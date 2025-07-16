@@ -1,0 +1,219 @@
+/* Chart Component Styles */
+.chart-container {
+  display: flex;
+  aspect-ratio: 16 / 9;
+  justify-content: center;
+  font-size: 0.75rem; /* 12px */
+}
+
+/* Recharts specific styling */
+.chart-container .recharts-cartesian-axis-tick_text {
+  fill: hsl(var(--muted-foreground));
+}
+
+.chart-container .recharts-cartesian-grid_line[stroke='#ccc'] {
+  stroke: hsl(var(--border) / 0.5);
+}
+
+.chart-container .recharts-curve.recharts-tooltip-cursor {
+  stroke: hsl(var(--border));
+}
+
+.chart-container .recharts-dot[stroke='#fff'] {
+  stroke: transparent;
+}
+
+.chart-container .recharts-layer {
+  outline: none;
+}
+
+.chart-container .recharts-polar-grid_[stroke='#ccc'] {
+  stroke: hsl(var(--border));
+}
+
+.chart-container .recharts-radial-bar-background-sector {
+  fill: hsl(var(--muted));
+}
+
+.chart-container .recharts-rectangle.recharts-tooltip-cursor {
+  fill: hsl(var(--muted));
+}
+
+.chart-container .recharts-reference-line_[stroke='#ccc'] {
+  stroke: hsl(var(--border));
+}
+
+.chart-container .recharts-sector[stroke='#fff'] {
+  stroke: transparent;
+}
+
+.chart-container .recharts-sector {
+  outline: none;
+}
+
+.chart-container .recharts-surface {
+  outline: none;
+}
+
+/* Chart Tooltip Styles */
+.chart-tooltip {
+  display: grid;
+  min-width: 8rem; /* 8 * 0.25rem */
+  align-items: start;
+  gap: 0.375rem; /* 1.5 * 0.25rem */
+  border-radius: 0.5rem; /* 8px */
+  border: 1px solid hsl(var(--border) / 0.5);
+  background-color: hsl(var(--background));
+  padding: 0.625rem 0.625rem; /* 2.5 * 0.25rem */
+  font-size: 0.75rem; /* 12px */
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.chart-tooltip-content {
+  display: grid;
+  gap: 0.375rem; /* 1.5 * 0.25rem */
+}
+
+.chart-tooltip-item {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem; /* 2 * 0.25rem */
+}
+
+.chart-tooltip-item > svg {
+  height: 0.625rem; /* 2.5 * 0.25rem */
+  width: 0.625rem; /* 2.5 * 0.25rem */
+  color: hsl(var(--muted-foreground));
+}
+
+.chart-tooltip-item--dot {
+  align-items: center;
+}
+
+.chart-tooltip-indicator {
+  flex-shrink: 0;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+}
+
+.chart-tooltip-indicator--dot {
+  height: 0.625rem; /* 2.5 * 0.25rem */
+  width: 0.625rem; /* 2.5 * 0.25rem */
+}
+
+.chart-tooltip-indicator--line {
+  width: 0.25rem; /* 1 * 0.25rem */
+}
+
+.chart-tooltip-indicator--dashed {
+  width: 0;
+  border: 1.5px dashed var(--color-border);
+  background-color: transparent;
+}
+
+.chart-tooltip-indicator--dashed-nested {
+  margin: 0.125rem 0; /* 0.5 * 0.25rem */
+}
+
+.chart-tooltip-content-wrapper {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  line-height: 1;
+}
+
+.chart-tooltip-content-wrapper--nested {
+  align-items: flex-end;
+}
+
+.chart-tooltip-content-wrapper--default {
+  align-items: center;
+}
+
+.chart-tooltip-label-group {
+  display: grid;
+  gap: 0.375rem; /* 1.5 * 0.25rem */
+}
+
+.chart-tooltip-label {
+  font-weight: 500;
+}
+
+.chart-tooltip-name {
+  color: hsl(var(--muted-foreground));
+}
+
+.chart-tooltip-value {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+}
+
+/* Chart Legend Styles */
+.chart-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem; /* 4 * 0.25rem */
+}
+
+.chart-legend--top {
+  padding-bottom: 0.75rem; /* 3 * 0.25rem */
+}
+
+.chart-legend--bottom {
+  padding-top: 0.75rem; /* 3 * 0.25rem */
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem; /* 1.5 * 0.25rem */
+}
+
+.chart-legend-item > svg {
+  height: 0.75rem; /* 3 * 0.25rem */
+  width: 0.75rem; /* 3 * 0.25rem */
+  color: hsl(var(--muted-foreground));
+}
+
+.chart-legend-indicator {
+  height: 0.5rem; /* 2 * 0.25rem */
+  width: 0.5rem; /* 2 * 0.25rem */
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+/* Responsive behavior */
+@media (max-width: 640px) {
+  .chart-container {
+    aspect-ratio: auto;
+    height: 300px;
+  }
+  
+  .chart-tooltip {
+    min-width: 6rem; /* 6 * 0.25rem */
+    font-size: 0.625rem; /* 10px */
+  }
+}
+
+/* Focus states for accessibility */
+.chart-container:focus-within {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .chart-tooltip {
+    display: none;
+  }
+  
+  .chart-container {
+    break-inside: avoid;
+  }
+} 

@@ -1,0 +1,202 @@
+/* MaterialAssignment Component Styles */
+.material-assignment {
+    width: 100%;
+}
+
+.materials-assignment-grid {
+    padding: var(--spacing-lg);
+}
+
+.assignment-header {
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.assignment-header h4 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.assignment-header p {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
+.materials-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+}
+
+.material-assignment-card {
+    background: var(--color-background);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.material-assignment-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.material-assignment-card.assigned {
+    border-color: var(--color-primary);
+    background-color: #f0f9ff;
+}
+
+.material-info {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    flex: 1;
+}
+
+.material-icon {
+    color: var(--color-muted-foreground);
+    margin-top: var(--spacing-xs);
+}
+
+.material-details {
+    flex: 1;
+}
+
+.material-name {
+    font-weight: 600;
+    color: var(--color-foreground);
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+}
+
+.material-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted-foreground);
+    margin-bottom: var(--spacing-sm);
+}
+
+.material-preview {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+    line-height: 1.4;
+    font-style: italic;
+}
+
+.assignment-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+}
+
+.assignment-checkbox {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.assignment-checkbox.checked {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+}
+
+.assignment-status {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted-foreground);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.assignment-summary {
+    background-color: var(--color-muted);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.summary-card h4 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.summary-card p {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
+.assigned-materials-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.assigned-material-tag {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.assignment-warning {
+    background-color: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    text-align: center;
+}
+
+.assignment-warning p {
+    margin: 0;
+    color: #92400e;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.no-materials {
+    padding: var(--spacing-lg);
+    text-align: center;
+    color: var(--color-muted-foreground);
+}
+
+@media (max-width: 768px) {
+    .material-assignment-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-md);
+    }
+
+    .assignment-controls {
+        flex-direction: row;
+        align-items: center;
+        align-self: flex-end;
+    }
+
+    .assigned-materials-list {
+        justify-content: center;
+    }
+}

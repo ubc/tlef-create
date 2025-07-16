@@ -1,0 +1,40 @@
+/* Aspect Ratio Component Styles */
+.aspect-ratio {
+  position: relative;
+  width: 100%;
+}
+
+.aspect-ratio > * {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* Common aspect ratio variants */
+.aspect-ratio--square {
+  aspect-ratio: 1 / 1;
+}
+
+.aspect-ratio--video {
+  aspect-ratio: 16 / 9;
+}
+
+.aspect-ratio--portrait {
+  aspect-ratio: 3 / 4;
+}
+
+.aspect-ratio--landscape {
+  aspect-ratio: 4 / 3;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .aspect-ratio--responsive {
+    aspect-ratio: auto;
+    height: auto;
+  }
+} 

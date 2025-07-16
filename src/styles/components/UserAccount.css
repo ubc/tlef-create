@@ -1,0 +1,156 @@
+/* UserAccount Component Styles */
+.user-account {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-2xl);
+}
+
+.page-header h1 {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-foreground);
+}
+
+.account-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.user-avatar {
+    width: 80px;
+    height: 80px;
+    background-color: var(--color-muted);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-muted-foreground);
+}
+
+.user-info h2 {
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.user-email {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
+.account-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-lg);
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--color-foreground);
+}
+
+.setting-item:hover {
+    background-color: var(--color-accent);
+}
+
+.report-section {
+    padding: var(--spacing-lg);
+    text-align: center;
+}
+
+.report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.report-description {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.report-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+}
+
+.report-form {
+    padding: var(--spacing-lg);
+}
+
+.report-form .form-field {
+    margin-bottom: var(--spacing-lg);
+}
+
+.report-form .form-field:last-child {
+    margin-bottom: 0;
+}
+
+.report-form label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-foreground);
+    margin-bottom: var(--spacing-xs);
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        margin-bottom: var(--spacing-xl);
+    }
+
+    .page-header h1 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .user-profile {
+        flex-direction: column;
+        text-align: center;
+        gap: var(--spacing-md);
+    }
+
+    .user-avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .account-sections {
+        gap: var(--spacing-lg);
+    }
+}
