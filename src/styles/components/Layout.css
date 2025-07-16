@@ -1,0 +1,35 @@
+/* Layout Component Styles */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--color-background);
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-left: 240px; /* Account for fixed sidebar width */
+}
+
+.content-area {
+    flex: 1;
+    padding: var(--spacing-lg);
+    overflow-y: auto;
+    background-color: var(--color-background);
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .app-layout {
+        flex-direction: column;
+    }
+
+    .content-area {
+        padding: var(--spacing-md);
+    }
+}

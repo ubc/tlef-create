@@ -1,0 +1,109 @@
+/* QuizView Component Styles */
+.quiz-view {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--spacing-lg);
+}
+
+.quiz-header {
+    margin-bottom: var(--spacing-2xl);
+}
+
+.quiz-header h1 {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+    color: var(--color-foreground);
+}
+
+.quiz-description {
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-lg);
+    margin: 0;
+}
+
+.quiz-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-2xl);
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    padding-bottom: 0;
+}
+
+.quiz-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: none;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    position: relative;
+}
+
+.quiz-tab:hover:not(.disabled) {
+    color: var(--color-foreground);
+    background-color: var(--color-muted);
+}
+
+.quiz-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background-color: var(--color-background);
+}
+
+.quiz-tab.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tab-lock {
+    margin-left: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+}
+
+.quiz-content {
+    min-height: 600px;
+}
+
+.quiz-not-found {
+    text-align: center;
+    padding: var(--spacing-2xl);
+}
+
+.quiz-not-found h2 {
+    margin-bottom: var(--spacing-lg);
+    color: var(--color-muted-foreground);
+}
+
+@media (max-width: 768px) {
+    .quiz-header {
+        margin-bottom: var(--spacing-xl);
+    }
+
+    .quiz-header h1 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .quiz-tabs {
+        gap: 0;
+        margin-bottom: var(--spacing-xl);
+    }
+
+    .quiz-tab {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: var(--font-size-xs);
+    }
+
+    .quiz-tab span {
+        display: none;
+    }
+}

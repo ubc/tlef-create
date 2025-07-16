@@ -1,0 +1,121 @@
+/* Toggle Group Component Styles */
+.toggle-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem; /* 1 * 0.25rem */
+}
+
+.toggle-group-item {
+  /* Base styles inherited from toggle component */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border-radius: 0.375rem; /* 6px */
+  font-size: 0.875rem; /* 14px */
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Default variant */
+.toggle-group-item--default {
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.toggle-group-item--default:hover {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.toggle-group-item--default[data-state="on"] {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Outline variant */
+.toggle-group-item--outline {
+  background-color: transparent;
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.toggle-group-item--outline:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.toggle-group-item--outline[data-state="on"] {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Ghost variant */
+.toggle-group-item--ghost {
+  background-color: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.toggle-group-item--ghost:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.toggle-group-item--ghost[data-state="on"] {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Size variants */
+.toggle-group-item--default {
+  height: 2.5rem; /* 10 * 0.25rem */
+  padding: 0 0.75rem; /* 0 3 * 0.25rem */
+}
+
+.toggle-group-item--sm {
+  height: 2.25rem; /* 9 * 0.25rem */
+  padding: 0 0.5rem; /* 0 2 * 0.25rem */
+  font-size: 0.75rem; /* 12px */
+}
+
+.toggle-group-item--lg {
+  height: 2.75rem; /* 11 * 0.25rem */
+  padding: 0 1rem; /* 0 4 * 0.25rem */
+}
+
+/* Focus states */
+.toggle-group-item:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Disabled states */
+.toggle-group-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Group specific styles */
+.toggle-group--vertical {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.toggle-group--horizontal {
+  flex-direction: row;
+}
+
+/* Responsive behavior */
+@media (max-width: 640px) {
+  .toggle-group--responsive {
+    flex-direction: column;
+    align-items: stretch;
+  }
+} 
