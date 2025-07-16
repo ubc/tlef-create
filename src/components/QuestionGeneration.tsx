@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Wand2, Settings, Zap, Gamepad2, GraduationCap, Edit, Plus, Minus } from 'lucide-react';
+import '../styles/components/QuestionGeneration.css';
 
 interface QuestionGenerationProps {
   learningObjectives: string[];
@@ -97,7 +98,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
   const handleApproachSelect = (approachId: PedagogicalApproach) => {
     setApproach(approachId);
     setShowAdvancedEdit(approachId === 'custom');
-    
+
     if (approachId !== 'custom') {
       const selectedApproach = pedagogicalApproaches.find(app => app.id === approachId);
       if (selectedApproach?.defaultTypes) {
@@ -123,11 +124,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
 
   const handleGeneration = async () => {
     setIsGenerating(true);
-    
+
     // Generate mock questions based on approach
     const questionConfigs = getCurrentQuestionTypes();
     const mockQuestions: any[] = [];
-    
+
     learningObjectives.forEach((objective, loIndex) => {
       questionConfigs.forEach((config) => {
         for (let i = 0; i < config.count; i++) {
@@ -136,9 +137,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
             type: config.type,
             difficulty: 'moderate',
             question: `${config.type.replace('-', ' ')} question ${mockQuestions.length + 1} for "${objective.substring(0, 40)}..."`,
-            answer: config.type === 'multiple-choice' ? ['Option A', 'Option B', 'Option C', 'Option D'] : 
-                   config.type === 'true-false' ? 'True' : 
-                   'Sample answer content',
+            answer: config.type === 'multiple-choice' ? ['Option A', 'Option B', 'Option C', 'Option D'] :
+                config.type === 'true-false' ? 'True' :
+                    'Sample answer content',
             correctAnswer: config.type === 'multiple-choice' ? 'Option A' : 'True',
             loIndex,
             learningObjective: objective,
@@ -147,7 +148,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
         }
       });
     });
-    
+
     setTimeout(() => {
       setGeneratedQuestions(mockQuestions);
       setIsGenerating(false);
@@ -155,206 +156,206 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
   };
 
   return (
-    <div className="question-generation">
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">Auto Generation</h3>
-          <p className="card-description">
-            Generate a complete quiz based on your learning objectives and pedagogical approach
-          </p>
-        </div>
-
-        <div className="pedagogical-approaches">
-          <h4>Choose Pedagogical Approach</h4>
-          <div className="approaches-grid">
-            {pedagogicalApproaches.map((app) => (
-              <div
-                key={app.id}
-                className={`approach-card ${approach === app.id ? 'selected' : ''}`}
-                onClick={() => handleApproachSelect(app.id)}
-              >
-                <app.icon size={24} />
-                <h5>{app.title}</h5>
-                <p>{app.description}</p>
-                {app.id !== 'custom' && !showAdvancedEdit && approach === app.id && (
-                  <button 
-                    className="btn btn-outline btn-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAdvancedEdit(true);
-                    }}
-                  >
-                    <Edit size={14} />
-                    Advanced Edit
-                  </button>
-                )}
-              </div>
-            ))}
+      <div className="question-generation">
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Auto Generation</h3>
+            <p className="card-description">
+              Generate a complete quiz based on your learning objectives and pedagogical approach
+            </p>
           </div>
-        </div>
 
-        {approach !== 'custom' && !showAdvancedEdit && (
-          <div className="generation-settings">
-            <div className="setting-group">
-              <label>Questions per Learning Objective: {questionsPerLO}</label>
-              <div className="questions-counter">
-                <button 
-                  className="btn btn-outline counter-btn"
-                  onClick={() => setQuestionsPerLO(Math.max(1, questionsPerLO - 1))}
-                >
-                  <Minus size={16} />
-                </button>
-                <span className="counter-value">{questionsPerLO}</span>
-                <button 
-                  className="btn btn-outline counter-btn"
-                  onClick={() => setQuestionsPerLO(Math.min(10, questionsPerLO + 1))}
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-group">
-              <label>Total Questions: {learningObjectives.length * questionsPerLO}</label>
-              <p className="setting-description">
-                Based on {learningObjectives.length} learning objectives
-              </p>
+          <div className="pedagogical-approaches">
+            <h4>Choose Pedagogical Approach</h4>
+            <div className="approaches-grid">
+              {pedagogicalApproaches.map((app) => (
+                  <div
+                      key={app.id}
+                      className={`approach-card ${approach === app.id ? 'selected' : ''}`}
+                      onClick={() => handleApproachSelect(app.id)}
+                  >
+                    <app.icon size={24} />
+                    <h5>{app.title}</h5>
+                    <p>{app.description}</p>
+                    {app.id !== 'custom' && !showAdvancedEdit && approach === app.id && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAdvancedEdit(true);
+                            }}
+                        >
+                          <Edit size={14} />
+                          Advanced Edit
+                        </button>
+                    )}
+                  </div>
+              ))}
             </div>
           </div>
-        )}
 
-        {(approach === 'custom' || showAdvancedEdit) && (
-          <div className="advanced-edit">
-            <div className="advanced-header">
-              <h4>Question Formula</h4>
-              {approach !== 'custom' && (
-                <button 
-                  className="btn btn-outline btn-sm"
-                  onClick={() => setShowAdvancedEdit(false)}
-                >
-                  Simple View
-                </button>
-              )}
-            </div>
-
-            <div className="question-types-config">
-              {(approach === 'custom' ? customQuestionTypes : 
-                pedagogicalApproaches.find(app => app.id === approach)?.defaultTypes || []
-              ).map((config, index) => (
-                <div key={index} className="question-type-row">
-                  <select 
-                    className="select-input"
-                    value={config.type}
-                    onChange={(e) => approach === 'custom' 
-                      ? updateQuestionType(index, 'type', e.target.value as QuestionType)
-                      : null
-                    }
-                    disabled={approach !== 'custom'}
-                  >
-                    {questionTypes.map(type => (
-                      <option key={type.id} value={type.id}>{type.label}</option>
-                    ))}
-                  </select>
-                  
-                  <div className="count-input">
-                    <button 
-                      className="btn btn-outline counter-btn"
-                      onClick={() => approach === 'custom' 
-                        ? updateQuestionType(index, 'count', Math.max(0, config.count - 1))
-                        : null
-                      }
-                      disabled={approach !== 'custom'}
+          {approach !== 'custom' && !showAdvancedEdit && (
+              <div className="generation-settings">
+                <div className="setting-group">
+                  <label>Questions per Learning Objective: {questionsPerLO}</label>
+                  <div className="questions-counter">
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.max(1, questionsPerLO - 1))}
                     >
-                      <Minus size={14} />
+                      <Minus size={16} />
                     </button>
-                    <span className="counter-value">{config.count}</span>
-                    <button 
-                      className="btn btn-outline counter-btn"
-                      onClick={() => approach === 'custom' 
-                        ? updateQuestionType(index, 'count', config.count + 1)
-                        : null
-                      }
-                      disabled={approach !== 'custom'}
+                    <span className="counter-value">{questionsPerLO}</span>
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.min(10, questionsPerLO + 1))}
                     >
-                      <Plus size={14} />
+                      <Plus size={16} />
                     </button>
                   </div>
+                </div>
 
-                  {approach === 'custom' && (
-                    <button 
-                      className="btn btn-outline btn-sm"
-                      onClick={() => removeQuestionType(index)}
-                    >
-                      Remove
-                    </button>
+                <div className="setting-group">
+                  <label>Total Questions: {learningObjectives.length * questionsPerLO}</label>
+                  <p className="setting-description">
+                    Based on {learningObjectives.length} learning objectives
+                  </p>
+                </div>
+              </div>
+          )}
+
+          {(approach === 'custom' || showAdvancedEdit) && (
+              <div className="advanced-edit">
+                <div className="advanced-header">
+                  <h4>Question Formula</h4>
+                  {approach !== 'custom' && (
+                      <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setShowAdvancedEdit(false)}
+                      >
+                        Simple View
+                      </button>
                   )}
                 </div>
-              ))}
 
-              {approach === 'custom' && (
-                <button 
-                  className="btn btn-outline"
-                  onClick={addQuestionType}
-                >
-                  <Plus size={16} />
-                  Add Question Type
-                </button>
-              )}
-            </div>
+                <div className="question-types-config">
+                  {(approach === 'custom' ? customQuestionTypes :
+                          pedagogicalApproaches.find(app => app.id === approach)?.defaultTypes || []
+                  ).map((config, index) => (
+                      <div key={index} className="question-type-row">
+                        <select
+                            className="select-input"
+                            value={config.type}
+                            onChange={(e) => approach === 'custom'
+                                ? updateQuestionType(index, 'type', e.target.value as QuestionType)
+                                : null
+                            }
+                            disabled={approach !== 'custom'}
+                        >
+                          {questionTypes.map(type => (
+                              <option key={type.id} value={type.id}>{type.label}</option>
+                          ))}
+                        </select>
 
-            <div className="total-summary">
-              <p><strong>Total per Learning Objective:</strong> {getTotalQuestionsPerLO()} questions</p>
-              <p><strong>Total Quiz Questions:</strong> {learningObjectives.length * getTotalQuestionsPerLO()}</p>
-            </div>
-          </div>
-        )}
+                        <div className="count-input">
+                          <button
+                              className="btn btn-outline counter-btn"
+                              onClick={() => approach === 'custom'
+                                  ? updateQuestionType(index, 'count', Math.max(0, config.count - 1))
+                                  : null
+                              }
+                              disabled={approach !== 'custom'}
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="counter-value">{config.count}</span>
+                          <button
+                              className="btn btn-outline counter-btn"
+                              onClick={() => approach === 'custom'
+                                  ? updateQuestionType(index, 'count', config.count + 1)
+                                  : null
+                              }
+                              disabled={approach !== 'custom'}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
 
-        <div className="generation-action">
-          {isGenerating ? (
-            <div className="generating-state">
-              <div className="loading-spinner"></div>
-              <p>Generating questions for Learning Objective 1 of {learningObjectives.length}...</p>
-              <button className="btn btn-secondary">Cancel Generation</button>
-            </div>
-          ) : (
-            <button className="btn btn-primary" onClick={handleGeneration}>
-              <Wand2 size={16} />
-              Generate Full Quiz ({learningObjectives.length * getTotalQuestionsPerLO()} questions)
-            </button>
+                        {approach === 'custom' && (
+                            <button
+                                className="btn btn-outline btn-sm"
+                                onClick={() => removeQuestionType(index)}
+                            >
+                              Remove
+                            </button>
+                        )}
+                      </div>
+                  ))}
+
+                  {approach === 'custom' && (
+                      <button
+                          className="btn btn-outline"
+                          onClick={addQuestionType}
+                      >
+                        <Plus size={16} />
+                        Add Question Type
+                      </button>
+                  )}
+                </div>
+
+                <div className="total-summary">
+                  <p><strong>Total per Learning Objective:</strong> {getTotalQuestionsPerLO()} questions</p>
+                  <p><strong>Total Quiz Questions:</strong> {learningObjectives.length * getTotalQuestionsPerLO()}</p>
+                </div>
+              </div>
           )}
-        </div>
-      </div>
 
-      {generatedQuestions.length > 0 && (
-        <div className="generated-questions">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Generated Questions ({generatedQuestions.length})</h3>
-              <p className="card-description">
-                Questions generated successfully. Review and edit as needed.
-              </p>
-            </div>
-            
-            <div className="questions-preview">
-              {generatedQuestions.slice(0, 3).map((question, index) => (
-                <div key={question.id} className="question-preview">
-                  <div className="question-meta">
-                    Q{index + 1} • {question.type.replace('-', ' ')} • {question.difficulty}
-                  </div>
-                  <div className="question-text">{question.question}</div>
+          <div className="generation-action">
+            {isGenerating ? (
+                <div className="generating-state">
+                  <div className="loading-spinner"></div>
+                  <p>Generating questions for Learning Objective 1 of {learningObjectives.length}...</p>
+                  <button className="btn btn-secondary">Cancel Generation</button>
                 </div>
-              ))}
-              
-              {generatedQuestions.length > 3 && (
-                <div className="more-questions">
-                  And {generatedQuestions.length - 3} more questions...
-                </div>
-              )}
-            </div>
+            ) : (
+                <button className="btn btn-primary" onClick={handleGeneration}>
+                  <Wand2 size={16} />
+                  Generate Full Quiz ({learningObjectives.length * getTotalQuestionsPerLO()} questions)
+                </button>
+            )}
           </div>
         </div>
-      )}
-    </div>
+
+        {generatedQuestions.length > 0 && (
+            <div className="generated-questions">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Generated Questions ({generatedQuestions.length})</h3>
+                  <p className="card-description">
+                    Questions generated successfully. Review and edit as needed.
+                  </p>
+                </div>
+
+                <div className="questions-preview">
+                  {generatedQuestions.slice(0, 3).map((question, index) => (
+                      <div key={question.id} className="question-preview">
+                        <div className="question-meta">
+                          Q{index + 1} • {question.type.replace('-', ' ')} • {question.difficulty}
+                        </div>
+                        <div className="question-text">{question.question}</div>
+                      </div>
+                  ))}
+
+                  {generatedQuestions.length > 3 && (
+                      <div className="more-questions">
+                        And {generatedQuestions.length - 3} more questions...
+                      </div>
+                  )}
+                </div>
+              </div>
+            </div>
+        )}
+      </div>
   );
 };
 

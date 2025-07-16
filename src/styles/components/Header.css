@@ -1,0 +1,53 @@
+/* Header Component Styles */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-lg);
+    background-color: var(--color-card);
+    border-bottom: 1px solid var(--color-border);
+    min-height: 70px;
+}
+
+.header h1 {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-foreground);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+}
+
+@media (max-width: 768px) {
+    .header {
+        padding: var(--spacing-md);
+        min-height: 60px;
+    }
+
+    .header h1 {
+        font-size: var(--font-size-lg);
+    }
+
+    .header-left,
+    .header-right {
+        gap: var(--spacing-sm);
+    }
+}

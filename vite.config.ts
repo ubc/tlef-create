@@ -19,4 +19,10 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  css: {
+    modules: {
+      // Enable CSS modules for .module.css files
+      localsConvention: 'camelCase',
+    },
+  },
 }));
