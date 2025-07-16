@@ -1,0 +1,64 @@
+/* Collapsible Component Styles */
+.collapsible {
+  /* Base styles for collapsible root */
+}
+
+.collapsible-trigger {
+  /* Base styles for trigger button */
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  transition: all 0.2s ease-in-out;
+}
+
+.collapsible-trigger:hover {
+  background-color: hsl(var(--muted) / 0.1);
+}
+
+.collapsible-trigger:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.collapsible-content {
+  overflow: hidden;
+  transition: height 0.3s ease-in-out;
+}
+
+.collapsible-content[data-state="open"] {
+  animation: slideDown 0.3s ease-out;
+}
+
+.collapsible-content[data-state="closed"] {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+} 

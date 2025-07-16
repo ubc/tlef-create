@@ -1,0 +1,39 @@
+.radio-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.radio-group-item {
+  aspect-ratio: 1;
+  height: 1rem;
+  width: 1rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  outline: none;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.radio-group-item:focus-visible {
+  outline: none;
+  border-color: var(--color-ring);
+  box-shadow: 0 0 0 2px var(--color-ring);
+}
+
+.radio-group-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.radio-group-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radio-group-icon {
+  height: 0.625rem;
+  width: 0.625rem;
+  fill: currentColor;
+  color: currentColor;
+} 

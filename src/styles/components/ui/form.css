@@ -1,0 +1,20 @@
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label-error {
+  color: var(--color-destructive);
+}
+
+.form-description {
+  font-size: 0.875rem;
+  color: var(--color-muted-foreground);
+}
+
+.form-message {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-destructive);
+} 

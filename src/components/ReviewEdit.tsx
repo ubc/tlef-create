@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2 } from 'lucide-react';
+import '../styles/components/ReviewEdit.css';
 
 interface ReviewEditProps {
   quizId: string;
@@ -73,13 +74,13 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     { id: 'cloze', label: 'Cloze Test' }
   ];
 
-  const filteredQuestions = filterByLO !== null 
-    ? questions.filter(q => q.loIndex === filterByLO)
-    : questions;
+  const filteredQuestions = filterByLO !== null
+      ? questions.filter(q => q.loIndex === filterByLO)
+      : questions;
 
   const toggleEdit = (questionId: string) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId ? { ...q, isEditing: !q.isEditing } : q
+    setQuestions(questions.map(q =>
+        q.id === questionId ? { ...q, isEditing: !q.isEditing } : q
     ));
   };
 
@@ -88,20 +89,20 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   };
 
   const updateQuestion = (questionId: string, field: keyof Question, value: any) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId ? { ...q, [field]: value } : q
+    setQuestions(questions.map(q =>
+        q.id === questionId ? { ...q, [field]: value } : q
     ));
   };
 
   const saveQuestion = (questionId: string) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId ? { ...q, isEditing: false } : q
+    setQuestions(questions.map(q =>
+        q.id === questionId ? { ...q, isEditing: false } : q
     ));
   };
 
   const addManualQuestion = () => {
     if (!newQuestion.question.trim()) return;
-    
+
     const question: Question = {
       id: Date.now().toString(),
       type: newQuestion.type,
@@ -134,265 +135,265 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   };
 
   return (
-    <div className="review-edit">
-      <div className="card">
-        <div className="card-header">
-          <div className="review-header">
-            <div>
-              <h3 className="card-title">Review & Edit Questions</h3>
-              <p className="card-description">
-                Review generated questions and make final adjustments
-              </p>
-            </div>
-            <div className="review-actions">
-              <button 
-                className="btn btn-outline"
-                onClick={() => setShowManualAdd(true)}
-              >
-                <Plus size={16} />
-                Add Question
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="review-filters">
-          <div className="filter-group">
-            <label>Filter by Learning Objective:</label>
-            <select 
-              className="select-input"
-              value={filterByLO ?? ''}
-              onChange={(e) => setFilterByLO(e.target.value ? parseInt(e.target.value) : null)}
-            >
-              <option value="">All Objectives</option>
-              {learningObjectives.map((obj, index) => (
-                <option key={index} value={index}>
-                  LO {index + 1}: {obj.substring(0, 50)}...
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="questions-count">
-            {filteredQuestions.length} questions {filterByLO !== null ? 'in this objective' : 'total'}
-          </div>
-        </div>
-
-        <div className="questions-list">
-          {filteredQuestions.map((question, index) => (
-            <div key={question.id} className="question-item">
-              <div className="question-header">
-                <div className="question-meta">
-                  <span className="question-number">Q{index + 1}</span>
-                  <span className="question-type">{question.type.replace('-', ' ')}</span>
-                  <span className="question-difficulty">{question.difficulty}</span>
-                  <span className="question-lo">LO {question.loIndex + 1}</span>
-                </div>
-                <div className="question-actions">
-                  <button 
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => regenerateQuestion(question.id)}
-                    title="Regenerate question"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                  <button 
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => toggleEdit(question.id)}
-                    title={question.isEditing ? 'Cancel edit' : 'Edit question'}
-                  >
-                    {question.isEditing ? <EyeOff size={14} /> : <Edit size={14} />}
-                  </button>
-                  <button 
-                    className="btn btn-ghost btn-sm text-destructive"
-                    onClick={() => deleteQuestion(question.id)}
-                    title="Delete question"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+      <div className="review-edit">
+        <div className="card">
+          <div className="card-header">
+            <div className="review-header">
+              <div>
+                <h3 className="card-title">Review & Edit Questions</h3>
+                <p className="card-description">
+                  Review generated questions and make final adjustments
+                </p>
               </div>
-
-              {question.isEditing ? (
-                <div className="question-edit">
-                  <div className="edit-field">
-                    <label>Question:</label>
-                    <textarea
-                      className="textarea"
-                      value={question.question}
-                      onChange={(e) => updateQuestion(question.id, 'question', e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                  
-                  <div className="edit-row">
-                    <div className="edit-field">
-                      <label>Type:</label>
-                      <select 
-                        className="select-input"
-                        value={question.type}
-                        onChange={(e) => updateQuestion(question.id, 'type', e.target.value)}
-                      >
-                        {questionTypes.map(type => (
-                          <option key={type.id} value={type.id}>{type.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="edit-field">
-                      <label>Difficulty:</label>
-                      <select 
-                        className="select-input"
-                        value={question.difficulty}
-                        onChange={(e) => updateQuestion(question.id, 'difficulty', e.target.value)}
-                      >
-                        <option value="easy">Easy</option>
-                        <option value="moderate">Moderate</option>
-                        <option value="hard">Hard</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="edit-field">
-                    <label>Answer:</label>
-                    <textarea
-                      className="textarea"
-                      value={Array.isArray(question.answer) ? question.answer.join('\n') : question.answer}
-                      onChange={(e) => updateQuestion(question.id, 'answer', e.target.value)}
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="edit-actions">
-                    <button 
-                      className="btn btn-primary btn-sm"
-                      onClick={() => saveQuestion(question.id)}
-                    >
-                      <Save size={14} />
-                      Save
-                    </button>
-                    <button 
-                      className="btn btn-outline btn-sm"
-                      onClick={() => toggleEdit(question.id)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="question-display">
-                  <div className="question-text">{question.question}</div>
-                  <div className="question-answer">
-                    <strong>Answer:</strong> {
-                      Array.isArray(question.answer) 
-                        ? question.answer.join(', ')
-                        : question.answer
-                    }
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {showManualAdd && (
-          <div className="manual-add-modal">
-            <div className="modal-overlay" onClick={() => setShowManualAdd(false)}></div>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h4>Add New Question</h4>
-                <button 
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setShowManualAdd(false)}
+              <div className="review-actions">
+                <button
+                    className="btn btn-outline"
+                    onClick={() => setShowManualAdd(true)}
                 >
-                  ×
+                  <Plus size={16} />
+                  Add Question
                 </button>
               </div>
-
-              <div className="manual-add-form">
-                <div className="form-row">
-                  <div className="form-field">
-                    <label>Question Type:</label>
-                    <select 
-                      className="select-input"
-                      value={newQuestion.type}
-                      onChange={(e) => setNewQuestion({...newQuestion, type: e.target.value})}
-                    >
-                      {questionTypes.map(type => (
-                        <option key={type.id} value={type.id}>{type.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label>Difficulty:</label>
-                    <select 
-                      className="select-input"
-                      value={newQuestion.difficulty}
-                      onChange={(e) => setNewQuestion({...newQuestion, difficulty: e.target.value})}
-                    >
-                      <option value="easy">Easy</option>
-                      <option value="moderate">Moderate</option>
-                      <option value="hard">Hard</option>
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label>Learning Objective:</label>
-                    <select 
-                      className="select-input"
-                      value={newQuestion.loIndex}
-                      onChange={(e) => setNewQuestion({...newQuestion, loIndex: parseInt(e.target.value)})}
-                    >
-                      {learningObjectives.map((obj, index) => (
-                        <option key={index} value={index}>
-                          LO {index + 1}: {obj.substring(0, 30)}...
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-field">
-                  <label>Question:</label>
-                  <textarea
-                    className="textarea"
-                    placeholder="Enter your question here..."
-                    value={newQuestion.question}
-                    onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label>Answer:</label>
-                  <textarea
-                    className="textarea"
-                    placeholder="Enter the answer or options (one per line for multiple choice)..."
-                    value={newQuestion.answer}
-                    onChange={(e) => setNewQuestion({...newQuestion, answer: e.target.value})}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="modal-actions">
-                  <button 
-                    className="btn btn-primary"
-                    onClick={addManualQuestion}
-                    disabled={!newQuestion.question.trim()}
-                  >
-                    <Plus size={16} />
-                    Add Question
-                  </button>
-                  <button 
-                    className="btn btn-outline"
-                    onClick={() => setShowManualAdd(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
-        )}
+
+          <div className="review-filters">
+            <div className="filter-group">
+              <label>Filter by Learning Objective:</label>
+              <select
+                  className="select-input"
+                  value={filterByLO ?? ''}
+                  onChange={(e) => setFilterByLO(e.target.value ? parseInt(e.target.value) : null)}
+              >
+                <option value="">All Objectives</option>
+                {learningObjectives.map((obj, index) => (
+                    <option key={index} value={index}>
+                      LO {index + 1}: {obj.substring(0, 50)}...
+                    </option>
+                ))}
+              </select>
+            </div>
+            <div className="questions-count">
+              {filteredQuestions.length} questions {filterByLO !== null ? 'in this objective' : 'total'}
+            </div>
+          </div>
+
+          <div className="questions-list">
+            {filteredQuestions.map((question, index) => (
+                <div key={question.id} className="question-item">
+                  <div className="question-header">
+                    <div className="question-meta">
+                      <span className="question-number">Q{index + 1}</span>
+                      <span className="question-type">{question.type.replace('-', ' ')}</span>
+                      <span className="question-difficulty">{question.difficulty}</span>
+                      <span className="question-lo">LO {question.loIndex + 1}</span>
+                    </div>
+                    <div className="question-actions">
+                      <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => regenerateQuestion(question.id)}
+                          title="Regenerate question"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                      <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => toggleEdit(question.id)}
+                          title={question.isEditing ? 'Cancel edit' : 'Edit question'}
+                      >
+                        {question.isEditing ? <EyeOff size={14} /> : <Edit size={14} />}
+                      </button>
+                      <button
+                          className="btn btn-ghost btn-sm text-destructive"
+                          onClick={() => deleteQuestion(question.id)}
+                          title="Delete question"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {question.isEditing ? (
+                      <div className="question-edit">
+                        <div className="edit-field">
+                          <label>Question:</label>
+                          <textarea
+                              className="textarea"
+                              value={question.question}
+                              onChange={(e) => updateQuestion(question.id, 'question', e.target.value)}
+                              rows={3}
+                          />
+                        </div>
+
+                        <div className="edit-row">
+                          <div className="edit-field">
+                            <label>Type:</label>
+                            <select
+                                className="select-input"
+                                value={question.type}
+                                onChange={(e) => updateQuestion(question.id, 'type', e.target.value)}
+                            >
+                              {questionTypes.map(type => (
+                                  <option key={type.id} value={type.id}>{type.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="edit-field">
+                            <label>Difficulty:</label>
+                            <select
+                                className="select-input"
+                                value={question.difficulty}
+                                onChange={(e) => updateQuestion(question.id, 'difficulty', e.target.value)}
+                            >
+                              <option value="easy">Easy</option>
+                              <option value="moderate">Moderate</option>
+                              <option value="hard">Hard</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="edit-field">
+                          <label>Answer:</label>
+                          <textarea
+                              className="textarea"
+                              value={Array.isArray(question.answer) ? question.answer.join('\n') : question.answer}
+                              onChange={(e) => updateQuestion(question.id, 'answer', e.target.value)}
+                              rows={2}
+                          />
+                        </div>
+
+                        <div className="edit-actions">
+                          <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => saveQuestion(question.id)}
+                          >
+                            <Save size={14} />
+                            Save
+                          </button>
+                          <button
+                              className="btn btn-outline btn-sm"
+                              onClick={() => toggleEdit(question.id)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                  ) : (
+                      <div className="question-display">
+                        <div className="question-text">{question.question}</div>
+                        <div className="question-answer">
+                          <strong>Answer:</strong> {
+                          Array.isArray(question.answer)
+                              ? question.answer.join(', ')
+                              : question.answer
+                        }
+                        </div>
+                      </div>
+                  )}
+                </div>
+            ))}
+          </div>
+
+          {showManualAdd && (
+              <div className="manual-add-modal">
+                <div className="modal-overlay" onClick={() => setShowManualAdd(false)}></div>
+                <div className="modal-content">
+                  <div className="modal-header">
+                    <h4>Add New Question</h4>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setShowManualAdd(false)}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="manual-add-form">
+                    <div className="form-row">
+                      <div className="form-field">
+                        <label>Question Type:</label>
+                        <select
+                            className="select-input"
+                            value={newQuestion.type}
+                            onChange={(e) => setNewQuestion({...newQuestion, type: e.target.value})}
+                        >
+                          {questionTypes.map(type => (
+                              <option key={type.id} value={type.id}>{type.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-field">
+                        <label>Difficulty:</label>
+                        <select
+                            className="select-input"
+                            value={newQuestion.difficulty}
+                            onChange={(e) => setNewQuestion({...newQuestion, difficulty: e.target.value})}
+                        >
+                          <option value="easy">Easy</option>
+                          <option value="moderate">Moderate</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </div>
+                      <div className="form-field">
+                        <label>Learning Objective:</label>
+                        <select
+                            className="select-input"
+                            value={newQuestion.loIndex}
+                            onChange={(e) => setNewQuestion({...newQuestion, loIndex: parseInt(e.target.value)})}
+                        >
+                          {learningObjectives.map((obj, index) => (
+                              <option key={index} value={index}>
+                                LO {index + 1}: {obj.substring(0, 30)}...
+                              </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-field">
+                      <label>Question:</label>
+                      <textarea
+                          className="textarea"
+                          placeholder="Enter your question here..."
+                          value={newQuestion.question}
+                          onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
+                          rows={3}
+                      />
+                    </div>
+
+                    <div className="form-field">
+                      <label>Answer:</label>
+                      <textarea
+                          className="textarea"
+                          placeholder="Enter the answer or options (one per line for multiple choice)..."
+                          value={newQuestion.answer}
+                          onChange={(e) => setNewQuestion({...newQuestion, answer: e.target.value})}
+                          rows={3}
+                      />
+                    </div>
+
+                    <div className="modal-actions">
+                      <button
+                          className="btn btn-primary"
+                          onClick={addManualQuestion}
+                          disabled={!newQuestion.question.trim()}
+                      >
+                        <Plus size={16} />
+                        Add Question
+                      </button>
+                      <button
+                          className="btn btn-outline"
+                          onClick={() => setShowManualAdd(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          )}
+        </div>
       </div>
-    </div>
   );
 };
 
