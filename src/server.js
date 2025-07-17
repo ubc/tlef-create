@@ -22,11 +22,11 @@ app.get('/settings', (req, res) => {
 app.use('/api/example', exampleRoutes);
 
 // Serve index.html for all other routes (SPA fallback)
-// if (isProduction) {
-//   app.get('*', (req, res) => {
-//     res.sendFile(path.join(staticDir, 'index.html'));
-//   });
-// }
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
+}
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
