@@ -1,6 +1,6 @@
 # TLEF CREATE
 
-This is a template Node.js application.
+This is a modern web application template using **Vite** for the front-end (React) and **Node.js/Express** for the back-end.
 
 ## Configuration
 
@@ -12,26 +12,50 @@ Create a file named `.env` and add the following content:
 TLEF_CREATE_PORT=8090
 ```
 
+## Project Structure
+
+-   `src/`: Contains all source code, including the React front-end components and the Node.js/Express server.
+-   `public/`: Holds static assets that do not require processing, like favicons or `robots.txt`.
+-   `dist/`: The production-ready build output. This directory is generated when you run `npm run build` and is what the production server serves.
+
 ## Development
 
-To run the application in development mode, run the following command:
+To run the application in development mode, use the following command:
 
 ```bash
+npm install
 npm run dev
 ```
 
-This will start the Node.js server with `nodemon` for backend reloading and also launch `BrowserSync`. BrowserSync will automatically open a new tab in your browser. Use the URL it provides (usually `http://localhost:3000`) for development.
+This command starts two processes in parallel:
 
-Any changes to frontend files in the `public` directory will cause the browser to reload automatically. Changes to backend files in the `src` directory will cause the server to restart.
+1.  **Vite Dev Server (Front-End):**
+    -   Serves the React application with Hot Module Replacement (HMR) for a fast development experience.
+    -   It will be available at **http://localhost:8080**.
+    -   Changes to front-end files in `src/` (e.g., `.tsx`, `.css`) will update the browser instantly.
+
+2.  **Nodemon (Back-End):**
+    -   Runs your Express API server.
+    -   Automatically restarts the server whenever you make changes to back-end files (e.g., `src/server.js`).
 
 ## Production
 
-To run the application in production mode, use the following command:
+To run the application in production mode, follow these two steps:
 
-```bash
-npm start
-```
+1.  **Build the application:**
+    This command bundles and optimizes the React front-end for production, placing the output in the `dist/` directory.
 
-## Continuius Integration
+    ```bash
+    npm run build
+    ```
 
-Pushing to the main branch in this repo will trigger a deploy automatically to the staging server.
+2.  **Start the server:**
+    This command runs the Node.js server, which serves the built front-end files from `dist/`.
+
+    ```bash
+    npm start
+    ```
+
+## Continuous Integration
+
+Pushing to the main branch in this repo will trigger a deploy automatically to the staging server. The staging server will run the `npm run build` and `npm start` commands.
