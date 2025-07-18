@@ -13,15 +13,10 @@ const staticDir = isProduction
 
 app.use(express.static(staticDir));
 
-// Page routes
-app.get('/settings', (req, res) => {
-    res.sendFile(path.join(staticDir, 'settings.html'));
-});
-
 // API endpoint
 app.use('/api/example', exampleRoutes);
 
-// Serve index.html for all other routes (SPA fallback)
+// Serve index.html for all routes (SPA fallback)
 if (isProduction) {
   app.get('*', (req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
