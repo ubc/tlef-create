@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import Sidebar from './Sidebar';
+import NotificationSystem from './NotificationSystem';
 import '../styles/components/Layout.css';
 
 interface LayoutProps {
@@ -15,6 +16,7 @@ const Layout = ({ children }: LayoutProps) => {
                     {children}
                 </div>
             </div>
+            <NotificationSystem />
         </div>
     );
 };

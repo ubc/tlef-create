@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Wand2, Settings, Zap, Gamepad2, GraduationCap, Edit, Plus, Minus } from 'lucide-react';
+import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS, QuizGenerationProgressPayload, QuizGenerationCompletedPayload } from '../services/pubsubService';
 import '../styles/components/QuestionGeneration.css';
 
 interface QuestionGenerationProps {
@@ -25,7 +27,66 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
     { type: 'flashcard', count: 1 }
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState({
+    currentStep: '',
+    progress: 0,
+    questionsGenerated: 0,
+    totalQuestions: 0
+  });
   const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
+  const [generationId, setGenerationId] = useState<string | null>(null);
+
+  const { subscribe, publish, showNotification, showLoading, hideLoading, reportError } = usePubSub('QuestionGeneration');
+
+  // Subscribe to quiz generation events
+  useEffect(() => {
+    const progressToken = subscribe<QuizGenerationProgressPayload>(
+        PUBSUB_EVENTS.QUIZ_GENERATION_PROGRESS,
+        (data) => {
+          if (data.quizId === quizId) {
+            setGenerationProgress({
+              currentStep: data.currentStep,
+              progress: data.progress,
+              questionsGenerated: data.questionsGenerated,
+              totalQuestions: data.totalQuestions
+            });
+          }
+        }
+    );
+
+    const completedToken = subscribe<QuizGenerationCompletedPayload>(
+        PUBSUB_EVENTS.QUIZ_GENERATION_COMPLETED,
+        (data) => {
+          if (data.quizId === quizId) {
+            setGeneratedQuestions(data.questions);
+            setIsGenerating(false);
+            if (generationId) {
+              hideLoading(generationId);
+            }
+            showNotification(
+                'success',
+                'Quiz Generated',
+                `Successfully generated ${data.questions.length} questions in ${data.totalTime}ms`
+            );
+          }
+        }
+    );
+
+    const failedToken = subscribe(PUBSUB_EVENTS.QUIZ_GENERATION_FAILED, (data: any) => {
+      if (data.quizId === quizId) {
+        setIsGenerating(false);
+        if (generationId) {
+          hideLoading(generationId);
+        }
+        showNotification('error', 'Generation Failed', data.error || 'Failed to generate quiz');
+        reportError(new Error(data.error), 'QuestionGeneration.quizGenerationFailed', 'high');
+      }
+    });
+
+    return () => {
+      // Cleanup handled by usePubSub hook
+    };
+  }, [subscribe, quizId, showNotification, hideLoading, reportError, generationId]);
 
   const pedagogicalApproaches = [
     {
@@ -106,6 +167,13 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
         setQuestionsPerLO(totalQuestions);
       }
     }
+
+    // Publish approach change event
+    publish('QUIZ_APPROACH_CHANGED', {
+      quizId,
+      approach: approachId,
+      questionTypes: getCurrentQuestionTypes()
+    });
   };
 
   const addQuestionType = () => {
@@ -123,9 +191,74 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
   };
 
   const handleGeneration = async () => {
+    const totalQuestions = learningObjectives.length * getTotalQuestionsPerLO();
+    const newGenerationId = `generation-${Date.now()}`;
+    setGenerationId(newGenerationId);
     setIsGenerating(true);
+    setGenerationProgress({
+      currentStep: 'Initializing...',
+      progress: 0,
+      questionsGenerated: 0,
+      totalQuestions
+    });
 
-    // Generate mock questions based on approach
+    // Show loading state
+    showLoading(`Generating ${totalQuestions} questions...`, newGenerationId);
+
+    // Publish generation started event
+    publish(PUBSUB_EVENTS.QUIZ_GENERATION_STARTED, {
+      quizId,
+      totalQuestions,
+      approach,
+      learningObjectives: learningObjectives.length,
+      assignedMaterials: assignedMaterials.length,
+      questionTypes: getCurrentQuestionTypes()
+    });
+
+    // Simulate the generation process with progress updates
+    try {
+      await simulateQuizGeneration(totalQuestions);
+    } catch (error) {
+      publish(PUBSUB_EVENTS.QUIZ_GENERATION_FAILED, {
+        quizId,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
+    }
+  };
+
+  const simulateQuizGeneration = async (totalQuestions: number) => {
+    const steps = [
+      'Analyzing learning objectives...',
+      'Processing course materials...',
+      'Generating question templates...',
+      'Creating questions...',
+      'Validating and reviewing...',
+      'Finalizing quiz...'
+    ];
+
+    const questionsPerStep = Math.ceil(totalQuestions / steps.length);
+    let questionsGenerated = 0;
+
+    for (let i = 0; i < steps.length; i++) {
+      const currentStep = steps[i];
+      const stepProgress = ((i + 1) / steps.length) * 100;
+
+      // Update progress
+      publish(PUBSUB_EVENTS.QUIZ_GENERATION_PROGRESS, {
+        quizId,
+        currentStep,
+        progress: stepProgress,
+        questionsGenerated: Math.min(questionsGenerated + questionsPerStep, totalQuestions),
+        totalQuestions
+      });
+
+      // Simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+
+      questionsGenerated = Math.min(questionsGenerated + questionsPerStep, totalQuestions);
+    }
+
+    // Generate mock questions
     const questionConfigs = getCurrentQuestionTypes();
     const mockQuestions: any[] = [];
 
@@ -149,10 +282,23 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
       });
     });
 
-    setTimeout(() => {
-      setGeneratedQuestions(mockQuestions);
-      setIsGenerating(false);
-    }, 3000);
+    // Publish completion
+    publish(PUBSUB_EVENTS.QUIZ_GENERATION_COMPLETED, {
+      quizId,
+      questions: mockQuestions,
+      totalTime: Date.now() - (parseInt(generationId?.split('-')[1] || '0')),
+      approach,
+      questionsPerObjective: getTotalQuestionsPerLO()
+    });
+  };
+
+  const handleCancelGeneration = () => {
+    setIsGenerating(false);
+    if (generationId) {
+      hideLoading(generationId);
+    }
+    publish('QUIZ_GENERATION_CANCELLED', { quizId });
+    showNotification('info', 'Generation Cancelled', 'Quiz generation has been stopped');
   };
 
   return (
@@ -314,11 +460,24 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: Q
             {isGenerating ? (
                 <div className="generating-state">
                   <div className="loading-spinner"></div>
-                  <p>Generating questions for Learning Objective 1 of {learningObjectives.length}...</p>
-                  <button className="btn btn-secondary">Cancel Generation</button>
+                  <p>{generationProgress.currentStep}</p>
+                  <div className="progress-bar">
+                    <div
+                        className="progress-fill"
+                        style={{ width: `${generationProgress.progress}%` }}
+                    />
+                  </div>
+                  <p>Generated {generationProgress.questionsGenerated} of {generationProgress.totalQuestions} questions</p>
+                  <button className="btn btn-secondary" onClick={handleCancelGeneration}>
+                    Cancel Generation
+                  </button>
                 </div>
             ) : (
-                <button className="btn btn-primary" onClick={handleGeneration}>
+                <button
+                    className="btn btn-primary"
+                    onClick={handleGeneration}
+                    disabled={learningObjectives.length === 0 || assignedMaterials.length === 0}
+                >
                   <Wand2 size={16} />
                   Generate Full Quiz ({learningObjectives.length * getTotalQuestionsPerLO()} questions)
                 </button>
