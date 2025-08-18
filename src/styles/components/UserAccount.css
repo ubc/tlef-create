@@ -76,10 +76,28 @@
     cursor: pointer;
     transition: all 0.2s ease;
     color: var(--color-foreground);
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    font-weight: 500;
 }
 
 .setting-item:hover {
     background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Special handling for dark settings items */
+.setting-item.dark {
+    background-color: var(--color-muted);
+    color: var(--color-foreground);
+}
+
+.setting-item.dark:hover {
+    background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
 }
 
 .report-section {

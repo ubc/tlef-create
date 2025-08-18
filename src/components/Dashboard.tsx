@@ -1,21 +1,60 @@
+import { useState, useEffect } from 'react';
 import { BookOpen, FileText, CheckCircle, Clock } from 'lucide-react';
 import { useAppSelector } from '../hooks/redux';
+import { foldersApi, Folder, ApiError } from '../services/api';
 import '../styles/components/Dashboard.css';
 
 const Dashboard = () => {
-  const { courses } = useAppSelector((state) => state.app);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const totalQuizzes = courses.reduce((total, course) => total + course.quizzes.length, 0);
-  const totalQuestions = courses.reduce((total, course) =>
-      total + course.quizzes.reduce((quizTotal, quiz) => quizTotal + quiz.questionCount, 0), 0
-  );
+  useEffect(() => {
+    loadFolders();
+  }, []);
+
+  const loadFolders = async () => {
+    console.log('🔄 Loading folders from API...');
+    try {
+      setError(null);
+      const response = await foldersApi.getFolders();
+      console.log('✅ Folders API response:', response);
+      console.log('📁 Number of folders received:', response.folders?.length || 0);
+      console.log('📋 Folder details:', response.folders);
+      setFolders(response.folders);
+    } catch (err) {
+      console.error('❌ Failed to load folders:', err);
+      if (err instanceof ApiError) {
+        console.error('🚨 API Error details:', {
+          status: err.status,
+          code: err.code,
+          message: err.message,
+          details: err.details
+        });
+        if (err.isAuthError()) {
+          setError('Please log in again to continue');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Failed to load folders. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate stats from actual folder data (with safe guards)
+  const totalQuizzes = folders?.reduce((total, folder) => total + (folder.stats?.totalQuizzes || 0), 0) || 0;
+  const totalQuestions = folders?.reduce((total, folder) => total + (folder.stats?.totalQuestions || 0), 0) || 0;
+  const totalMaterials = folders?.reduce((total, folder) => total + (folder.stats?.totalMaterials || 0), 0) || 0;
 
   return (
       <div>
         <div className="dashboard-grid">
           <div className="card stat-card">
             <BookOpen size={24} style={{ margin: '0 auto var(--spacing-sm)', color: 'var(--color-primary)' }} />
-            <div className="stat-number">{courses.length}</div>
+            <div className="stat-number">{folders?.length || 0}</div>
             <div className="stat-label">Active Courses</div>
           </div>
 

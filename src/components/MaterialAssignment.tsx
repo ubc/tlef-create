@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileText, Link, Check } from 'lucide-react';
+import { Material } from '../services/api';
 import '../styles/components/MaterialAssignment.css';
 
-interface Material {
+interface MaterialUI {
   id: string;
   name: string;
   type: 'pdf' | 'docx' | 'url' | 'text';
@@ -14,40 +15,24 @@ interface MaterialAssignmentProps {
   courseId: string;
   assignedMaterials: string[];
   onAssignedMaterialsChange: (materials: string[]) => void;
+  courseMaterials?: Material[];
+  onNavigateNext?: () => void;
 }
 
-const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsChange }: MaterialAssignmentProps) => {
-  // Mock materials data - in real app this would come from the course materials
-  const [courseMaterials] = useState<Material[]>([
-    {
-      id: '1',
-      name: 'Geological Survey Report 2024.pdf',
-      type: 'pdf',
-      uploadDate: '2024-01-15',
-      content: 'Comprehensive geological survey...'
-    },
-    {
-      id: '2',
-      name: 'Plate Tectonics Lecture Notes.docx',
-      type: 'docx',
-      uploadDate: '2024-01-14',
-      content: 'Lecture notes on plate tectonics...'
-    },
-    {
-      id: '3',
-      name: 'URL: National Geographic Earth Sciences',
-      type: 'url',
-      uploadDate: '2024-01-13',
-      content: 'https://nationalgeographic.com/earth-sciences'
-    },
-    {
-      id: '4',
-      name: 'Text: Field Observation Guidelines',
-      type: 'text',
-      uploadDate: '2024-01-12',
-      content: 'Guidelines for conducting field observations...'
-    }
-  ]);
+const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsChange, courseMaterials: propsCourseMaterials, onNavigateNext }: MaterialAssignmentProps) => {
+  // Use real materials if provided, otherwise use mock data
+  const materials = propsCourseMaterials || [];
+  const [showNavigation, setShowNavigation] = useState(false);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  
+  // Transform backend materials to match the UI interface
+  const courseMaterials: MaterialUI[] = materials.map(m => ({
+    id: m._id,
+    name: m.name,
+    type: m.type,
+    uploadDate: new Date(m.createdAt).toLocaleDateString(),
+    content: m.content || m.url || m.filePath
+  }));
 
   const handleMaterialToggle = (materialId: string) => {
     if (assignedMaterials.includes(materialId)) {
@@ -56,6 +41,30 @@ const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsCh
       onAssignedMaterialsChange([...assignedMaterials, materialId]);
     }
   };
+
+  // Effect to handle navigation appearance with smooth scroll
+  useEffect(() => {
+    const shouldShowNav = assignedMaterials.length > 0;
+    
+    if (shouldShowNav && !showNavigation) {
+      // Show navigation section
+      setShowNavigation(true);
+      
+      // Scroll to navigation section after it appears
+      setTimeout(() => {
+        if (navigationRef.current) {
+          navigationRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'start'
+          });
+        }
+      }, 300); // Delay to allow render
+    } else if (!shouldShowNav && showNavigation) {
+      // Hide navigation section
+      setShowNavigation(false);
+    }
+  }, [assignedMaterials.length, showNavigation]);
 
   const getFileIcon = (type: string) => {
     switch (type) {
@@ -156,6 +165,45 @@ const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsCh
                     </div>
                 )}
               </div>
+          )}
+
+          {/* Navigation Section */}
+          {showNavigation && (
+            <div 
+              ref={navigationRef}
+              className={`tab-navigation ${assignedMaterials.length > 0 ? 'nav-visible' : 'nav-hidden'}`}
+            >
+              <div className="nav-content">
+                <div className="nav-info">
+                  <h4>Materials Assigned</h4>
+                  <p>You have assigned {assignedMaterials.length} material{assignedMaterials.length !== 1 ? 's' : ''} to this quiz.</p>
+                </div>
+                <div className="nav-actions">
+                  <button 
+                    className="btn btn-primary btn-nav"
+                    onClick={() => {
+                      if (onNavigateNext) {
+                        onNavigateNext();
+                      } else {
+                        // Fallback method
+                        const tabButtons = document.querySelectorAll('button');
+                        const objectivesTab = Array.from(tabButtons).find(button => 
+                          button.textContent?.includes('Learning Objectives')
+                        );
+                        if (objectivesTab) {
+                          objectivesTab.click();
+                          setTimeout(() => {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }, 200);
+                        }
+                      }
+                    }}
+                  >
+                    Next: Set Learning Objectives
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

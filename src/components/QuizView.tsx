@@ -1,11 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { useAppSelector } from '../hooks/redux';
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft, FileText, Target, Wand2, Settings } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
 import QuestionGeneration from './QuestionGeneration';
 import ReviewEdit from './ReviewEdit';
+import { RootState, AppDispatch } from '../store';
+import { fetchQuizById, setCurrentQuiz, assignMaterials } from '../store/slices/quizSlice';
+import { fetchMaterials } from '../store/slices/materialSlice';
+import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import '../styles/components/QuizView.css';
 
 type TabType = 'materials' | 'objectives' | 'generation' | 'review';
@@ -13,19 +17,58 @@ type TabType = 'materials' | 'objectives' | 'generation' | 'review';
 const QuizView = () => {
   const { courseId, quizId } = useParams();
   const navigate = useNavigate();
-  const { courses } = useAppSelector((state) => state.app);
-
+  const dispatch = useDispatch<AppDispatch>();
+  
+  const { currentQuiz, loading, error } = useSelector((state: RootState) => state.quiz);
+  const { materials } = useSelector((state: RootState) => state.material);
   const [activeTab, setActiveTab] = useState<TabType>('materials');
   const [learningObjectives, setLearningObjectives] = useState<string[]>([]);
   const [assignedMaterials, setAssignedMaterials] = useState<string[]>([]);
 
-  const course = courses.find(c => c.id === courseId);
-  const quiz = course?.quizzes.find(q => q.id === quizId);
+  useEffect(() => {
+    if (quizId) {
+      dispatch(fetchQuizById(quizId));
+    }
+    if (courseId) {
+      dispatch(fetchMaterials(courseId));
+    }
+    return () => {
+      dispatch(setCurrentQuiz(null));
+      dispatch(clearObjectives());
+    };
+  }, [quizId, courseId, dispatch]);
 
-  if (!course || !quiz) {
+  useEffect(() => {
+    if (currentQuiz) {
+      // Set assigned materials from backend
+      const materialIds = currentQuiz.materials.map((m: any) => 
+        typeof m === 'string' ? m : m._id
+      );
+      setAssignedMaterials(materialIds);
+      
+      // Set learning objectives if they exist
+      if (currentQuiz.learningObjectives) {
+        // Ensure learning objectives are strings, not objects
+        const objectiveTexts = currentQuiz.learningObjectives.map((obj: any) => 
+          typeof obj === 'string' ? obj : obj.text || obj
+        );
+        setLearningObjectives(objectiveTexts);
+      }
+    }
+  }, [currentQuiz]);
+
+  if (loading) {
+    return (
+      <div className="quiz-loading">
+        <div>Loading quiz...</div>
+      </div>
+    );
+  }
+
+  if (error || !currentQuiz) {
     return (
         <div className="quiz-not-found">
-          <h2>Quiz not found</h2>
+          <h2>{error || 'Quiz not found'}</h2>
           <button className="btn btn-primary" onClick={() => navigate('/')}>
             Go to Dashboard
           </button>
@@ -58,12 +101,12 @@ const QuizView = () => {
         <div className="quiz-header">
           <button className="btn btn-ghost" onClick={() => navigate(`/course/${courseId}`)}>
             <ArrowLeft size={16} />
-            Back to {course.name}
+            Back to Course
           </button>
           <div>
-            <h1>{quiz.name}</h1>
+            <h1>{currentQuiz.name}</h1>
             <p className="quiz-description">
-              {course.name} • {quiz.questionCount} questions
+              {currentQuiz.folder?.name || 'Course'} • {currentQuiz.questions?.length || 0} questions
             </p>
           </div>
         </div>
@@ -88,7 +131,20 @@ const QuizView = () => {
               <MaterialAssignment
                   courseId={courseId!}
                   assignedMaterials={assignedMaterials}
-                  onAssignedMaterialsChange={setAssignedMaterials}
+                  onAssignedMaterialsChange={(materialIds) => {
+                    setAssignedMaterials(materialIds);
+                    // Update backend whenever materials change (assign or unassign)
+                    if (currentQuiz) {
+                      dispatch(assignMaterials({ id: currentQuiz._id, materialIds }));
+                    }
+                  }}
+                  courseMaterials={materials}
+                  onNavigateNext={() => {
+                    setActiveTab('objectives');
+                    setTimeout(() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }, 100);
+                  }}
               />
           )}
 
@@ -97,6 +153,13 @@ const QuizView = () => {
                   assignedMaterials={assignedMaterials}
                   objectives={learningObjectives}
                   onObjectivesChange={setLearningObjectives}
+                  quizId={quizId!}
+                  onNavigateNext={() => {
+                    setActiveTab('generation');
+                    setTimeout(() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }, 100);
+                  }}
               />
           )}
 
@@ -105,6 +168,7 @@ const QuizView = () => {
                   learningObjectives={learningObjectives}
                   assignedMaterials={assignedMaterials}
                   quizId={quizId!}
+                  onQuestionsGenerated={() => setActiveTab('review')}
               />
           )}
 

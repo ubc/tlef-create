@@ -1,4 +1,4 @@
-import "../../../styles/components/ui/skeleton.css"
+import "../../styles/components/ui/skeleton.css"
 import { cn } from "../../lib/utils"
 
 function Skeleton({

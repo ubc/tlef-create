@@ -1,6 +1,6 @@
 import * as React from "react"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
-import "../../../styles/components/ui/pagination.css"
+import "../../styles/components/ui/pagination.css"
 
 import { cn } from "../../lib/utils"
 import { ButtonProps, buttonVariants } from "./button"

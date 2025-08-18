@@ -1,6 +1,6 @@
 import * as React from "react"
 import * as TabsPrimitive from "@radix-ui/react-tabs"
-import "../../../styles/components/ui/tabs.css"
+import "../../styles/components/ui/tabs.css"
 
 import { cn } from "../../lib/utils"
 

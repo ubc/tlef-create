@@ -1,0 +1,783 @@
+import { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { Wand2, Settings, Zap, Gamepad2, GraduationCap, Edit, Plus, Minus, CheckCircle, Eye } from 'lucide-react';
+import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS, QuizGenerationProgressPayload, QuizGenerationCompletedPayload } from '../services/pubsubService';
+import { RootState, AppDispatch } from '../store';
+import { generatePlan, fetchPlans, approvePlan, updatePlan, setCurrentPlan } from '../store/slices/planSlice';
+import '../styles/components/QuestionGeneration.css';
+
+interface QuestionGenerationProps {
+  learningObjectives: string[];
+  assignedMaterials: string[];
+  quizId: string;
+}
+
+type PedagogicalApproach = 'support' | 'assess' | 'gamify' | 'custom';
+type QuestionType = 'multiple-choice' | 'true-false' | 'flashcard' | 'summary' | 'discussion' | 'matching' | 'ordering' | 'cloze';
+
+interface QuestionTypeConfig {
+  type: QuestionType;
+  count?: number;        // For fixed count (e.g., 3 questions)
+  percentage?: number;   // For percentage-based (e.g., 30%)
+  distributionType: 'fixed' | 'percentage';
+}
+
+const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId }: QuestionGenerationProps) => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { plans, currentPlan, activePlan, loading, generating, error } = useSelector((state: RootState) => state.plan);
+  
+  // Phase management: 'plan' for plan generation/review, 'generate' for question generation
+  const [phase, setPhase] = useState<'plan' | 'generate'>('plan');
+  const [approach, setApproach] = useState<PedagogicalApproach>('support');
+  const [questionsPerLO, setQuestionsPerLO] = useState(3);
+  const [showAdvancedEdit, setShowAdvancedEdit] = useState(false);
+  const [customQuestionTypes, setCustomQuestionTypes] = useState<QuestionTypeConfig[]>([
+    { type: 'multiple-choice', percentage: 40, distributionType: 'percentage' },
+    { type: 'flashcard', percentage: 60, distributionType: 'percentage' }
+  ]);
+  
+  // Store customized approaches for each pedagogical approach
+  const [customizedApproaches, setCustomizedApproaches] = useState<Record<PedagogicalApproach, QuestionTypeConfig[]>>({
+    support: [],
+    assess: [],
+    gamify: [],
+    custom: []
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState({
+    currentStep: '',
+    progress: 0,
+    questionsGenerated: 0,
+    totalQuestions: 0
+  });
+  const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
+  const [generationId, setGenerationId] = useState<string | null>(null);
+
+  const { subscribe, publish, showNotification, showLoading, hideLoading, reportError } = usePubSub('QuestionGeneration');
+
+  // Load existing plans when component mounts
+  useEffect(() => {
+    if (quizId) {
+      dispatch(fetchPlans(quizId));
+    }
+  }, [quizId, dispatch]);
+
+  // Determine phase based on active plan and learning objectives
+  useEffect(() => {
+    if (learningObjectives.length === 0) {
+      setPhase('plan');
+    } else if (activePlan) {
+      setPhase('generate');
+    } else {
+      setPhase('plan');
+    }
+  }, [activePlan, learningObjectives.length]);
+
+  // Subscribe to quiz generation events
+  useEffect(() => {
+    const progressToken = subscribe<QuizGenerationProgressPayload>(
+        PUBSUB_EVENTS.QUIZ_GENERATION_PROGRESS,
+        (data) => {
+          if (data.quizId === quizId) {
+            setGenerationProgress({
+              currentStep: data.currentStep,
+              progress: data.progress,
+              questionsGenerated: data.questionsGenerated,
+              totalQuestions: data.totalQuestions
+            });
+          }
+        }
+    );
+
+    const completedToken = subscribe<QuizGenerationCompletedPayload>(
+        PUBSUB_EVENTS.QUIZ_GENERATION_COMPLETED,
+        (data) => {
+          if (data.quizId === quizId) {
+            setGeneratedQuestions(data.questions);
+            setIsGenerating(false);
+            if (generationId) {
+              hideLoading(generationId);
+            }
+            showNotification(
+                'success',
+                'Quiz Generated',
+                `Successfully generated ${data.questions.length} questions in ${data.totalTime}ms`
+            );
+          }
+        }
+    );
+
+    const failedToken = subscribe(PUBSUB_EVENTS.QUIZ_GENERATION_FAILED, (data: any) => {
+      if (data.quizId === quizId) {
+        setIsGenerating(false);
+        if (generationId) {
+          hideLoading(generationId);
+        }
+        showNotification('error', 'Generation Failed', data.error || 'Failed to generate quiz');
+        reportError(new Error(data.error), 'QuestionGeneration.quizGenerationFailed', 'high');
+      }
+    });
+
+    return () => {
+      // Cleanup handled by usePubSub hook
+    };
+  }, [subscribe, quizId, showNotification, hideLoading, reportError, generationId]);
+
+  const pedagogicalApproaches = [
+    {
+      id: 'support' as PedagogicalApproach,
+      title: 'Support Learning',
+      description: 'Flashcards and summaries to help students memorize and understand',
+      icon: GraduationCap,
+      defaultTypes: [
+        { type: 'flashcard' as QuestionType, percentage: 60, distributionType: 'percentage' as const },
+        { type: 'summary' as QuestionType, percentage: 30, distributionType: 'percentage' as const },
+        { type: 'discussion' as QuestionType, count: 1, distributionType: 'fixed' as const }
+      ]
+    },
+    {
+      id: 'assess' as PedagogicalApproach,
+      title: 'Assess Learning',
+      description: 'Classic assessment questions to test student comprehension',
+      icon: Zap,
+      defaultTypes: [
+        { type: 'multiple-choice' as QuestionType, percentage: 60, distributionType: 'percentage' as const },
+        { type: 'true-false' as QuestionType, percentage: 40, distributionType: 'percentage' as const }
+      ]
+    },
+    {
+      id: 'gamify' as PedagogicalApproach,
+      title: 'Gamify Learning',
+      description: 'Interactive and engaging questions to make learning fun',
+      icon: Gamepad2,
+      defaultTypes: [
+        { type: 'matching' as QuestionType, percentage: 40, distributionType: 'percentage' as const },
+        { type: 'ordering' as QuestionType, percentage: 30, distributionType: 'percentage' as const },
+        { type: 'cloze' as QuestionType, percentage: 30, distributionType: 'percentage' as const }
+      ]
+    },
+    {
+      id: 'custom' as PedagogicalApproach,
+      title: 'Custom Formula',
+      description: 'Define your own mix of question types and quantities',
+      icon: Settings,
+      defaultTypes: []
+    }
+  ];
+
+  const questionTypes = [
+    { id: 'multiple-choice', label: 'Multiple Choice' },
+    { id: 'true-false', label: 'True/False' },
+    { id: 'flashcard', label: 'Flashcard' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'discussion', label: 'Discussion' },
+    { id: 'matching', label: 'Matching' },
+    { id: 'ordering', label: 'Ordering' },
+    { id: 'cloze', label: 'Cloze Test' }
+  ];
+
+  const getCurrentQuestionTypes = () => {
+    if (approach === 'custom') {
+      return customQuestionTypes;
+    }
+    
+    // Check if user has customized this approach
+    const customized = customizedApproaches[approach];
+    if (customized && customized.length > 0) {
+      return customized;
+    }
+    
+    // Return default types for this approach
+    const selectedApproach = pedagogicalApproaches.find(app => app.id === approach);
+    return selectedApproach?.defaultTypes || [];
+  };
+
+  const calculateQuestionDistribution = (questionsPerLO: number) => {
+    const currentTypes = getCurrentQuestionTypes();
+    const distribution: { type: QuestionType; count: number; source: 'fixed' | 'percentage' }[] = [];
+    
+    // Validate input
+    const validQuestionsPerLO = Math.max(1, isNaN(questionsPerLO) ? 3 : questionsPerLO);
+    
+    // First, allocate fixed questions
+    let fixedTotal = 0;
+    currentTypes.forEach(config => {
+      if (config.distributionType === 'fixed' && config.count && !isNaN(config.count)) {
+        const count = Math.max(0, config.count);
+        distribution.push({ type: config.type, count, source: 'fixed' });
+        fixedTotal += count;
+      }
+    });
+    
+    // Calculate remaining questions for percentage-based distribution
+    const remainingQuestions = Math.max(0, validQuestionsPerLO - fixedTotal);
+    
+    // Get percentage-based configs
+    const percentageConfigs = currentTypes.filter(config => 
+      config.distributionType === 'percentage' && 
+      config.percentage && 
+      !isNaN(config.percentage) && 
+      config.percentage > 0
+    );
+    
+    if (percentageConfigs.length === 0 && remainingQuestions > 0) {
+      // If no valid percentage configs, distribute remaining questions equally
+      const evenDistribution = Math.floor(remainingQuestions / Math.max(1, currentTypes.length));
+      currentTypes.forEach(config => {
+        if (config.distributionType === 'percentage') {
+          distribution.push({ type: config.type, count: evenDistribution, source: 'percentage' });
+        }
+      });
+      return distribution;
+    }
+    
+    // Distribute remaining questions by percentage
+    let allocatedCount = 0;
+    percentageConfigs.forEach((config, index) => {
+      const percentage = Math.max(0, Math.min(100, config.percentage || 0));
+      
+      if (index === percentageConfigs.length - 1) {
+        // Last item gets all remaining questions to handle rounding
+        const count = Math.max(0, remainingQuestions - allocatedCount);
+        if (count > 0) {
+          distribution.push({ type: config.type, count, source: 'percentage' });
+        }
+      } else {
+        const count = Math.max(0, Math.ceil((percentage / 100) * remainingQuestions));
+        distribution.push({ type: config.type, count, source: 'percentage' });
+        allocatedCount += count;
+      }
+    });
+    
+    return distribution;
+  };
+
+  const getTotalQuestionsPerLO = () => {
+    return questionsPerLO;
+  };
+
+  // Plan generation handlers
+  const handleGeneratePlan = async () => {
+    try {
+      await dispatch(generatePlan({ quizId, approach, questionsPerLO }));
+      showNotification('success', 'Plan Generated', 'Generation plan created successfully');
+    } catch (error) {
+      console.error('Failed to generate plan:', error);
+      showNotification('error', 'Plan Generation Failed', 'Failed to generate plan');
+    }
+  };
+
+  const handleApprovePlan = async () => {
+    if (!currentPlan) return;
+    
+    try {
+      await dispatch(approvePlan(currentPlan._id));
+      setPhase('generate');
+      showNotification('success', 'Plan Approved', 'Plan approved successfully. Ready to generate questions!');
+    } catch (error) {
+      console.error('Failed to approve plan:', error);
+      showNotification('error', 'Plan Approval Failed', 'Failed to approve plan');
+    }
+  };
+
+  const handleBackToPlan = () => {
+    setPhase('plan');
+  };
+
+  const handleApproachSelect = (approachId: PedagogicalApproach) => {
+    setApproach(approachId);
+    setShowAdvancedEdit(approachId === 'custom');
+
+    if (approachId !== 'custom') {
+      const selectedApproach = pedagogicalApproaches.find(app => app.id === approachId);
+      if (selectedApproach?.defaultTypes) {
+        const totalQuestions = selectedApproach.defaultTypes.reduce((total, config) => total + config.count, 0);
+        setQuestionsPerLO(totalQuestions);
+      }
+    }
+
+    // Publish approach change event
+    publish('QUIZ_APPROACH_CHANGED', {
+      quizId,
+      approach: approachId,
+      questionTypes: getCurrentQuestionTypes()
+    });
+  };
+
+  const addQuestionType = () => {
+    const newConfig: QuestionTypeConfig = { 
+      type: 'multiple-choice', 
+      percentage: 20, 
+      distributionType: 'percentage' 
+    };
+    
+    if (approach === 'custom') {
+      setCustomQuestionTypes([...customQuestionTypes, newConfig]);
+    } else {
+      // Add to customized approach
+      const updated = { ...customizedApproaches };
+      const current = updated[approach] || getCurrentQuestionTypes();
+      updated[approach] = [...current, newConfig];
+      setCustomizedApproaches(updated);
+    }
+  };
+
+  const removeQuestionType = (index: number) => {
+    if (approach === 'custom') {
+      setCustomQuestionTypes(customQuestionTypes.filter((_, i) => i !== index));
+    } else {
+      const updated = { ...customizedApproaches };
+      const current = updated[approach] || getCurrentQuestionTypes();
+      updated[approach] = current.filter((_, i) => i !== index);
+      setCustomizedApproaches(updated);
+    }
+  };
+
+  const updateQuestionType = (index: number, field: keyof QuestionTypeConfig, value: any) => {
+    if (approach === 'custom') {
+      const updated = [...customQuestionTypes];
+      updated[index] = { ...updated[index], [field]: value };
+      setCustomQuestionTypes(updated);
+    } else {
+      const updatedApproaches = { ...customizedApproaches };
+      const current = updatedApproaches[approach] || [...getCurrentQuestionTypes()];
+      current[index] = { ...current[index], [field]: value };
+      updatedApproaches[approach] = current;
+      setCustomizedApproaches(updatedApproaches);
+    }
+  };
+
+  const resetApproachToDefault = () => {
+    if (approach !== 'custom') {
+      const updated = { ...customizedApproaches };
+      updated[approach] = [];
+      setCustomizedApproaches(updated);
+    }
+  };
+
+  const handleGeneration = async () => {
+    const totalQuestions = learningObjectives.length * getTotalQuestionsPerLO();
+    const newGenerationId = `generation-${Date.now()}`;
+    setGenerationId(newGenerationId);
+    setIsGenerating(true);
+    setGenerationProgress({
+      currentStep: 'Initializing...',
+      progress: 0,
+      questionsGenerated: 0,
+      totalQuestions
+    });
+
+    // Show loading state
+    showLoading(`Generating ${totalQuestions} questions...`, newGenerationId);
+
+    // Publish generation started event
+    publish(PUBSUB_EVENTS.QUIZ_GENERATION_STARTED, {
+      quizId,
+      totalQuestions,
+      approach,
+      learningObjectives: learningObjectives.length,
+      assignedMaterials: assignedMaterials.length,
+      questionTypes: getCurrentQuestionTypes()
+    });
+
+    // Simulate the generation process with progress updates
+    try {
+      await simulateQuizGeneration(totalQuestions);
+    } catch (error) {
+      publish(PUBSUB_EVENTS.QUIZ_GENERATION_FAILED, {
+        quizId,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      });
+    }
+  };
+
+  const simulateQuizGeneration = async (totalQuestions: number) => {
+    const steps = [
+      'Analyzing learning objectives...',
+      'Processing course materials...',
+      'Generating question templates...',
+      'Creating questions...',
+      'Validating and reviewing...',
+      'Finalizing quiz...'
+    ];
+
+    const questionsPerStep = Math.ceil(totalQuestions / steps.length);
+    let questionsGenerated = 0;
+
+    for (let i = 0; i < steps.length; i++) {
+      const currentStep = steps[i];
+      const stepProgress = ((i + 1) / steps.length) * 100;
+
+      // Update progress
+      publish(PUBSUB_EVENTS.QUIZ_GENERATION_PROGRESS, {
+        quizId,
+        currentStep,
+        progress: stepProgress,
+        questionsGenerated: Math.min(questionsGenerated + questionsPerStep, totalQuestions),
+        totalQuestions
+      });
+
+      // Simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+
+      questionsGenerated = Math.min(questionsGenerated + questionsPerStep, totalQuestions);
+    }
+
+    // Generate mock questions
+    const questionConfigs = getCurrentQuestionTypes();
+    const mockQuestions: any[] = [];
+
+    learningObjectives.forEach((objective, loIndex) => {
+      questionConfigs.forEach((config) => {
+        for (let i = 0; i < config.count; i++) {
+          mockQuestions.push({
+            id: Date.now() + Math.random(),
+            type: config.type,
+            difficulty: 'moderate',
+            question: `${config.type.replace('-', ' ')} question ${mockQuestions.length + 1} for "${objective.substring(0, 40)}..."`,
+            answer: config.type === 'multiple-choice' ? ['Option A', 'Option B', 'Option C', 'Option D'] :
+                config.type === 'true-false' ? 'True' :
+                    'Sample answer content',
+            correctAnswer: config.type === 'multiple-choice' ? 'Option A' : 'True',
+            loIndex,
+            learningObjective: objective,
+            generatedAt: new Date().toISOString()
+          });
+        }
+      });
+    });
+
+    // Publish completion
+    publish(PUBSUB_EVENTS.QUIZ_GENERATION_COMPLETED, {
+      quizId,
+      questions: mockQuestions,
+      totalTime: Date.now() - (parseInt(generationId?.split('-')[1] || '0')),
+      approach,
+      questionsPerObjective: getTotalQuestionsPerLO()
+    });
+  };
+
+  const handleCancelGeneration = () => {
+    setIsGenerating(false);
+    if (generationId) {
+      hideLoading(generationId);
+    }
+    publish('QUIZ_GENERATION_CANCELLED', { quizId });
+    showNotification('info', 'Generation Cancelled', 'Quiz generation has been stopped');
+  };
+
+  return (
+      <div className="question-generation">
+        {/* Phase indicator */}
+        <div className="phase-indicator">
+          <div className={`phase-step ${phase === 'plan' ? 'active' : activePlan ? 'completed' : ''}`}>
+            <div className="step-number">1</div>
+            <div className="step-label">Plan Generation</div>
+          </div>
+          <div className="phase-divider"></div>
+          <div className={`phase-step ${phase === 'generate' ? 'active' : ''}`}>
+            <div className="step-number">2</div>
+            <div className="step-label">Question Generation</div>
+          </div>
+        </div>
+
+        {phase === 'plan' ? (
+          // Phase 1: Plan Generation & Review
+          <div className="plan-phase">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Generation Plan</h3>
+                <p className="card-description">
+                  Configure how questions will be generated based on your learning objectives and pedagogical approach
+                </p>
+              </div>
+
+              <div className="pedagogical-approaches">
+                <h4>Choose Pedagogical Approach</h4>
+                <div className="approaches-grid">
+              {pedagogicalApproaches.map((app) => (
+                  <div
+                      key={app.id}
+                      className={`approach-card ${approach === app.id ? 'selected' : ''}`}
+                      onClick={() => handleApproachSelect(app.id)}
+                  >
+                    <app.icon size={24} />
+                    <h5>{app.title}</h5>
+                    <p>{app.description}</p>
+                    {app.id !== 'custom' && !showAdvancedEdit && approach === app.id && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAdvancedEdit(true);
+                            }}
+                        >
+                          <Edit size={14} />
+                          Advanced Edit
+                        </button>
+                    )}
+                  </div>
+              ))}
+            </div>
+          </div>
+
+          {approach !== 'custom' && !showAdvancedEdit && (
+              <div className="generation-settings">
+                <div className="setting-group">
+                  <label>Questions per Learning Objective: {isNaN(questionsPerLO) ? 3 : questionsPerLO}</label>
+                  <div className="questions-counter">
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.max(1, (isNaN(questionsPerLO) ? 3 : questionsPerLO) - 1))}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span className="counter-value">{isNaN(questionsPerLO) ? 3 : questionsPerLO}</span>
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.min(10, (isNaN(questionsPerLO) ? 3 : questionsPerLO) + 1))}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="setting-group">
+                  <label>Total Questions: {learningObjectives.length * (isNaN(questionsPerLO) ? 3 : questionsPerLO)}</label>
+                  <p className="setting-description">
+                    Based on {learningObjectives.length} learning objectives
+                  </p>
+                </div>
+              </div>
+          )}
+
+          {(approach === 'custom' || showAdvancedEdit) && (
+              <div className="advanced-edit">
+                <div className="advanced-header">
+                  <h4>Question Formula Editor</h4>
+                  <div className="advanced-actions">
+                    {approach !== 'custom' && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={resetApproachToDefault}
+                        >
+                          Reset to Default
+                        </button>
+                    )}
+                    {approach !== 'custom' && (
+                        <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setShowAdvancedEdit(false)}
+                        >
+                          Simple View
+                        </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="questions-per-lo-setting">
+                  <label>Questions per Learning Objective: {isNaN(questionsPerLO) ? 3 : questionsPerLO}</label>
+                  <div className="questions-counter">
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.max(1, (isNaN(questionsPerLO) ? 3 : questionsPerLO) - 1))}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span className="counter-value">{isNaN(questionsPerLO) ? 3 : questionsPerLO}</span>
+                    <button
+                        className="btn btn-outline counter-btn"
+                        onClick={() => setQuestionsPerLO(Math.min(20, (isNaN(questionsPerLO) ? 3 : questionsPerLO) + 1))}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="question-types-config">
+                  <div className="config-header">
+                    <h5>Question Distribution</h5>
+                    <p>Configure how questions are distributed across types</p>
+                  </div>
+                  
+                  {getCurrentQuestionTypes().map((config, index) => (
+                      <div key={index} className="question-type-row">
+                        <div className="question-type-select">
+                          <select
+                              className="select-input"
+                              value={config.type}
+                              onChange={(e) => updateQuestionType(index, 'type', e.target.value as QuestionType)}
+                          >
+                            {questionTypes.map(type => (
+                                <option key={type.id} value={type.id}>{type.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="distribution-type-toggle">
+                          <button
+                              className={`btn btn-sm ${config.distributionType === 'percentage' ? 'btn-primary' : 'btn-outline'}`}
+                              onClick={() => {
+                                updateQuestionType(index, 'distributionType', 'percentage');
+                                // Set default percentage if switching from fixed
+                                if (config.distributionType === 'fixed') {
+                                  updateQuestionType(index, 'percentage', 20);
+                                }
+                              }}
+                          >
+                            %
+                          </button>
+                          <button
+                              className={`btn btn-sm ${config.distributionType === 'fixed' ? 'btn-primary' : 'btn-outline'}`}
+                              onClick={() => {
+                                updateQuestionType(index, 'distributionType', 'fixed');
+                                // Set default count if switching from percentage
+                                if (config.distributionType === 'percentage') {
+                                  updateQuestionType(index, 'count', 1);
+                                }
+                              }}
+                          >
+                            #
+                          </button>
+                        </div>
+
+                        {config.distributionType === 'percentage' ? (
+                            <div className="percentage-input">
+                              <input
+                                  type="number"
+                                  className="input-sm"
+                                  value={isNaN(config.percentage || 0) ? 0 : (config.percentage || 0)}
+                                  onChange={(e) => {
+                                    const value = parseInt(e.target.value) || 0;
+                                    updateQuestionType(index, 'percentage', Math.max(0, Math.min(100, value)));
+                                  }}
+                                  min="0"
+                                  max="100"
+                              />
+                              <span>%</span>
+                            </div>
+                        ) : (
+                            <div className="count-input">
+                              <button
+                                  className="btn btn-outline counter-btn"
+                                  onClick={() => {
+                                    const currentCount = config.count || 0;
+                                    updateQuestionType(index, 'count', Math.max(0, currentCount - 1));
+                                  }}
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <span className="counter-value">{isNaN(config.count || 0) ? 0 : (config.count || 0)}</span>
+                              <button
+                                  className="btn btn-outline counter-btn"
+                                  onClick={() => {
+                                    const currentCount = config.count || 0;
+                                    updateQuestionType(index, 'count', currentCount + 1);
+                                  }}
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                        )}
+
+                        <button
+                            className="btn btn-outline btn-sm btn-danger"
+                            onClick={() => removeQuestionType(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                  ))}
+
+                  <button
+                      className="btn btn-outline"
+                      onClick={addQuestionType}
+                  >
+                    <Plus size={16} />
+                    Add Question Type
+                  </button>
+                </div>
+
+                <div className="distribution-preview">
+                  <h5>Preview Distribution</h5>
+                  <div className="preview-grid">
+                    {calculateQuestionDistribution(questionsPerLO).map((item, index) => (
+                        <div key={index} className="preview-item">
+                          <span className="question-type-label">{questionTypes.find(qt => qt.id === item.type)?.label}</span>
+                          <span className="question-count">{item.count} questions</span>
+                          <span className="question-source">({item.source})</span>
+                        </div>
+                    ))}
+                  </div>
+                  <div className="total-summary">
+                    <p><strong>Total per Learning Objective:</strong> {calculateQuestionDistribution(questionsPerLO).reduce((sum, item) => sum + item.count, 0)} questions</p>
+                    <p><strong>Total Quiz Questions:</strong> {learningObjectives.length * calculateQuestionDistribution(questionsPerLO).reduce((sum, item) => sum + item.count, 0)}</p>
+                  </div>
+                </div>
+              </div>
+          )}
+
+          <div className="generation-action">
+            {isGenerating ? (
+                <div className="generating-state">
+                  <div className="loading-spinner"></div>
+                  <p>{generationProgress.currentStep}</p>
+                  <div className="progress-bar">
+                    <div
+                        className="progress-fill"
+                        style={{ width: `${generationProgress.progress}%` }}
+                    />
+                  </div>
+                  <p>Generated {generationProgress.questionsGenerated} of {generationProgress.totalQuestions} questions</p>
+                  <button className="btn btn-secondary" onClick={handleCancelGeneration}>
+                    Cancel Generation
+                  </button>
+                </div>
+            ) : (
+                <button
+                    className="btn btn-primary"
+                    onClick={handleGeneration}
+                    disabled={learningObjectives.length === 0 || assignedMaterials.length === 0}
+                >
+                  <Wand2 size={16} />
+                  Generate Full Quiz ({learningObjectives.length * (isNaN(getTotalQuestionsPerLO()) ? 3 : getTotalQuestionsPerLO())} questions)
+                </button>
+            )}
+          </div>
+        </div>
+
+        {generatedQuestions.length > 0 && (
+            <div className="generated-questions">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">Generated Questions ({generatedQuestions.length})</h3>
+                  <p className="card-description">
+                    Questions generated successfully. Review and edit as needed.
+                  </p>
+                </div>
+
+                <div className="questions-preview">
+                  {generatedQuestions.slice(0, 3).map((question, index) => (
+                      <div key={question.id} className="question-preview">
+                        <div className="question-meta">
+                          Q{index + 1} • {question.type.replace('-', ' ')} • {question.difficulty}
+                        </div>
+                        <div className="question-text">{question.question}</div>
+                      </div>
+                  ))}
+
+                  {generatedQuestions.length > 3 && (
+                      <div className="more-questions">
+                        And {generatedQuestions.length - 3} more questions...
+                      </div>
+                  )}
+                </div>
+              </div>
+            </div>
+        )}
+      </div>
+  );
+};
+
+export default QuestionGeneration;
