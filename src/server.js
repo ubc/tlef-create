@@ -1,7 +1,12 @@
-require('dotenv').config();
-const express = require('express');
-const path = require('path');
-const exampleRoutes = require('./routes/example/hello');
+import dotenv from 'dotenv';
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import exampleRoutes from './routes/example/hello.js';
+
+dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.TLEF_CREATE_PORT || 8090;
