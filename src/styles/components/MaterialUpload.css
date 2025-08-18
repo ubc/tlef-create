@@ -33,6 +33,25 @@
     background-color: var(--color-muted);
 }
 
+.upload-zone.drag-over {
+    border-color: var(--color-primary);
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+    border-style: solid;
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
+
+.upload-zone.drag-over p {
+    color: var(--color-primary-foreground);
+    font-weight: 600;
+}
+
+.upload-zone.drag-over .upload-hint {
+    color: var(--color-primary-foreground);
+    opacity: 0.8;
+}
+
 .upload-zone p {
     margin: var(--spacing-sm) 0;
     font-weight: 500;

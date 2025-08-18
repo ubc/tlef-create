@@ -1,5 +1,5 @@
 import { useToast } from "../../hooks/use-toast"
-import "../../../styles/components/ui/toaster.css"
+import "../../styles/components/ui/toaster.css"
 import {
   Toast,
   ToastClose,

@@ -1,5 +1,5 @@
 import * as React from "react"
-import "../../../styles/components/ui/table.css"
+import "../../styles/components/ui/table.css"
 
 import { cn } from "../../lib/utils"
 

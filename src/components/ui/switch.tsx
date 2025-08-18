@@ -1,6 +1,6 @@
 import * as React from "react"
 import * as SwitchPrimitives from "@radix-ui/react-switch"
-import "../../../styles/components/ui/switch.css"
+import "../../styles/components/ui/switch.css"
 
 import { cn } from "../../lib/utils"
 

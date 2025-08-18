@@ -1,7 +1,7 @@
 import * as React from "react"
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group"
 import { Circle } from "lucide-react"
-import "../../../styles/components/ui/radio-group.css"
+import "../../styles/components/ui/radio-group.css"
 
 import { cn } from "../../lib/utils"
 

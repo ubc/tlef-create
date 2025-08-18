@@ -1,7 +1,7 @@
 import * as React from "react"
 import * as MenubarPrimitive from "@radix-ui/react-menubar"
 import { Check, ChevronRight, Circle } from "lucide-react"
-import "../../../styles/components/ui/menubar.css"
+import "../../styles/components/ui/menubar.css"
 
 import { cn } from "../../lib/utils"
 
