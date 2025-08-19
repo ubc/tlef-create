@@ -56,7 +56,7 @@ h6 {
   --color-secondary-foreground: #0f172a;
   --color-muted: #f8fafc;
   --color-muted-foreground: #64748b;
-  --color-accent: #000000;
+  --color-accent: #6b7280;
   --color-accent-foreground: #ffffff;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
@@ -67,6 +67,8 @@ h6 {
   --color-card-foreground: #0f172a;
   --color-popover: #ffffff;
   --color-popover-foreground: #0f172a;
+  --color-success: #22c55e;
+  --color-success-foreground: #ffffff;
 
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -108,14 +110,17 @@ h6 {
   --color-secondary-foreground: #f8fafc;
   --color-muted: #1e293b;
   --color-muted-foreground: #94a3b8;
-  --color-accent: #ffffff;
-  --color-accent-foreground: #000000;
+  --color-accent: #6b7280;
+  --color-accent-foreground: #ffffff;
   --color-border: #334155;
   --color-input: #334155;
+  --color-ring: #ffffff;
   --color-card: #0f172a;
   --color-card-foreground: #f8fafc;
   --color-popover: #0f172a;
   --color-popover-foreground: #f8fafc;
+  --color-success: #22c55e;
+  --color-success-foreground: #ffffff;
 }
 
 /* Base Styles */
@@ -124,6 +129,24 @@ body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-size: var(--font-size-base);
+}
+
+/* Ensure good contrast for all interactive elements */
+button, .btn {
+  border: 1px solid transparent;
+}
+
+/* Special styles for elements that might have contrast issues */
+.dark-element {
+  background-color: var(--color-muted) !important;
+  color: var(--color-foreground) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.dark-element:hover {
+  background-color: var(--color-accent) !important;
+  color: var(--color-accent-foreground) !important;
+  border-color: var(--color-accent) !important;
 }
 
 /* Utility Classes */

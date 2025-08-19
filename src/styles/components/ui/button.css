@@ -31,10 +31,13 @@
 .btn-default {
   background-color: var(--color-primary);
   color: var(--color-primary-foreground);
+  border: 1px solid var(--color-primary);
 }
 
 .btn-default:hover {
-  background-color: color-mix(in srgb, var(--color-primary) 90%, black);
+  background-color: color-mix(in srgb, var(--color-primary) 90%, white);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-destructive {
@@ -47,13 +50,15 @@
 }
 
 .btn-outline {
-  border: 1px solid var(--color-input);
+  border: 1px solid var(--color-border);
   background-color: var(--color-background);
+  color: var(--color-foreground);
 }
 
 .btn-outline:hover {
   background-color: var(--color-accent);
   color: var(--color-accent-foreground);
+  border-color: var(--color-accent);
 }
 
 .btn-secondary {
@@ -63,6 +68,11 @@
 
 .btn-secondary:hover {
   background-color: color-mix(in srgb, var(--color-secondary) 80%, black);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--color-foreground);
 }
 
 .btn-ghost:hover {

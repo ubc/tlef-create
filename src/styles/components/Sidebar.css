@@ -92,6 +92,51 @@
     color: var(--color-secondary-foreground);
 }
 
+.quiz-add-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    margin-top: var(--spacing-xs);
+    background: transparent;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--font-size-sm);
+}
+
+.quiz-add-button:hover:not(:disabled) {
+    background-color: var(--color-accent);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.quiz-add-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.quiz-add-button.loading {
+    pointer-events: none;
+}
+
+.spinner-mini {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--color-border);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 .sidebar-footer {
     margin-top: auto;
     padding: var(--spacing-lg);
@@ -107,10 +152,17 @@
     cursor: pointer;
     transition: all 0.2s ease;
     font-size: var(--font-size-sm);
+    color: var(--color-foreground);
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
 }
 
 .user-account-item:hover {
     background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 768px) {

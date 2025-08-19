@@ -1,6 +1,6 @@
 import { GripVertical } from "lucide-react"
 import * as ResizablePrimitive from "react-resizable-panels"
-import "../../../styles/components/ui/resizable.css"
+import "../../styles/components/ui/resizable.css"
 
 import { cn } from "../../lib/utils"
 

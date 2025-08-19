@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Upload, Link, FileText, X, Plus } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
-import { PUBSUB_EVENTS, FileUploadCompletedPayload, FileUploadProgressPayload, pubsubService } from '../services/pubsubService';
 import '../styles/components/MaterialUpload.css';
 
 interface Material {
@@ -16,7 +15,7 @@ interface Material {
 
 interface MaterialUploadProps {
   materials: Material[];
-  onAddMaterial: (material: Omit<Material, 'id' | 'uploadDate'>) => void;
+  onAddMaterial: (material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File }) => void;
   onRemoveMaterial: (id: string) => void;
 }
 
@@ -25,91 +24,15 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const [textInput, setTextInput] = useState('');
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [showTextForm, setShowTextForm] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState<Map<string, Material>>(new Map());
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { subscribe, showNotification, showLoading, hideLoading, reportError } = usePubSub('MaterialUpload');
-
-  // Subscribe to upload events
-  useEffect(() => {
-    const progressToken = subscribe<FileUploadProgressPayload>(
-        PUBSUB_EVENTS.FILE_UPLOAD_PROGRESS,
-        (data) => {
-          setUploadingFiles(prev => {
-            const updated = new Map(prev);
-            const file = updated.get(data.fileId);
-            if (file) {
-              updated.set(data.fileId, { ...file, uploadProgress: data.progress });
-            }
-            return updated;
-          });
-        }
-    );
-
-    const completedToken = subscribe<FileUploadCompletedPayload>(
-        PUBSUB_EVENTS.FILE_UPLOAD_COMPLETED,
-        (data) => {
-          // Remove from uploading files
-          setUploadingFiles(prev => {
-            const updated = new Map(prev);
-            updated.delete(data.fileId);
-            return updated;
-          });
-
-          // Add to materials list
-          const type = data.fileName.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx';
-          onAddMaterial({
-            name: data.fileName,
-            type,
-            content: data.parsedContent || `Uploaded file: ${data.fileName}`
-          });
-
-          showNotification('success', 'Upload Complete', `${data.fileName} has been processed successfully`);
-          hideLoading(data.fileId);
-        }
-    );
-
-    const failedToken = subscribe(PUBSUB_EVENTS.FILE_UPLOAD_FAILED, (data: any) => {
-      setUploadingFiles(prev => {
-        const updated = new Map(prev);
-        updated.delete(data.fileId);
-        return updated;
-      });
-
-      showNotification('error', 'Upload Failed', data.error || 'Failed to upload file');
-      hideLoading(data.fileId);
-    });
-
-    return () => {
-      // Cleanup handled by usePubSub hook
-    };
-  }, [subscribe, onAddMaterial, showNotification, hideLoading]);
+  const { showNotification } = usePubSub('MaterialUpload');
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      Array.from(files).forEach((file) => {
-        const fileId = `file-${Date.now()}-${Math.random()}`;
-        const type = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx';
-
-        // Add to uploading files map
-        const uploadingFile: Material = {
-          id: fileId,
-          name: file.name,
-          type,
-          uploadDate: new Date().toLocaleDateString(),
-          uploadProgress: 0,
-          isUploading: true,
-        };
-
-        setUploadingFiles(prev => new Map(prev.set(fileId, uploadingFile)));
-
-        // Show loading state
-        showLoading(`Uploading ${file.name}...`, fileId);
-
-        // Simulate file upload with progress
-        simulateFileUpload(file, fileId);
-      });
+    if (files && files.length > 0) {
+      processFiles(files);
     }
 
     // Reset file input
@@ -118,40 +41,54 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
     }
   };
 
-  const simulateFileUpload = async (file: File, fileId: string) => {
-    try {
-      // Simulate upload progress
-      for (let progress = 0; progress <= 100; progress += 10) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // Publish progress event using static import
-        const progressData: FileUploadProgressPayload = { fileId, progress };
-        pubsubService.publish(PUBSUB_EVENTS.FILE_UPLOAD_PROGRESS, progressData);
+  const processFiles = (files: FileList) => {
+    Array.from(files).forEach(file => {
+      // Validate file type
+      const validTypes = ['.pdf', '.docx', '.doc'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!validTypes.includes(fileExtension)) {
+        showNotification('error', 'Invalid File Type', `${file.name} is not a supported file type. Please upload PDF or DOCX files.`);
+        return;
       }
 
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Validate file size (100MB limit)
+      if (file.size > 100 * 1024 * 1024) {
+        showNotification('error', 'File Too Large', `${file.name} is too large. Please upload files smaller than 100MB.`);
+        return;
+      }
 
-      // Publish completion event
-      const completedData: FileUploadCompletedPayload = {
-        fileId,
-        fileName: file.name,
-        materialId: `material-${Date.now()}`,
-        parsedContent: `Processed content from ${file.name}`,
-      };
-
-      pubsubService.publish(PUBSUB_EVENTS.FILE_UPLOAD_COMPLETED, completedData);
-
-    } catch (error) {
-      // Publish error event
-      pubsubService.publish(PUBSUB_EVENTS.FILE_UPLOAD_FAILED, {
-        fileId,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      onAddMaterial({
+        name: file.name,
+        type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+        file: file
       });
+    });
+  };
 
-      reportError(error instanceof Error ? error : new Error('Upload failed'), 'MaterialUpload.simulateFileUpload');
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFiles(files);
     }
   };
+
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,11 +132,8 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
     }
   };
 
-  // Combine regular materials with uploading files for display
-  const allMaterials = [
-    ...materials,
-    ...Array.from(uploadingFiles.values())
-  ];
+  // Use materials directly since we don't have uploading files anymore
+  const allMaterials = materials;
 
   return (
       <div className="material-upload">
@@ -214,11 +148,14 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
           {/* Upload Actions */}
           <div className="upload-actions">
             <div
-                className="upload-zone"
+                className={`upload-zone ${isDragOver ? 'drag-over' : ''}`}
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
             >
               <Upload size={24} />
-              <p>Click to upload files or drag and drop</p>
+              <p>{isDragOver ? 'Drop files here' : 'Click to upload files or drag and drop'}</p>
               <span className="upload-hint">PDF, DOCX files accepted</span>
             </div>
 
@@ -311,28 +248,15 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                             <div className="material-name">{material.name}</div>
                             <div className="material-meta">
                               {material.type.toUpperCase()} • {material.uploadDate}
-                              {material.isUploading && (
-                                  <span> • Uploading {material.uploadProgress}%</span>
-                              )}
                             </div>
-                            {material.isUploading && (
-                                <div className="upload-progress">
-                                  <div
-                                      className="upload-progress-bar"
-                                      style={{ width: `${material.uploadProgress}%` }}
-                                  />
-                                </div>
-                            )}
                           </div>
                         </div>
-                        {!material.isUploading && (
-                            <button
-                                className="btn btn-ghost material-remove"
-                                onClick={() => onRemoveMaterial(material.id)}
-                            >
-                              <X size={16} />
-                            </button>
-                        )}
+                        <button
+                            className="btn btn-ghost material-remove"
+                            onClick={() => onRemoveMaterial(material.id)}
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                   ))}
                 </div>

@@ -1,6 +1,6 @@
 import * as React from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
-import "../../../styles/components/ui/slider.css"
+import "../../styles/components/ui/slider.css"
 
 import { cn } from "../../lib/utils"
 

@@ -1,18 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
-import { setActiveCourse, setActiveQuiz, addCourse } from '../store/slices/appSlice';
+import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
+import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
 import '../styles/components/Sidebar.css';
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { courses, activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
+  const { activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creatingQuizForFolder, setCreatingQuizForFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadFolders();
+  }, []);
+
+  const loadFolders = async () => {
+    console.log('🔄 Sidebar: Loading folders from API...');
+    try {
+      const response = await foldersApi.getFolders();
+      console.log('✅ Sidebar: Folders loaded:', response.folders);
+      setFolders(response.folders);
+    } catch (err) {
+      console.error('❌ Sidebar: Failed to load folders:', err);
+      setFolders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleCourse = (courseId: string) => {
     setExpandedCourses(prev =>
@@ -34,12 +56,91 @@ const Sidebar = () => {
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
-  const handleCreateCourse = (courseName: string, quizCount: number) => {
-    dispatch(addCourse({ name: courseName, quizCount }));
+  const handleCreateCourse = async (courseName: string, materials: any[] = []) => {
+    console.log('➕ Sidebar: Creating folder:', courseName, 'with default Quiz 1 and', materials.length, 'materials');
+    try {
+      const response = await foldersApi.createFolder(courseName, 1);
+      console.log('✅ Sidebar: Folder created with Quiz 1:', response.folder);
+      
+      // Upload materials to the created folder
+      if (materials.length > 0) {
+        console.log('📁 Uploading materials to folder:', materials);
+        console.log('📁 Folder ID for upload:', response.folder._id);
+        
+        for (const material of materials) {
+          try {
+            console.log('🔄 Processing material:', material);
+            switch (material.type) {
+              case 'pdf':
+              case 'docx':
+                if (material.file) {
+                  console.log('📄 Uploading file:', material.file.name);
+                  const files = [material.file];
+                  await materialsApi.uploadFiles(response.folder._id, files as any);
+                }
+                break;
+              case 'url':
+                console.log('🔗 Adding URL:', material.content || material.name);
+                await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
+                break;
+              case 'text':
+                console.log('📝 Adding text material:', material.name);
+                await materialsApi.addText(response.folder._id, material.content || '', material.name);
+                break;
+            }
+          } catch (materialError) {
+            console.error('❌ Failed to upload material:', material.name, materialError);
+          }
+        }
+        console.log('✅ All materials processed');
+      }
+      
+      // Reload folders to get the updated list
+      await loadFolders();
+    } catch (err) {
+      console.error('❌ Sidebar: Failed to create folder:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to create folder: ${err.message}`);
+      } else {
+        alert('Failed to create folder. Please try again.');
+      }
+    }
   };
 
   const handleUserAccountClick = () => {
     navigate('/account');
+  };
+
+  const handleAddQuiz = async (folderId: string) => {
+    if (creatingQuizForFolder) return;
+    
+    setCreatingQuizForFolder(folderId);
+    try {
+      // Find the current folder to get existing quiz count
+      const folder = folders.find(f => f._id === folderId);
+      if (!folder) return;
+      
+      // Generate a name for the new quiz
+      const quizNumber = (folder.quizzes?.length || 0) + 1;
+      const quizName = `Quiz ${quizNumber}`;
+      
+      const response = await quizApi.createQuiz(quizName, folderId);
+      
+      // Reload folders to get the updated quiz list
+      await loadFolders();
+      
+      console.log('✅ Sidebar: Quiz created successfully:', response.quiz);
+      
+    } catch (err) {
+      console.error('❌ Sidebar: Failed to create quiz:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to create quiz: ${err.message}`);
+      } else {
+        alert('Failed to create quiz. Please try again.');
+      }
+    } finally {
+      setCreatingQuizForFolder(null);
+    }
   };
 
   return (
@@ -53,7 +154,7 @@ const Sidebar = () => {
                 onClick={() => setShowCreateModal(true)}
             >
               <Plus size={16} />
-              Create Folder
+              Create Course
             </button>
           </div>
 
@@ -80,42 +181,64 @@ const Sidebar = () => {
 
           <div className="sidebar-section">
             <h2 className="sidebar-section-title">Courses</h2>
-            {courses.length === 0 ? (
+            {loading ? (
+                <p style={{ color: 'var(--color-muted-foreground)', fontSize: 'var(--font-size-sm)' }}>
+                  Loading courses...
+                </p>
+            ) : folders.length === 0 ? (
                 <p style={{ color: 'var(--color-muted-foreground)', fontSize: 'var(--font-size-sm)' }}>
                   No courses yet. Create your first course folder to get started.
                 </p>
             ) : (
-                courses.map((course) => (
-                    <div key={course.id}>
+                folders.map((folder) => (
+                    <div key={folder._id}>
                       <div
-                          className={`course-item ${activeCourse === course.id ? 'active' : ''}`}
-                          onClick={() => handleCourseClick(course.id)}
+                          className={`course-item ${activeCourse === folder._id ? 'active' : ''}`}
+                          onClick={() => handleCourseClick(folder._id)}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span className="course-name">{course.name}</span>
-                          {expandedCourses.includes(course.id) ?
+                          <span className="course-name">{folder.name}</span>
+                          {expandedCourses.includes(folder._id) ?
                               <ChevronDown size={16} /> :
                               <ChevronRight size={16} />
                           }
                         </div>
                       </div>
 
-                      {expandedCourses.includes(course.id) && (
+                      {expandedCourses.includes(folder._id) && folder.quizzes && (
                           <div className="quiz-list">
-                            {course.quizzes.map((quiz) => (
+                            {folder.quizzes.map((quiz: any) => {
+                              const quizId = quiz._id || quiz;
+                              const quizName = quiz.name || `Quiz ${quizId}`;
+                              const questionCount = quiz.questions?.length || 0;
+                              
+                              return (
                                 <div
-                                    key={quiz.id}
-                                    className={`quiz-item ${activeQuiz === quiz.id ? 'active' : ''}`}
-                                    onClick={() => handleQuizClick(course.id, quiz.id)}
+                                    key={quizId}
+                                    className={`quiz-item ${activeQuiz === quizId ? 'active' : ''}`}
+                                    onClick={() => handleQuizClick(folder._id, quizId)}
                                 >
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>{quiz.name}</span>
+                                    <span>{quizName}</span>
                                     <span style={{ fontSize: 'var(--font-size-sm)', opacity: 0.7 }}>
-                            {quiz.questionCount} questions
-                          </span>
+                                      {questionCount} questions
+                                    </span>
                                   </div>
                                 </div>
-                            ))}
+                              );
+                            })}
+                            
+                            <button 
+                              className={`quiz-add-button ${creatingQuizForFolder === folder._id ? 'loading' : ''}`}
+                              onClick={() => handleAddQuiz(folder._id)}
+                              disabled={creatingQuizForFolder === folder._id}
+                            >
+                              {creatingQuizForFolder === folder._id ? (
+                                <div className="spinner-mini"></div>
+                              ) : (
+                                <Plus size={16} />
+                              )}
+                            </button>
                           </div>
                       )}
                     </div>
