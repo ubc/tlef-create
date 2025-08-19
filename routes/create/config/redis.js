@@ -4,15 +4,24 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Redis client configuration
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD || 'tlef-redis-2024',
-  retryDelayOnFailover: 100,
-  enableReadyCheck: true,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true
-};
+// Support REDIS_URL format or individual host/port/password
+let redisConfig;
+
+if (process.env.REDIS_URL) {
+  // Use Redis URL if provided (e.g., redis://:password@host:port)
+  redisConfig = process.env.REDIS_URL;
+} else {
+  // Fall back to individual configuration
+  redisConfig = {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: process.env.REDIS_PORT || 6379,
+    password: process.env.REDIS_PASSWORD || 'tlef-redis-2024',
+    retryDelayOnFailover: 100,
+    enableReadyCheck: true,
+    maxRetriesPerRequest: 3,
+    lazyConnect: true
+  };
+}
 
 // Create Redis client
 const redis = new Redis(redisConfig);
