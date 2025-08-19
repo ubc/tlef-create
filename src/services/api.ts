@@ -1,5 +1,7 @@
 // API Service Layer for TLEF-CREATE Backend Integration
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:7736';
+import { API_URL } from '../config/api';
+
+const API_BASE = API_URL;
 
 // Types for API responses
 export interface ApiResponse<T = any> {

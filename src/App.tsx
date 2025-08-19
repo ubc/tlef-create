@@ -9,6 +9,7 @@ import UserAccount from './components/UserAccount';
 import Login from './components/Login';
 import NotFound from "./pages/NotFound";
 import { useState, useEffect } from 'react';
+import { API_URL } from './config/api';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -23,11 +24,17 @@ const App = () => {
   const checkAuth = async () => {
     console.log('🔧 checkAuth called');
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/me`, {
+      const response = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
       console.log('🔧 Auth response status:', response.status);
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Auth check returned non-JSON response (likely HTML error page)');
+          setIsAuthenticated(false);
+          return;
+        }
         const data = await response.json();
         console.log('🔧 Auth response data:', data);
         if (data.data?.authenticated) {
