@@ -139,11 +139,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('👋 SIGTERM signal received: closing HTTP server');
-  server.close(() => {
+  server.close(async () => {
     console.log('🔴 HTTP server closed');
-    mongoose.connection.close(false, () => {
-      console.log('🔴 MongoDB connection closed');
-      process.exit(0);
-    });
+    // Mongoose 8+ doesn't accept callbacks for close()
+    await mongoose.connection.close();
+    console.log('🔴 MongoDB connection closed');
+    process.exit(0);
   });
 });
