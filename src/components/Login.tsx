@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { GraduationCap, Sparkles, Shield, ArrowRight, Loader2 } from 'lucide-react';
@@ -17,7 +18,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
 
   const handleSamlLogin = () => {
     // Redirect to backend SAML login endpoint
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/create/auth/saml/login`;
+    window.location.href = `${API_URL}/api/create/auth/saml/login`;
   };
 
   const handleAutoLogin = async () => {
@@ -30,11 +31,17 @@ const Login = ({ onAuthChange }: LoginProps) => {
     
     try {
       // First, check if we're already authenticated
-      const authCheck = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/me`, {
+      const authCheck = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
       
       if (authCheck.ok) {
+        const contentType = authCheck.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Auth check returned non-JSON response');
+          setIsAutoLoggingIn(false);
+          return;
+        }
         const authData = await authCheck.json();
         if (authData.data?.authenticated) {
           // Already authenticated, trigger auth change and navigate
@@ -48,7 +55,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
       }
 
       // Not authenticated, proceed with auto-login
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/auto-login`, {
+      const response = await fetch(`${API_URL}/api/create/auth/auto-login`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -58,11 +65,17 @@ const Login = ({ onAuthChange }: LoginProps) => {
 
       if (response.ok) {
         // Verify authentication after auto-login
-        const verifyAuth = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/me`, {
+        const verifyAuth = await fetch(`${API_URL}/api/create/auth/me`, {
           credentials: 'include'
         });
         
         if (verifyAuth.ok) {
+          const contentType = verifyAuth.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            console.error('Verify auth returned non-JSON response');
+            setIsAutoLoggingIn(false);
+            return;
+          }
           const verifyData = await verifyAuth.json();
           if (verifyData.data?.authenticated) {
             // Add a small delay to ensure session is fully established
@@ -96,8 +109,14 @@ const Login = ({ onAuthChange }: LoginProps) => {
     }
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/config`);
+      const response = await fetch(`${API_URL}/api/create/auth/config`);
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Config endpoint returned non-JSON response');
+          setSamlAvailable(false);
+          return;
+        }
         const config = await response.json();
         setSamlAvailable(config.data.samlAvailable);
         

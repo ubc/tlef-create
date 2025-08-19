@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import { Bug, User, ArrowLeft, Mail, Settings, HelpCircle, LogOut, Brain, Cpu } from 'lucide-react';
 import '../styles/components/UserAccount.css';
 
@@ -31,7 +32,7 @@ const UserAccount = () => {
 
   const fetchUserData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/create/auth/me`, {
+      const response = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
       if (response.ok) {
