@@ -9,6 +9,7 @@ import createRoutes from './routes/create/createRoutes.js';
 import biocbotRoutes from './routes/biocbot/biocbotRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
+import mongoose from 'mongoose';
 
 // ES6 __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -17,8 +18,20 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from .env file
 dotenv.config();
 
+console.log('🚀 Starting TLEF-CREATE server...');
+console.log('📦 Environment:', process.env.NODE_ENV || 'development');
+console.log('🔌 Port:', process.env.PORT || 7736);
+console.log('🌐 Frontend URL:', process.env.FRONTEND_URL || 'not set');
+
 // Connect to database
-connectDB();
+console.log('🔗 Connecting to MongoDB...');
+connectDB().catch(err => {
+  console.error('❌ Failed to connect to MongoDB:', err.message);
+  // Don't exit immediately in production to allow health checks
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 7736;
@@ -56,6 +69,17 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Health check endpoint (before other routes for priority)
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT,
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
 // Mount the API routers
 app.use('/api/create', createRoutes);
 app.use('/api/biocbot', biocbotRoutes);
@@ -74,7 +98,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 } else {
   // Development mode - show server status
-  app.get('/', (req, res) => {
+  app.get('/', (_req, res) => {
     res.json({
       message: 'TLEF Web Server is running in development mode',
       apis: {
@@ -86,8 +110,30 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`CREATE app API available at http://localhost:${PORT}/api/create`);
-  console.log(`BIOCBOT app API available at http://localhost:${PORT}/api/biocbot`);
+// Error handling middleware
+app.use((err, _req, res, _next) => {
+  console.error('❌ Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message
+  });
+});
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server is running on http://localhost:${PORT}`);
+  console.log(`📡 Health check available at http://localhost:${PORT}/health`);
+  console.log(`🎯 CREATE app API available at http://localhost:${PORT}/api/create`);
+  console.log(`🤖 BIOCBOT app API available at http://localhost:${PORT}/api/biocbot`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('🔴 HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('🔴 MongoDB connection closed');
+      process.exit(0);
+    });
+  });
 });
