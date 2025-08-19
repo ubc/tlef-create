@@ -9,6 +9,7 @@ import createRoutes from './routes/create/createRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
 import mongoose from 'mongoose';
+import StorageMonitor from './routes/create/services/storageMonitor.js';
 
 // ES6 __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -57,9 +58,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Middleware - limits for file uploads (reduced from 100mb to 50mb for safety)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 // Session middleware for passport
@@ -171,6 +172,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is running on http://localhost:${PORT}`);
   console.log(`📡 Health check available at http://localhost:${PORT}/health`);
   console.log(`🎯 CREATE app API available at http://localhost:${PORT}/api/create`);
+  
+  // Start storage monitoring (only in production to avoid development clutter)
+  if (process.env.NODE_ENV === 'production') {
+    StorageMonitor.startMonitoring();
+  }
 });
 
 // Graceful shutdown

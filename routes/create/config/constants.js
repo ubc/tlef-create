@@ -87,14 +87,20 @@ export const PLAN_STATUS = {
 
 
 export const FILE_CONFIG = {
-  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100MB
+  MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024, // Reduced to 50MB default
   ALLOWED_MIME_TYPES: {
     'application/pdf': 'pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
     'application/msword': 'doc',
     'text/plain': 'txt'
   },
-  UPLOAD_PATH: './routes/create/uploads/'
+  UPLOAD_PATH: process.env.UPLOAD_DIR || './routes/create/uploads/',
+  
+  // Storage protection limits
+  MAX_TOTAL_STORAGE: 10 * 1024 * 1024 * 1024, // 10GB total limit
+  MAX_FILES_PER_USER: 100, // Max files per user
+  MAX_FILES_TOTAL: 10000,  // Max total files in system
+  CLEANUP_DAYS: 30         // Auto-delete files older than 30 days
 };
 
 export const RATE_LIMITS = {
