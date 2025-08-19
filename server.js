@@ -63,15 +63,27 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Session middleware for passport
+// For staging/production behind proxy, we need to trust the proxy
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy (nginx)
+}
+
+// HARDCODED FIX FOR STAGING: Disable secure cookies for staging environment
+const isStaging = process.env.NODE_ENV === 'production' && 
+                  (process.env.FRONTEND_URL?.includes('staging') || 
+                   process.env.PORT === '8090');
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // HARDCODED: Disable secure cookies for staging to fix auth
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax' // Protect against CSRF
+  },
+  name: 'tlef.sid' // Custom session name
 }));
 
 // Initialize passport
@@ -97,6 +109,21 @@ app.get('/api/test', (_req, res) => {
     server: 'TLEF-CREATE Staging'
   });
 });
+
+// HARDCODED: Debug middleware for staging - always on for debugging auth issues
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, _res, next) => {
+    // Only log API auth endpoints to reduce noise
+    if (req.path.includes('/auth/')) {
+      console.log('🔍 Auth Request:', req.method, req.path);
+      console.log('🍪 Cookies:', req.cookies);
+      console.log('📦 Session ID:', req.sessionID);
+      console.log('👤 User:', req.user ? req.user.cwlId : 'none');
+      console.log('✅ Authenticated:', req.isAuthenticated ? req.isAuthenticated() : false);
+    }
+    next();
+  });
+}
 
 // Mount the API router FIRST (before static files)
 app.use('/api/create', createRoutes);
