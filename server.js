@@ -37,9 +37,19 @@ const app = express();
 const PORT = process.env.PORT || 7736;
 
 // CORS configuration for frontend integration
-const corsOrigin = process.env.NODE_ENV === 'production'
-  ? process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/:[\d]+$/, '') : true  // Remove port from FRONTEND_URL if present
-  : ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:8081', 'http://localhost:8090', 'http://localhost:8092', 'http://localhost:8093'];
+// In production, strip port numbers from FRONTEND_URL as they shouldn't be in browser requests
+let corsOrigin;
+if (process.env.NODE_ENV === 'production') {
+  if (process.env.FRONTEND_URL) {
+    // Remove port from URL (e.g., https://domain.com:8092 -> https://domain.com)
+    corsOrigin = process.env.FRONTEND_URL.replace(/:\d+$/, '');
+    console.log('🔒 CORS origin set to:', corsOrigin);
+  } else {
+    corsOrigin = true; // Allow same-origin
+  }
+} else {
+  corsOrigin = ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:8081', 'http://localhost:8090', 'http://localhost:8092', 'http://localhost:8093'];
+}
 
 app.use(cors({
   origin: corsOrigin,
