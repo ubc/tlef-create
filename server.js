@@ -6,7 +6,6 @@ import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import createRoutes from './routes/create/createRoutes.js';
-import biocbotRoutes from './routes/biocbot/biocbotRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
 import mongoose from 'mongoose';
@@ -90,31 +89,43 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Mount the API routers
+// Test endpoint to verify nginx routing
+app.get('/api/test', (_req, res) => {
+  res.json({
+    message: 'Backend is working!',
+    timestamp: new Date().toISOString(),
+    server: 'TLEF-CREATE Staging'
+  });
+});
+
+// Mount the API router FIRST (before static files)
 app.use('/api/create', createRoutes);
-app.use('/api/biocbot', biocbotRoutes);
 
 // Serve static files from dist in production
 if (process.env.NODE_ENV === 'production') {
+  // Log static file serving for debugging
+  console.log('📁 Serving static files from:', path.join(__dirname, 'dist'));
+  
+  // Serve static files
   app.use(express.static(path.join(__dirname, 'dist')));
   
   // Handle SPA routing - serve index.html for all non-API routes
   app.get('*', (req, res) => {
     // Don't serve SPA for API routes
     if (req.path.startsWith('/api/')) {
+      console.log('❌ API endpoint not found:', req.path);
       return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    console.log('📄 Serving index.html for:', req.path);
+    res.sendFile(indexPath);
   });
 } else {
   // Development mode - show server status
   app.get('/', (_req, res) => {
     res.json({
       message: 'TLEF Web Server is running in development mode',
-      apis: {
-        create: `/api/create`,
-        biocbot: `/api/biocbot`
-      },
+      api: `/api/create`,
       frontend: 'Run `npm run dev` for frontend development server'
     });
   });
@@ -133,7 +144,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is running on http://localhost:${PORT}`);
   console.log(`📡 Health check available at http://localhost:${PORT}/health`);
   console.log(`🎯 CREATE app API available at http://localhost:${PORT}/api/create`);
-  console.log(`🤖 BIOCBOT app API available at http://localhost:${PORT}/api/biocbot`);
 });
 
 // Graceful shutdown
