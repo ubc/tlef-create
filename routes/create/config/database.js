@@ -5,7 +5,9 @@ dotenv.config();
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://tlef-app:tlef-app-2024@localhost:27017/tlef-create', {
+    // Support both MONGODB_URI and MONGO_URI for compatibility
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://tlef-app:tlef-app-2024@localhost:27017/tlef-create';
+    const conn = await mongoose.connect(mongoUri, {
       // Mongoose 7+ doesn't need most options as they're defaults
       serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
