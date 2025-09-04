@@ -1,0 +1,117 @@
+{
+  "introPage": {
+    "showIntroPage": true,
+    "title": "Plant Biology Study Set",
+    "introduction": "This study set contains 3 different types of learning materials.",
+    "startButtonText": "Start Studying"
+  },
+  "progressType": "dots",
+  "passPercentage": 50,
+  "questions": [
+    {
+      "library": "H5P.Dialogcards 1.9",
+      "params": {
+        "title": "<p>Flashcard Study</p>\\n",
+        "description": "<p>Study these cards to learn the material.</p>\\n",
+        "dialogs": [
+          {
+            "text": "<p style=\"text-align: center;\">What is photosynthesis?</p>",
+            "answer": "<p style=\"text-align: center;\">The process by which plants convert sunlight into energy using chlorophyll.</p>",
+            "tips": {},
+            "audio": [],
+            "image": null,
+            "imageAltText": ""
+          }
+        ],
+        "behaviour": {
+          "scaleTextNotCard": true,
+          "enableRetry": true,
+          "disableBackwardsNavigation": false,
+          "randomCards": false,
+          "maxProficiency": 5,
+          "quickProgression": false
+        },
+        "mode": "normal"
+      },
+      "subContentId": "flashcard-test-e44c9325",
+      "metadata": {
+        "contentType": "Dialog Cards",
+        "license": "U",
+        "title": "Flashcard"
+      }
+    },
+    {
+      "library": "H5P.Accordion 1.0",
+      "params": {
+        "panels": [
+          {
+            "content": {
+              "params": {
+                "text": "<p>Plants convert sunlight, water, and CO2 into glucose and oxygen through photosynthesis. This process occurs in chloroplasts and is essential for life on Earth.</p>\\n"
+              },
+              "library": "H5P.AdvancedText 1.1",
+              "subContentId": "26ef9a99032a5",
+              "metadata": {
+                "contentType": "Text",
+                "license": "U",
+                "title": "Summary Content"
+              }
+            },
+            "title": "Photosynthesis"
+          },
+          {
+            "content": {
+              "params": {
+                "text": "<p>Plants have roots for nutrient absorption, stems for support and transport, and leaves for photosynthesis and gas exchange.</p>\\n"
+              },
+              "library": "H5P.AdvancedText 1.1",
+              "subContentId": "015e0987fac2c",
+              "metadata": {
+                "contentType": "Text",
+                "license": "U",
+                "title": "Summary Content"
+              }
+            },
+            "title": "Plant Structure"
+          },
+          {
+            "content": {
+              "params": {
+                "text": "<p>Plants reproduce through seeds (sexual reproduction) or vegetative propagation (asexual reproduction) such as runners or bulbs.</p>\\n"
+              },
+              "library": "H5P.AdvancedText 1.1",
+              "subContentId": "3425c4272889c",
+              "metadata": {
+                "contentType": "Text",
+                "license": "U",
+                "title": "Summary Content"
+              }
+            },
+            "title": "Plant Reproduction"
+          }
+        ],
+        "hTag": "h2"
+      },
+      "subContentId": "summary-test-380e0e1a",
+      "metadata": {
+        "contentType": "Accordion",
+        "license": "U",
+        "title": "Summary"
+      }
+    },
+    {
+      "library": "H5P.AdvancedText 1.1",
+      "params": {
+        "text": "<h3>Discussion Question</h3>\\n<p>How do you think climate change will affect plant ecosystems in the next 50 years? Consider factors like temperature, precipitation, and CO2 levels.</p>\\n<p><em>Discuss this question with your classmates or instructor.</em></p>\\n"
+      },
+      "subContentId": "discussion-test-cf8d9987",
+      "metadata": {
+        "contentType": "Text",
+        "license": "U",
+        "title": "Discussion Question"
+      }
+    }
+  ],
+  "disableBackwardsNavigation": false,
+  "randomQuestions": false
+}

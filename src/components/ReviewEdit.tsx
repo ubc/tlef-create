@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download } from 'lucide-react';
-import { questionsApi, Question } from '../services/api';
+import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/ReviewEdit.css';
 import '../styles/components/InteractiveQuestions.css';
@@ -17,6 +17,7 @@ interface ExtendedQuestion extends Question {
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportLoading, setExportLoading] = useState(false);
   const { showNotification } = usePubSub('ReviewEdit');
 
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
@@ -181,6 +182,48 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     } catch (error) {
       console.error('Failed to regenerate question:', error);
       showNotification('error', 'Regeneration Failed', 'Failed to regenerate question');
+    }
+  };
+
+  const handleH5PExport = async () => {
+    if (questions.length === 0) {
+      showNotification('warning', 'No Questions', 'Add some questions before exporting to H5P');
+      return;
+    }
+
+    setExportLoading(true);
+    try {
+      showNotification('info', 'Generating Export', 'Creating H5P package...');
+      
+      const result = await exportApi.exportToH5P(quizId);
+      console.log('Export API response:', result);
+      
+      if (result.success && result.data) {
+        // Download the file
+        const blob = await exportApi.downloadExport(result.data.exportId);
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = result.data.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification('success', 'Export Complete', `Downloaded ${result.data.filename} successfully`);
+      } else {
+        console.error('Export failed - Response:', result);
+        const errorMessage = result.error?.message || 'Failed to generate H5P export';
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('H5P export failed:', error);
+      const message = error.message || 'Failed to export quiz to H5P format';
+      showNotification('error', 'Export Failed', message);
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -795,10 +838,11 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               <div className="export-actions">
                 <button
                   className="btn btn-primary"
-                  onClick={() => showNotification('info', 'Export Coming Soon', 'H5P and other export formats will be available soon!')}
+                  onClick={handleH5PExport}
+                  disabled={exportLoading}
                 >
                   <Download size={16} />
-                  Export to H5P
+                  {exportLoading ? 'Exporting...' : 'Export to H5P'}
                 </button>
                 <button
                   className="btn btn-outline"

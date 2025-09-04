@@ -1,0 +1,61 @@
+{
+  "title": "Plant Biology Study Set",
+  "language": "en",
+  "mainLibrary": "H5P.QuestionSet",
+  "embedTypes": [
+    "iframe"
+  ],
+  "license": "U",
+  "preloadedDependencies": [
+    {
+      "machineName": "H5P.QuestionSet",
+      "majorVersion": "1",
+      "minorVersion": "20"
+    },
+    {
+      "machineName": "H5P.MultiChoice",
+      "majorVersion": "1",
+      "minorVersion": "16"
+    },
+    {
+      "machineName": "H5P.TrueFalse",
+      "majorVersion": "1",
+      "minorVersion": "8"
+    },
+    {
+      "machineName": "H5P.SortParagraphs",
+      "majorVersion": "0",
+      "minorVersion": "11"
+    },
+    {
+      "machineName": "H5P.DragText",
+      "majorVersion": "1",
+      "minorVersion": "10"
+    },
+    {
+      "machineName": "H5P.Blanks",
+      "majorVersion": "1",
+      "minorVersion": "14"
+    },
+    {
+      "machineName": "H5P.SingleChoiceSet",
+      "majorVersion": "1",
+      "minorVersion": "11"
+    },
+    {
+      "machineName": "H5P.Dialogcards",
+      "majorVersion": "1",
+      "minorVersion": "9"
+    },
+    {
+      "machineName": "H5P.Accordion",
+      "majorVersion": "1",
+      "minorVersion": "0"
+    },
+    {
+      "machineName": "H5P.AdvancedText",
+      "majorVersion": "1",
+      "minorVersion": "1"
+    }
+  ]
+}

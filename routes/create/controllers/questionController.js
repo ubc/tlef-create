@@ -121,7 +121,7 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
     let questionOrder = 0;
 
     for (const generatedQuestion of generationResult.questions) {
-      console.log(`💾 Saving question ${questionOrder + 1}: ${generatedQuestion.questionText.substring(0, 50)}...`);
+      console.log(`💾 Saving question ${questionOrder + 1}: ${generatedQuestion.questionText ? generatedQuestion.questionText.substring(0, 50) : 'No text'}...`);
       
       const question = new Question({
         quiz: quizId,

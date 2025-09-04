@@ -1,0 +1,55 @@
+{
+  "introPage": {
+    "showIntroPage": true,
+    "title": "Scientific Method Quiz",
+    "introduction": "This quiz contains 1 questions.",
+    "startButtonText": "Start Quiz"
+  },
+  "progressType": "dots",
+  "passPercentage": 50,
+  "questions": [
+    {
+      "library": "H5P.SortParagraphs 0.11",
+      "params": {
+        "taskDescription": "<p>Arrange these steps of the scientific method in the correct order:</p>\\n",
+        "paragraphs": [
+          "<p>Observe a phenomenon</p>\\n",
+          "<p>Form a hypothesis</p>\\n",
+          "<p>Design and conduct an experiment</p>\\n",
+          "<p>Analyze the results</p>\\n",
+          "<p>Draw conclusions</p>\\n"
+        ],
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100
+          }
+        ],
+        "behaviour": {
+          "scoringMode": "transitions",
+          "applyPenalties": true,
+          "duplicatesInterchangeable": true,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "addButtonsForMovement": true
+        },
+        "l10n": {
+          "checkAnswer": "Check",
+          "tryAgain": "Retry",
+          "showSolution": "Show solution",
+          "up": "Up",
+          "down": "Down",
+          "disabled": "Disabled"
+        }
+      },
+      "subContentId": "ordering-test-123",
+      "metadata": {
+        "contentType": "Sort the Paragraphs",
+        "license": "U",
+        "title": "Ordering Question"
+      }
+    }
+  ],
+  "disableBackwardsNavigation": false,
+  "randomQuestions": false
+}

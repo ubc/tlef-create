@@ -1,0 +1,122 @@
+{
+  "introPage": {
+    "showIntroPage": true,
+    "title": "Mixed Question Types Quiz",
+    "introduction": "This quiz contains 3 questions of different types.",
+    "startButtonText": "Start Quiz"
+  },
+  "progressType": "dots",
+  "passPercentage": 50,
+  "questions": [
+    {
+      "library": "H5P.DragText 1.10",
+      "params": {
+        "taskDescription": "<p>Match each planet with its characteristics:</p>\\n",
+        "textField": "Match each planet with its characteristics:\\n\\nMars: *Red planet*\\nVenus: *Hottest planet*\\nJupiter: *Largest planet*\\n",
+        "checkAnswer": "Check",
+        "tryAgain": "Retry",
+        "showSolution": "Show Solution",
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "instantFeedback": false,
+          "enableCheckButton": true
+        },
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100,
+            "feedback": "Score: @score of @total."
+          }
+        ],
+        "distractors": "*Has rings*"
+      },
+      "subContentId": "matching-test-790261a3",
+      "metadata": {
+        "contentType": "Drag Text",
+        "license": "U",
+        "title": "Matching Question"
+      }
+    },
+    {
+      "library": "H5P.Blanks 1.14",
+      "params": {
+        "questions": [
+          "<p>Photosynthesis is the process by which plants convert [blank] into energy using [blank] from the sun.</p>\\n"
+        ],
+        "showSolutions": "Show solutions",
+        "tryAgain": "Try again",
+        "text": "<p>Fill in the blanks about photosynthesis:</p>\\n",
+        "checkAnswer": "Check",
+        "behaviour": {
+          "enableSolutionsButton": true,
+          "autoCheck": true,
+          "caseSensitive": false,
+          "enableRetry": true,
+          "enableCheckButton": true
+        },
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100,
+            "feedback": "You got @score of @total blanks correct."
+          }
+        ]
+      },
+      "subContentId": "cloze-test-2d554797",
+      "metadata": {
+        "contentType": "Fill in the Blanks",
+        "license": "U",
+        "title": "Cloze Question"
+      }
+    },
+    {
+      "library": "H5P.SingleChoiceSet 1.11",
+      "params": {
+        "choices": [
+          {
+            "answers": [
+              "Paris",
+              "London",
+              "Berlin",
+              "Madrid"
+            ],
+            "question": "What is the capital of France?",
+            "subContentId": "23d42cef"
+          }
+        ],
+        "behaviour": {
+          "timeoutCorrect": 1000,
+          "timeoutWrong": 1000,
+          "soundEffectsEnabled": true,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "passPercentage": 100,
+          "autoContinue": true
+        },
+        "l10n": {
+          "showSolutionButtonLabel": "Show solution",
+          "retryButtonLabel": "Retry",
+          "solutionViewTitle": "Solution",
+          "correctText": "Correct!",
+          "incorrectText": "Incorrect!"
+        },
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100,
+            "feedback": "You got :numcorrect of :maxscore correct"
+          }
+        ]
+      },
+      "subContentId": "single-choice-test-4ca7da84",
+      "metadata": {
+        "contentType": "Single Choice Set",
+        "license": "U",
+        "title": "Single Choice Question"
+      }
+    }
+  ],
+  "disableBackwardsNavigation": false,
+  "randomQuestions": false
+}

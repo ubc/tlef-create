@@ -5,6 +5,7 @@
 
 import { LLMModule } from 'ubc-genai-toolkit-llm';
 import { ConsoleLogger } from 'ubc-genai-toolkit-core';
+import { generateTemplateQuestion } from './templateQuestionGenerator.js';
 import { QUESTION_TYPES } from '../config/constants.js';
 
 class QuizLLMService {
@@ -99,7 +100,7 @@ class QuizLLMService {
       const provider = userPreferences?.llmProvider || 'ollama';
       const settings = userPreferences?.llmSettings || { temperature: 0.7, maxTokens: 2000 };
 
-      if (provider === 'openai') {
+      if (provider === 'openai' && process.env.OPENAI_API_KEY) {
         const defaultOptions = {
           max_completion_tokens: settings.maxTokens // Use correct OpenAI parameter
         };
@@ -117,6 +118,19 @@ class QuizLLMService {
           defaultModel: model,
           logger: this.logger,
           defaultOptions
+        });
+      } else if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
+        // Fallback to Ollama if OpenAI is requested but no API key is available
+        console.log('⚠️ OpenAI requested but no API key found, falling back to Ollama');
+        return new LLMModule({
+          provider: 'ollama',
+          endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434',
+          defaultModel: 'llama3.1:8b', // Use Ollama model as fallback
+          logger: this.logger,
+          defaultOptions: {
+            temperature: settings.temperature,
+            maxTokens: settings.maxTokens
+          }
         });
       } else {
         return new LLMModule({
@@ -199,11 +213,13 @@ class QuizLLMService {
         success: true,
         questionData: {
           ...questionData,
+          type: questionType, // Add the question type explicitly
+          difficulty: difficulty || 'moderate',
           generationMetadata: {
             llmModel: response.model || 'llama3.1:8b',
             generationPrompt: prompt,
             learningObjective: learningObjective,
-            contentSources: relevantContent.map(c => c.source),
+            contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
             processingTime: processingTime,
             temperature: this.getTemperatureForQuestionType(questionType),
             generationMethod: 'llm-rag-enhanced',
@@ -224,8 +240,13 @@ class QuizLLMService {
    * Build expert-level prompt for question generation
    */
   buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions) {
-    const contentText = relevantContent
-      .map((chunk, index) => `[Content ${index + 1}] (from ${chunk.source}, relevance: ${chunk.score.toFixed(2)})\n${chunk.content}`)
+    // Handle different relevantContent formats
+    const contentArray = Array.isArray(relevantContent) 
+      ? relevantContent 
+      : (relevantContent?.chunks || []);
+    
+    const contentText = contentArray
+      .map((chunk, index) => `[Content ${index + 1}] (from ${chunk.metadata?.source || chunk.source || 'unknown'}, relevance: ${chunk.score?.toFixed(2) || 'N/A'})\n${chunk.content}`)
       .join('\n\n');
 
     const previousQuestionsText = previousQuestions.length > 0 
@@ -448,9 +469,34 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
           throw new Error('Missing or invalid options array');
         }
         
+        // Normalize options - set missing isCorrect to false
+        parsed.options.forEach(option => {
+          if (option.isCorrect === undefined || option.isCorrect === null) {
+            option.isCorrect = false;
+          }
+        });
+        
+        // Check if exactly one option is marked correct
         const correctOptions = parsed.options.filter(opt => opt.isCorrect === true);
-        if (correctOptions.length !== 1) {
-          throw new Error('Exactly one option must be marked as correct');
+        
+        // If no options are marked correct, try to find the correct one from correctAnswer
+        if (correctOptions.length === 0 && parsed.correctAnswer) {
+          const correctAnswerText = parsed.correctAnswer.toLowerCase().trim();
+          const matchingOption = parsed.options.find(opt => 
+            opt.text.toLowerCase().trim().includes(correctAnswerText) ||
+            correctAnswerText.includes(opt.text.toLowerCase().trim())
+          );
+          
+          if (matchingOption) {
+            matchingOption.isCorrect = true;
+            console.log(`🔧 Auto-corrected missing isCorrect flag for option: "${matchingOption.text}"`);
+          }
+        }
+        
+        // Final validation
+        const finalCorrectOptions = parsed.options.filter(opt => opt.isCorrect === true);
+        if (finalCorrectOptions.length !== 1) {
+          throw new Error(`Exactly one option must be marked as correct, found ${finalCorrectOptions.length}`);
         }
       }
 
@@ -489,10 +535,14 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
    * Calculate content relevance score
    */
   calculateContentRelevanceScore(relevantContent) {
-    if (!relevantContent || relevantContent.length === 0) return 0;
+    const contentArray = Array.isArray(relevantContent) 
+      ? relevantContent 
+      : (relevantContent?.chunks || []);
+      
+    if (!contentArray || contentArray.length === 0) return 0;
     
-    const totalScore = relevantContent.reduce((sum, chunk) => sum + chunk.score, 0);
-    return totalScore / relevantContent.length;
+    const totalScore = contentArray.reduce((sum, chunk) => sum + (chunk.score || 0.5), 0);
+    return totalScore / contentArray.length;
   }
 
   /**
@@ -869,6 +919,12 @@ Provide only the improved learning objective as your response (no additional tex
   async generateQuestionBatch(batchConfig, userPreferences = null) {
     const { learningObjective, questionConfigs, relevantContent, difficulty, courseContext } = batchConfig;
     
+    // Validate questionConfigs early to prevent undefined errors
+    if (!questionConfigs || !Array.isArray(questionConfigs) || questionConfigs.length === 0) {
+      console.error(`❌ Invalid questionConfigs:`, questionConfigs);
+      throw new Error('questionConfigs must be a non-empty array');
+    }
+    
     console.log(`🔄 Generating batch of ${questionConfigs.length} questions`);
     if (userPreferences?.llmProvider === 'openai') {
       console.log(`🤖 Using OpenAI model: ${userPreferences.llmModel || 'gpt-4o-mini'}`);
@@ -887,17 +943,20 @@ Provide only the improved learning objective as your response (no additional tex
     for (let i = 0; i < questionConfigs.length; i++) {
       const config = questionConfigs[i];
       try {
-        console.log(`📝 Generating question ${i + 1}/${questionConfigs.length}: ${config.type}`);
+        console.log(`📝 Generating question ${i + 1}/${questionConfigs.length}: ${config.questionType}`);
         
         const questionConfig = {
           learningObjective,
-          questionType: config.type,
+          questionType: config.questionType,
           relevantContent,
           difficulty: config.difficulty || difficulty,
           courseContext
         };
 
-        const question = await this.generateQuestion(questionConfig, userPreferences);
+        const questionResult = await this.generateQuestion(questionConfig, userPreferences);
+        
+        // Extract the question data from the nested response
+        const question = questionResult.success ? questionResult.questionData : questionResult;
         results.questions.push(question);
         results.totalGenerated++;
 
@@ -907,11 +966,30 @@ Provide only the improved learning objective as your response (no additional tex
         }
       } catch (error) {
         console.error(`❌ Failed to generate question ${i + 1}:`, error.message);
-        results.errors.push({
-          questionIndex: i,
-          questionType: config.type,
-          error: error.message
-        });
+        console.log(`🔄 Falling back to template generation for ${config.questionType} question`);
+        
+        try {
+          // Generate template question as fallback
+          const templateQuestion = generateTemplateQuestion(
+            { text: learningObjective }, // Ensure it has text property
+            config.questionType,
+            config.difficulty || difficulty
+          );
+          
+          // Add template question to results
+          results.questions.push(templateQuestion);
+          results.totalGenerated++;
+          
+          console.log(`✅ Template ${config.questionType} question generated successfully`);
+        } catch (templateError) {
+          console.error(`❌ Template generation also failed:`, templateError.message);
+          results.errors.push({
+            questionIndex: i,
+            questionType: config.questionType,
+            error: error.message,
+            templateError: templateError.message
+          });
+        }
       }
     }
 
