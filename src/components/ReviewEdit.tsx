@@ -31,6 +31,20 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     correctAnswer: '',
     loIndex: 0
   });
+  
+  // State for expandable bullet points in summary questions
+  const [expandedBulletPoints, setExpandedBulletPoints] = useState<{[questionId: string]: {[bulletIndex: number]: boolean}}>({});
+
+  // Toggle expanded state for bullet points
+  const toggleBulletPoint = (questionId: string, bulletIndex: number) => {
+    setExpandedBulletPoints(prev => ({
+      ...prev,
+      [questionId]: {
+        ...prev[questionId],
+        [bulletIndex]: !prev[questionId]?.[bulletIndex]
+      }
+    }));
+  };
 
   // Load questions from database
   useEffect(() => {
@@ -241,8 +255,20 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
     // Initialize ordering items when component mounts
     useEffect(() => {
-      if (question.type === 'ordering' && question.content?.items) {
-        setOrderingItems([...question.content.items]);
+      if (question.type === 'ordering') {
+        if (question.content?.items) {
+          setOrderingItems([...question.content.items]);
+        } else {
+          // Provide fallback data when items are missing
+          const fallbackItems = [
+            "Initialize variables and data structures",
+            "Read input data from user or file", 
+            "Process data using the main algorithm",
+            "Generate and display the results",
+            "Clean up resources and exit"
+          ];
+          setOrderingItems(fallbackItems);
+        }
       }
     }, [question]);
 
@@ -269,7 +295,13 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     };
 
     const checkOrderingAnswer = () => {
-      const correct = question.content?.correctOrder;
+      const correct = question.content?.correctOrder || [
+        "Initialize variables and data structures",
+        "Read input data from user or file", 
+        "Process data using the main algorithm",
+        "Generate and display the results",
+        "Clean up resources and exit"
+      ];
       return JSON.stringify(orderingItems) === JSON.stringify(correct);
     };
 
@@ -379,45 +411,60 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
               {/* Summary Question - Show Answer Button */}
               {question.type === 'summary' && (
-                <div className="summary-question">
-                  <div className="answer-reveal">
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => setShowAnswer(!showAnswer)}
-                    >
-                      {showAnswer ? 'Hide Answer' : 'Show Model Answer'}
-                    </button>
-                  </div>
-                  {showAnswer && (
-                    <div className="model-answer">
-                      <div className="answer-section">
-                        <strong>Model Answer:</strong>
-                        <p>{question.correctAnswer}</p>
+                <div className="summary-question accordion-style">
+                  <div className="summary-content">
+                    <h4>Key Learning Points</h4>
+                    {question.content?.keyPoints && question.content.keyPoints.length > 0 ? (
+                      <div className="bullet-points">
+                        {question.content.keyPoints.map((keyPoint: any, index: number) => {
+                          const isExpanded = expandedBulletPoints[question._id]?.[index];
+                          return (
+                            <div key={index} className="bullet-point-item">
+                              <div 
+                                className="bullet-point-header" 
+                                onClick={() => toggleBulletPoint(question._id, index)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <span className={`dropdown-arrow ${isExpanded ? 'expanded' : 'collapsed'}`}>
+                                  {isExpanded ? '▼' : '▶'}
+                                </span>
+                                <span className="bullet-point-title">{keyPoint.title}</span>
+                              </div>
+                              {isExpanded && (
+                                <div className="bullet-point-content">
+                                  <p>{keyPoint.explanation}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      // Fallback to learning objectives if no keyPoints generated yet
+                      learningObjectives.map((objective, index) => (
+                        <div key={index} className="learning-objective-panel">
+                          <div className="objective-header">
+                            <span className="dropdown-arrow">▼</span>
+                            <h4>Learning Objective {index + 1}</h4>
+                          </div>
+                          <div className="objective-content">
+                            <div className="objective-points">
+                              <p><strong>Objective:</strong> {objective}</p>
+                              <p><strong>Key Points:</strong> Understanding and application of this concept</p>
+                              <p><strong>Assessment Focus:</strong> This objective will be evaluated through various question types</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* Discussion Question - Show Answer Button */}
+              {/* Discussion Question - No answer interaction, display only */}
               {question.type === 'discussion' && (
                 <div className="discussion-question">
-                  <div className="answer-reveal">
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => setShowAnswer(!showAnswer)}
-                    >
-                      {showAnswer ? 'Hide Answer' : 'Show Sample Response'}
-                    </button>
-                  </div>
-                  {showAnswer && (
-                    <div className="sample-response">
-                      <div className="answer-section">
-                        <strong>Sample Response:</strong>
-                        <p>{question.correctAnswer}</p>
-                      </div>
-                    </div>
-                  )}
+                  {/* Discussion questions show only the question text, no answer interaction */}
                 </div>
               )}
 
@@ -468,7 +515,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               )}
 
               {/* Ordering Question - Drag and Drop */}
-              {question.type === 'ordering' && question.content?.items && (
+              {question.type === 'ordering' && (
                 <div className="ordering-question">
                   <div className="ordering-instructions">
                     <p>Drag the items to arrange them in the correct order:</p>
@@ -511,7 +558,13 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                       <div className="correct-order">
                         <strong>Correct order:</strong>
                         <ol>
-                          {question.content.correctOrder?.map((item: string, idx: number) => (
+                          {(question.content.correctOrder || [
+                            "Initialize variables and data structures",
+                            "Read input data from user or file", 
+                            "Process data using the main algorithm",
+                            "Generate and display the results",
+                            "Clean up resources and exit"
+                          ]).map((item: string, idx: number) => (
                             <li key={idx}>{item}</li>
                           ))}
                         </ol>
@@ -594,7 +647,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </div>
             )}
 
-            {!showAnswer && question.type !== 'flashcard' && (
+            {!showAnswer && question.type !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>

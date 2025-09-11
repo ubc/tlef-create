@@ -523,3 +523,152 @@
         flex-wrap: wrap;
     }
 }
+
+/* Summary Question Accordion Styles */
+.summary-question.accordion-style {
+    margin-top: var(--spacing-md);
+}
+
+.learning-objective-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: var(--spacing-md);
+    background: var(--color-background);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.objective-header {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-md);
+    background: var(--color-muted);
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+}
+
+.objective-header:hover {
+    background: var(--color-muted-hover);
+}
+
+.dropdown-arrow {
+    margin-right: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+}
+
+.objective-header h4 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.objective-content {
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--color-border);
+}
+
+.objective-points p {
+    margin: var(--spacing-sm) 0;
+    line-height: 1.5;
+    color: var(--color-muted-foreground);
+}
+
+.objective-points p strong {
+    color: var(--color-foreground);
+}
+
+/* Discussion Question Styles */
+.discussion-question {
+    /* Discussion questions show only question text, no additional styling needed */
+    margin-top: var(--spacing-sm);
+}
+
+/* Enhanced Summary Question Styles with Bullet Points */
+.summary-content h4 {
+    color: var(--color-primary);
+    margin-bottom: var(--spacing-md);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.bullet-points {
+    margin-top: var(--spacing-md);
+}
+
+.bullet-point-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: var(--spacing-xs);
+    background: #fafafa;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.bullet-point-item:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.bullet-point-header {
+    padding: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    background: #f8f9fa;
+    transition: background-color 0.2s ease;
+}
+
+.bullet-point-header:hover {
+    background: #e9ecef;
+}
+
+.bullet-point-header .dropdown-arrow {
+    color: var(--color-primary);
+    font-weight: bold;
+    transition: transform 0.2s ease;
+    min-width: 16px;
+    text-align: center;
+}
+
+.bullet-point-header .dropdown-arrow.expanded {
+    transform: rotate(0deg);
+}
+
+.bullet-point-header .dropdown-arrow.collapsed {
+    transform: rotate(0deg);
+}
+
+.bullet-point-title {
+    font-weight: 600;
+    color: var(--color-text);
+    flex: 1;
+}
+
+.bullet-point-content {
+    padding: var(--spacing-md);
+    background: white;
+    border-top: 1px solid #e9ecef;
+    animation: slideDown 0.2s ease-out;
+}
+
+.bullet-point-content p {
+    margin: 0;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 200px;
+        padding-top: var(--spacing-md);
+        padding-bottom: var(--spacing-md);
+    }
+}

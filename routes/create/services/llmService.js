@@ -324,13 +324,33 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
 
       'summary': `{
   "questionText": "Comprehensive summary question that requires synthesis of multiple concepts",
-  "correctAnswer": "Model answer that demonstrates complete understanding (3-4 sentences)",
-  "explanation": "Key points that should be included in a complete answer, assessment criteria"
+  "explanation": "Key points that should be included in a complete answer, assessment criteria",
+  "content": {
+    "title": "Summary of Key Concepts",
+    "additionalNotes": "This summary will be structured based on the learning objectives for this quiz",
+    "keyPoints": [
+      {
+        "title": "Benefits and advantages",
+        "explanation": "Understanding the key benefits and positive aspects of this concept or approach"
+      },
+      {
+        "title": "Trade-offs and limitations",
+        "explanation": "Identifying the challenges, limitations, and potential drawbacks to consider"
+      },
+      {
+        "title": "Practical applications",
+        "explanation": "Real-world scenarios and use cases where this concept is most effectively applied"
+      },
+      {
+        "title": "Best practices",
+        "explanation": "Recommended approaches and proven strategies for successful implementation"
+      }
+    ]
+  }
 }`,
 
       'discussion': `{
-  "questionText": "Thought-provoking discussion question that encourages critical thinking",
-  "correctAnswer": "Sample response that demonstrates deep engagement with the topic",
+  "questionText": "Thought-provoking discussion question that encourages critical thinking and analysis",
   "explanation": "Discussion points to consider, different perspectives, and evaluation criteria"
 }`,
 
@@ -352,12 +372,12 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
 }`,
 
       'cloze': `{
-  "questionText": "Fill in the blanks: In programming, _____ is used for _____ while _____ provides _____.",
-  "textWithBlanks": "In programming, _____ is used for _____ while _____ provides _____.",
-  "blankOptions": [["async", "sync", "callback"], ["error handling", "data processing", "user interaction"], ["promises", "callbacks", "events"], ["better readability", "more complexity", "faster execution"]],
-  "correctAnswers": ["async", "error handling", "promises", "better readability"],
-  "correctAnswer": "async, error handling, promises, better readability",
-  "explanation": "Detailed explanation of why these are the correct answers for each blank"
+  "questionText": "Fill in the blanks: In programming, _____ is used for handling asynchronous operations while _____ provides more predictable error handling and better readability.",
+  "textWithBlanks": "In programming, _____ is used for handling asynchronous operations while _____ provides more predictable error handling and better readability.",
+  "blankOptions": [["callbacks", "promises", "async/await"], ["promises", "callbacks", "events"]],
+  "correctAnswers": ["callbacks", "promises"],
+  "correctAnswer": "callbacks, promises",
+  "explanation": "Callbacks are used for handling asynchronous operations, while promises provide more predictable error handling and better readability compared to callback-based code."
 }`
     };
 
@@ -458,9 +478,15 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
         hasExplanation: !!parsed.explanation
       });
       
-      // Validate required fields
-      if (!parsed.questionText || !parsed.correctAnswer || !parsed.explanation) {
-        throw new Error('Missing required fields in LLM response');
+      // Validate required fields - correctAnswer is optional for discussion and summary questions
+      const requiresCorrectAnswer = !['discussion', 'summary'].includes(questionType);
+      
+      if (!parsed.questionText || !parsed.explanation) {
+        throw new Error('Missing required fields: questionText and explanation are required');
+      }
+      
+      if (requiresCorrectAnswer && !parsed.correctAnswer) {
+        throw new Error('Missing required field: correctAnswer is required for this question type');
       }
 
       // Type-specific validation

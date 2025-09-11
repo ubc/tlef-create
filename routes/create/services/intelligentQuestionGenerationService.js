@@ -193,11 +193,13 @@ class IntelligentQuestionGenerationService {
     if (generationConfig?.questionTypes && Array.isArray(generationConfig.questionTypes) && generationConfig.questionTypes.length > 0) {
       fallbackConfig = generationConfig.questionTypes;
     } else {
-      // Robust fallback that includes flashcards
+      // Robust fallback that includes all question types
       fallbackConfig = [
         { type: 'multiple-choice', count: 1 },
         { type: 'true-false', count: 1 },
-        { type: 'flashcard', count: 1 }
+        { type: 'flashcard', count: 1 },
+        { type: 'discussion', count: 1 },
+        { type: 'summary', count: 1 }
       ];
     }
 

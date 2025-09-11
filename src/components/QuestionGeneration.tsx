@@ -49,9 +49,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     // Initialize with default support approach distribution
     return {
       questionTypes: [
-        { type: 'multiple-choice', count: 1, percentage: 40, scope: 'per-lo', editMode: 'count' },
+        { type: 'multiple-choice', count: 1, percentage: 35, scope: 'per-lo', editMode: 'count' },
         { type: 'true-false', count: 1, percentage: 20, scope: 'per-lo', editMode: 'count' },
-        { type: 'flashcard', count: 1, percentage: 30, scope: 'per-lo', editMode: 'count' },
+        { type: 'flashcard', count: 1, percentage: 25, scope: 'per-lo', editMode: 'count' },
+        { type: 'discussion', count: 0, percentage: 10, scope: 'per-lo', editMode: 'count' },
         { type: 'summary', count: 0, percentage: 10, scope: 'per-lo', editMode: 'count' }
       ],
       totalQuestions: 3,
@@ -356,9 +357,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const getApproachDistribution = (approach: PedagogicalApproach, questionsPerLO: number) => {
     const distributions = {
       'support': {
-        'multiple-choice': 40,
+        'multiple-choice': 35,
         'true-false': 20,
-        'flashcard': 30,
+        'flashcard': 25,
+        'discussion': 10,
         'summary': 10
       },
       'assess': {

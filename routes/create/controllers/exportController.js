@@ -44,16 +44,42 @@ router.post('/h5p/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
   }
 
   try {
+    // === DEBUG LOGGING: Database Questions ===
+    console.log('\n=== DATABASE QUESTIONS DEBUG ===');
+    console.log(`Quiz ID: ${quiz._id}`);
+    console.log(`Quiz Name: ${quiz.name}`);
+    console.log(`Total Questions in DB: ${quiz.questions.length}`);
+    
+    quiz.questions.forEach((question, index) => {
+      console.log(`\n--- Question ${index + 1} (DB) ---`);
+      console.log(`ID: ${question._id}`);
+      console.log(`Type: ${question.type}`);
+      console.log(`Question Text: ${question.questionText}`);
+      console.log(`Content:`, JSON.stringify(question.content, null, 2));
+      console.log(`Correct Answer: ${question.correctAnswer}`);
+      console.log(`Order: ${question.order}`);
+      console.log(`Review Status: ${question.reviewStatus}`);
+    });
+    
     // Create export file path
     const exportId = crypto.randomBytes(16).toString('hex');
     const filename = `${quiz.name.replace(/[^a-zA-Z0-9]/g, '_')}_${exportId}.h5p`;
-    const filePath = path.join('./routes/create/uploads/', filename);
+    const uploadsDir = path.join('./routes/create/uploads/');
+    const filePath = path.join(uploadsDir, filename);
+    
+    // Ensure uploads directory exists
+    await fs.mkdir(uploadsDir, { recursive: true });
 
     // Create H5P ZIP package
     await createH5PPackage(quiz, filePath);
 
-    // Save export record
-    await quiz.addExport(filePath);
+    // Save export record (add to quiz exports if schema supports it)
+    if (quiz.addExport) {
+      await quiz.addExport(filePath);
+    } else {
+      // Alternative: just log the export for now
+      console.log(`Export created for quiz ${quiz._id}: ${filePath}`);
+    }
 
     // Get file size
     const stats = await fs.stat(filePath);
@@ -304,702 +330,284 @@ async function createH5PPackage(quiz, outputPath) {
     // Pipe archive data to the file
     archive.pipe(output);
 
-    // Create h5p.json content - using QuestionSet library for quiz
-    const h5pJson = {
-      title: quiz.name || "Quiz Export",
-      language: "en",
-      mainLibrary: "H5P.QuestionSet",
-      embedTypes: ["iframe"],
-      license: "U",
-      preloadedDependencies: [
-        {
-          machineName: "H5P.QuestionSet",
-          majorVersion: "1",
-          minorVersion: "20"
-        },
-        {
-          machineName: "H5P.MultiChoice",
-          majorVersion: "1",
-          minorVersion: "16"
-        },
-        {
-          machineName: "H5P.TrueFalse",
-          majorVersion: "1",
-          minorVersion: "8"
-        },
-        {
-          machineName: "H5P.SortParagraphs",
-          majorVersion: "0",
-          minorVersion: "11"
-        },
-        {
-          machineName: "H5P.DragText",
-          majorVersion: "1",
-          minorVersion: "10"
-        },
-        {
-          machineName: "H5P.Blanks",
-          majorVersion: "1",
-          minorVersion: "14"
-        },
-        {
-          machineName: "H5P.SingleChoiceSet",
-          majorVersion: "1",
-          minorVersion: "11"
-        },
-        {
-          machineName: "H5P.Dialogcards",
-          majorVersion: "1",
-          minorVersion: "9"
-        },
-        {
-          machineName: "H5P.Accordion",
-          majorVersion: "1",
-          minorVersion: "0"
-        },
-        {
-          machineName: "H5P.AdvancedText",
-          majorVersion: "1",
-          minorVersion: "1"
+    // Determine if we need Column or can use simpler format
+    const flashcardQuestions = quiz.questions.filter(q => q.type === 'flashcard');
+    const nonFlashcardQuestions = quiz.questions.filter(q => q.type !== 'flashcard');
+    const hasMixedContent = flashcardQuestions.length > 0 && nonFlashcardQuestions.length > 0;
+    const isFlashcardOnly = flashcardQuestions.length > 0 && nonFlashcardQuestions.length === 0;
+    
+    // Create h5p.json content - use Column for all page-only exports (per user request)
+    let h5pJson;
+    if (hasMixedContent || !isFlashcardOnly) {
+      // Use Column for mixed content types with complete website dependencies
+      h5pJson = {
+        title: quiz.name || "Quiz Export",
+        language: "en",
+        mainLibrary: "H5P.Column",
+        embedTypes: ["div"],
+        license: "U",
+        defaultLanguage: "en",
+        preloadedDependencies: [
+          {
+            machineName: "FontAwesome",
+            majorVersion: 4,
+            minorVersion: 5
+          },
+          {
+            machineName: "H5P.FontIcons",
+            majorVersion: 1,
+            minorVersion: 0
+          },
+          {
+            machineName: "H5P.Transition",
+            majorVersion: 1,
+            minorVersion: 0
+          },
+          {
+            machineName: "H5P.JoubelUI",
+            majorVersion: 1,
+            minorVersion: 3
+          },
+          {
+            machineName: "H5P.Audio",
+            majorVersion: 1,
+            minorVersion: 5
+          },
+          {
+            machineName: "H5P.Dialogcards",
+            majorVersion: 1,
+            minorVersion: 9
+          },
+          {
+            machineName: "H5P.RowColumn",
+            majorVersion: 1,
+            minorVersion: 0
+          },
+          {
+            machineName: "H5P.Row",
+            majorVersion: 1,
+            minorVersion: 0
+          },
+          {
+            machineName: "H5P.Question",
+            majorVersion: 1,
+            minorVersion: 5
+          },
+          {
+            machineName: "H5P.MultiChoice",
+            majorVersion: 1,
+            minorVersion: 16
+          },
+          {
+            machineName: "H5P.TrueFalse",
+            majorVersion: 1,
+            minorVersion: 8
+          },
+          {
+            machineName: "H5P.SortParagraphs",
+            majorVersion: 0,
+            minorVersion: 11
+          },
+          {
+            machineName: "jQuery.ui",
+            majorVersion: 1,
+            minorVersion: 10
+          },
+          {
+            machineName: "H5P.DragText",
+            majorVersion: 1,
+            minorVersion: 10
+          },
+          {
+            machineName: "H5P.Blanks",
+            majorVersion: 1,
+            minorVersion: 14
+          },
+          {
+            machineName: "H5P.SingleChoiceSet",
+            majorVersion: 1,
+            minorVersion: 11
+          },
+          {
+            machineName: "H5P.Accordion",
+            majorVersion: 1,
+            minorVersion: 0
+          },
+          {
+            machineName: "H5P.AdvancedText",
+            majorVersion: 1,
+            minorVersion: 1
+          },
+          {
+            machineName: "H5P.Video",
+            majorVersion: 1,
+            minorVersion: 6
+          },
+          {
+            machineName: "H5P.QuestionSet",
+            majorVersion: 1,
+            minorVersion: 20
+          },
+          {
+            machineName: "H5P.Column",
+            majorVersion: 1,
+            minorVersion: 18
+          }
+        ]
+      };
+    } else if (isFlashcardOnly) {
+      // Use Dialog Cards for flashcard-only quizzes
+      h5pJson = {
+        title: quiz.name || "Quiz Export",
+        language: "en",
+        mainLibrary: "H5P.Dialogcards",
+        embedTypes: ["iframe"],
+        license: "U",
+        preloadedDependencies: [
+          {
+            machineName: "H5P.Dialogcards",
+            majorVersion: "1",
+            minorVersion: "9"
+          }
+        ]
+      };
+    } else {
+      // Use QuestionSet for non-flashcard quizzes
+      h5pJson = {
+        title: quiz.name || "Quiz Export",
+        language: "en",
+        mainLibrary: "H5P.QuestionSet",
+        embedTypes: ["iframe"],
+        license: "U",
+        preloadedDependencies: [
+          {
+            machineName: "H5P.QuestionSet",
+            majorVersion: "1",
+            minorVersion: "20"
+          },
+          {
+            machineName: "H5P.MultiChoice",
+            majorVersion: "1",
+            minorVersion: "16"
+          },
+          {
+            machineName: "H5P.TrueFalse",
+            majorVersion: "1",
+            minorVersion: "8"
+          },
+          {
+            machineName: "H5P.SortParagraphs",
+            majorVersion: "0",
+            minorVersion: "11"
+          },
+          {
+            machineName: "H5P.DragText",
+            majorVersion: "1",
+            minorVersion: "10"
+          },
+          {
+            machineName: "H5P.Blanks",
+            majorVersion: "1",
+            minorVersion: "14"
+          },
+          {
+            machineName: "H5P.SingleChoiceSet",
+            majorVersion: "1",
+            minorVersion: "11"
+          },
+          {
+            machineName: "H5P.Accordion",
+            majorVersion: "1",
+            minorVersion: "0"
+          },
+          {
+            machineName: "H5P.AdvancedText",
+            majorVersion: "1",
+            minorVersion: "1"
+          }
+        ]
+      };
+    }
+
+    // Create content.json using page structure for all question types (no QuestionSet)
+    const contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
+
+    // === DEBUG LOGGING: H5P Export Content ===
+    console.log('\n=== H5P EXPORT CONTENT DEBUG ===');
+    console.log(`Flashcard Questions: ${flashcardQuestions.length}`);
+    console.log(`Non-Flashcard Questions: ${nonFlashcardQuestions.length}`);
+    console.log(`Total Content Sections: ${contentJson.content?.length || 0}`);
+    
+    if (contentJson.content) {
+      contentJson.content.forEach((section, index) => {
+        console.log(`\n--- H5P Section ${index + 1} ---`);
+        console.log(`Library: ${section.content?.library || 'Unknown'}`);
+        
+        // If it's a Row with RowColumn content
+        if (section.content?.library === 'H5P.Row 1.0') {
+          const rowColumn = section.content.params?.columns?.[0]?.content;
+          if (rowColumn?.library === 'H5P.RowColumn 1.0') {
+            const content = rowColumn.params?.content?.[0];
+            if (content) {
+              console.log(`Question Type: ${content.library || 'Unknown'}`);
+              console.log(`Question Text: ${content.params?.question || content.params?.taskDescription || 'No text'}`);
+              
+              // Log specific content based on type
+              if (content.library?.includes('MultiChoice')) {
+                console.log(`Options: ${content.params?.answers?.length || 0}`);
+              } else if (content.library?.includes('TrueFalse')) {
+                console.log(`Correct Answer: ${content.params?.correct}`);
+              } else if (content.library?.includes('DragText')) {
+                console.log(`Text Field: ${content.params?.textField?.substring(0, 100)}...`);
+              } else if (content.library?.includes('Blanks')) {
+                console.log(`Questions: ${content.params?.questions?.length || 0}`);
+              }
+            }
+          }
         }
-      ]
-    };
+        
+        // If it's Dialogcards
+        if (section.content?.library === 'H5P.Row 1.0') {
+          const dialogCards = section.content.params?.columns?.[0]?.content?.params?.content?.[0];
+          if (dialogCards?.library?.includes('Dialogcards')) {
+            console.log(`Dialog Cards: ${dialogCards.params?.dialogs?.length || 0}`);
+          }
+        }
+      });
+    }
+    
+    console.log('\n=== H5P JSON STRUCTURE ===');
+    console.log(JSON.stringify(contentJson, null, 2));
 
-    // Create content.json - H5P QuestionSet format
-    const contentJson = generateH5PQuestionSet(quiz);
-
-    // Add files to the archive (NO HTML files!)
+    // Add files to the archive
     archive.append(JSON.stringify(h5pJson), { name: 'h5p.json' });
     archive.append(JSON.stringify(contentJson), { name: 'content/content.json' });
+
+    // Add H5P library files from our cached library directory
+    const libraryPath = path.join('./routes/create/h5p-libs/');
+    try {
+      // Check if libraries exist
+      await fs.access(libraryPath);
+      
+      // Add all library directories and files
+      archive.directory(libraryPath, false, (entry) => {
+        // Skip the content directory and h5p.json from the library cache
+        if (entry.name === 'content' || entry.name === 'h5p.json') {
+          return false;
+        }
+        return entry;
+      });
+      
+      console.log('Added H5P library files from cache');
+    } catch (error) {
+      console.warn('H5P library files not found, creating minimal export:', error.message);
+    }
 
     // Finalize the archive
     archive.finalize();
   });
 }
 
-function generateH5PQuestionSet(quiz) {
-  // H5P QuestionSet JSON structure
-  const questionSet = {
-    "introPage": {
-      "showIntroPage": true,
-      "title": quiz.name || "Quiz",
-      "introduction": `This quiz contains ${quiz.questions.length} questions.`,
-      "startButtonText": "Start Quiz"
-    },
-    "progressType": "dots",
-    "passPercentage": 50,
-    "questions": [],
-    "disableBackwardsNavigation": false,
-    "randomQuestions": false,
-    "endGame": {
-      "showResultPage": true,
-      "showSolutionButton": true,
-      "showRetryButton": true,
-      "noResultMessage": "Finished",
-      "message": "Your result:",
-      "overallFeedback": [
-        {
-          "from": 0,
-          "to": 49,
-          "feedback": "You need more practice. Try again!"
-        },
-        {
-          "from": 50,
-          "to": 79,
-          "feedback": "Good job! You passed the quiz."
-        },
-        {
-          "from": 80,
-          "to": 100,
-          "feedback": "Excellent work! You've mastered this material."
-        }
-      ],
-      "solutionButtonText": "Show solution",
-      "retryButtonText": "Retry",
-      "finishButtonText": "Finish",
-      "submitButtonText": "Submit",
-      "showAnimations": false,
-      "successVideo": {},
-      "failVideo": {}
-    },
-    "override": {
-      "checkButton": true,
-      "showSolutionButton": "on",
-      "retryButton": "on"
-    },
-    "texts": {
-      "prevButton": "Previous question",
-      "nextButton": "Next question",
-      "finishButton": "Finish",
-      "submitButton": "Submit",
-      "textualProgress": "Question: @current of @total questions",
-      "jumpToQuestion": "Question %d of %total",
-      "questionLabel": "Question",
-      "readSpeakerProgress": "Question @current of @total",
-      "unansweredText": "Unanswered",
-      "answeredText": "Answered",
-      "currentQuestionText": "Current question",
-      "navigationLabel": "Questions"
-    }
-  };
-
-  // Convert each question to H5P format
-  for (const question of quiz.questions) {
-    let h5pQuestion;
-
-    if (question.type === 'multiple-choice') {
-      h5pQuestion = {
-        "library": "H5P.MultiChoice 1.16",
-        "params": {
-          "question": `<p>${escapeHtml(question.questionText)}</p>`,
-          "answers": question.content?.options?.map(option => ({
-            "correct": option.isCorrect || false,
-            "text": `<div>${escapeHtml(option.text)}</div>\n`,
-            "tipsAndFeedback": {
-              "tip": "",
-              "chosenFeedback": option.isCorrect ? "Correct!" : "Try again",
-              "notChosenFeedback": ""
-            }
-          })) || [],
-          "behaviour": {
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "enableCheckButton": true,
-            "type": "auto",
-            "singlePoint": true,
-            "randomAnswers": false,
-            "showSolutionsRequiresInput": true,
-            "confirmCheckDialog": false,
-            "confirmRetryDialog": false,
-            "autoCheck": false,
-            "passPercentage": 100,
-            "showScorePoints": true
-          },
-          "UI": {
-            "checkAnswerButton": "Check",
-            "submitAnswerButton": "Submit",
-            "showSolutionButton": "Show solution",
-            "tryAgainButton": "Try again",
-            "tipsLabel": "Show tip",
-            "scoreBarLabel": "You got :num out of :total points",
-            "tipAvailable": "Tip available",
-            "feedbackAvailable": "Feedback available",
-            "readFeedback": "Read feedback",
-            "wrongAnswer": "Wrong answer",
-            "correctAnswer": "Correct answer",
-            "shouldCheck": "Should have been checked",
-            "shouldNotCheck": "Should not have been checked",
-            "noInput": "Please answer before viewing the solution"
-          },
-          "confirmCheck": {
-            "header": "Finish ?",
-            "body": "Are you sure you wish to finish ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Finish"
-          },
-          "confirmRetry": {
-            "header": "Retry ?",
-            "body": "Are you sure you wish to retry ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Confirm"
-          },
-          "overallFeedback": []
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Multiple Choice",
-          "license": "U",
-          "title": "Question"
-        }
-      };
-    } else if (question.type === 'true-false') {
-      h5pQuestion = {
-        "library": "H5P.TrueFalse 1.8",
-        "params": {
-          "question": `<p>${escapeHtml(question.questionText)}</p>`,
-          "correct": question.correctAnswer === 'True' || question.correctAnswer === true,
-          "behaviour": {
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "enableCheckButton": true,
-            "confirmCheckDialog": false,
-            "confirmRetryDialog": false,
-            "autoCheck": false
-          },
-          "l10n": {
-            "trueText": "True",
-            "falseText": "False",
-            "score": "You got @score of @total points",
-            "checkAnswer": "Check",
-            "showSolutionButton": "Show solution",
-            "tryAgain": "Retry",
-            "wrongAnswerMessage": "Wrong answer",
-            "correctAnswerMessage": "Correct answer",
-            "scoreBarLabel": "You got :num out of :total points",
-            "submitAnswer": "Submit"
-          },
-          "confirmCheck": {
-            "header": "Finish ?",
-            "body": "Are you sure you wish to finish ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Finish"
-          },
-          "confirmRetry": {
-            "header": "Retry ?",
-            "body": "Are you sure you wish to retry ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Confirm"
-          }
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "True/False Question",
-          "license": "U",
-          "title": "Question"
-        }
-      };
-    } else if (question.type === 'matching') {
-      // H5P DragText for matching questions
-      // Convert matching pairs to drag-and-drop format
-      const leftItems = question.content?.leftItems || [];
-      const rightItems = question.content?.rightItems || [];
-      const matchingPairs = question.content?.matchingPairs || [];
-      
-      // Create text with drag zones - format: "Item1 matches *correct_answer*"
-      let textField = question.questionText + "\\n\\n";
-      leftItems.forEach((leftItem, index) => {
-        const correctMatch = matchingPairs[index] ? matchingPairs[index][1] : rightItems[index];
-        textField += `${leftItem}: *${correctMatch}*\\n`;
-      });
-      
-      // Create distractors from unused right items
-      const usedRightItems = matchingPairs.map(pair => pair[1]);
-      const distractors = rightItems.filter(item => !usedRightItems.includes(item));
-
-      h5pQuestion = {
-        "library": "H5P.DragText 1.10",
-        "params": {
-          "taskDescription": `<p>${escapeHtml(question.questionText)}</p>\\n`,
-          "textField": textField,
-          "checkAnswer": "Check",
-          "tryAgain": "Retry", 
-          "showSolution": "Show Solution",
-          "behaviour": {
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "instantFeedback": false,
-            "enableCheckButton": true
-          },
-          "overallFeedback": [
-            {
-              "from": 0,
-              "to": 100,
-              "feedback": "Score: @score of @total."
-            }
-          ],
-          "media": {
-            "disableImageZooming": false
-          },
-          "dropZoneIndex": "Drop Zone @index.",
-          "empty": "Drop Zone @index is empty.",
-          "contains": "Drop Zone @index contains draggable @draggable.",
-          "tipLabel": "Show tip",
-          "correctText": "Correct!",
-          "incorrectText": "Incorrect!",
-          "resetDropTitle": "Reset drop",
-          "resetDropDescription": "Are you sure you want to reset this drop zone?",
-          "grabbed": "Draggable is grabbed.",
-          "cancelledDragging": "Cancelled dragging.",
-          "correctAnswer": "Correct answer:",
-          "feedbackHeader": "Feedback",
-          "scoreBarLabel": "You got :num out of :total points",
-          "submitAnswer": "Submit",
-          "ariaDraggableIndex": "@index of @count draggables.",
-          "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
-          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
-          "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
-          "distractors": distractors.length > 0 ? distractors.map(d => `*${d}*`).join(" ") : ""
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Drag Text",
-          "license": "U",
-          "title": "Matching Question"
-        }
-      };
-    } else if (question.type === 'cloze') {
-      // H5P Blanks for cloze/fill-in-the-blank questions
-      const textWithBlanks = question.content?.textWithBlanks || question.questionText;
-      const correctAnswers = question.content?.correctAnswers || [];
-      
-      // Convert textWithBlanks format to H5P format
-      // Replace [blank] or ____ with *answer* format
-      let h5pText = textWithBlanks;
-      correctAnswers.forEach((answer, index) => {
-        h5pText = h5pText.replace(/\[blank\]|\_{3,}/, `*${answer}*`);
-      });
-
-      h5pQuestion = {
-        "library": "H5P.Blanks 1.14",
-        "params": {
-          "questions": [`<p>${escapeHtml(h5pText)}</p>\\n`],
-          "showSolutions": "Show solutions",
-          "tryAgain": "Try again",
-          "text": `<p>${escapeHtml(question.questionText.split('\\n')[0])}</p>\\n`,
-          "checkAnswer": "Check",
-          "notFilledOut": "Please fill in all blanks",
-          "behaviour": {
-            "enableSolutionsButton": true,
-            "autoCheck": true,
-            "caseSensitive": false,
-            "showSolutionsRequiresInput": true,
-            "separateLines": false,
-            "enableRetry": true,
-            "confirmCheckDialog": false,
-            "confirmRetryDialog": false,
-            "acceptSpellingErrors": false,
-            "enableCheckButton": true
-          },
-          "answerIsCorrect": "'':ans'' is correct",
-          "answerIsWrong": "'':ans'' is wrong",
-          "answeredCorrectly": "Answered correctly",
-          "answeredIncorrectly": "Answered incorrectly",
-          "solutionLabel": "Correct answer:",
-          "inputLabel": "Blank input @num of @total",
-          "inputHasTipLabel": "Tip available",
-          "tipLabel": "Tip",
-          "confirmCheck": {
-            "header": "Finish ?",
-            "body": "Are you sure you wish to finish ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Finish"
-          },
-          "confirmRetry": {
-            "header": "Retry ?",
-            "body": "Are you sure you wish to retry ?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Confirm"
-          },
-          "media": {
-            "disableImageZooming": true
-          },
-          "overallFeedback": [
-            {
-              "from": 0,
-              "to": 100,
-              "feedback": "You got @score of @total blanks correct."
-            }
-          ],
-          "scoreBarLabel": "You got :num out of :total points",
-          "submitAnswer": "Submit",
-          "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
-          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
-          "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
-          "a11yCheckingModeHeader": "Checking mode"
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Fill in the Blanks",
-          "license": "U",
-          "title": "Cloze Question"
-        }
-      };
-    } else if (question.type === 'flashcard') {
-      // H5P Dialog Cards for flashcard questions
-      const front = question.content?.front || question.questionText;
-      const back = question.content?.back || question.correctAnswer;
-      
-      h5pQuestion = {
-        "library": "H5P.Dialogcards 1.9",
-        "params": {
-          "title": `<p>Flashcard</p>\\n`,
-          "description": `<p>Study these cards to learn the material.</p>\\n`,
-          "dialogs": [
-            {
-              "text": `<p style="text-align: center;">${escapeHtml(front)}</p>`,
-              "answer": `<p style="text-align: center;">${escapeHtml(back)}</p>`,
-              "tips": {},
-              "audio": [],
-              "image": null,
-              "imageAltText": ""
-            }
-          ],
-          "next": "Next",
-          "answer": "Turn",
-          "prev": "Previous",
-          "retry": "Try again",
-          "progressText": "Card @card of @total",
-          "behaviour": {
-            "scaleTextNotCard": true,
-            "enableRetry": true,
-            "disableBackwardsNavigation": false,
-            "randomCards": false,
-            "maxProficiency": 5,
-            "quickProgression": false
-          },
-          "cardFrontLabel": "Card front",
-          "cardBackLabel": "Card back",
-          "tipButtonLabel": "Show tip",
-          "audioNotSupported": "Your browser does not support this audio",
-          "mode": "normal",
-          "correctAnswer": "I got it right!",
-          "incorrectAnswer": "I got it wrong",
-          "round": "Round @round",
-          "cardsLeft": "Cards left: @number",
-          "nextRound": "Proceed to round @round",
-          "startOver": "Start over",
-          "showSummary": "Next",
-          "summary": "Summary",
-          "summaryCardsRight": "Cards you got right:",
-          "summaryCardsWrong": "Cards you got wrong:",
-          "summaryCardsNotShown": "Cards in pool not shown:",
-          "summaryOverallScore": "Overall Score",
-          "summaryCardsCompleted": "Cards you have completed learning:",
-          "summaryCompletedRounds": "Completed rounds:",
-          "summaryAllDone": "Well done! You got all @cards cards correct @max times in a row!",
-          "confirmStartingOver": {
-            "header": "Start over?",
-            "body": "All progress will be lost. Are you sure you want to start over?",
-            "cancelLabel": "Cancel",
-            "confirmLabel": "Start over"
-          }
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Dialog Cards",
-          "license": "U",
-          "title": "Flashcard"
-        }
-      };
-    } else if (question.type === 'summary') {
-      // H5P Accordion for summary questions - expandable content sections
-      const summaryPanels = question.content?.panels || [
-        {
-          title: "Summary",
-          content: question.questionText
-        }
-      ];
-
-      h5pQuestion = {
-        "library": "H5P.Accordion 1.0",
-        "params": {
-          "panels": summaryPanels.map(panel => ({
-            "content": {
-              "params": {
-                "text": `<p>${escapeHtml(panel.content)}</p>\\n`
-              },
-              "library": "H5P.AdvancedText 1.1",
-              "subContentId": crypto.randomBytes(16).toString('hex'),
-              "metadata": {
-                "contentType": "Text",
-                "license": "U",
-                "title": "Summary Content"
-              }
-            },
-            "title": panel.title || "Summary"
-          })),
-          "hTag": "h2"
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Accordion",
-          "license": "U",
-          "title": "Summary"
-        }
-      };
-    } else if (question.type === 'discussion') {
-      // H5P Advanced Text for discussion questions - display only
-      h5pQuestion = {
-        "library": "H5P.AdvancedText 1.1",
-        "params": {
-          "text": `<h3>Discussion Question</h3>\\n<p>${escapeHtml(question.questionText)}</p>\\n<p><em>Discuss this question with your classmates or instructor.</em></p>\\n`
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Text",
-          "license": "U",
-          "title": "Discussion Question"
-        }
-      };
-    } else if (question.type === 'single-choice-set') {
-      // H5P SingleChoiceSet for rapid-fire single choice questions
-      const options = question.content?.options || [];
-      const correctOption = options.find(opt => opt.isCorrect);
-      
-      h5pQuestion = {
-        "library": "H5P.SingleChoiceSet 1.11",
-        "params": {
-          "choices": [
-            {
-              "answers": options.map(opt => opt.text),
-              "question": question.questionText,
-              "subContentId": crypto.randomBytes(8).toString('hex')
-            }
-          ],
-          "behaviour": {
-            "timeoutCorrect": 1000,
-            "timeoutWrong": 1000,
-            "soundEffectsEnabled": true,
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "passPercentage": 100,
-            "autoContinue": true
-          },
-          "l10n": {
-            "showSolutionButtonLabel": "Show solution",
-            "retryButtonLabel": "Retry",
-            "solutionViewTitle": "Solution",
-            "correctText": "Correct!",
-            "incorrectText": "Incorrect!",
-            "muteButtonLabel": "Mute feedback sound",
-            "closeButtonLabel": "Close",
-            "slideOfTotal": "Slide :num of :total",
-            "nextButtonLabel": "Next question",
-            "scoreBarLabel": "You got :num out of :total points",
-            "solutionListQuestionNumber": "Question :num",
-            "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
-            "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
-            "shouldSelect": "Should have been selected",
-            "shouldNotSelect": "Should not have been selected"
-          },
-          "overallFeedback": [
-            {
-              "from": 0,
-              "to": 100,
-              "feedback": "You got :numcorrect of :maxscore correct"
-            }
-          ]
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Single Choice Set",
-          "license": "U",
-          "title": "Single Choice Question"
-        }
-      };
-    } else if (question.type === 'ordering') {
-      // H5P Sort Paragraphs for ordering questions
-      h5pQuestion = {
-        "library": "H5P.SortParagraphs 0.11",
-        "params": {
-          "taskDescription": `<p>${escapeHtml(question.questionText)}</p>\n`,
-          "paragraphs": question.content?.items?.map(item => `<p>${escapeHtml(item)}</p>\n`) || [],
-          "overallFeedback": [
-            {
-              "from": 0,
-              "to": 100
-            }
-          ],
-          "behaviour": {
-            "scoringMode": "transitions",
-            "applyPenalties": true,
-            "duplicatesInterchangeable": true,
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "addButtonsForMovement": true
-          },
-          "l10n": {
-            "checkAnswer": "Check",
-            "tryAgain": "Retry",
-            "showSolution": "Show solution",
-            "up": "Up",
-            "down": "Down",
-            "disabled": "Disabled"
-          },
-          "a11y": {
-            "check": "Check the answers. The responses will be marked as correct or incorrect.",
-            "showSolution": "Show the solution. The correct solution will be displayed.",
-            "retry": "Retry the task. Reset all elements and start the task over again.",
-            "yourResult": "You got @score out of @total points",
-            "paragraph": "Paragraph",
-            "correct": "correct",
-            "wrong": "wrong",
-            "point": "@score point",
-            "sevenOfNine": "@current of @total",
-            "currentPosition": "Current position in list",
-            "instructionsSelected": "Press spacebar to reorder",
-            "instructionsGrabbed": "Press up and down arrow keys to change position, spacebar to drop, escape to cancel",
-            "grabbed": "Grabbed",
-            "moved": "Moved",
-            "dropped": "Dropped",
-            "reorderCancelled": "Reorder cancelled",
-            "finalPosition": "Final position",
-            "nextParagraph": "Next paragraph",
-            "correctParagraph": "Correct paragraph at position",
-            "listDescription": "Sortable list of paragraphs.",
-            "listDescriptionCheckAnswer": "List of paragraphs with results.",
-            "listDescriptionShowSolution": "List of paragraphs with solutions."
-          }
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Sort the Paragraphs",
-          "license": "U",
-          "title": "Ordering Question"
-        }
-      };
-    } else {
-      // Default to multiple choice for other types
-      h5pQuestion = {
-        "library": "H5P.MultiChoice 1.16",
-        "params": {
-          "question": `<p>${escapeHtml(question.questionText)}</p>`,
-          "answers": [
-            {
-              "correct": true,
-              "text": `<div>${escapeHtml(question.correctAnswer || 'Answer')}</div>\n`,
-              "tipsAndFeedback": {
-                "tip": "",
-                "chosenFeedback": "Correct!",
-                "notChosenFeedback": ""
-              }
-            }
-          ],
-          "behaviour": {
-            "enableRetry": true,
-            "enableSolutionsButton": true,
-            "enableCheckButton": true,
-            "type": "auto",
-            "singlePoint": true,
-            "randomAnswers": false,
-            "showSolutionsRequiresInput": true,
-            "confirmCheckDialog": false,
-            "confirmRetryDialog": false,
-            "autoCheck": false,
-            "passPercentage": 100,
-            "showScorePoints": true
-          },
-          "UI": {
-            "checkAnswerButton": "Check",
-            "submitAnswerButton": "Submit",
-            "showSolutionButton": "Show solution",
-            "tryAgainButton": "Try again",
-            "tipsLabel": "Show tip",
-            "scoreBarLabel": "You got :num out of :total points",
-            "tipAvailable": "Tip available",
-            "feedbackAvailable": "Feedback available",
-            "readFeedback": "Read feedback",
-            "wrongAnswer": "Wrong answer",
-            "correctAnswer": "Correct answer",
-            "shouldCheck": "Should have been checked",
-            "shouldNotCheck": "Should not have been checked",
-            "noInput": "Please answer before viewing the solution"
-          }
-        },
-        "subContentId": crypto.randomBytes(16).toString('hex'),
-        "metadata": {
-          "contentType": "Multiple Choice",
-          "license": "U",
-          "title": "Question"
-        }
-      };
-    }
-
-    questionSet.questions.push(h5pQuestion);
-  }
-
-  return questionSet;
-}
 
 function escapeHtml(text) {
   if (!text) return '';
@@ -1041,44 +649,6 @@ async function generateH5PContent(quiz) {
   return h5pStructure;
 }
 
-function convertQuestionToH5P(question) {
-  const baseQuestion = {
-    type: question.type,
-    text: question.questionText,
-    feedback: question.explanation || 'Good job!'
-  };
-
-  switch (question.type) {
-    case 'multiple-choice':
-      return {
-        ...baseQuestion,
-        library: 'H5P.MultiChoice 1.16',
-        answers: question.content.options?.map(option => ({
-          text: option.text,
-          correct: option.isCorrect,
-          tipsAndFeedback: {
-            tip: '',
-            chosenFeedback: option.isCorrect ? 'Correct!' : 'Try again.',
-            notChosenFeedback: ''
-          }
-        })) || []
-      };
-
-    case 'true-false':
-      return {
-        ...baseQuestion,
-        library: 'H5P.TrueFalse 1.8',
-        correct: question.correctAnswer === 'True' ? 'true' : 'false'
-      };
-
-    default:
-      return {
-        ...baseQuestion,
-        library: 'H5P.Essay 1.5',
-        placeholder: 'Enter your answer here...'
-      };
-  }
-}
 
 function getQuestionTypeBreakdown(questions) {
   const breakdown = {};
@@ -1094,6 +664,995 @@ function getDifficultyDistribution(questions) {
     distribution[q.difficulty] = (distribution[q.difficulty] || 0) + 1;
   });
   return distribution;
+}
+
+// Generate H5P Column content using hybrid approach: Dialogcards + QuestionSet + Individual questions
+function generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions) {
+  const columnContent = [];
+  
+  // Treat ALL non-flashcard questions as individual rows (no QuestionSet)
+  const individualQuestions = nonFlashcardQuestions;
+  
+  // Add flashcards as Dialog Cards wrapped in Row/RowColumn (First Row)
+  if (flashcardQuestions.length > 0) {
+    const flashcardDialogs = flashcardQuestions.map(question => {
+      const front = question.content?.front || question.questionText || "Front of card";
+      const back = question.content?.back || question.correctAnswer || "Back of card";
+      
+      // Use simple text escaping, avoid HTML entities
+      const escapedFront = front.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const escapedBack = back.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      
+      return {
+        "text": `<p style="text-align:center;">${escapedFront}</p>`,
+        "answer": `<p style="text-align:center;">${escapedBack}</p>`,
+        "tips": {},
+        "imageAltText": ""
+      };
+    });
+    
+    // Wrap Dialog Cards in Row/RowColumn structure
+    columnContent.push({
+      "content": {
+        "params": {
+          "columns": [
+            {
+              "width": 100,
+              "content": {
+                "params": {
+                  "content": [
+                    {
+                      "params": {
+                        "mode": "normal",
+                        "dialogs": flashcardDialogs,
+                        "behaviour": {
+                          "enableRetry": true,
+                          "disableBackwardsNavigation": false,
+                          "scaleTextNotCard": false,
+                          "randomCards": false,
+                          "maxProficiency": 5,
+                          "quickProgression": false
+                        },
+                        "answer": "Turn",
+                        "next": "Next",
+                        "prev": "Previous",
+                        "retry": "Retry",
+                        "correctAnswer": "I got it right!",
+                        "incorrectAnswer": "I got it wrong",
+                        "round": "Round @round",
+                        "cardsLeft": "Cards left: @number",
+                        "nextRound": "Proceed to round @round",
+                        "startOver": "Start over",
+                        "showSummary": "Next",
+                        "summary": "Summary",
+                        "summaryCardsRight": "Cards you got right:",
+                        "summaryCardsWrong": "Cards you got wrong:",
+                        "summaryCardsNotShown": "Cards in pool not shown:",
+                        "summaryOverallScore": "Overall Score",
+                        "summaryCardsCompleted": "Cards you have completed learning:",
+                        "summaryCompletedRounds": "Completed rounds:",
+                        "summaryAllDone": "Well done! You have mastered all @cards cards by getting them correct @max times!",
+                        "progressText": "Card @card of @total",
+                        "cardFrontLabel": "Card front",
+                        "cardBackLabel": "Card back",
+                        "tipButtonLabel": "Show tip",
+                        "audioNotSupported": "Your browser does not support this audio",
+                        "confirmStartingOver": {
+                          "header": "Start over?",
+                          "body": "All progress will be lost. Are you sure you want to start over?",
+                          "cancelLabel": "Cancel",
+                          "confirmLabel": "Start over"
+                        },
+                        "title": `<p>${escapeHtml(quiz.name || 'Study Cards')}</p>`,
+                        "description": ""
+                      },
+                      "library": "H5P.Dialogcards 1.9",
+                      "subContentId": crypto.randomBytes(16).toString('hex'),
+                      "metadata": {
+                        "contentType": "Dialog Cards",
+                        "license": "U",
+                        "title": "Flashcards"
+                      }
+                    }
+                  ]
+                },
+                "library": "H5P.RowColumn 1.0",
+                "subContentId": crypto.randomBytes(16).toString('hex'),
+                "metadata": {
+                  "contentType": "Column",
+                  "license": "U",
+                  "title": "Untitled Column"
+                }
+              }
+            }
+          ]
+        },
+        "library": "H5P.Row 1.0",
+        "subContentId": crypto.randomBytes(16).toString('hex'),
+        "metadata": {
+          "contentType": "Row",
+          "license": "U",
+          "title": "Untitled Row"
+        }
+      }
+    });
+  }
+  
+  // Add all other questions as individual rows
+  individualQuestions.forEach(question => {
+    const h5pQuestion = convertQuestionToH5PRowColumn(question, quiz);
+    if (h5pQuestion) {
+      columnContent.push(h5pQuestion);
+    }
+  });
+  
+  return {
+    "content": columnContent
+  };
+}
+
+// Generate H5P QuestionSet content for supported question types
+function generateH5PQuestionSet(questions) {
+  const questionSetQuestions = questions.map(question => {
+    let h5pQuestion;
+    
+    if (question.type === 'multiple-choice') {
+      h5pQuestion = {
+        "params": {
+          "media": {
+            "disableImageZooming": false
+          },
+          "answers": question.content?.options?.map(option => ({
+            "correct": option.isCorrect || false,
+            "text": `<div>${escapeHtml(option.text)}</div>`,
+            "tipsAndFeedback": {}
+          })) || [],
+          "overallFeedback": [
+            {
+              "from": 0,
+              "to": 100
+            }
+          ],
+          "behaviour": {
+            "enableRetry": true,
+            "enableSolutionsButton": true,
+            "enableCheckButton": true,
+            "type": "auto",
+            "singlePoint": false,
+            "randomAnswers": true,
+            "showSolutionsRequiresInput": true,
+            "confirmCheckDialog": false,
+            "confirmRetryDialog": false,
+            "autoCheck": false,
+            "passPercentage": 100,
+            "showScorePoints": true
+          },
+          "UI": {
+            "checkAnswerButton": "Check",
+            "submitAnswerButton": "Submit",
+            "showSolutionButton": "Show solution",
+            "tryAgainButton": "Retry",
+            "tipsLabel": "Show tip",
+            "scoreBarLabel": "You got :num out of :total points",
+            "tipAvailable": "Tip available",
+            "feedbackAvailable": "Feedback available",
+            "readFeedback": "Read feedback",
+            "wrongAnswer": "Wrong answer",
+            "correctAnswer": "Correct answer",
+            "shouldCheck": "Should have been checked",
+            "shouldNotCheck": "Should not have been checked",
+            "noInput": "Please answer before viewing the solution",
+            "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+            "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+            "a11yRetry": "Retry the task. Reset all responses and start the task over again."
+          },
+          "confirmCheck": {
+            "header": "Finish ?",
+            "body": "Are you sure you wish to finish ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Finish"
+          },
+          "confirmRetry": {
+            "header": "Retry ?",
+            "body": "Are you sure you wish to retry ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Confirm"
+          },
+          "question": `<p>${escapeHtml(question.questionText)}</p>`
+        },
+        "library": "H5P.MultiChoice 1.16",
+        "metadata": {
+          "contentType": "Multiple Choice",
+          "license": "U",
+          "title": "Untitled Multiple Choice"
+        },
+        "subContentId": crypto.randomBytes(16).toString('hex')
+      };
+    } else if (question.type === 'true-false') {
+      h5pQuestion = {
+        "params": {
+          "media": {
+            "disableImageZooming": false
+          },
+          "correct": question.correctAnswer ? "true" : "false", 
+          "behaviour": {
+            "enableRetry": true,
+            "enableSolutionsButton": true,
+            "enableCheckButton": true,
+            "confirmCheckDialog": false,
+            "confirmRetryDialog": false,
+            "autoCheck": false
+          },
+          "l10n": {
+            "trueText": "True",
+            "falseText": "False",
+            "score": "You got @score of @total points",
+            "checkAnswer": "Check",
+            "submitAnswer": "Submit",
+            "showSolutionButton": "Show solution",
+            "tryAgain": "Retry",
+            "wrongAnswerMessage": "Wrong answer",
+            "correctAnswerMessage": "Correct answer",
+            "scoreBarLabel": "You got :num out of :total points",
+            "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+            "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+            "a11yRetry": "Retry the task. Reset all responses and start the task over again."
+          },
+          "confirmCheck": {
+            "header": "Finish ?",
+            "body": "Are you sure you wish to finish ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Finish"
+          },
+          "confirmRetry": {
+            "header": "Retry ?",
+            "body": "Are you sure you wish to retry ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Confirm"
+          },
+          "question": `<p>${escapeHtml(question.questionText)}</p>`
+        },
+        "library": "H5P.TrueFalse 1.8",
+        "metadata": {
+          "contentType": "True/False Question",
+          "license": "U",
+          "title": "Untitled True/False Question"
+        },
+        "subContentId": crypto.randomBytes(16).toString('hex')
+      };
+    } else if (question.type === 'cloze') {
+      const textWithBlanks = question.content?.textWithBlanks || question.questionText;
+      const correctAnswers = question.content?.correctAnswers || [];
+      
+      let h5pText = textWithBlanks;
+      correctAnswers.forEach((answer, index) => {
+        h5pText = h5pText.replace(/\_{3,}/, `*${escapeHtml(answer)}*`);
+      });
+
+      h5pQuestion = {
+        "params": {
+          "media": {
+            "disableImageZooming": false
+          },
+          "taskDescription": `<p>${escapeHtml(question.questionText.split('\\n')[0])}</p>`,
+          "overallFeedback": [
+            {
+              "from": 0,
+              "to": 100
+            }
+          ],
+          "showSolutions": "Show solution",
+          "tryAgain": "Retry",
+          "checkAnswer": "Check",
+          "submitAnswer": "Submit",
+          "notFilledOut": "Please fill in all blanks to view solution",
+          "answerIsCorrect": "':ans' is correct",
+          "answerIsWrong": "':ans' is wrong",
+          "answeredCorrectly": "Answered correctly",
+          "answeredIncorrectly": "Answered incorrectly",
+          "solutionLabel": "Correct answer:",
+          "inputLabel": "Blank input @num of @total",
+          "inputHasTipLabel": "Tip available",
+          "tipLabel": "Tip",
+          "behaviour": {
+            "enableRetry": true,
+            "enableSolutionsButton": true,
+            "enableCheckButton": true,
+            "autoCheck": false,
+            "caseSensitive": true,
+            "showSolutionsRequiresInput": true,
+            "separateLines": false,
+            "confirmCheckDialog": false,
+            "confirmRetryDialog": false,
+            "acceptSpellingErrors": false
+          },
+          "scoreBarLabel": "You got :num out of :total points",
+          "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+          "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
+          "a11yCheckingModeHeader": "Checking mode",
+          "confirmCheck": {
+            "header": "Finish ?",
+            "body": "Are you sure you wish to finish ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Finish"
+          },
+          "confirmRetry": {
+            "header": "Retry ?",
+            "body": "Are you sure you wish to retry ?",
+            "cancelLabel": "Cancel",
+            "confirmLabel": "Confirm"
+          },
+          "questions": [`<p>${escapeHtml(h5pText)}</p>`]
+        },
+        "library": "H5P.Blanks 1.14",
+        "metadata": {
+          "contentType": "Fill in the Blanks",
+          "license": "U",
+          "title": "Untitled Fill in the Blanks"
+        },
+        "subContentId": crypto.randomBytes(16).toString('hex')
+      };
+    } else if (question.type === 'ordering') {
+      // Convert ordering to H5P DragText format
+      const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
+      const correctOrder = question.content?.correctOrder || items;
+      
+      // Create text field with numbered blanks for ordering
+      let textField = "";
+      correctOrder.forEach((item, index) => {
+        textField += `*${index + 1}*. ${escapeHtml(item)}\\n`;
+      });
+      
+      const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).map(String);
+
+      h5pQuestion = {
+        "params": {
+          "media": {
+            "disableImageZooming": false
+          },
+          "taskDescription": `<p>${escapeHtml(question.questionText)}</p>`,
+          "textField": textField.replace(/\\n/g, '\n'),
+          "overallFeedback": [
+            {
+              "from": 0,
+              "to": 100
+            }
+          ],
+          "checkAnswer": "Check",
+          "submitAnswer": "Submit",
+          "tryAgain": "Retry",
+          "showSolution": "Show solution",
+          "dropZoneIndex": "Drop Zone @index.",
+          "empty": "Drop Zone @index is empty.",
+          "contains": "Drop Zone @index contains draggable @draggable.",
+          "ariaDraggableIndex": "@index of @count draggables.",
+          "tipLabel": "Show tip",
+          "correctText": "Correct!",
+          "incorrectText": "Incorrect!",
+          "resetDropTitle": "Reset drop",
+          "resetDropDescription": "Are you sure you want to reset this drop zone?",
+          "grabbed": "Draggable is grabbed.",
+          "cancelledDragging": "Cancelled dragging.",
+          "correctAnswer": "Correct answer:",
+          "feedbackHeader": "Feedback",
+          "behaviour": {
+            "enableRetry": true,
+            "enableSolutionsButton": true,
+            "enableCheckButton": true,
+            "instantFeedback": false
+          },
+          "scoreBarLabel": "You got :num out of :total points",
+          "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+          "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
+          "distractors": distractorNumbers.join(" ")
+        },
+        "library": "H5P.DragText 1.10",
+        "metadata": {
+          "contentType": "Drag the Words",
+          "license": "U", 
+          "title": "Untitled Drag the Words"
+        },
+        "subContentId": crypto.randomBytes(16).toString('hex')
+      };
+    }
+    
+    return h5pQuestion;
+  }).filter(Boolean);
+  
+  return {
+    "introPage": {
+      "showIntroPage": false,
+      "startButtonText": "Start Quiz"
+    },
+    "progressType": "dots",
+    "passPercentage": 50,
+    "questions": questionSetQuestions,
+    "disableBackwardsNavigation": false,
+    "randomQuestions": false,
+    "endGame": {
+      "showResultPage": true,
+      "showSolutionButton": true,
+      "showRetryButton": true,
+      "noResultMessage": "Finished",
+      "message": "Your result:",
+      "scoreBarLabel": "You got @finals out of @totals points",
+      "overallFeedback": [
+        {
+          "from": 0,
+          "to": 100
+        }
+      ],
+      "solutionButtonText": "Show solution",
+      "retryButtonText": "Retry",
+      "finishButtonText": "Finish",
+      "submitButtonText": "Submit",
+      "showAnimations": false,
+      "skippable": false,
+      "skipButtonText": "Skip video"
+    },
+    "texts": {
+      "prevButton": "Previous question",
+      "nextButton": "Next question",
+      "finishButton": "Finish",
+      "submitButton": "Submit",
+      "textualProgress": "Question: @current of @total questions",
+      "jumpToQuestion": "Question %d of %total",
+      "questionLabel": "Question",
+      "readSpeakerProgress": "Question @current of @total",
+      "unansweredText": "Unanswered",
+      "answeredText": "Answered",
+      "currentQuestionText": "Current question",
+      "navigationLabel": "Questions",
+      "questionSetInstruction": "Choose question to display"
+    },
+    "override": {
+      "checkButton": true
+    }
+  };
+}
+
+// Generate H5P Dialog Cards content for flashcard-only quizzes
+function generateH5PDialogCards(flashcardQuestions) {
+  const flashcardDialogs = flashcardQuestions.map(question => {
+    const front = question.content?.front || question.questionText || "Front of card";
+    const back = question.content?.back || question.correctAnswer || "Back of card";
+    
+    const escapedFront = front.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escapedBack = back.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    
+    return {
+      "text": `<p style="text-align: center;">${escapedFront}</p>`,
+      "answer": `<p style="text-align: center;">${escapedBack}</p>`,
+      "tips": {},
+      "audio": [],
+      "image": {},
+      "imageAltText": ""
+    };
+  });
+  
+  return {
+    "title": "<p>Study Cards</p>\n",
+    "description": "<p>Review these flashcards to learn the material.</p>\n",
+    "dialogs": flashcardDialogs,
+    "next": "Next",
+    "answer": "Turn",
+    "prev": "Previous",
+    "retry": "Try again",
+    "progressText": "Card @card of @total",
+    "behaviour": {
+      "scaleTextNotCard": true,
+      "enableRetry": true,
+      "disableBackwardsNavigation": false,
+      "randomCards": false,
+      "maxProficiency": 5,
+      "quickProgression": false
+    },
+    "cardFrontLabel": "Card front",
+    "cardBackLabel": "Card back",
+    "tipButtonLabel": "Show tip",
+    "audioNotSupported": "Your browser does not support this audio",
+    "mode": "normal",
+    "correctAnswer": "I got it right!",
+    "incorrectAnswer": "I got it wrong",
+    "round": "Round @round",
+    "cardsLeft": "Cards left: @number",
+    "nextRound": "Proceed to round @round",
+    "startOver": "Start over",
+    "showSummary": "Next",
+    "summary": "Summary",
+    "summaryCardsRight": "Cards you got right:",
+    "summaryCardsWrong": "Cards you got wrong:",
+    "summaryCardsNotShown": "Cards in pool not shown:",
+    "summaryOverallScore": "Overall Score",
+    "summaryCardsCompleted": "Cards you have completed learning:",
+    "summaryCompletedRounds": "Completed rounds:",
+    "summaryAllDone": "Well done! You got all @cards cards correct @max times in a row!",
+    "confirmStartingOver": {
+      "header": "Start over?",
+      "body": "All progress will be lost. Are you sure you want to start over?",
+      "cancelLabel": "Cancel",
+      "confirmLabel": "Start over"
+    }
+  };
+}
+
+// Convert individual question to H5P format wrapped in Row/RowColumn 
+function convertQuestionToH5PRowColumn(question, quiz) {
+  const baseQuestion = convertQuestionToH5P(question, quiz);
+  if (!baseQuestion) return null;
+  
+  // Wrap in Row/RowColumn structure like website
+  return {
+    "content": {
+      "params": {
+        "columns": [
+          {
+            "width": 100,
+            "content": {
+              "params": {
+                "content": [baseQuestion]
+              },
+              "library": "H5P.RowColumn 1.0",
+              "subContentId": crypto.randomBytes(16).toString('hex'),
+              "metadata": {
+                "contentType": "Column",
+                "license": "U", 
+                "title": "Untitled Column"
+              }
+            }
+          }
+        ]
+      },
+      "library": "H5P.Row 1.0",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Row",
+        "license": "U",
+        "title": "Untitled Row"
+      }
+    }
+  };
+}
+
+// Convert individual question to H5P format
+function convertQuestionToH5P(question, quiz) {
+  if (question.type === 'multiple-choice') {
+    return {
+      "library": "H5P.MultiChoice 1.16",
+      "params": {
+        "question": `<p>${escapeHtml(question.questionText)}</p>`,
+        "answers": question.content?.options?.map(option => ({
+          "correct": option.isCorrect || false,
+          "text": `<div>${escapeHtml(option.text)}</div>\n`,
+          "tipsAndFeedback": {
+            "tip": "",
+            "chosenFeedback": option.isCorrect ? "Correct!" : "Try again",
+            "notChosenFeedback": ""
+          }
+        })) || [],
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "type": "auto",
+          "singlePoint": true,
+          "randomAnswers": false,
+          "showSolutionsRequiresInput": true,
+          "confirmCheckDialog": false,
+          "confirmRetryDialog": false,
+          "autoCheck": false,
+          "passPercentage": 100,
+          "showScorePoints": true
+        },
+        "UI": {
+          "checkAnswerButton": "Check",
+          "submitAnswerButton": "Submit",
+          "showSolutionButton": "Show solution",
+          "tryAgainButton": "Try again",
+          "tipsLabel": "Show tip",
+          "scoreBarLabel": "You got :num out of :total points",
+          "tipAvailable": "Tip available",
+          "feedbackAvailable": "Feedback available",
+          "readFeedback": "Read feedback",
+          "wrongAnswer": "Wrong answer",
+          "correctAnswer": "Correct answer",
+          "shouldCheck": "Should have been checked",
+          "shouldNotCheck": "Should not have been checked",
+          "noInput": "Please answer before viewing the solution"
+        },
+        "confirmCheck": {
+          "header": "Finish ?",
+          "body": "Are you sure you wish to finish ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Finish"
+        },
+        "confirmRetry": {
+          "header": "Retry ?",
+          "body": "Are you sure you wish to retry ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Confirm"
+        },
+        "overallFeedback": []
+      },
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Multiple Choice",
+        "license": "U",
+        "title": "Question"
+      }
+    };
+  } else if (question.type === 'true-false') {
+    return {
+      "params": {
+        "media": {
+          "disableImageZooming": false
+        },
+        "correct": question.correctAnswer ? "true" : "false",
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "confirmCheckDialog": false,
+          "confirmRetryDialog": false,
+          "autoCheck": false
+        },
+        "l10n": {
+          "trueText": "True",
+          "falseText": "False",
+          "score": "You got @score of @total points",
+          "checkAnswer": "Check",
+          "submitAnswer": "Submit",
+          "showSolutionButton": "Show solution",
+          "tryAgain": "Retry",
+          "wrongAnswerMessage": "Wrong answer",
+          "correctAnswerMessage": "Correct answer",
+          "scoreBarLabel": "You got :num out of :total points",
+          "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+          "a11yRetry": "Retry the task. Reset all responses and start the task over again."
+        },
+        "confirmCheck": {
+          "header": "Finish ?",
+          "body": "Are you sure you wish to finish ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Finish"
+        },
+        "confirmRetry": {
+          "header": "Retry ?",
+          "body": "Are you sure you wish to retry ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Confirm"
+        },
+        "question": `<p>${escapeHtml(question.questionText)}</p>`
+      },
+      "library": "H5P.TrueFalse 1.8",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "True/False Question",
+        "license": "U",
+        "title": "True/False Question"
+      }
+    };
+  } else if (question.type === 'matching') {
+    // Use H5P.DragText for matching questions
+    const leftItems = question.content?.leftItems || [];
+    const rightItems = question.content?.rightItems || [];
+    const matchingPairs = question.content?.matchingPairs || [];
+    
+    // Create text field with drag markers - simpler format like working example
+    let textField = "";
+    leftItems.forEach((leftItem, index) => {
+      const correctMatch = matchingPairs.find(pair => pair[0] === leftItem)?.[1] || rightItems[index] || rightItems[0];
+      textField += `${index + 1}. ${escapeHtml(correctMatch)} = *${escapeHtml(leftItem)}*\n`;
+    });
+    
+    // Add distractors - should be unused leftItems (terms that can be dragged)
+    const usedLeftItems = matchingPairs.map(pair => pair[0]);
+    const distractors = leftItems.filter(item => !usedLeftItems.includes(item));
+    const distractorText = distractors.length > 0 ? distractors.map(d => escapeHtml(d)).join(" ") : "";
+    
+    return {
+      "params": {
+        "media": {
+          "disableImageZooming": false
+        },
+        "taskDescription": `<p>${escapeHtml(question.questionText || 'Drag the words into the correct boxes')}</p>`,
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100
+          }
+        ],
+        "checkAnswer": "Check",
+        "submitAnswer": "Submit",
+        "tryAgain": "Retry",
+        "showSolution": "Show solution",
+        "dropZoneIndex": "Drop Zone @index.",
+        "empty": "Drop Zone @index is empty.",
+        "contains": "Drop Zone @index contains draggable @draggable.",
+        "ariaDraggableIndex": "@index of @count draggables.",
+        "tipLabel": "Show tip",
+        "correctText": "Correct!",
+        "incorrectText": "Incorrect!",
+        "resetDropTitle": "Reset drop",
+        "resetDropDescription": "Are you sure you want to reset this drop zone?",
+        "grabbed": "Draggable is grabbed.",
+        "cancelledDragging": "Cancelled dragging.",
+        "correctAnswer": "Correct answer:",
+        "feedbackHeader": "Feedback",
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "instantFeedback": false
+        },
+        "scoreBarLabel": "You got :num out of :total points",
+        "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+        "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+        "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
+        "textField": textField.replace(/\n/g, '\n'),
+        "distractors": distractorText
+      },
+      "library": "H5P.DragText 1.10",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Drag the Words",
+        "license": "U",
+        "title": "Matching question"
+      }
+    };
+  } else if (question.type === 'ordering') {
+    // Convert ordering to H5P DragText format
+    const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
+    const correctOrder = question.content?.correctOrder || items;
+    
+    // Create text field with numbered blanks for ordering
+    let textField = "";
+    correctOrder.forEach((item, index) => {
+      textField += `*${index + 1}*. ${escapeHtml(item)}\\n`;
+    });
+    
+    const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).map(String);
+
+    return {
+      "params": {
+        "media": {
+          "disableImageZooming": false
+        },
+        "taskDescription": `<p>${escapeHtml(question.questionText)}</p>`,
+        "textField": textField.replace(/\\n/g, '\n'),
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100
+          }
+        ],
+        "checkAnswer": "Check",
+        "submitAnswer": "Submit",
+        "tryAgain": "Retry",
+        "showSolution": "Show solution",
+        "dropZoneIndex": "Drop Zone @index.",
+        "empty": "Drop Zone @index is empty.",
+        "contains": "Drop Zone @index contains draggable @draggable.",
+        "ariaDraggableIndex": "@index of @count draggables.",
+        "tipLabel": "Show tip",
+        "correctText": "Correct!",
+        "incorrectText": "Incorrect!",
+        "resetDropTitle": "Reset drop",
+        "resetDropDescription": "Are you sure you want to reset this drop zone?",
+        "grabbed": "Draggable is grabbed.",
+        "cancelledDragging": "Cancelled dragging.",
+        "correctAnswer": "Correct answer:",
+        "feedbackHeader": "Feedback",
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "instantFeedback": false
+        },
+        "scoreBarLabel": "You got :num out of :total points",
+        "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+        "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+        "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
+        "distractors": distractorNumbers.join(" ")
+      },
+      "library": "H5P.DragText 1.10",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Drag the Words",
+        "license": "U", 
+        "title": "Ordering question"
+      }
+    };
+  } else if (question.type === 'cloze') {
+    const textWithBlanks = question.content?.textWithBlanks || question.questionText;
+    const correctAnswers = question.content?.correctAnswers || [];
+    
+    let h5pText = textWithBlanks;
+    correctAnswers.forEach((answer, index) => {
+      h5pText = h5pText.replace(/\_{3,}/, `*${escapeHtml(answer)}*`);
+    });
+
+    return {
+      "params": {
+        "media": {
+          "disableImageZooming": false
+        },
+        "taskDescription": `<p>${escapeHtml(question.questionText.split('\\n')[0])}</p>`,
+        "overallFeedback": [
+          {
+            "from": 0,
+            "to": 100
+          }
+        ],
+        "showSolutions": "Show solution",
+        "tryAgain": "Retry",
+        "checkAnswer": "Check",
+        "submitAnswer": "Submit",
+        "notFilledOut": "Please fill in all blanks to view solution",
+        "answerIsCorrect": "':ans' is correct",
+        "answerIsWrong": "':ans' is wrong",
+        "answeredCorrectly": "Answered correctly",
+        "answeredIncorrectly": "Answered incorrectly",
+        "solutionLabel": "Correct answer:",
+        "inputLabel": "Blank input @num of @total",
+        "inputHasTipLabel": "Tip available",
+        "tipLabel": "Tip",
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "autoCheck": false,
+          "caseSensitive": true,
+          "showSolutionsRequiresInput": true,
+          "separateLines": false,
+          "confirmCheckDialog": false,
+          "confirmRetryDialog": false,
+          "acceptSpellingErrors": false
+        },
+        "scoreBarLabel": "You got :num out of :total points",
+        "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+        "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+        "a11yRetry": "Retry the task. Reset all responses and start the task over again.",
+        "a11yCheckingModeHeader": "Checking mode",
+        "confirmCheck": {
+          "header": "Finish ?",
+          "body": "Are you sure you wish to finish ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Finish"
+        },
+        "confirmRetry": {
+          "header": "Retry ?",
+          "body": "Are you sure you wish to retry ?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Confirm"
+        },
+        "questions": [`<p>${escapeHtml(h5pText)}</p>`]
+      },
+      "library": "H5P.Blanks 1.14",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Fill in the Blanks",
+        "license": "U",
+        "title": "Cloze question"
+      }
+    };
+  } else if (question.type === 'discussion') {
+    // Use H5P.AdvancedText for discussion questions - display only, no interaction needed
+    return {
+      "params": {
+        "text": `<p>${escapeHtml(question.questionText)}</p>`
+      },
+      "library": "H5P.AdvancedText 1.1",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Text",
+        "license": "U",
+        "title": "Discussion question"
+      }
+    };
+  } else if (question.type === 'summary') {
+    // Use H5P.Accordion for summary questions with AI-generated key points
+    const panels = [];
+
+    // Check if we have AI-generated keyPoints, otherwise fallback to learning objectives
+    if (question.content?.keyPoints && question.content.keyPoints.length > 0) {
+      // Use the new keyPoints structure generated by LLM
+      question.content.keyPoints.forEach((keyPoint, index) => {
+        const bulletContent = `
+          <div style="padding: 10px;">
+            <h4 style="color: #2563eb; margin-bottom: 8px;">${escapeHtml(keyPoint.title)}</h4>
+            <p style="line-height: 1.5; margin: 0;">${escapeHtml(keyPoint.explanation)}</p>
+          </div>
+        `;
+
+        panels.push({
+          "content": {
+            "params": {
+              "text": bulletContent
+            },
+            "library": "H5P.AdvancedText 1.1",
+            "subContentId": crypto.randomBytes(16).toString('hex'),
+            "metadata": {
+              "contentType": "Text",
+              "license": "U",
+              "title": "Key Learning Point"
+            }
+          },
+          "title": keyPoint.title
+        });
+      });
+    } else {
+      // Fallback to learning objectives if keyPoints not available
+      const learningObjectives = quiz?.learningObjectives || [];
+      if (learningObjectives.length > 0) {
+        learningObjectives.forEach((objective, index) => {
+          const objectiveText = objective.text || objective.description || objective.content || `Learning Objective ${index + 1}`;
+          
+          const bulletContent = `
+            <ul>
+              <li><strong>Objective:</strong> ${escapeHtml(objectiveText)}</li>
+              <li><strong>Key Points:</strong> Understanding and application of this concept</li>
+              <li><strong>Assessment Focus:</strong> This objective will be evaluated through various question types</li>
+            </ul>
+            ${question.content?.additionalNotes ? `<p><em>Additional Notes:</em> ${escapeHtml(question.content.additionalNotes)}</p>` : ''}
+          `;
+
+          panels.push({
+            "content": {
+              "params": {
+                "text": bulletContent
+              },
+              "library": "H5P.AdvancedText 1.1",
+              "subContentId": crypto.randomBytes(16).toString('hex'),
+              "metadata": {
+                "contentType": "Text",
+                "license": "U",
+                "title": "Learning Objective Text"
+              }
+            },
+            "title": `Learning Objective ${index + 1}`
+          });
+        });
+      } else {
+        // Fallback if no learning objectives are available
+        panels.push({
+          "content": {
+            "params": {
+              "text": `<p>${escapeHtml(question.explanation || question.content?.summary || 'Summary content will be based on learning objectives when they are available.')}</p>`
+            },
+          "library": "H5P.AdvancedText 1.1",
+          "subContentId": crypto.randomBytes(16).toString('hex'),
+          "metadata": {
+            "contentType": "Text",
+            "license": "U",
+            "title": "Summary Text"
+          }
+        },
+        "title": question.content?.title || "Summary"
+      });
+    }
+    }
+
+    return {
+      "params": {
+        "panels": panels,
+        "hTag": "h2"
+      },
+      "library": "H5P.Accordion 1.0",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Accordion",
+        "license": "U",
+        "title": "Summary question"
+      }
+    };
+  }
+  
+  // Add other question types as needed
+  return null;
 }
 
 function estimateExportSize(quiz) {
