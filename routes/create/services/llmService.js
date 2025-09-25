@@ -57,15 +57,14 @@ class QuizLLMService {
   }
 
   /**
-   * Get the correct options object for sendMessage based on provider and model
-   * @param {Object} userPreferences - User preferences
+   * Get the correct options object for sendMessage based on provider and model from .env
    * @param {number} temperature - Temperature setting
    * @param {number} maxTokens - Max tokens setting
    * @returns {Object} Options object with correct parameter names
    */
-  getSendMessageOptions(userPreferences, temperature, maxTokens) {
-    const provider = userPreferences?.llmProvider || 'ollama';
-    const model = userPreferences?.llmModel;
+  getSendMessageOptions(temperature, maxTokens) {
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'llama3.1:8b';
     
     if (provider === 'openai') {
       const options = {
@@ -90,71 +89,11 @@ class QuizLLMService {
     }
   }
 
-  /**
-   * Create a user-specific LLM instance based on their preferences
-   * @param {Object} userPreferences - User's AI model preferences
-   * @returns {LLMModule} Configured LLM instance
-   */
-  createUserLLMInstance(userPreferences) {
-    try {
-      const provider = userPreferences?.llmProvider || 'ollama';
-      const settings = userPreferences?.llmSettings || { temperature: 0.7, maxTokens: 2000 };
-
-      if (provider === 'openai' && process.env.OPENAI_API_KEY) {
-        const defaultOptions = {
-          max_completion_tokens: settings.maxTokens // Use correct OpenAI parameter
-        };
-        
-        const model = userPreferences?.llmModel || 'gpt-4o-mini';
-        
-        // Some models don't support custom temperature
-        if (model !== 'gpt-5-nano') {
-          defaultOptions.temperature = settings.temperature;
-        }
-        
-        return new LLMModule({
-          provider: 'openai',
-          apiKey: process.env.OPENAI_API_KEY,
-          defaultModel: model,
-          logger: this.logger,
-          defaultOptions
-        });
-      } else if (provider === 'openai' && !process.env.OPENAI_API_KEY) {
-        // Fallback to Ollama if OpenAI is requested but no API key is available
-        console.log('⚠️ OpenAI requested but no API key found, falling back to Ollama');
-        return new LLMModule({
-          provider: 'ollama',
-          endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434',
-          defaultModel: 'llama3.1:8b', // Use Ollama model as fallback
-          logger: this.logger,
-          defaultOptions: {
-            temperature: settings.temperature,
-            maxTokens: settings.maxTokens
-          }
-        });
-      } else {
-        return new LLMModule({
-          provider: 'ollama',
-          endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434',
-          defaultModel: userPreferences?.llmModel || 'llama3.1:8b',
-          logger: this.logger,
-          defaultOptions: {
-            temperature: settings.temperature,
-            maxTokens: settings.maxTokens
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Failed to create user LLM instance:', error);
-      return this.llm; // Fallback to default instance
-    }
-  }
 
   /**
    * Generate a high-quality question using LLM + RAG content
-   * @param {Object} userPreferences - User's AI model preferences
    */
-  async generateQuestion(questionConfig, userPreferences = null) {
+  async generateQuestion(questionConfig) {
     const {
       learningObjective,
       questionType,
@@ -168,18 +107,13 @@ class QuizLLMService {
     console.log(`📝 Learning Objective: ${learningObjective.substring(0, 100)}...`);
     console.log(`📚 Using ${relevantContent.length} content chunks`);
 
-    // Use user-specific LLM instance or fallback to default
-    const llmInstance = userPreferences ? this.createUserLLMInstance(userPreferences) : this.llm;
-    
-    if (!llmInstance) {
+    if (!this.llm) {
       throw new Error('LLM service not initialized. Please check Ollama/OpenAI configuration.');
     }
 
-    if (userPreferences?.llmProvider === 'openai') {
-      console.log(`🤖 Using OpenAI model: ${userPreferences.llmModel || 'gpt-4o-mini'}`);
-    } else {
-      console.log(`🤖 Using Ollama model: ${userPreferences?.llmModel || 'llama3.1:8b'}`);
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model}`);
 
     try {
       // Build expert-level prompt
@@ -194,13 +128,13 @@ class QuizLLMService {
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
 
-      // Call LLM with user-specific settings
+      // Call LLM with default settings from .env
       const startTime = Date.now();
-      const temperature = userPreferences?.llmSettings?.temperature || this.getTemperatureForQuestionType(questionType);
-      const maxTokens = userPreferences?.llmSettings?.maxTokens || 2000;
+      const temperature = this.getTemperatureForQuestionType(questionType);
+      const maxTokens = 2000;
       
-      const options = this.getSendMessageOptions(userPreferences, temperature, maxTokens);
-      const response = await llmInstance.sendMessage(prompt, options);
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      const response = await this.llm.sendMessage(prompt, options);
 
       const processingTime = Date.now() - startTime;
       console.log(`⏱️ LLM response received in ${processingTime}ms`);
@@ -668,27 +602,21 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
   }
 
   /**
-   * Generate learning objectives from course materials with user preferences
+   * Generate learning objectives from course materials
    * @param {Array} materials - Course materials
    * @param {String} courseContext - Course context string
    * @param {Number} targetCount - Target number of objectives
-   * @param {Object} userPreferences - User's AI model preferences
    */
-  async generateLearningObjectives(materials, courseContext = '', targetCount = null, userPreferences = null) {
+  async generateLearningObjectives(materials, courseContext = '', targetCount = null) {
     console.log(`🎯 Generating learning objectives from ${materials.length} materials`);
     
-    // Use user-specific LLM instance or fallback to default
-    const llmInstance = userPreferences ? this.createUserLLMInstance(userPreferences) : this.llm;
-    
-    if (!llmInstance) {
+    if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
     }
 
-    if (userPreferences?.llmProvider === 'openai') {
-      console.log(`🤖 Using OpenAI model: ${userPreferences.llmModel || 'gpt-4o-mini'}`);
-    } else {
-      console.log(`🤖 Using Ollama model: ${userPreferences?.llmModel || 'llama3.1:8b'}`);
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model}`);
 
     // Prepare materials content for the prompt
     const materialsContent = materials.map(material => {
@@ -720,11 +648,11 @@ Format your response as a JSON array of strings, like this:
 Learning Objectives:`;
 
     try {
-      const temperature = userPreferences?.llmSettings?.temperature || 0.6;
-      const maxTokens = userPreferences?.llmSettings?.maxTokens || 1000;
+      const temperature = 0.6;
+      const maxTokens = 1000;
       
-      const options = this.getSendMessageOptions(userPreferences, temperature, maxTokens);
-      const response = await llmInstance.sendMessage(prompt, options);
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      const response = await this.llm.sendMessage(prompt, options);
 
       // Try to parse JSON response
       try {
@@ -759,15 +687,11 @@ Learning Objectives:`;
   }
 
   /**
-   * Classify user-provided text into individual learning objectives with user preferences
+   * Classify user-provided text into individual learning objectives
    * @param {String} inputText - User input text
-   * @param {Object} userPreferences - User's AI model preferences
    */
-  async classifyLearningObjectives(inputText, userPreferences = null) {
-    // Use user-specific LLM instance or fallback to default
-    const llmInstance = userPreferences ? this.createUserLLMInstance(userPreferences) : this.llm;
-    
-    if (!llmInstance) {
+  async classifyLearningObjectives(inputText) {
+    if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
     }
 
@@ -789,11 +713,11 @@ Format your response as a JSON array of strings, like this:
 Learning Objectives:`;
 
     try {
-      const temperature = userPreferences?.llmSettings?.temperature || 0.5;
-      const maxTokens = userPreferences?.llmSettings?.maxTokens || 800;
+      const temperature = 0.5;
+      const maxTokens = 800;
       
-      const options = this.getSendMessageOptions(userPreferences, temperature, maxTokens);
-      const response = await llmInstance.sendMessage(prompt, options);
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      const response = await this.llm.sendMessage(prompt, options);
 
       // Try to parse JSON response
       try {
@@ -840,17 +764,13 @@ Learning Objectives:`;
   }
 
   /**
-   * Regenerate a single learning objective with user preferences
+   * Regenerate a single learning objective
    * @param {String} currentObjective - Current objective text
    * @param {Array} materials - Course materials
    * @param {String} courseContext - Course context
-   * @param {Object} userPreferences - User's AI model preferences
    */
-  async regenerateSingleObjective(currentObjective, materials, courseContext = '', userPreferences = null) {
-    // Use user-specific LLM instance or fallback to default
-    const llmInstance = userPreferences ? this.createUserLLMInstance(userPreferences) : this.llm;
-    
-    if (!llmInstance) {
+  async regenerateSingleObjective(currentObjective, materials, courseContext = '') {
+    if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
     }
 
@@ -883,11 +803,11 @@ Please regenerate this learning objective to:
 Provide only the improved learning objective as your response (no additional text or formatting):`;
 
     try {
-      const temperature = userPreferences?.llmSettings?.temperature || 0.6;
-      const maxTokens = userPreferences?.llmSettings?.maxTokens || 200;
+      const temperature = 0.6;
+      const maxTokens = 200;
       
-      const options = this.getSendMessageOptions(userPreferences, temperature, maxTokens);
-      const response = await llmInstance.sendMessage(prompt, options);
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      const response = await this.llm.sendMessage(prompt, options);
 
       // Clean up the response to get just the objective text
       const cleanedObjective = response.content
@@ -937,12 +857,11 @@ Provide only the improved learning objective as your response (no additional tex
   }
 
   /**
-   * Generate multiple questions in a batch with user preferences
+   * Generate multiple questions in a batch
    * @param {Object} batchConfig - Configuration for batch generation
-   * @param {Object} userPreferences - User's AI model preferences
    * @returns {Promise<Object>} Batch generation results
    */
-  async generateQuestionBatch(batchConfig, userPreferences = null) {
+  async generateQuestionBatch(batchConfig) {
     const { learningObjective, questionConfigs, relevantContent, difficulty, courseContext } = batchConfig;
     
     // Validate questionConfigs early to prevent undefined errors
@@ -952,11 +871,9 @@ Provide only the improved learning objective as your response (no additional tex
     }
     
     console.log(`🔄 Generating batch of ${questionConfigs.length} questions`);
-    if (userPreferences?.llmProvider === 'openai') {
-      console.log(`🤖 Using OpenAI model: ${userPreferences.llmModel || 'gpt-4o-mini'}`);
-    } else {
-      console.log(`🤖 Using Ollama model: ${userPreferences?.llmModel || 'llama3.1:8b'}`);
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model}`);
 
     const results = {
       totalRequested: questionConfigs.length,
@@ -979,7 +896,7 @@ Provide only the improved learning objective as your response (no additional tex
           courseContext
         };
 
-        const questionResult = await this.generateQuestion(questionConfig, userPreferences);
+        const questionResult = await this.generateQuestion(questionConfig);
         
         // Extract the question data from the nested response
         const question = questionResult.success ? questionResult.questionData : questionResult;

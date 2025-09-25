@@ -77,16 +77,9 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
   try {
     console.log('🧠 Starting intelligent RAG + LLM question generation...');
 
-    // Get user preferences for AI model selection
-    const { default: User } = await import('../models/User.js');
-    const user = await User.findById(userId).select('preferences');
-    const userPreferences = user?.preferences || null;
-    
-    if (userPreferences?.llmProvider) {
-      console.log(`🤖 Using user's preferred LLM: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🤖 Using default LLM configuration');
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model}`);
 
     // Use the intelligent generation service instead of template-based generation
     const generationResult = await intelligentQuestionGenerationService.generateQuestionsForQuiz(
@@ -95,8 +88,7 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
         difficulty: 'moderate',
         useRAG: true,
         useLLM: true
-      },
-      userPreferences
+      }
     );
 
     console.log('🔍 Generation result summary:', {
@@ -392,16 +384,9 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
   }
 
   try {
-    // Get user preferences for AI model selection
-    const { default: User } = await import('../models/User.js');
-    const user = await User.findById(userId).select('preferences');
-    const userPreferences = user?.preferences || null;
-    
-    if (userPreferences?.llmProvider) {
-      console.log(`🎯 Question regeneration using: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🎯 Question regeneration using default LLM configuration');
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🎯 Question regeneration using ${provider} model: ${model}`);
     
     // Import LLM service for regeneration
     const { default: llmService } = await import('../services/llmService.js');
@@ -417,7 +402,7 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       previousQuestions: [{ questionText: question.questionText }] // Avoid duplication
     };
     
-    const result = await llmService.generateQuestion(questionConfig, userPreferences);
+    const result = await llmService.generateQuestion(questionConfig);
     const newQuestionData = result.questionData;
 
     // Store previous version
