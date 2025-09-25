@@ -27,13 +27,12 @@ class IntelligentQuestionGenerationService {
       console.log(`📝 Learning objectives: ${quizData.learningObjectives.length}`);
       console.log(`📄 Materials: ${quizData.materials.length}`);
 
-      // Step 2: Index materials in RAG system if not already done
-      if (quizData.materials.length > 0) {
-        const materialIds = quizData.materials.map(m => m._id);
-        console.log('🔍 Indexing materials in RAG system...');
-        
-        const indexResult = await ragService.indexQuizMaterials(quizId, materialIds);
-        console.log(`✅ RAG indexing result:`, indexResult);
+      // Step 2: Verify materials are already processed and embedded
+      const processedMaterials = quizData.materials.filter(m => m.processingStatus === 'completed');
+      console.log(`📊 Materials status: ${processedMaterials.length}/${quizData.materials.length} processed and embedded`);
+      
+      if (processedMaterials.length === 0) {
+        console.log('⚠️ No processed materials found for RAG retrieval');
       }
 
       // Step 3: Generate questions for each learning objective
@@ -62,13 +61,14 @@ class IntelligentQuestionGenerationService {
           console.log(`❓ Question types for this LO:`, 
             questionConfigs.map(c => `${c.count}x ${c.questionType}`).join(', '));
 
-          // Retrieve relevant content from RAG
+          // Retrieve relevant content from RAG using processed materials
+          const materialIds = processedMaterials.map(m => m._id.toString());
           const relevantContent = await ragService.retrieveRelevantContent(
             learningObjective.text,
             questionConfigs[0]?.questionType || 'multiple-choice',
             {
               topK: 5,
-              quizId: quizId,
+              materialIds: materialIds, // Filter by specific materials
               minScore: 0.3
             }
           );

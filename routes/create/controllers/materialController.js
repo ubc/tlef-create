@@ -92,13 +92,35 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
       // Add to folder
       await folder.addMaterial(material._id);
 
-      // Enqueue for document processing
+      // Process material immediately (chunk and embed)
       try {
-        await processingJobService.enqueueProcessingJob(material._id, 'document');
-        console.log(`📋 Document processing job enqueued for material: ${material._id}`);
+        console.log(`🔄 Starting immediate processing for material: ${material.name}`);
+        await material.markAsProcessing();
+        
+        // Import RAG service for immediate processing
+        const ragService = await import('../services/ragService.js');
+        const result = await ragService.default.processAndEmbedMaterial(material);
+        
+        if (result.success) {
+          await material.markAsCompleted();
+          console.log(`✅ Material processed and embedded: ${material.name}`);
+          console.log(`📊 Created ${result.chunksCount} chunks, embedded successfully`);
+          
+          // Clean up original file after successful processing
+          await FileService.deleteFile(material.filePath);
+          console.log(`🗑️ Original file cleaned up: ${material.filePath}`);
+          
+          // Clear file path since file is deleted
+          material.filePath = null;
+          await material.save();
+        } else {
+          await material.markAsFailed(result.error);
+          console.error(`❌ Failed to process material: ${result.error}`);
+        }
       } catch (processingError) {
-        console.error(`❌ Failed to enqueue processing job:`, processingError);
-        // Don't fail the upload, just log the error
+        console.error(`❌ Failed to process material:`, processingError);
+        await material.markAsFailed(processingError);
+        // Don't fail the upload, just mark as failed
       }
 
       materials.push(material);
