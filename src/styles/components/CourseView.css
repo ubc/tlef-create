@@ -13,6 +13,29 @@
     margin-bottom: var(--spacing-2xl);
 }
 
+.course-header-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.course-header-nav .btn-danger {
+    background: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+    border-color: var(--color-destructive);
+}
+
+.course-header-nav .btn-danger:hover:not(:disabled) {
+    background: var(--color-destructive-hover, #dc2626);
+    border-color: var(--color-destructive-hover, #dc2626);
+}
+
+.course-header-nav .btn-danger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .course-header h1 {
     font-size: var(--font-size-3xl);
     font-weight: 700;
@@ -361,4 +384,73 @@
         margin-left: 0;
         justify-content: flex-end;
     }
+}
+
+/* Delete Confirmation Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.modal-body {
+    padding: var(--spacing-lg);
+}
+
+.modal-body p {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--color-foreground);
+}
+
+.modal-body ul {
+    margin: var(--spacing-md) 0;
+    padding-left: var(--spacing-lg);
+    color: var(--color-muted-foreground);
+}
+
+.modal-body li {
+    margin-bottom: var(--spacing-xs);
+}
+
+.warning-text {
+    color: #dc2626 !important;
+    font-weight: 500;
+    margin-top: var(--spacing-md) !important;
+}
+
+.modal-actions {
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
 }

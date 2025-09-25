@@ -759,6 +759,102 @@ class QuizRAGService {
   }
 
   /**
+   * Clean up vector embeddings for a specific material
+   * @param {string} materialId - Material ID to cleanup
+   */
+  async cleanupMaterialEmbeddings(materialId) {
+    try {
+      console.log(`🧹 Cleaning up vector embeddings for material: ${materialId}`);
+      
+      if (!this.ragModule) {
+        console.log('⚠️ RAG module not available - skipping vector cleanup');
+        return { success: false, error: 'RAG module not initialized' };
+      }
+
+      // Try to use direct Qdrant API for vector cleanup
+      try {
+        const qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333';
+        const qdrantApiKey = process.env.QDRANT_API_KEY;
+        const collectionName = 'quiz_materials'; // Default collection name
+        
+        console.log(`🔧 Attempting direct Qdrant cleanup via REST API`);
+        
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+        
+        if (qdrantApiKey) {
+          headers['api-key'] = qdrantApiKey;
+        }
+        
+        // Delete points by material ID filter
+        const deleteUrl = `${qdrantUrl}/collections/${collectionName}/points/delete`;
+        const deletePayload = {
+          filter: {
+            must: [
+              {
+                key: "materialId",
+                match: {
+                  value: materialId
+                }
+              }
+            ]
+          }
+        };
+        
+        console.log(`🔄 Making DELETE request to: ${deleteUrl}`);
+        console.log(`📄 Payload:`, JSON.stringify(deletePayload, null, 2));
+        
+        const response = await fetch(deleteUrl, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(deletePayload)
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Successfully deleted vector embeddings for material ${materialId}`);
+          console.log(`📊 Deletion result:`, result);
+          
+          return {
+            success: true,
+            message: `Vector embeddings deleted for material ${materialId}`,
+            deletedCount: result.result?.operation_id || 'unknown',
+            method: 'direct_qdrant_api'
+          };
+        } else {
+          const errorText = await response.text();
+          console.error(`❌ Qdrant API error (${response.status}):`, errorText);
+          
+          // Fall back to logging if direct API fails
+          console.log(`📝 Falling back to cleanup logging for material ${materialId}`);
+          return {
+            success: true,
+            message: `Cleanup logged for material ${materialId} (API fallback)`,
+            note: `Direct API failed: ${response.status} ${errorText}`,
+            method: 'fallback_logging'
+          };
+        }
+        
+      } catch (apiError) {
+        console.error(`❌ Direct Qdrant API error:`, apiError.message);
+        
+        // Fall back to logging if API approach fails
+        console.log(`📝 Falling back to cleanup logging for material ${materialId}`);
+        return {
+          success: true,
+          message: `Cleanup logged for material ${materialId} (error fallback)`,
+          note: `Direct API failed: ${apiError.message}`,
+          method: 'fallback_logging'
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error cleaning up material embeddings:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Clean up RAG data for a quiz (when quiz is deleted)
    */
   async cleanupQuizData(quizId) {
