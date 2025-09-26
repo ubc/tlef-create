@@ -884,12 +884,19 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                   {question.isEditing ? (
                       <div className="question-edit">
                         <div className="edit-field">
-                          <label>Question:</label>
+                          <label>{question.type === 'flashcard' ? 'Front side:' : 'Question:'}</label>
                           <textarea
                               className="textarea"
-                              value={question.questionText}
-                              onChange={(e) => updateQuestion(question._id, 'questionText', e.target.value)}
+                              value={question.type === 'flashcard' ? (question.content?.front || question.questionText) : question.questionText}
+                              onChange={(e) => {
+                                if (question.type === 'flashcard') {
+                                  updateQuestion(question._id, 'content', { ...question.content, front: e.target.value });
+                                } else {
+                                  updateQuestion(question._id, 'questionText', e.target.value);
+                                }
+                              }}
                               rows={3}
+                              placeholder={question.type === 'flashcard' ? 'Enter the question/front side content...' : 'Enter your question...'}
                           />
                         </div>
 
@@ -969,6 +976,17 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                 <label className="tf-label">False</label>
                               </div>
                             </div>
+                          </div>
+                        ) : question.type === 'flashcard' ? (
+                          <div className="edit-field">
+                            <label>Back side:</label>
+                            <textarea
+                                className="textarea"
+                                value={question.content?.back || question.correctAnswer || ''}
+                                onChange={(e) => updateQuestion(question._id, 'content', { ...question.content, back: e.target.value })}
+                                rows={3}
+                                placeholder="Enter the answer/back side content..."
+                            />
                           </div>
                         ) : (
                           <div className="edit-field">
