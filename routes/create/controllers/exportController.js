@@ -16,6 +16,28 @@ import { createWriteStream } from 'fs';
 const router = express.Router();
 
 /**
+ * Generate available options text for Cloze questions
+ * @param {Array<Array<string>>} blankOptions - Array of option arrays for each blank
+ * @returns {string} Formatted text showing available options
+ */
+function generateAvailableOptionsText(blankOptions) {
+  if (!blankOptions || blankOptions.length === 0) {
+    return '';
+  }
+
+  let optionsText = '<strong>Available options:</strong><br>';
+  
+  blankOptions.forEach((options, index) => {
+    if (options && options.length > 0) {
+      const optionsList = options.map(option => escapeHtml(option)).join(', ');
+      optionsText += `Blank ${index + 1}: ${optionsList}<br>`;
+    }
+  });
+  
+  return optionsText;
+}
+
+/**
  * POST /api/export/h5p/:quizId
  * Generate H5P export
  */
@@ -923,11 +945,16 @@ function generateH5PQuestionSet(questions) {
     } else if (question.type === 'cloze') {
       const textWithBlanks = question.content?.textWithBlanks || question.questionText;
       const correctAnswers = question.content?.correctAnswers || [];
+      const blankOptions = question.content?.blankOptions || [];
       
       let h5pText = textWithBlanks;
       correctAnswers.forEach((answer, index) => {
-        h5pText = h5pText.replace(/\_{3,}/, `*${escapeHtml(answer)}*`);
+        h5pText = h5pText.replace(/\$\$/, `*${escapeHtml(answer)}*`);
       });
+
+      // Add available options to the end of the text
+      const optionsText = generateAvailableOptionsText(blankOptions);
+      const finalH5pText = h5pText + (optionsText ? '\n\n' + optionsText : '');
 
       h5pQuestion = {
         "params": {
@@ -983,7 +1010,7 @@ function generateH5PQuestionSet(questions) {
             "cancelLabel": "Cancel",
             "confirmLabel": "Confirm"
           },
-          "questions": [`<p>${escapeHtml(h5pText)}</p>`]
+          "questions": [`<p>${escapeHtml(h5pText)}${optionsText ? '<br><br>' + optionsText : ''}</p>`]
         },
         "library": "H5P.Blanks 1.14",
         "metadata": {
@@ -1469,11 +1496,16 @@ function convertQuestionToH5P(question, quiz) {
   } else if (question.type === 'cloze') {
     const textWithBlanks = question.content?.textWithBlanks || question.questionText;
     const correctAnswers = question.content?.correctAnswers || [];
+    const blankOptions = question.content?.blankOptions || [];
     
     let h5pText = textWithBlanks;
     correctAnswers.forEach((answer, index) => {
-      h5pText = h5pText.replace(/\_{3,}/, `*${escapeHtml(answer)}*`);
+      h5pText = h5pText.replace(/\$\$/, `*${escapeHtml(answer)}*`);
     });
+
+    // Add available options to the end of the text
+    const optionsText = generateAvailableOptionsText(blankOptions);
+    const finalH5pText = h5pText + (optionsText ? '\n\n' + optionsText : '');
 
     return {
       "params": {
@@ -1529,7 +1561,7 @@ function convertQuestionToH5P(question, quiz) {
           "cancelLabel": "Cancel",
           "confirmLabel": "Confirm"
         },
-        "questions": [`<p>${escapeHtml(h5pText)}</p>`]
+        "questions": [`<p>${escapeHtml(h5pText)}${optionsText ? '<br><br>' + optionsText : ''}</p>`]
       },
       "library": "H5P.Blanks 1.14",
       "subContentId": crypto.randomBytes(16).toString('hex'),

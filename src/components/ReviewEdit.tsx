@@ -470,6 +470,169 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }));
   };
 
+  // Cloze question specific editing functions
+  const updateClozeText = (questionId: string, newText: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId) {
+        // Count the number of $$ markers in the new text
+        const blankCount = (newText.match(/\$\$/g) || []).length;
+        const currentBlankOptions = q.content?.blankOptions || [];
+        const currentCorrectAnswers = q.content?.correctAnswers || [];
+        
+        // If we have more blanks than options, add new ones
+        let newBlankOptions = [...currentBlankOptions];
+        let newCorrectAnswers = [...currentCorrectAnswers];
+        
+        while (newBlankOptions.length < blankCount) {
+          newBlankOptions.push(['']);
+          newCorrectAnswers.push('');
+        }
+        
+        // If we have fewer blanks than options, remove excess ones
+        if (newBlankOptions.length > blankCount) {
+          newBlankOptions = newBlankOptions.slice(0, blankCount);
+          newCorrectAnswers = newCorrectAnswers.slice(0, blankCount);
+        }
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            textWithBlanks: newText,
+            blankOptions: newBlankOptions,
+            correctAnswers: newCorrectAnswers
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addClozeBlank = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId) {
+        const currentText = q.content?.textWithBlanks || '';
+        const newText = currentText + '$$';
+        const newBlankOptions = [...(q.content?.blankOptions || []), ['']];
+        const newCorrectAnswers = [...(q.content?.correctAnswers || []), ''];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            textWithBlanks: newText,
+            blankOptions: newBlankOptions,
+            correctAnswers: newCorrectAnswers
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeClozeBlank = (questionId: string, blankIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.blankOptions && q.content.blankOptions.length > 1) {
+        // Split text by blanks and remove the specified blank
+        const textParts = q.content.textWithBlanks?.split('$$') || [];
+        if (blankIndex < textParts.length - 1) {
+          // Remove the blank by joining adjacent parts
+          const newTextParts = [...textParts];
+          newTextParts[blankIndex] = newTextParts[blankIndex] + newTextParts[blankIndex + 1];
+          newTextParts.splice(blankIndex + 1, 1);
+          const newText = newTextParts.join('$$');
+          
+          const newBlankOptions = q.content.blankOptions.filter((_: string[], index: number) => index !== blankIndex);
+          const newCorrectAnswers = q.content.correctAnswers?.filter((_: string, index: number) => index !== blankIndex) || [];
+          
+          return {
+            ...q,
+            content: { 
+              ...q.content, 
+              textWithBlanks: newText,
+              blankOptions: newBlankOptions,
+              correctAnswers: newCorrectAnswers
+            }
+          };
+        }
+      }
+      return q;
+    }));
+  };
+
+  const updateClozeBlankOption = (questionId: string, blankIndex: number, optionIndex: number, newValue: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.blankOptions) {
+        const updatedBlankOptions = [...q.content.blankOptions];
+        updatedBlankOptions[blankIndex] = [...updatedBlankOptions[blankIndex]];
+        updatedBlankOptions[blankIndex][optionIndex] = newValue;
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            blankOptions: updatedBlankOptions
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addClozeBlankOption = (questionId: string, blankIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.blankOptions) {
+        const updatedBlankOptions = [...q.content.blankOptions];
+        updatedBlankOptions[blankIndex] = [...updatedBlankOptions[blankIndex], ''];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            blankOptions: updatedBlankOptions
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeClozeBlankOption = (questionId: string, blankIndex: number, optionIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.blankOptions && q.content.blankOptions[blankIndex].length > 1) {
+        const updatedBlankOptions = [...q.content.blankOptions];
+        updatedBlankOptions[blankIndex] = updatedBlankOptions[blankIndex].filter((_: string, index: number) => index !== optionIndex);
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            blankOptions: updatedBlankOptions
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateClozeCorrectAnswer = (questionId: string, blankIndex: number, newAnswer: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId) {
+        const updatedCorrectAnswers = [...(q.content?.correctAnswers || [])];
+        updatedCorrectAnswers[blankIndex] = newAnswer;
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            correctAnswers: updatedCorrectAnswers
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
   // Summary keyPoints editing functions
   const updateKeyPoint = (questionId: string, keyPointIndex: number, field: string, value: string) => {
     setQuestions(questions.map(q => {
@@ -881,29 +1044,37 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 </div>
               )}
 
-              {/* Cloze (Fill in the blanks) Question - Dropdown Menus */}
-              {question.type === 'cloze' && question.content?.blankOptions && (
+              {/* Cloze (Fill in the blanks) Question - Input Fields (H5P Style) */}
+              {question.type === 'cloze' && question.content?.textWithBlanks && (
                 <div className="cloze-question">
                   <div className="cloze-text">
-                    {question.content.textWithBlanks?.split('_____').map((part, partIndex) => (
+                    {question.content.textWithBlanks?.split('$$').map((part, partIndex) => (
                       <span key={partIndex}>
                         {part}
-                        {partIndex < question.content.blankOptions.length && (
-                          <select
-                            className="cloze-dropdown"
+                        {partIndex < (question.content.textWithBlanks?.match(/\$\$/g) || []).length && (
+                          <input
+                            type="text"
+                            className="cloze-input"
                             value={clozeAnswers[partIndex] || ''}
                             onChange={(e) => handleClozeAnswerChange(partIndex, e.target.value)}
-                          >
-                            <option value="">Select...</option>
-                            {question.content.blankOptions[partIndex]?.map((option: string, optIndex: number) => (
-                              <option key={optIndex} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder={`Blank ${partIndex + 1}`}
+                          />
                         )}
                       </span>
                     ))}
+                  </div>
+                  <div className="cloze-options-hint">
+                    <strong>Available options:</strong>
+                    <div className="options-display">
+                      {question.content.blankOptions?.map((blankOptions: string[], blankIndex: number) => (
+                        <div key={blankIndex} className="blank-options-hint">
+                          <span className="blank-label">Blank {blankIndex + 1}:</span>
+                          <span className="options-list">
+                            {blankOptions.filter(opt => opt.trim()).join(', ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="cloze-actions">
                     <button
@@ -1489,6 +1660,123 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                               </div>
                             </div>
                           </div>
+                        ) : question.type === 'cloze' ? (
+                          <div className="edit-field">
+                            <label>Cloze Question:</label>
+                            <div className="cloze-editor">
+                              <div className="cloze-editor-section">
+                                <h4>Question Text with Blanks:</h4>
+                                <div className="cloze-text-editor">
+                                  <textarea
+                                    className="cloze-text-input"
+                                    value={question.content?.textWithBlanks || ''}
+                                    onChange={(e) => updateClozeText(question._id, e.target.value)}
+                                    placeholder="Enter your text with blanks marked by $$ (e.g., 'In programming, $$ is used for handling asynchronous operations while $$ provides more predictable error handling.')"
+                                    rows={4}
+                                  />
+                                  <small className="cloze-hint">
+                                    Use $$ to mark where blanks should appear. Each $$ will create a fill-in field.
+                                  </small>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm add-blank"
+                                  onClick={() => addClozeBlank(question._id)}
+                                >
+                                  <Plus size={14} />
+                                  Add Blank
+                                </button>
+                              </div>
+
+                              <div className="cloze-editor-section">
+                                <h4>Blank Options & Correct Answers:</h4>
+                                <div className="cloze-blanks-editor">
+                                  {question.content?.blankOptions?.map((blankOptions: string[], blankIndex: number) => (
+                                    <div key={blankIndex} className="cloze-blank-editor">
+                                      <div className="blank-header">
+                                        <strong>Blank {blankIndex + 1}:</strong>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-sm remove-blank"
+                                          onClick={() => removeClozeBlank(question._id, blankIndex)}
+                                          disabled={question.content.blankOptions.length <= 1}
+                                          title="Remove blank"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                      
+                                      <div className="blank-options">
+                                        <label>Available Options:</label>
+                                        <div className="options-list">
+                                          {blankOptions.map((option: string, optionIndex: number) => (
+                                            <div key={optionIndex} className="option-input-group">
+                                              <input
+                                                type="text"
+                                                className="input-field option-input"
+                                                value={option}
+                                                onChange={(e) => updateClozeBlankOption(question._id, blankIndex, optionIndex, e.target.value)}
+                                                placeholder={`Option ${optionIndex + 1}`}
+                                              />
+                                              <button
+                                                type="button"
+                                                className="btn btn-ghost btn-sm remove-option"
+                                                onClick={() => removeClozeBlankOption(question._id, blankIndex, optionIndex)}
+                                                disabled={blankOptions.length <= 1}
+                                                title="Remove option"
+                                              >
+                                                <Trash2 size={14} />
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline btn-sm add-option"
+                                          onClick={() => addClozeBlankOption(question._id, blankIndex)}
+                                        >
+                                          <Plus size={14} />
+                                          Add Option
+                                        </button>
+                                      </div>
+
+                                      <div className="correct-answer">
+                                        <label>Correct Answer:</label>
+                                        <input
+                                          type="text"
+                                          className="input-field correct-answer-input"
+                                          value={question.content?.correctAnswers?.[blankIndex] || ''}
+                                          onChange={(e) => updateClozeCorrectAnswer(question._id, blankIndex, e.target.value)}
+                                          placeholder="Enter the correct answer for this blank"
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="cloze-editor-section">
+                                <h4>Preview:</h4>
+                                <div className="cloze-preview">
+                                  <div className="preview-text">
+                                    {question.content?.textWithBlanks?.split('$$').map((part: string, partIndex: number) => (
+                                      <span key={partIndex}>
+                                        {part}
+                                        {partIndex < (question.content?.textWithBlanks?.match(/\$\$/g) || []).length && (
+                                          <input
+                                            type="text"
+                                            className="preview-blank"
+                                            placeholder={`Blank ${partIndex + 1}`}
+                                            disabled
+                                          />
+                                        )}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         ) : question.type === 'ordering' ? (
                           <div className="edit-field">
                             <label>Ordering Items:</label>
@@ -1671,6 +1959,48 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                 </li>
                               ))}
                             </ul>
+                          </div>
+                        </div>
+                        {question.explanation && (
+                          <div className="question-explanation">
+                            <strong>Explanation:</strong> {question.explanation}
+                          </div>
+                        )}
+                      </div>
+                  ) : question.type === 'cloze' ? (
+                      <div className="question-display">
+                        <div className="question-text">{question.questionText}</div>
+                        <div className="cloze-display">
+                          <div className="cloze-text-display">
+                            <strong>Question Text:</strong>
+                            <div className="cloze-text-content">
+                              {question.content?.textWithBlanks?.split('$$').map((part: string, partIndex: number) => (
+                                <span key={partIndex}>
+                                  {part}
+                                  {partIndex < (question.content?.blankOptions?.length || 0) && (
+                                    <span className="blank-placeholder">[Blank {partIndex + 1}]</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="cloze-answers-display">
+                            <strong>Correct Answers:</strong>
+                            <ul>
+                              {question.content?.correctAnswers?.map((answer: string, index: number) => (
+                                <li key={index}>
+                                  <strong>Blank {index + 1}:</strong> {answer}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="cloze-options-display">
+                            <strong>Available Options:</strong>
+                            {question.content?.blankOptions?.map((blankOptions: string[], blankIndex: number) => (
+                              <div key={blankIndex} className="blank-options-display">
+                                <strong>Blank {blankIndex + 1}:</strong> {blankOptions.filter(opt => opt.trim()).join(', ')}
+                              </div>
+                            ))}
                           </div>
                         </div>
                         {question.explanation && (

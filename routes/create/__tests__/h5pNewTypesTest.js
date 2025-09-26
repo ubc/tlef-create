@@ -39,7 +39,7 @@ const mockQuestions = [
     type: 'cloze',
     questionText: 'Fill in the blanks about photosynthesis:',
     content: {
-      textWithBlanks: 'Photosynthesis is the process by which plants convert [blank] into energy using [blank] from the sun.',
+      textWithBlanks: 'Photosynthesis is the process by which plants convert $$ into energy using $$ from the sun.',
       correctAnswers: ['sunlight', 'energy'],
       blankOptions: [
         ['sunlight', 'water', 'oxygen'],
@@ -148,6 +148,28 @@ async function testAllNewQuestionTypes() {
   }
 }
 
+/**
+ * Generate available options text for Cloze questions
+ * @param {Array<Array<string>>} blankOptions - Array of option arrays for each blank
+ * @returns {string} Formatted text showing available options
+ */
+function generateAvailableOptionsText(blankOptions) {
+  if (!blankOptions || blankOptions.length === 0) {
+    return '';
+  }
+
+  let optionsText = '<strong>Available options:</strong><br>';
+  
+  blankOptions.forEach((options, index) => {
+    if (options && options.length > 0) {
+      const optionsList = options.map(option => escapeHtml(option)).join(', ');
+      optionsText += `Blank ${index + 1}: ${optionsList}<br>`;
+    }
+  });
+  
+  return optionsText;
+}
+
 function generateTestH5PContent(quiz) {
   const content = {
     "introPage": {
@@ -207,16 +229,21 @@ function generateTestH5PContent(quiz) {
     } else if (question.type === 'cloze') {
       const textWithBlanks = question.content?.textWithBlanks || question.questionText;
       const correctAnswers = question.content?.correctAnswers || [];
+      const blankOptions = question.content?.blankOptions || [];
       
       let h5pText = textWithBlanks;
       correctAnswers.forEach((answer) => {
-        h5pText = h5pText.replace(/\\[blank\\]|\_{3,}/, `*${answer}*`);
+        h5pText = h5pText.replace(/\$\$/, `*${answer}*`);
       });
+
+      // Add available options to the end of the text
+      const optionsText = generateAvailableOptionsText(blankOptions);
+      const finalH5pText = h5pText + (optionsText ? '\n\n' + optionsText : '');
 
       h5pQuestion = {
         "library": "H5P.Blanks 1.14",
         "params": {
-          "questions": [`<p>${escapeHtml(h5pText)}</p>\\n`],
+          "questions": [`<p>${escapeHtml(h5pText)}${optionsText ? '<br><br>' + optionsText : ''}</p>\\n`],
           "showSolutions": "Show solutions",
           "tryAgain": "Try again",
           "text": `<p>${escapeHtml(question.questionText)}</p>\\n`,

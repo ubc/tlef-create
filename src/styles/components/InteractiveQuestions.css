@@ -853,6 +853,414 @@
   }
 }
 
+/* Cloze Question Editor Styles */
+.cloze-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.cloze-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cloze-editor-section h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.cloze-text-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cloze-text-input {
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.cloze-text-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.cloze-hint {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+.add-blank {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+.cloze-blanks-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cloze-blank-editor {
+  padding: 1rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.blank-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.blank-header strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.remove-blank {
+  color: var(--text-secondary);
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-blank:hover {
+  color: var(--destructive-color);
+  background: var(--destructive-color-light);
+}
+
+.remove-blank:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.blank-options {
+  margin-bottom: 0.75rem;
+}
+
+.blank-options label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.option-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.option-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: white;
+}
+
+.option-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.remove-option {
+  color: var(--text-secondary);
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-option:hover {
+  color: var(--destructive-color);
+  background: var(--destructive-color-light);
+}
+
+.remove-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-option {
+  font-size: 0.8rem;
+  padding: 4px 8px;
+}
+
+.correct-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.correct-answer label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.correct-answer-input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: var(--success-color-light);
+  border-color: var(--success-color);
+}
+
+.correct-answer-input:focus {
+  outline: none;
+  border-color: var(--success-color-dark);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+}
+
+.cloze-preview {
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.preview-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.preview-blank {
+  padding: 4px 8px;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  margin: 0 4px;
+  min-width: 80px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Updated Cloze Interactive Styles */
+.cloze-input {
+  padding: 6px 12px;
+  border: 2px solid var(--primary-color);
+  border-radius: 4px;
+  background: white;
+  margin: 0 4px;
+  min-width: 100px;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.cloze-input:focus {
+  outline: none;
+  border-color: var(--primary-color-dark);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.cloze-options-hint {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.cloze-options-hint strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.options-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.blank-options-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.blank-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+
+.options-list {
+  color: var(--text-primary);
+}
+
+/* Responsive adjustments for cloze editor */
+@media (max-width: 768px) {
+  .cloze-editor {
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+  
+  .cloze-blank-editor {
+    padding: 0.75rem;
+  }
+  
+  .option-input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  
+  .cloze-input {
+    margin: 2px;
+    min-width: 80px;
+  }
+}
+
+/* Cloze Question Display Styles */
+.cloze-display {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.cloze-text-display,
+.cloze-answers-display,
+.cloze-options-display {
+  margin-bottom: 1rem;
+}
+
+.cloze-text-display:last-child,
+.cloze-answers-display:last-child,
+.cloze-options-display:last-child {
+  margin-bottom: 0;
+}
+
+.cloze-text-display strong,
+.cloze-answers-display strong,
+.cloze-options-display strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.cloze-text-content {
+  padding: 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.blank-placeholder {
+  background: var(--primary-color-light);
+  color: var(--primary-color-dark);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  margin: 0 2px;
+}
+
+.cloze-answers-display {
+  padding: 0.75rem;
+  background: var(--success-color-light);
+  border-radius: 4px;
+  border: 1px solid var(--success-color);
+}
+
+.cloze-answers-display strong {
+  color: var(--success-color-dark);
+}
+
+.cloze-answers-display ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.cloze-answers-display li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--success-color-dark);
+}
+
+.cloze-answers-display li strong {
+  display: inline;
+  margin: 0;
+  font-weight: 600;
+}
+
+.cloze-options-display {
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.blank-options-display {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.blank-options-display strong {
+  display: inline;
+  margin: 0;
+  margin-right: 0.5rem;
+  font-weight: 600;
+}
+
+/* Responsive adjustments for cloze display */
+@media (max-width: 768px) {
+  .cloze-display {
+    padding: 0.75rem;
+  }
+  
+  .cloze-text-content {
+    padding: 0.5rem;
+  }
+}
+
 /* CSS Variables (add these to your main CSS file if not already present) */
 :root {
   --primary-color: #3b82f6;

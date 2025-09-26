@@ -674,9 +674,9 @@ function formatContentForDatabase(generatedQuestion, questionType) {
     
     case 'cloze':
       return {
-        textWithBlanks: generatedQuestion.textWithBlanks || generatedQuestion.questionText || '',
-        blankOptions: generatedQuestion.blankOptions || [],
-        correctAnswers: generatedQuestion.correctAnswers || []
+        textWithBlanks: generatedQuestion.content?.textWithBlanks || generatedQuestion.textWithBlanks || generatedQuestion.questionText || '',
+        blankOptions: generatedQuestion.content?.blankOptions || generatedQuestion.blankOptions || [],
+        correctAnswers: generatedQuestion.content?.correctAnswers || generatedQuestion.correctAnswers || []
       };
     
     case 'summary':

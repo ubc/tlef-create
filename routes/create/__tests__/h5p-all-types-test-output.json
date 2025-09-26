@@ -31,7 +31,7 @@
         ],
         "distractors": "*Has rings*"
       },
-      "subContentId": "matching-test-790261a3",
+      "subContentId": "matching-test-951e1e62",
       "metadata": {
         "contentType": "Drag Text",
         "license": "U",
@@ -42,7 +42,7 @@
       "library": "H5P.Blanks 1.14",
       "params": {
         "questions": [
-          "<p>Photosynthesis is the process by which plants convert [blank] into energy using [blank] from the sun.</p>\\n"
+          "<p>Photosynthesis is the process by which plants convert *sunlight* into energy using *energy* from the sun.<br><br><strong>Available options:</strong><br>Blank 1: sunlight, water, oxygen<br>Blank 2: energy, glucose, carbon dioxide<br></p>\\n"
         ],
         "showSolutions": "Show solutions",
         "tryAgain": "Try again",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "subContentId": "cloze-test-2d554797",
+      "subContentId": "cloze-test-a66755cc",
       "metadata": {
         "contentType": "Fill in the Blanks",
         "license": "U",
@@ -82,7 +82,7 @@
               "Madrid"
             ],
             "question": "What is the capital of France?",
-            "subContentId": "23d42cef"
+            "subContentId": "0ae37a73"
           }
         ],
         "behaviour": {
@@ -109,7 +109,7 @@
           }
         ]
       },
-      "subContentId": "single-choice-test-4ca7da84",
+      "subContentId": "single-choice-test-d23c4cfd",
       "metadata": {
         "contentType": "Single Choice Set",
         "license": "U",

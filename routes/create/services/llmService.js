@@ -328,13 +328,27 @@ IMPORTANT: Generate 4-6 specific, educational sub-titles that represent actual k
 }`,
 
       'cloze': `{
-  "questionText": "Fill in the blanks: In programming, _____ is used for handling asynchronous operations while _____ provides more predictable error handling and better readability.",
-  "textWithBlanks": "In programming, _____ is used for handling asynchronous operations while _____ provides more predictable error handling and better readability.",
+  "questionText": "Fill in the blanks: In programming, $$ is used for handling asynchronous operations while $$ provides more predictable error handling and better readability.",
+  "textWithBlanks": "In programming, $$ is used for handling asynchronous operations while $$ provides more predictable error handling and better readability.",
   "blankOptions": [["callbacks", "promises", "async/await"], ["promises", "callbacks", "events"]],
   "correctAnswers": ["callbacks", "promises"],
   "correctAnswer": "callbacks, promises",
   "explanation": "Callbacks are used for handling asynchronous operations, while promises provide more predictable error handling and better readability compared to callback-based code."
-}`
+}
+
+IMPORTANT REQUIREMENTS FOR CLOZE QUESTIONS:
+1. Use $$ to mark blanks in the textWithBlanks field. Each $$ represents one fill-in field.
+2. Do not use _____ or [blank] - only use $$.
+3. You MUST provide blankOptions array with multiple choice options for each blank.
+4. You MUST provide correctAnswers array with the correct answer for each blank.
+5. CRITICAL: The number of blankOptions arrays must EXACTLY match the number of $$ markers in textWithBlanks.
+6. CRITICAL: The number of correctAnswers must EXACTLY match the number of $$ markers in textWithBlanks.
+7. Each blankOptions array should contain 2-4 realistic options including the correct answer.
+8. Count the $$ markers carefully - if you have 2 $$ markers, you need exactly 2 blankOptions arrays and 2 correctAnswers.
+
+EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", then you need:
+- blankOptions: [["callbacks", "promises"], ["asynchronous", "synchronous"]]
+- correctAnswers: ["callbacks", "asynchronous"]`
     };
 
     return formats[questionType] || formats['multiple-choice'];
@@ -501,6 +515,39 @@ IMPORTANT: Generate 4-6 specific, educational sub-titles that represent actual k
       // Validate required fields - correctAnswer is optional for discussion and summary questions
       const requiresCorrectAnswer = !['discussion', 'summary'].includes(questionType);
       
+      // Special handling for Cloze questions - accept answerKey as explanation
+      if (questionType === 'cloze' && parsed.answerKey && !parsed.explanation) {
+        parsed.explanation = parsed.answerKey;
+        delete parsed.answerKey;
+      }
+      
+      // Post-process Cloze questions to ensure $$ markers are used and content structure is correct
+      if (questionType === 'cloze') {
+        // Convert any remaining _____ markers to $$
+        if (parsed.textWithBlanks) {
+          parsed.textWithBlanks = parsed.textWithBlanks.replace(/_{3,}/g, '$$');
+        }
+        // Also update questionText if it contains the same pattern
+        if (parsed.questionText) {
+          parsed.questionText = parsed.questionText.replace(/_{3,}/g, '$$');
+        }
+        
+        // Move Cloze-specific fields into content object if they're at root level
+        if (parsed.textWithBlanks || parsed.blankOptions || parsed.correctAnswers) {
+          parsed.content = {
+            textWithBlanks: parsed.textWithBlanks,
+            blankOptions: parsed.blankOptions,
+            correctAnswers: parsed.correctAnswers,
+            ...parsed.content // Preserve any existing content
+          };
+          
+          // Remove from root level
+          delete parsed.textWithBlanks;
+          delete parsed.blankOptions;
+          delete parsed.correctAnswers;
+        }
+      }
+      
       if (!parsed.questionText || !parsed.explanation) {
         throw new Error('Missing required fields: questionText and explanation are required');
       }
@@ -550,6 +597,52 @@ IMPORTANT: Generate 4-6 specific, educational sub-titles that represent actual k
         if (!parsed.content || !parsed.content.front || !parsed.content.back) {
           throw new Error('Flashcard missing front/back content');
         }
+      }
+
+      if (questionType === 'cloze') {
+        // Validate Cloze question structure
+        const textWithBlanks = parsed.content?.textWithBlanks || parsed.textWithBlanks;
+        const blankOptions = parsed.content?.blankOptions || parsed.blankOptions;
+        const correctAnswers = parsed.content?.correctAnswers || parsed.correctAnswers;
+        
+        if (!textWithBlanks) {
+          throw new Error('Cloze question missing textWithBlanks field');
+        }
+        
+        if (!blankOptions || !Array.isArray(blankOptions)) {
+          throw new Error('Cloze question missing blankOptions array');
+        }
+        
+        if (!correctAnswers || !Array.isArray(correctAnswers)) {
+          throw new Error('Cloze question missing correctAnswers array');
+        }
+        
+        // Count $$ markers in textWithBlanks
+        const blankCount = (textWithBlanks.match(/\$\$/g) || []).length;
+        
+        if (blankCount === 0) {
+          throw new Error('Cloze question textWithBlanks must contain at least one $$ marker');
+        }
+        
+        if (blankOptions.length !== blankCount) {
+          throw new Error(`Cloze question has ${blankCount} blanks but ${blankOptions.length} blankOptions arrays`);
+        }
+        
+        if (correctAnswers.length !== blankCount) {
+          throw new Error(`Cloze question has ${blankCount} blanks but ${correctAnswers.length} correctAnswers`);
+        }
+        
+        // Validate each blankOptions array
+        blankOptions.forEach((options, index) => {
+          if (!Array.isArray(options) || options.length < 2) {
+            throw new Error(`Blank ${index + 1} must have at least 2 options`);
+          }
+          
+          const correctAnswer = correctAnswers[index];
+          if (!options.includes(correctAnswer)) {
+            throw new Error(`Blank ${index + 1} correct answer "${correctAnswer}" not found in options: ${options.join(', ')}`);
+          }
+        });
       }
 
       console.log('✅ LLM response validated successfully');

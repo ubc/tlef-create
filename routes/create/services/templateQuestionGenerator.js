@@ -126,7 +126,7 @@ function generateClozeTemplate(objective, difficulty) {
   return {
     questionText: `Fill in the blanks about ${objective}:`,
     content: {
-      textWithBlanks: `Understanding [blank] involves recognizing its [blank] and applying it to [blank] situations.`,
+      textWithBlanks: `Understanding $$ involves recognizing its $$ and applying it to $$ situations.`,
       correctAnswers: [
         keyTerms.primary || "the concept",
         keyTerms.characteristic || "key principles", 

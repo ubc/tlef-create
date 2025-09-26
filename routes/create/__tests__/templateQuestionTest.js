@@ -215,9 +215,9 @@ function testH5PCompatibility(successfulQuestions) {
         break;
         
       case 'cloze':
-        if (!question.content.textWithBlanks.includes('[blank]')) {
+        if (!question.content.textWithBlanks.includes('$$')) {
           compatible = false;
-          issues.push('TextWithBlanks should contain [blank] placeholders');
+          issues.push('TextWithBlanks should contain $$ placeholders');
         }
         break;
     }
