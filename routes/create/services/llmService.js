@@ -143,6 +143,22 @@ class QuizLLMService {
       // Parse and validate response
       const questionData = this.parseAndValidateResponse(response.content, questionType);
       
+      // Log generated Summary questions for debugging
+      if (questionType === 'summary') {
+        console.log('📋 SUMMARY QUESTION GENERATED:');
+        console.log('🎯 Question Text:', questionData.questionText);
+        console.log('📝 Explanation:', questionData.explanation);
+        console.log('📚 Content Structure:', JSON.stringify(questionData.content, null, 2));
+        if (questionData.content?.keyPoints) {
+          console.log('🔑 Key Points Generated:');
+          questionData.content.keyPoints.forEach((keyPoint, index) => {
+            console.log(`   ${index + 1}. Title: "${keyPoint.title}"`);
+            console.log(`      Explanation: "${keyPoint.explanation.substring(0, 100)}..."`);
+          });
+        }
+        console.log('📋 Full Generated Data:', JSON.stringify(questionData, null, 2));
+      }
+      
       return {
         success: true,
         questionData: {
@@ -257,31 +273,37 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
 }`,
 
       'summary': `{
-  "questionText": "Comprehensive summary question that requires synthesis of multiple concepts",
-  "explanation": "Key points that should be included in a complete answer, assessment criteria",
+  "questionText": "Study Guide: Essential Knowledge Points",
+  "explanation": "This study guide covers the key concepts and knowledge points that students should understand to master this learning objective",
   "content": {
-    "title": "Summary of Key Concepts",
-    "additionalNotes": "This summary will be structured based on the learning objectives for this quiz",
+    "title": "Essential Knowledge Points",
+    "additionalNotes": "Interactive study guide with expandable sections covering the fundamental concepts students need to master",
     "keyPoints": [
       {
-        "title": "Benefits and advantages",
-        "explanation": "Understanding the key benefits and positive aspects of this concept or approach"
+        "title": "Specific knowledge point 1 that students must understand (e.g., 'Core Principles and Definitions')",
+        "explanation": "Detailed explanation of this essential concept, including definitions, key principles, and fundamental understanding students need to develop"
       },
       {
-        "title": "Trade-offs and limitations",
-        "explanation": "Identifying the challenges, limitations, and potential drawbacks to consider"
+        "title": "Specific knowledge point 2 that students must understand (e.g., 'Implementation Methods and Techniques')", 
+        "explanation": "Comprehensive explanation covering how this concept works in practice, including methods, techniques, and step-by-step processes"
       },
       {
-        "title": "Practical applications",
-        "explanation": "Real-world scenarios and use cases where this concept is most effectively applied"
+        "title": "Specific knowledge point 3 that students must understand (e.g., 'Common Challenges and Solutions')",
+        "explanation": "Detailed coverage of typical problems, challenges, error scenarios, and proven solutions that students should be aware of"
       },
       {
-        "title": "Best practices",
-        "explanation": "Recommended approaches and proven strategies for successful implementation"
+        "title": "Specific knowledge point 4 that students must understand (e.g., 'Real-world Applications and Examples')",
+        "explanation": "Concrete examples, case studies, and practical applications that demonstrate how this concept is used in real scenarios"
+      },
+      {
+        "title": "Specific knowledge point 5 that students must understand (e.g., 'Evaluation and Assessment Criteria')",
+        "explanation": "How to evaluate, measure, or assess this concept, including criteria for determining success, quality metrics, and evaluation methods"
       }
     ]
   }
-}`,
+}
+
+IMPORTANT: Generate 4-6 specific, educational sub-titles that represent actual knowledge points students need to learn about this topic. Each title should be a concrete learning point, not a generic category. The titles should clearly state what students will learn (e.g., "Understanding Callback Function Syntax and Structure", "Comparing Promise.then() vs Async/Await Patterns", "Handling Error Cases in Asynchronous Code"). Each explanation should be comprehensive enough to serve as a mini-lesson on that specific topic.`,
 
       'discussion': `{
   "questionText": "Thought-provoking discussion question that encourages critical thinking and analysis",
@@ -394,7 +416,55 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
       }
       
       if (lastBrace === -1) {
-        throw new Error('No matching closing brace found in JSON');
+        console.log('❌ No matching closing brace found');
+        console.log('🔍 Raw content length:', cleanContent.length);
+        console.log('🔍 Content preview:', cleanContent.substring(0, 1000));
+        console.log('🔍 Content ending:', cleanContent.substring(Math.max(0, cleanContent.length - 200)));
+        
+        // Try to repair the JSON by adding missing closing braces
+        const openBraces = (cleanContent.match(/\{/g) || []).length;
+        const closeBraces = (cleanContent.match(/\}/g) || []).length;
+        const openBrackets = (cleanContent.match(/\[/g) || []).length;
+        const closeBrackets = (cleanContent.match(/\]/g) || []).length;
+        const missingBraces = openBraces - closeBraces;
+        const missingBrackets = openBrackets - closeBrackets;
+        
+        console.log(`🔧 JSON repair analysis: ${openBraces} open braces, ${closeBraces} close braces, ${missingBraces} missing braces`);
+        console.log(`🔧 JSON repair analysis: ${openBrackets} open brackets, ${closeBrackets} close brackets, ${missingBrackets} missing brackets`);
+        
+        if (missingBraces > 0 || missingBrackets > 0) {
+          console.log(`🔧 Attempting to repair JSON: adding ${missingBraces} closing braces and ${missingBrackets} closing brackets`);
+          
+          // Add missing brackets first, then braces
+          if (missingBrackets > 0) {
+            cleanContent = cleanContent + ']'.repeat(missingBrackets);
+          }
+          if (missingBraces > 0) {
+            cleanContent = cleanContent + '}'.repeat(missingBraces);
+          }
+          
+          // Reset brace count and try to find the last brace again
+          braceCount = 0;
+          for (let i = firstBrace; i < cleanContent.length; i++) {
+            if (cleanContent[i] === '{') {
+              braceCount++;
+            } else if (cleanContent[i] === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                lastBrace = i;
+                break;
+              }
+            }
+          }
+          
+          console.log(`🔧 After repair, found last brace at position: ${lastBrace}`);
+        }
+        
+        if (lastBrace === -1) {
+          console.log('❌ JSON repair failed - still no matching closing brace');
+          console.log('💀 Repaired content preview:', cleanContent.substring(0, 500));
+          throw new Error('No matching closing brace found in JSON after repair attempt');
+        }
       }
       
       cleanContent = cleanContent.substring(firstBrace, lastBrace + 1);
@@ -409,8 +479,24 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
         hasQuestionText: !!parsed.questionText,
         hasOptions: !!parsed.options,
         hasCorrectAnswer: !!parsed.correctAnswer,
-        hasExplanation: !!parsed.explanation
+        hasExplanation: !!parsed.explanation,
+        hasContent: !!parsed.content,
+        hasKeyPoints: !!(parsed.content && parsed.content.keyPoints)
       });
+      
+      // Special logging for Summary questions
+      if (questionType === 'summary' && parsed.content) {
+        console.log('🎯 SUMMARY QUESTION PARSING SUCCESS:');
+        console.log('📝 Content structure:', JSON.stringify(parsed.content, null, 2));
+        if (parsed.content.keyPoints && Array.isArray(parsed.content.keyPoints)) {
+          console.log(`🔑 KeyPoints count: ${parsed.content.keyPoints.length}`);
+          parsed.content.keyPoints.forEach((kp, idx) => {
+            console.log(`   ${idx + 1}. ${kp.title ? kp.title.substring(0, 50) : 'No title'}...`);
+          });
+        } else {
+          console.log('❌ keyPoints missing or not an array in content');
+        }
+      }
       
       // Validate required fields - correctAnswer is optional for discussion and summary questions
       const requiresCorrectAnswer = !['discussion', 'summary'].includes(questionType);
@@ -570,11 +656,19 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
           });
           
           if (result.success) {
-            questions.push({
+            const questionWithMetadata = {
               ...result.questionData,
               type: config.questionType,
               order: questions.length
-            });
+            };
+            
+            // Additional logging for Summary questions in batch
+            if (config.questionType === 'summary') {
+              console.log('🔄 BATCH: Summary question added to results');
+              console.log('📋 Batch Summary Data:', JSON.stringify(questionWithMetadata, null, 2));
+            }
+            
+            questions.push(questionWithMetadata);
           }
           
           // Small delay to avoid overwhelming the LLM

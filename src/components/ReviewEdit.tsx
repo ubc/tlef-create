@@ -205,6 +205,57 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }));
   };
 
+  // Summary keyPoints editing functions
+  const updateKeyPoint = (questionId: string, keyPointIndex: number, field: string, value: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.type === 'summary' && q.content?.keyPoints) {
+        const updatedKeyPoints = [...q.content.keyPoints];
+        updatedKeyPoints[keyPointIndex] = {
+          ...updatedKeyPoints[keyPointIndex],
+          [field]: value
+        };
+        return {
+          ...q,
+          content: { ...q.content, keyPoints: updatedKeyPoints }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addKeyPoint = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.type === 'summary') {
+        const newKeyPoint = {
+          title: '',
+          explanation: ''
+        };
+        const existingKeyPoints = q.content?.keyPoints || [];
+        return {
+          ...q,
+          content: {
+            ...q.content,
+            keyPoints: [...existingKeyPoints, newKeyPoint]
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeKeyPoint = (questionId: string, keyPointIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.type === 'summary' && q.content?.keyPoints) {
+        const updatedKeyPoints = q.content.keyPoints.filter((_, index) => index !== keyPointIndex);
+        return {
+          ...q,
+          content: { ...q.content, keyPoints: updatedKeyPoints }
+        };
+      }
+      return q;
+    }));
+  };
+
   const saveQuestion = async (questionId: string) => {
     try {
       const question = questions.find(q => q._id === questionId);
@@ -988,6 +1039,59 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                 placeholder="Enter the answer/back side content..."
                             />
                           </div>
+                        ) : question.type === 'summary' ? (
+                          <div className="edit-field">
+                            <label>Knowledge Points:</label>
+                            <div className="summary-keypoints-editor">
+                              {question.content?.keyPoints && question.content.keyPoints.length > 0 ? (
+                                question.content.keyPoints.map((keyPoint: any, index: number) => (
+                                  <div key={index} className="keypoint-editor">
+                                    <div className="keypoint-header">
+                                      <strong>Point {index + 1}:</strong>
+                                      <button
+                                        type="button"
+                                        className="btn btn-outline btn-sm remove-keypoint"
+                                        onClick={() => removeKeyPoint(question._id, index)}
+                                        disabled={question.content.keyPoints.length <= 1}
+                                        title="Remove key point"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                    <div className="keypoint-fields">
+                                      <input
+                                        type="text"
+                                        className="input-field keypoint-title"
+                                        value={keyPoint.title || ''}
+                                        onChange={(e) => updateKeyPoint(question._id, index, 'title', e.target.value)}
+                                        placeholder="Enter the knowledge point title..."
+                                      />
+                                      <textarea
+                                        className="textarea keypoint-explanation"
+                                        value={keyPoint.explanation || ''}
+                                        onChange={(e) => updateKeyPoint(question._id, index, 'explanation', e.target.value)}
+                                        rows={3}
+                                        placeholder="Enter detailed explanation of this knowledge point..."
+                                      />
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="no-keypoints">
+                                  <p>No knowledge points available. Generate the question with AI or add manually.</p>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm add-keypoint"
+                                onClick={() => addKeyPoint(question._id)}
+                                disabled={question.content?.keyPoints?.length >= 8}
+                              >
+                                <Plus size={14} />
+                                Add Knowledge Point
+                              </button>
+                            </div>
+                          </div>
                         ) : (
                           <div className="edit-field">
                             <label>Correct Answer:</label>
@@ -1025,6 +1129,40 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                             Cancel
                           </button>
                         </div>
+                      </div>
+                  ) : question.type === 'summary' ? (
+                      <div className="question-display">
+                        <div className="question-text">{question.questionText}</div>
+                        <div className="summary-keypoints-display">
+                          {question.content?.keyPoints && question.content.keyPoints.length > 0 ? (
+                            <div className="keypoints-list">
+                              <strong>Knowledge Points:</strong>
+                              {question.content.keyPoints.map((keyPoint: any, index: number) => (
+                                <div key={index} className="keypoint-display">
+                                  <div className="keypoint-title">
+                                    <strong>{index + 1}. {keyPoint.title}</strong>
+                                  </div>
+                                  <div className="keypoint-explanation">
+                                    {keyPoint.explanation}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="question-answer">
+                              <strong>Answer:</strong> {
+                                typeof question.correctAnswer === 'string' 
+                                  ? question.correctAnswer 
+                                  : JSON.stringify(question.correctAnswer)
+                              }
+                            </div>
+                          )}
+                        </div>
+                        {question.explanation && (
+                          <div className="question-explanation">
+                            <strong>Explanation:</strong> {question.explanation}
+                          </div>
+                        )}
                       </div>
                   ) : (
                       <div className="question-display">

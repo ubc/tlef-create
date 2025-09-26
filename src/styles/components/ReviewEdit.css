@@ -816,3 +816,135 @@
     opacity: 0.4;
     cursor: not-allowed;
 }
+
+/* Summary KeyPoints Editor Styles */
+.summary-keypoints-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-background);
+    margin-top: var(--spacing-sm);
+}
+
+.keypoint-editor {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-muted);
+}
+
+.keypoint-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+}
+
+.keypoint-header strong {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+}
+
+.remove-keypoint {
+    padding: var(--spacing-xs);
+    color: var(--color-destructive);
+}
+
+.remove-keypoint:hover:not(:disabled) {
+    background-color: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+}
+
+.remove-keypoint:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.keypoint-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.keypoint-title {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+}
+
+.keypoint-explanation {
+    min-height: 80px;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+
+.no-keypoints {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--color-muted-foreground);
+    font-style: italic;
+}
+
+.add-keypoint {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-sm);
+    border: 1px dashed var(--color-border);
+    background-color: transparent;
+}
+
+.add-keypoint:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background-color: var(--color-muted);
+}
+
+.add-keypoint:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Summary KeyPoints Display Styles (non-interactive) */
+.summary-keypoints-display {
+    margin-top: var(--spacing-md);
+}
+
+.keypoints-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.keypoint-display {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-muted);
+}
+
+.keypoint-title {
+    margin-bottom: var(--spacing-sm);
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+}
+
+.keypoint-explanation {
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--color-foreground);
+}
+
+@media (max-width: 768px) {
+    .keypoint-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+
+    .remove-keypoint {
+        align-self: flex-end;
+    }
+}

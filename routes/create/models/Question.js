@@ -72,7 +72,15 @@ const questionSchema = new mongoose.Schema({
     // For Cloze (fill in the blanks)
     textWithBlanks: { type: String }, // "Text $ more text $ end"
     blankOptions: [[{ type: String }]], // [[A,B,C,D], [A,E,F]] for each blank
-    correctAnswers: [{ type: String }] // [A, E] for each blank
+    correctAnswers: [{ type: String }], // [A, E] for each blank
+    
+    // For Summary questions
+    title: { type: String }, // Study guide title
+    additionalNotes: { type: String }, // Additional notes for the study guide
+    keyPoints: [{
+      title: { type: String, required: true },
+      explanation: { type: String, required: true }
+    }]
   },
   
   // Simple correct answer for basic question types
