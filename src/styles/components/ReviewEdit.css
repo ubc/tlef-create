@@ -672,3 +672,102 @@
         padding-bottom: var(--spacing-md);
     }
 }
+
+/* Multiple Choice Editor Styles */
+.multiple-choice-editor {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    background-color: var(--color-background);
+    margin-top: var(--spacing-sm);
+}
+
+.option-editor {
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-muted);
+}
+
+.option-input-group {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
+}
+
+.option-radio {
+    margin-top: var(--spacing-sm);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.option-text-input {
+    flex: 1;
+    min-height: 40px;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+
+.option-text-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.1);
+}
+
+.remove-option {
+    margin-top: var(--spacing-xs);
+    padding: var(--spacing-xs);
+    flex-shrink: 0;
+    color: var(--color-destructive);
+}
+
+.remove-option:hover:not(:disabled) {
+    background-color: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+}
+
+.remove-option:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.option-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted-foreground);
+    margin-left: 24px;
+    font-weight: 500;
+}
+
+.option-hint:has-text("Correct Answer") {
+    color: var(--color-success);
+}
+
+.add-option {
+    margin-top: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    width: 100%;
+    justify-content: center;
+    padding: var(--spacing-sm);
+    border: 1px dashed var(--color-border);
+    background-color: transparent;
+}
+
+.add-option:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background-color: var(--color-muted);
+}
+
+.add-option:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

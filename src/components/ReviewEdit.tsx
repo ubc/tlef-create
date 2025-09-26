@@ -108,6 +108,88 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     ));
   };
 
+  // Multiple Choice specific editing functions
+  const updateMultipleChoiceOption = (questionId: string, optionIndex: number, newText: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        const updatedOptions = [...q.content.options];
+        updatedOptions[optionIndex] = { ...updatedOptions[optionIndex], text: newText };
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateMultipleChoiceCorrect = (questionId: string, correctIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        const updatedOptions = q.content.options.map((option: any, index: number) => ({
+          ...option,
+          isCorrect: index === correctIndex
+        }));
+        
+        // Also update the correctAnswer field to match
+        const correctOption = updatedOptions[correctIndex];
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions },
+          correctAnswer: correctOption.text
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addMultipleChoiceOption = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        const newOption = {
+          text: '',
+          isCorrect: false,
+          order: q.content.options.length
+        };
+        const updatedOptions = [...q.content.options, newOption];
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeMultipleChoiceOption = (questionId: string, optionIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options && q.content.options.length > 2) {
+        const optionToRemove = q.content.options[optionIndex];
+        const updatedOptions = q.content.options.filter((_: any, index: number) => index !== optionIndex);
+        
+        // If we're removing the correct answer, make the first option correct
+        if (optionToRemove.isCorrect && updatedOptions.length > 0) {
+          updatedOptions[0].isCorrect = true;
+        }
+        
+        // Update order for remaining options
+        updatedOptions.forEach((option: any, index: number) => {
+          option.order = index;
+        });
+        
+        // Update correctAnswer to match the new correct option
+        const correctOption = updatedOptions.find((opt: any) => opt.isCorrect);
+        
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions },
+          correctAnswer: correctOption?.text || updatedOptions[0]?.text || ''
+        };
+      }
+      return q;
+    }));
+  };
+
   const saveQuestion = async (questionId: string) => {
     try {
       const question = questions.find(q => q._id === questionId);
@@ -796,42 +878,66 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                           />
                         </div>
 
-                        <div className="edit-row">
+                        {/* Multiple Choice Options Editor */}
+                        {question.type === 'multiple-choice' && question.content?.options ? (
                           <div className="edit-field">
-                            <label>Type:</label>
-                            <select
-                                className="select-input"
-                                value={question.type}
-                                onChange={(e) => updateQuestion(question._id, 'type', e.target.value)}
-                            >
-                              {questionTypes.map(type => (
-                                  <option key={type.id} value={type.id}>{type.label}</option>
+                            <label>Answer Options:</label>
+                            <div className="multiple-choice-editor">
+                              {question.content.options.map((option: any, index: number) => (
+                                <div key={index} className="option-editor">
+                                  <div className="option-input-group">
+                                    <input
+                                      type="radio"
+                                      name={`correct-${question._id}`}
+                                      checked={option.isCorrect}
+                                      onChange={() => updateMultipleChoiceCorrect(question._id, index)}
+                                      className="option-radio"
+                                    />
+                                    <textarea
+                                      className="option-text-input"
+                                      value={option.text}
+                                      onChange={(e) => updateMultipleChoiceOption(question._id, index, e.target.value)}
+                                      placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                                      rows={2}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm remove-option"
+                                      onClick={() => removeMultipleChoiceOption(question._id, index)}
+                                      disabled={question.content.options.length <= 2}
+                                      title="Remove option"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                  <small className="option-hint">
+                                    {option.isCorrect ? 'Correct Answer' : `Option ${String.fromCharCode(65 + index)}`}
+                                  </small>
+                                </div>
                               ))}
-                            </select>
+                              
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm add-option"
+                                onClick={() => addMultipleChoiceOption(question._id)}
+                                disabled={question.content.options.length >= 6}
+                              >
+                                <Plus size={14} />
+                                Add Option
+                              </button>
+                            </div>
                           </div>
+                        ) : (
                           <div className="edit-field">
-                            <label>Difficulty:</label>
-                            <select
-                                className="select-input"
-                                value={question.difficulty}
-                                onChange={(e) => updateQuestion(question._id, 'difficulty', e.target.value)}
-                            >
-                              <option value="easy">Easy</option>
-                              <option value="moderate">Moderate</option>
-                              <option value="hard">Hard</option>
-                            </select>
+                            <label>Correct Answer:</label>
+                            <textarea
+                                className="textarea"
+                                value={typeof question.correctAnswer === 'string' ? question.correctAnswer : JSON.stringify(question.correctAnswer)}
+                                onChange={(e) => updateQuestion(question._id, 'correctAnswer', e.target.value)}
+                                rows={2}
+                            />
                           </div>
-                        </div>
-
-                        <div className="edit-field">
-                          <label>Correct Answer:</label>
-                          <textarea
-                              className="textarea"
-                              value={typeof question.correctAnswer === 'string' ? question.correctAnswer : JSON.stringify(question.correctAnswer)}
-                              onChange={(e) => updateQuestion(question._id, 'correctAnswer', e.target.value)}
-                              rows={2}
-                          />
-                        </div>
+                        )}
 
                         <div className="edit-field">
                           <label>Explanation (optional):</label>
