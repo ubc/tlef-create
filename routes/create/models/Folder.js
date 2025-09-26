@@ -55,37 +55,47 @@ folderSchema.virtual('materialCount').get(function() {
 });
 
 // Instance Methods
-folderSchema.methods.updateStats = function() {
+folderSchema.methods.updateStats = async function() {
+  const Question = mongoose.model('Question');
+  
   this.stats.lastActivity = new Date();
   this.stats.totalQuizzes = this.quizzes.length;
   this.stats.totalMaterials = this.materials.length;
+  
+  // Calculate total questions across all quizzes in this folder
+  this.stats.totalQuestions = await Question.countDocuments({
+    quiz: { $in: this.quizzes }
+  });
+  
+  console.log(`📊 Updated folder stats: quizzes=${this.stats.totalQuizzes}, questions=${this.stats.totalQuestions}, materials=${this.stats.totalMaterials}`);
+  
   return this.save();
 };
 
-folderSchema.methods.addQuiz = function(quizId) {
+folderSchema.methods.addQuiz = async function(quizId) {
   if (!this.quizzes.includes(quizId)) {
     this.quizzes.push(quizId);
-    return this.updateStats();
+    return await this.updateStats();
   }
-  return Promise.resolve(this);
+  return this;
 };
 
-folderSchema.methods.removeQuiz = function(quizId) {
+folderSchema.methods.removeQuiz = async function(quizId) {
   this.quizzes = this.quizzes.filter(id => !id.equals(quizId));
-  return this.updateStats();
+  return await this.updateStats();
 };
 
-folderSchema.methods.addMaterial = function(materialId) {
+folderSchema.methods.addMaterial = async function(materialId) {
   if (!this.materials.includes(materialId)) {
     this.materials.push(materialId);
-    return this.updateStats();
+    return await this.updateStats();
   }
-  return Promise.resolve(this);
+  return this;
 };
 
-folderSchema.methods.removeMaterial = function(materialId) {
+folderSchema.methods.removeMaterial = async function(materialId) {
   this.materials = this.materials.filter(id => !id.equals(materialId));
-  return this.updateStats();
+  return await this.updateStats();
 };
 
 // Ensure virtual fields are serialized

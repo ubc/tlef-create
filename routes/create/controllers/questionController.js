@@ -186,6 +186,15 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
       success: true
     });
 
+    // Update folder stats to reflect new question count
+    const Folder = require('../models/Folder');
+    const folder = await Folder.findOne({ quizzes: quizId });
+    if (folder) {
+      console.log('📊 Updating folder stats after question generation...');
+      await folder.updateStats();
+      console.log('✅ Folder stats updated');
+    }
+
     return successResponse(res, { 
       questions,
       metadata: {
@@ -596,6 +605,15 @@ router.delete('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(a
     await quiz.save();
     
     console.log(`✅ Deleted ${questionCount} questions from quiz ${quizId}`);
+    
+    // Update folder stats after deleting questions
+    const Folder = require('../models/Folder');
+    const folder = await Folder.findOne({ quizzes: quizId });
+    if (folder) {
+      console.log('📊 Updating folder stats after question deletion...');
+      await folder.updateStats();
+      console.log('✅ Folder stats updated');
+    }
     
     return successResponse(res, { 
       deletedCount: questionCount,
