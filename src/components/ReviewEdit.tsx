@@ -190,6 +190,19 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }));
   };
 
+  // True/False specific editing function
+  const updateTrueFalseAnswer = (questionId: string, answer: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.type === 'true-false') {
+        return {
+          ...q,
+          correctAnswer: answer
+        };
+      }
+      return q;
+    }));
+  };
+
   const saveQuestion = async (questionId: string) => {
     try {
       const question = questions.find(q => q._id === questionId);
@@ -925,6 +938,34 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                 <Plus size={14} />
                                 Add Option
                               </button>
+                            </div>
+                          </div>
+                        ) : question.type === 'true-false' ? (
+                          <div className="edit-field">
+                            <label>Correct Answer:</label>
+                            <div className="true-false-editor">
+                              <div className="tf-option">
+                                <input
+                                  type="radio"
+                                  name={`tf-correct-${question._id}`}
+                                  value="True"
+                                  checked={question.correctAnswer === 'True' || question.correctAnswer === true}
+                                  onChange={() => updateTrueFalseAnswer(question._id, 'True')}
+                                  className="tf-radio"
+                                />
+                                <label className="tf-label">True</label>
+                              </div>
+                              <div className="tf-option">
+                                <input
+                                  type="radio"
+                                  name={`tf-correct-${question._id}`}
+                                  value="False"
+                                  checked={question.correctAnswer === 'False' || question.correctAnswer === false}
+                                  onChange={() => updateTrueFalseAnswer(question._id, 'False')}
+                                  className="tf-radio"
+                                />
+                                <label className="tf-label">False</label>
+                              </div>
                             </div>
                           </div>
                         ) : (
