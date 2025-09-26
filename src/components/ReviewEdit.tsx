@@ -382,6 +382,94 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }));
   };
 
+  // Ordering question specific editing functions
+  const updateOrderingItem = (questionId: string, itemIndex: number, newText: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.items) {
+        const updatedItems = [...q.content.items];
+        updatedItems[itemIndex] = newText;
+        
+        // Update correctOrder if it exists and references this item
+        const updatedCorrectOrder = q.content.correctOrder?.map((item: string) => 
+          item === q.content.items[itemIndex] ? newText : item
+        ) || [...updatedItems];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            items: updatedItems,
+            correctOrder: updatedCorrectOrder
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addOrderingItem = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.items) {
+        const newItem = `New Item ${q.content.items.length + 1}`;
+        const updatedItems = [...q.content.items, newItem];
+        const updatedCorrectOrder = [...(q.content.correctOrder || q.content.items), newItem];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            items: updatedItems,
+            correctOrder: updatedCorrectOrder
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeOrderingItem = (questionId: string, itemIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.items && q.content.items.length > 2) {
+        const itemToRemove = q.content.items[itemIndex];
+        const updatedItems = q.content.items.filter((_: string, index: number) => index !== itemIndex);
+        const updatedCorrectOrder = (q.content.correctOrder || q.content.items).filter((item: string) => item !== itemToRemove);
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            items: updatedItems,
+            correctOrder: updatedCorrectOrder
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const moveOrderingItem = (questionId: string, fromIndex: number, toIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.items) {
+        const updatedItems = [...q.content.items];
+        const [movedItem] = updatedItems.splice(fromIndex, 1);
+        updatedItems.splice(toIndex, 0, movedItem);
+        
+        // Update correctOrder to match the new order
+        const updatedCorrectOrder = [...updatedItems];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            items: updatedItems,
+            correctOrder: updatedCorrectOrder
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
   // Summary keyPoints editing functions
   const updateKeyPoint = (questionId: string, keyPointIndex: number, field: string, value: string) => {
     setQuestions(questions.map(q => {
@@ -1401,6 +1489,85 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                               </div>
                             </div>
                           </div>
+                        ) : question.type === 'ordering' ? (
+                          <div className="edit-field">
+                            <label>Ordering Items:</label>
+                            <div className="ordering-editor">
+                              <div className="ordering-editor-section">
+                                <h4>Items to Order:</h4>
+                                <div className="ordering-items-list">
+                                  {question.content?.items?.map((item: string, index: number) => (
+                                    <div key={index} className="ordering-item-editor">
+                                      <div className="item-input-group">
+                                        <div className="order-number-display">
+                                          {index + 1}
+                                        </div>
+                                        <textarea
+                                          className="ordering-item-input"
+                                          value={item}
+                                          onChange={(e) => updateOrderingItem(question._id, index, e.target.value)}
+                                          placeholder={`Item ${index + 1}`}
+                                          rows={2}
+                                        />
+                                        <div className="item-actions">
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm move-up"
+                                            onClick={() => moveOrderingItem(question._id, index, Math.max(0, index - 1))}
+                                            disabled={index === 0}
+                                            title="Move up"
+                                          >
+                                            ↑
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm move-down"
+                                            onClick={() => moveOrderingItem(question._id, index, Math.min((question.content?.items?.length || 1) - 1, index + 1))}
+                                            disabled={index === (question.content?.items?.length || 1) - 1}
+                                            title="Move down"
+                                          >
+                                            ↓
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm remove-item"
+                                            onClick={() => removeOrderingItem(question._id, index)}
+                                            disabled={question.content.items.length <= 2}
+                                            title="Remove item"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm add-item"
+                                  onClick={() => addOrderingItem(question._id)}
+                                  disabled={question.content?.items?.length >= 8}
+                                >
+                                  <Plus size={14} />
+                                  Add Item
+                                </button>
+                              </div>
+                              
+                              <div className="ordering-editor-section">
+                                <h4>Correct Order Preview:</h4>
+                                <div className="correct-order-preview">
+                                  <ol>
+                                    {question.content?.correctOrder?.map((item: string, index: number) => (
+                                      <li key={index}>{item}</li>
+                                    ))}
+                                  </ol>
+                                </div>
+                                <small className="order-hint">
+                                  The correct order is automatically updated when you reorder items above.
+                                </small>
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <div className="edit-field">
                             <label>Correct Answer:</label>
@@ -1504,6 +1671,33 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                 </li>
                               ))}
                             </ul>
+                          </div>
+                        </div>
+                        {question.explanation && (
+                          <div className="question-explanation">
+                            <strong>Explanation:</strong> {question.explanation}
+                          </div>
+                        )}
+                      </div>
+                  ) : question.type === 'ordering' ? (
+                      <div className="question-display">
+                        <div className="question-text">{question.questionText}</div>
+                        <div className="ordering-display">
+                          <div className="ordering-items-display">
+                            <strong>Items to Order:</strong>
+                            <ul>
+                              {question.content?.items?.map((item: string, index: number) => (
+                                <li key={index}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="correct-order-display">
+                            <strong>Correct Order:</strong>
+                            <ol>
+                              {question.content?.correctOrder?.map((item: string, index: number) => (
+                                <li key={index}>{item}</li>
+                              ))}
+                            </ol>
                           </div>
                         </div>
                         {question.explanation && (

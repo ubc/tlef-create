@@ -600,6 +600,259 @@
   }
 }
 
+/* Ordering Question Editor Styles */
+.ordering-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.ordering-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ordering-editor-section h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.ordering-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ordering-item-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.item-input-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.order-number-display {
+  background: var(--primary-color);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ordering-item-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+  resize: vertical;
+  min-height: 40px;
+}
+
+.ordering-item-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.move-up,
+.move-down {
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.move-up:hover,
+.move-down:hover {
+  color: var(--primary-color);
+  background: var(--primary-color-light);
+}
+
+.move-up:disabled,
+.move-down:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.remove-item {
+  color: var(--text-secondary);
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-item:hover {
+  color: var(--destructive-color);
+  background: var(--destructive-color-light);
+}
+
+.remove-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-item {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+.correct-order-preview {
+  padding: 0.75rem;
+  background: var(--success-color-light);
+  border-radius: 4px;
+  border: 1px solid var(--success-color);
+}
+
+.correct-order-preview ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.correct-order-preview li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--success-color-dark);
+}
+
+.order-hint {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Responsive adjustments for ordering editor */
+@media (max-width: 768px) {
+  .ordering-editor {
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+  
+  .ordering-item-editor {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .item-input-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .order-number-display {
+    align-self: flex-start;
+  }
+  
+  .item-actions {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+/* Ordering Question Display Styles */
+.ordering-display {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.ordering-items-display,
+.correct-order-display {
+  margin-bottom: 1rem;
+}
+
+.ordering-items-display:last-child,
+.correct-order-display:last-child {
+  margin-bottom: 0;
+}
+
+.ordering-items-display strong,
+.correct-order-display strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.ordering-items-display ul,
+.correct-order-display ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.ordering-items-display li,
+.correct-order-display li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.correct-order-display {
+  padding: 0.75rem;
+  background: var(--success-color-light);
+  border-radius: 4px;
+  border: 1px solid var(--success-color);
+}
+
+.correct-order-display strong {
+  color: var(--success-color-dark);
+}
+
+.correct-order-display li {
+  color: var(--success-color-dark);
+}
+
+/* Responsive adjustments for ordering display */
+@media (max-width: 768px) {
+  .ordering-display {
+    padding: 0.75rem;
+  }
+}
+
 /* CSS Variables (add these to your main CSS file if not already present) */
 :root {
   --primary-color: #3b82f6;
