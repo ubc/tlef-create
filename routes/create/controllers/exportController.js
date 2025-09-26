@@ -874,7 +874,7 @@ function generateH5PQuestionSet(questions) {
           "media": {
             "disableImageZooming": false
           },
-          "correct": question.correctAnswer ? "true" : "false", 
+          "correct": String(question.correctAnswer).toLowerCase() === "true" ? "true" : "false", 
           "behaviour": {
             "enableRetry": true,
             "enableSolutionsButton": true,
@@ -1289,7 +1289,7 @@ function convertQuestionToH5P(question, quiz) {
         "media": {
           "disableImageZooming": false
         },
-        "correct": question.correctAnswer ? "true" : "false",
+        "correct": String(question.correctAnswer).toLowerCase() === "true" ? "true" : "false",
         "behaviour": {
           "enableRetry": true,
           "enableSolutionsButton": true,

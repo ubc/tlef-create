@@ -192,8 +192,10 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
   // True/False specific editing function
   const updateTrueFalseAnswer = (questionId: string, answer: string) => {
+    console.log('🔄 Updating T/F answer:', { questionId, answer });
     setQuestions(questions.map(q => {
       if (q._id === questionId && q.type === 'true-false') {
+        console.log('📝 Before update:', q.correctAnswer, 'After update:', answer);
         return {
           ...q,
           correctAnswer: answer
@@ -420,7 +422,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         return option?.isCorrect;
       }
       if (question.type === 'true-false') {
-        return answer === question.correctAnswer;
+        return String(answer).toLowerCase() === String(question.correctAnswer).toLowerCase();
       }
       return false;
     };
@@ -480,20 +482,20 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 })
               }
               
-              {question.type === 'true-false' && question.content?.options && 
-                question.content.options.map((option: any, idx: number) => {
-                  const isSelected = selectedAnswer === option.text;
-                  const optionIsCorrect = option.isCorrect;
+              {question.type === 'true-false' && 
+                ['True', 'False'].map((option: string, idx: number) => {
+                  const isSelected = selectedAnswer === option;
+                  const optionIsCorrect = String(question.correctAnswer).toLowerCase() === option.toLowerCase();
                   const showResult = showAnswer && isSelected;
                   
                   return (
                     <button
                       key={idx}
                       className={`tf-button ${isSelected ? 'selected' : ''} ${showResult ? (optionIsCorrect ? 'correct' : 'incorrect') : ''}`}
-                      onClick={() => !showAnswer && handleAnswerSelect(option.text)}
+                      onClick={() => !showAnswer && handleAnswerSelect(option)}
                       disabled={showAnswer}
                     >
-                      <span className="tf-text">{option.text}</span>
+                      <span className="tf-text">{option}</span>
                       {showResult && (
                         <span className="tf-result">
                           {optionIsCorrect ? '✓' : '✗'}
@@ -949,7 +951,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                   type="radio"
                                   name={`tf-correct-${question._id}`}
                                   value="True"
-                                  checked={question.correctAnswer === 'True' || question.correctAnswer === true}
+                                  checked={String(question.correctAnswer).toLowerCase() === 'true'}
                                   onChange={() => updateTrueFalseAnswer(question._id, 'True')}
                                   className="tf-radio"
                                 />
@@ -960,7 +962,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                                   type="radio"
                                   name={`tf-correct-${question._id}`}
                                   value="False"
-                                  checked={question.correctAnswer === 'False' || question.correctAnswer === false}
+                                  checked={String(question.correctAnswer).toLowerCase() === 'false'}
                                   onChange={() => updateTrueFalseAnswer(question._id, 'False')}
                                   className="tf-radio"
                                 />
