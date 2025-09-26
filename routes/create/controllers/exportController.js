@@ -1337,20 +1337,20 @@ function convertQuestionToH5P(question, quiz) {
     };
   } else if (question.type === 'matching') {
     // Use H5P.DragText for matching questions
-    const leftItems = question.content?.leftItems || [];
-    const rightItems = question.content?.rightItems || [];
+    const leftItems = question.content?.leftItems || []; // Concepts (drop zones)
+    const rightItems = question.content?.rightItems || []; // Definitions (draggable items)
     const matchingPairs = question.content?.matchingPairs || [];
     
-    // Create text field with drag markers - simpler format like working example
+    // Create text field with drag markers - concepts as drop zones, definitions as draggable
     let textField = "";
     leftItems.forEach((leftItem, index) => {
       const correctMatch = matchingPairs.find(pair => pair[0] === leftItem)?.[1] || rightItems[index] || rightItems[0];
-      textField += `${index + 1}. ${escapeHtml(correctMatch)} = *${escapeHtml(leftItem)}*\n`;
+      textField += `${index + 1}. ${escapeHtml(leftItem)} = *${escapeHtml(correctMatch)}*\n`;
     });
     
-    // Add distractors - should be unused leftItems (terms that can be dragged)
-    const usedLeftItems = matchingPairs.map(pair => pair[0]);
-    const distractors = leftItems.filter(item => !usedLeftItems.includes(item));
+    // Add distractors - unused rightItems (definitions that can be dragged)
+    const usedRightItems = matchingPairs.map(pair => pair[1]);
+    const distractors = rightItems.filter(item => !usedRightItems.includes(item));
     const distractorText = distractors.length > 0 ? distractors.map(d => escapeHtml(d)).join(" ") : "";
     
     return {

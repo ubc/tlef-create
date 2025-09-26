@@ -173,7 +173,7 @@ function generateTestH5PContent(quiz) {
       
       let textField = question.questionText + "\\n\\n";
       leftItems.forEach((leftItem, index) => {
-        const correctMatch = matchingPairs[index] ? matchingPairs[index][1] : rightItems[index];
+        const correctMatch = matchingPairs.find(pair => pair[0] === leftItem)?.[1] || rightItems[index];
         textField += `${leftItem}: *${correctMatch}*\\n`;
       });
       

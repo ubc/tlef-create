@@ -205,6 +205,183 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }));
   };
 
+  // Matching question specific editing functions
+  const updateMatchingLeftItem = (questionId: string, itemIndex: number, newText: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.leftItems) {
+        const updatedLeftItems = [...q.content.leftItems];
+        updatedLeftItems[itemIndex] = newText;
+        
+        // Update matching pairs that reference this item
+        const updatedMatchingPairs = q.content.matchingPairs?.map(pair => 
+          pair[0] === q.content.leftItems[itemIndex] ? [newText, pair[1]] : pair
+        ) || [];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            leftItems: updatedLeftItems,
+            matchingPairs: updatedMatchingPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateMatchingRightItem = (questionId: string, itemIndex: number, newText: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.rightItems) {
+        const updatedRightItems = [...q.content.rightItems];
+        updatedRightItems[itemIndex] = newText;
+        
+        // Update matching pairs that reference this item
+        const updatedMatchingPairs = q.content.matchingPairs?.map(pair => 
+          pair[1] === q.content.rightItems[itemIndex] ? [pair[0], newText] : pair
+        ) || [];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            rightItems: updatedRightItems,
+            matchingPairs: updatedMatchingPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addMatchingLeftItem = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.leftItems) {
+        const newItem = `New Item ${q.content.leftItems.length + 1}`;
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            leftItems: [...q.content.leftItems, newItem]
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addMatchingRightItem = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.rightItems) {
+        const newItem = `New Answer ${q.content.rightItems.length + 1}`;
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            rightItems: [...q.content.rightItems, newItem]
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeMatchingLeftItem = (questionId: string, itemIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.leftItems && q.content.leftItems.length > 2) {
+        const itemToRemove = q.content.leftItems[itemIndex];
+        const updatedLeftItems = q.content.leftItems.filter((_: string, index: number) => index !== itemIndex);
+        
+        // Remove matching pairs that reference this item
+        const updatedMatchingPairs = q.content.matchingPairs?.filter(pair => pair[0] !== itemToRemove) || [];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            leftItems: updatedLeftItems,
+            matchingPairs: updatedMatchingPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeMatchingRightItem = (questionId: string, itemIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.rightItems && q.content.rightItems.length > 2) {
+        const itemToRemove = q.content.rightItems[itemIndex];
+        const updatedRightItems = q.content.rightItems.filter((_: string, index: number) => index !== itemIndex);
+        
+        // Remove matching pairs that reference this item
+        const updatedMatchingPairs = q.content.matchingPairs?.filter(pair => pair[1] !== itemToRemove) || [];
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            rightItems: updatedRightItems,
+            matchingPairs: updatedMatchingPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateMatchingPair = (questionId: string, pairIndex: number, itemIndex: number, newValue: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.matchingPairs) {
+        const updatedPairs = [...q.content.matchingPairs];
+        updatedPairs[pairIndex] = [...updatedPairs[pairIndex]];
+        updatedPairs[pairIndex][itemIndex] = newValue;
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            matchingPairs: updatedPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const addMatchingPair = (questionId: string) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.matchingPairs) {
+        const newPair = ['', ''];
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            matchingPairs: [...q.content.matchingPairs, newPair]
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
+  const removeMatchingPair = (questionId: string, pairIndex: number) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.matchingPairs && q.content.matchingPairs.length > 1) {
+        const updatedPairs = q.content.matchingPairs.filter((_: string[], index: number) => index !== pairIndex);
+        
+        return {
+          ...q,
+          content: { 
+            ...q.content, 
+            matchingPairs: updatedPairs
+          }
+        };
+      }
+      return q;
+    }));
+  };
+
   // Summary keyPoints editing functions
   const updateKeyPoint = (questionId: string, keyPointIndex: number, field: string, value: string) => {
     setQuestions(questions.map(q => {
@@ -795,7 +972,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </div>
             )}
 
-            {!showAnswer && question.type !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && (
+            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>
@@ -893,7 +1070,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               // Interactive mode - show questions as interactive cards
               <div className="questions-interactive">
                 {filteredQuestions.map((question, index) => (
-                  <InteractiveQuestion key={question._id} question={question} index={index} />
+                  <div key={question._id}>
+                    <InteractiveQuestion question={question} index={index} />
+                  </div>
                 ))}
               </div>
             ) : (
@@ -1092,6 +1271,136 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                               </button>
                             </div>
                           </div>
+                        ) : question.type === 'matching' ? (
+                          <div className="edit-field">
+                            <label>Matching Items:</label>
+                            <div className="matching-editor">
+                              <div className="matching-editor-section">
+                                <h4>Left Items (Items to Match):</h4>
+                                <div className="matching-items-list">
+                                  {question.content?.leftItems?.map((item: string, index: number) => (
+                                    <div key={index} className="matching-item-editor">
+                                      <div className="item-input-group">
+                                        <input
+                                          type="text"
+                                          className="input-field matching-item-input"
+                                          value={item}
+                                          onChange={(e) => updateMatchingLeftItem(question._id, index, e.target.value)}
+                                          placeholder={`Left item ${index + 1}`}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-sm remove-item"
+                                          onClick={() => removeMatchingLeftItem(question._id, index)}
+                                          disabled={question.content.leftItems.length <= 2}
+                                          title="Remove item"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm add-item"
+                                  onClick={() => addMatchingLeftItem(question._id)}
+                                  disabled={question.content?.leftItems?.length >= 8}
+                                >
+                                  <Plus size={14} />
+                                  Add Left Item
+                                </button>
+                              </div>
+
+                              <div className="matching-editor-section">
+                                <h4>Right Items (Answer Options):</h4>
+                                <div className="matching-items-list">
+                                  {question.content?.rightItems?.map((item: string, index: number) => (
+                                    <div key={index} className="matching-item-editor">
+                                      <div className="item-input-group">
+                                        <input
+                                          type="text"
+                                          className="input-field matching-item-input"
+                                          value={item}
+                                          onChange={(e) => updateMatchingRightItem(question._id, index, e.target.value)}
+                                          placeholder={`Right item ${index + 1}`}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-sm remove-item"
+                                          onClick={() => removeMatchingRightItem(question._id, index)}
+                                          disabled={question.content.rightItems.length <= 2}
+                                          title="Remove item"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm add-item"
+                                  onClick={() => addMatchingRightItem(question._id)}
+                                  disabled={question.content?.rightItems?.length >= 8}
+                                >
+                                  <Plus size={14} />
+                                  Add Right Item
+                                </button>
+                              </div>
+
+                              <div className="matching-editor-section">
+                                <h4>Correct Matches:</h4>
+                                <div className="matching-pairs-editor">
+                                  {question.content?.matchingPairs?.map((pair: string[], index: number) => (
+                                    <div key={index} className="matching-pair-editor">
+                                      <div className="pair-input-group">
+                                        <select
+                                          className="select-input pair-select"
+                                          value={pair[0] || ''}
+                                          onChange={(e) => updateMatchingPair(question._id, index, 0, e.target.value)}
+                                        >
+                                          <option value="">Select left item</option>
+                                          {question.content?.leftItems?.map((item: string, itemIndex: number) => (
+                                            <option key={itemIndex} value={item}>{item}</option>
+                                          ))}
+                                        </select>
+                                        <span className="pair-arrow">→</span>
+                                        <select
+                                          className="select-input pair-select"
+                                          value={pair[1] || ''}
+                                          onChange={(e) => updateMatchingPair(question._id, index, 1, e.target.value)}
+                                        >
+                                          <option value="">Select right item</option>
+                                          {question.content?.rightItems?.map((item: string, itemIndex: number) => (
+                                            <option key={itemIndex} value={item}>{item}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-sm remove-pair"
+                                          onClick={() => removeMatchingPair(question._id, index)}
+                                          disabled={question.content.matchingPairs.length <= 1}
+                                          title="Remove pair"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm add-pair"
+                                  onClick={() => addMatchingPair(question._id)}
+                                  disabled={question.content?.matchingPairs?.length >= 6}
+                                >
+                                  <Plus size={14} />
+                                  Add Match Pair
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <div className="edit-field">
                             <label>Correct Answer:</label>
@@ -1157,6 +1466,45 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                               }
                             </div>
                           )}
+                        </div>
+                        {question.explanation && (
+                          <div className="question-explanation">
+                            <strong>Explanation:</strong> {question.explanation}
+                          </div>
+                        )}
+                      </div>
+                  ) : question.type === 'matching' ? (
+                      <div className="question-display">
+                        <div className="question-text">{question.questionText}</div>
+                        <div className="matching-display">
+                          <div className="matching-items-display">
+                            <div className="matching-left-display">
+                              <strong>Items to Match:</strong>
+                              <ul>
+                                {question.content?.leftItems?.map((item: string, index: number) => (
+                                  <li key={index}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="matching-right-display">
+                              <strong>Answer Options:</strong>
+                              <ul>
+                                {question.content?.rightItems?.map((item: string, index: number) => (
+                                  <li key={index}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                          <div className="matching-pairs-display">
+                            <strong>Correct Matches:</strong>
+                            <ul>
+                              {question.content?.matchingPairs?.map((pair: string[], index: number) => (
+                                <li key={index}>
+                                  <strong>{pair[0]}</strong> → {pair[1]}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
                         {question.explanation && (
                           <div className="question-explanation">

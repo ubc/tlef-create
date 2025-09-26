@@ -338,6 +338,268 @@
   }
 }
 
+/* Matching Question Editor Styles */
+.matching-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.matching-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.matching-editor-section h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.matching-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.matching-item-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.item-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.matching-item-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.matching-item-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.remove-item {
+  color: var(--text-secondary);
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-item:hover {
+  color: var(--destructive-color);
+  background: var(--destructive-color-light);
+}
+
+.remove-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-item {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+.matching-pairs-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.matching-pair-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.pair-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.pair-select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.pair-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.pair-arrow {
+  font-size: 1.2rem;
+  color: var(--primary-color);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.remove-pair {
+  color: var(--text-secondary);
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-pair:hover {
+  color: var(--destructive-color);
+  background: var(--destructive-color-light);
+}
+
+.remove-pair:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.add-pair {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+/* Responsive adjustments for matching editor */
+@media (max-width: 768px) {
+  .matching-editor {
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+  
+  .matching-pair-editor {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .pair-input-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .pair-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+/* Matching Question Display Styles */
+.matching-display {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.matching-items-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.matching-left-display,
+.matching-right-display {
+  padding: 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.matching-left-display strong,
+.matching-right-display strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.matching-left-display ul,
+.matching-right-display ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.matching-left-display li,
+.matching-right-display li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.matching-pairs-display {
+  padding: 0.75rem;
+  background: var(--success-color-light);
+  border-radius: 4px;
+  border: 1px solid var(--success-color);
+}
+
+.matching-pairs-display strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--success-color-dark);
+  font-size: 0.9rem;
+}
+
+.matching-pairs-display ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.matching-pairs-display li {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--success-color-dark);
+}
+
+.matching-pairs-display li strong {
+  display: inline;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Responsive adjustments for matching display */
+@media (max-width: 768px) {
+  .matching-items-display {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
 /* CSS Variables (add these to your main CSS file if not already present) */
 :root {
   --primary-color: #3b82f6;

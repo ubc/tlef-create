@@ -689,6 +689,9 @@ export interface Question {
     textWithBlanks?: string;
     blankOptions?: string[][];
     correctAnswers?: string[];
+    title?: string;
+    additionalNotes?: string;
+    keyPoints?: Array<{ title: string; explanation: string }>;
   };
   correctAnswer: any;
   explanation?: string;
