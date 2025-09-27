@@ -100,7 +100,8 @@ class QuizLLMService {
       relevantContent = [],
       difficulty = 'moderate',
       courseContext = '',
-      previousQuestions = []
+      previousQuestions = [],
+      customPrompt = null
     } = questionConfig;
 
     console.log(`🤖 Generating ${questionType} question with LLM...`);
@@ -123,7 +124,8 @@ class QuizLLMService {
         relevantContent, 
         difficulty,
         courseContext,
-        previousQuestions
+        previousQuestions,
+        customPrompt
       );
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
@@ -189,7 +191,7 @@ class QuizLLMService {
   /**
    * Build expert-level prompt for question generation
    */
-  buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions) {
+  buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt) {
     // Handle different relevantContent formats
     const contentArray = Array.isArray(relevantContent) 
       ? relevantContent 
@@ -219,13 +221,15 @@ DIFFICULTY LEVEL: ${difficulty}
 QUESTION TYPE: ${questionType}
 ${previousQuestionsText}
 
-INSTRUCTIONS:
+INSTRUCTIONS:${customPrompt ? '\n⚠️ CRITICAL USER REQUIREMENTS (MUST FOLLOW): ' + customPrompt + '\n' : ''}
 1. Create a question that directly assesses the learning objective
 2. Use the provided course materials to create realistic, contextual content
 3. Ensure the question tests meaningful understanding, not just memorization
 4. Make the question engaging and relevant to real-world applications
 5. Follow educational best practices for ${questionType} questions
 6. Avoid duplicating previous questions - create unique content and scenarios
+
+${customPrompt ? 'IMPORTANT: The user requirements above are MANDATORY and must be implemented exactly as specified.' : ''}
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (all strings must be on single lines - no line breaks within strings):`;

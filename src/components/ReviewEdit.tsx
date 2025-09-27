@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
+import RegeneratePromptModal from './RegeneratePromptModal';
 import '../styles/components/ReviewEdit.css';
 import '../styles/components/InteractiveQuestions.css';
 
@@ -18,6 +19,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
+  const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
+  const [regenerateLoading, setRegenerateLoading] = useState(false);
+  const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
   const { showNotification } = usePubSub('ReviewEdit');
 
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
@@ -762,17 +766,37 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
-  const regenerateQuestion = async (questionId: string) => {
+  const openRegenerateModal = (questionId: string) => {
+    const question = questions.find(q => q._id === questionId);
+    if (question) {
+      setQuestionToRegenerate(question);
+      setRegenerateModalOpen(true);
+    }
+  };
+
+  const handleRegenerate = async (customPrompt?: string) => {
+    if (!questionToRegenerate) return;
+    
+    setRegenerateLoading(true);
     try {
-      const result = await questionsApi.regenerateQuestion(questionId);
+      const result = await questionsApi.regenerateQuestion(questionToRegenerate._id, customPrompt);
       setQuestions(questions.map(q =>
-          q._id === questionId ? { ...result.question, isEditing: false } : q
+          q._id === questionToRegenerate._id ? { ...result.question, isEditing: false } : q
       ));
       showNotification('success', 'Question Regenerated', 'Question has been regenerated using AI');
+      setRegenerateModalOpen(false);
+      setQuestionToRegenerate(null);
     } catch (error) {
       console.error('Failed to regenerate question:', error);
       showNotification('error', 'Regeneration Failed', 'Failed to regenerate question');
+    } finally {
+      setRegenerateLoading(false);
     }
+  };
+
+  const closeRegenerateModal = () => {
+    setRegenerateModalOpen(false);
+    setQuestionToRegenerate(null);
   };
 
   const handleH5PExport = async () => {
@@ -1348,8 +1372,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                     <div className="question-actions">
                       <button
                           className="btn btn-ghost btn-sm"
-                          onClick={() => regenerateQuestion(question._id)}
-                          title="Regenerate question"
+                          onClick={() => openRegenerateModal(question._id)}
+                          title="Regenerate question with custom prompt"
                       >
                         <RotateCcw size={14} />
                       </button>
@@ -2184,6 +2208,17 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </div>
           )}
         </div>
+
+        {/* Regenerate Prompt Modal */}
+        {questionToRegenerate && (
+          <RegeneratePromptModal
+            isOpen={regenerateModalOpen}
+            onClose={closeRegenerateModal}
+            onRegenerate={handleRegenerate}
+            question={questionToRegenerate}
+            isLoading={regenerateLoading}
+          />
+        )}
       </div>
   );
 };

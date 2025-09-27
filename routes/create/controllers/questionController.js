@@ -408,6 +408,7 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
 router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const questionId = req.params.id;
   const userId = req.user.id;
+  const { customPrompt } = req.body;
 
   const question = await Question.findOne({ _id: questionId, createdBy: userId })
     .populate('learningObjective');
@@ -421,6 +422,10 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
     console.log(`🎯 Question regeneration using ${provider} model: ${model}`);
     
+    if (customPrompt) {
+      console.log('📝 Custom prompt provided:', customPrompt.substring(0, 100) + '...');
+    }
+    
     // Import LLM service for regeneration
     const { default: llmService } = await import('../services/llmService.js');
     
@@ -431,8 +436,9 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       questionType: question.type,
       relevantContent: [], // Could be enhanced with RAG content later
       difficulty: 'moderate',
-      courseContext: `Question regeneration`,
-      previousQuestions: [{ questionText: question.questionText }] // Avoid duplication
+      courseContext: customPrompt ? `Question regeneration with custom instructions: ${customPrompt}` : `Question regeneration`,
+      previousQuestions: [{ questionText: question.questionText }], // Avoid duplication
+      customPrompt: customPrompt || undefined
     };
     
     const result = await llmService.generateQuestion(questionConfig);

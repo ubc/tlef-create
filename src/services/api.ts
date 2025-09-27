@@ -650,8 +650,10 @@ export const questionsApi = {
   },
 
   // POST /api/create/questions/:id/regenerate - Regenerate specific question
-  regenerateQuestion: async (id: string): Promise<{ question: Question }> => {
-    const response = await apiClient.post<{ success: boolean; data: { question: Question }; message: string }>(`/questions/${id}/regenerate`, {});
+  regenerateQuestion: async (id: string, customPrompt?: string): Promise<{ question: Question }> => {
+    const response = await apiClient.post<{ success: boolean; data: { question: Question }; message: string }>(`/questions/${id}/regenerate`, {
+      customPrompt: customPrompt || undefined
+    });
     return response.data;
   },
 
