@@ -21,6 +21,17 @@ const Dashboard = () => {
       console.log('✅ Folders API response:', response);
       console.log('📁 Number of folders received:', response.folders?.length || 0);
       console.log('📋 Folder details:', response.folders);
+      
+      // Debug folder stats
+      console.log('📊 DASHBOARD DEBUG - Folder Stats Analysis:');
+      response.folders?.forEach((folder, index) => {
+        console.log(`  Folder ${index + 1}: ${folder.name}`);
+        console.log(`    - stats object:`, folder.stats);
+        console.log(`    - totalQuestions:`, folder.stats?.totalQuestions || 0);
+        console.log(`    - totalQuizzes:`, folder.stats?.totalQuizzes || 0);
+        console.log(`    - totalMaterials:`, folder.stats?.totalMaterials || 0);
+      });
+      
       setFolders(response.folders);
     } catch (err) {
       console.error('❌ Failed to load folders:', err);
@@ -48,6 +59,26 @@ const Dashboard = () => {
   const totalQuizzes = folders?.reduce((total, folder) => total + (folder.stats?.totalQuizzes || 0), 0) || 0;
   const totalQuestions = folders?.reduce((total, folder) => total + (folder.stats?.totalQuestions || 0), 0) || 0;
   const totalMaterials = folders?.reduce((total, folder) => total + (folder.stats?.totalMaterials || 0), 0) || 0;
+  
+  // Debug the calculations
+  console.log('📊 DASHBOARD DEBUG - Stats Calculations:');
+  console.log('  folders array:', folders);
+  console.log('  folders length:', folders?.length || 0);
+  console.log('  totalQuizzes calculated:', totalQuizzes);
+  console.log('  totalQuestions calculated:', totalQuestions);
+  console.log('  totalMaterials calculated:', totalMaterials);
+  
+  // Show breakdown of question calculation
+  if (folders && folders.length > 0) {
+    console.log('📊 DASHBOARD DEBUG - Question Count Breakdown:');
+    let runningTotal = 0;
+    folders.forEach((folder, index) => {
+      const folderQuestions = folder.stats?.totalQuestions || 0;
+      runningTotal += folderQuestions;
+      console.log(`  ${folder.name}: ${folderQuestions} questions (running total: ${runningTotal})`);
+    });
+    console.log(`  FINAL TOTAL QUESTIONS: ${runningTotal}`);
+  }
   
   // Calculate time saved (5 minutes per question)
   const totalMinutes = totalQuestions * 5;
