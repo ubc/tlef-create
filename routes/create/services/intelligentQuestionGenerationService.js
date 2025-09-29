@@ -172,17 +172,25 @@ class IntelligentQuestionGenerationService {
    * Get question configurations for a learning objective based on generation plan
    */
   getQuestionConfigsForLO(learningObjective, generationPlan, generationConfig) {
+    console.log(`🔍 Getting question configs for LO: ${learningObjective.text.substring(0, 50)}...`);
+    console.log(`📋 Has generationPlan:`, !!generationPlan);
+    console.log(`📋 Has generationPlan.breakdown:`, !!generationPlan?.breakdown);
+    
     // If we have a generation plan, use it
     if (generationPlan && generationPlan.breakdown) {
       const breakdown = generationPlan.breakdown.find(
         item => item.learningObjective.toString() === learningObjective._id.toString()
       );
       
+      console.log(`📋 Found breakdown for this LO:`, !!breakdown);
+      
       if (breakdown && breakdown.questionTypes && Array.isArray(breakdown.questionTypes) && breakdown.questionTypes.length > 0) {
         const configs = breakdown.questionTypes.map(qt => ({
           questionType: qt.type,
           count: qt.count || 1
         }));
+        
+        console.log(`✅ Using generation plan configs:`, configs.map(c => `${c.count}x ${c.questionType}`).join(', '));
         return configs.filter(config => config.count > 0); // Remove zero-count items
       }
     }
@@ -193,14 +201,14 @@ class IntelligentQuestionGenerationService {
     if (generationConfig?.questionTypes && Array.isArray(generationConfig.questionTypes) && generationConfig.questionTypes.length > 0) {
       fallbackConfig = generationConfig.questionTypes;
     } else {
-      // Robust fallback that includes all question types
+      // More reasonable fallback - generate fewer, more common question types
       fallbackConfig = [
-        { type: 'multiple-choice', count: 1 },
-        { type: 'true-false', count: 1 },
-        { type: 'flashcard', count: 1 },
-        { type: 'discussion', count: 1 },
-        { type: 'summary', count: 1 }
+        { type: 'multiple-choice', count: 2 },
+        { type: 'true-false', count: 1 }
       ];
+      
+      console.log('⚠️ Using fallback question config - no specific plan found');
+      console.log('📋 Fallback will generate:', fallbackConfig.map(c => `${c.count}x ${c.type}`).join(', '));
     }
 
     const result = fallbackConfig.map(config => ({

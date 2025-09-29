@@ -3,6 +3,7 @@ import Question from '../models/Question.js';
 import Quiz from '../models/Quiz.js';
 import LearningObjective from '../models/LearningObjective.js';
 import GenerationPlan from '../models/GenerationPlan.js';
+import Folder from '../models/Folder.js';
 import { authenticateToken, attachUser } from '../middleware/auth.js';
 import { validateCreateQuestion, validateGenerateQuestions, validateReorderQuestions, validateMongoId, validateQuizId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
@@ -187,7 +188,6 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
     });
 
     // Update folder stats to reflect new question count
-    const Folder = require('../models/Folder');
     const folder = await Folder.findOne({ quizzes: quizId });
     if (folder) {
       console.log('📊 Updating folder stats after question generation...');
