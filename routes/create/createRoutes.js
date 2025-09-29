@@ -12,7 +12,7 @@ import quizController from './controllers/quizController.js';
 import objectiveController from './controllers/objectiveController.js';
 import planController from './controllers/planController.js';
 import questionController from './controllers/questionController.js';
-// import exportController from './controllers/exportController.js';
+import exportController from './controllers/exportController.js';
 
 const router = express.Router();
 
@@ -93,7 +93,7 @@ router.use('/quizzes', quizController);
 router.use('/objectives', objectiveController);
 router.use('/plans', planController);
 router.use('/questions', questionController);
-// router.use('/export', exportController);
+router.use('/export', exportController);
 
 // 404 handler for unknown API routes
 router.use((req, res) => {

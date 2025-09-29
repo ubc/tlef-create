@@ -180,11 +180,16 @@ router.put('/:id', authenticateToken, validateUpdateFolder, asyncHandler(async (
 
 /**
  * DELETE /api/folders/:id
- * Delete folder and all its contents
+ * Delete folder and CASCADE DELETE all its contents
+ * - All materials and their vector embeddings
+ * - All quizzes and their questions
+ * - All learning objectives and generation plans
  */
 router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const folderId = req.params.id;
   const userId = req.user.id;
+
+  console.log(`🗑️ Starting cascade deletion for folder: ${folderId}`);
 
   const folder = await Folder.findOne({ _id: folderId, instructor: userId });
 
@@ -192,19 +197,102 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
     return notFoundResponse(res, 'Folder');
   }
 
-  // Check if folder has materials or quizzes
-  if (folder.materials.length > 0 || folder.quizzes.length > 0) {
+  console.log(`📊 Folder "${folder.name}" contains: ${folder.materials.length} materials, ${folder.quizzes.length} quizzes`);
+
+  try {
+    // Import models needed for cascade deletion
+    const Material = await import('../models/Material.js');
+    const Quiz = await import('../models/Quiz.js');
+    const Question = await import('../models/Question.js');
+    const LearningObjective = await import('../models/LearningObjective.js');
+    const GenerationPlan = await import('../models/GenerationPlan.js');
+    const ragService = await import('../services/ragService.js');
+    
+    // Step 1: Delete all vector embeddings for materials in this folder
+    if (folder.materials.length > 0) {
+      console.log('🔄 Cleaning up vector database embeddings...');
+      
+      try {
+        // Clean up vector database embeddings for each material
+        const materials = await Material.default.find({ 
+          _id: { $in: folder.materials },
+          folder: folderId 
+        });
+        
+        for (const material of materials) {
+          try {
+            await ragService.default.cleanupMaterialEmbeddings(material._id.toString());
+            console.log(`✅ Cleaned vector embeddings for material: ${material.name}`);
+          } catch (embedError) {
+            console.error(`⚠️ Failed to clean embeddings for ${material.name}:`, embedError.message);
+            // Continue with deletion even if vector cleanup fails
+          }
+        }
+      } catch (ragError) {
+        console.error('⚠️ Vector database cleanup error:', ragError.message);
+        // Continue with database deletion even if vector cleanup fails
+      }
+    }
+
+    // Step 2: Delete all questions for all quizzes in this folder
+    if (folder.quizzes.length > 0) {
+      const questionDeleteResult = await Question.default.deleteMany({
+        quiz: { $in: folder.quizzes }
+      });
+      console.log(`✅ Deleted ${questionDeleteResult.deletedCount} questions`);
+
+      // Step 3: Delete all learning objectives for all quizzes in this folder
+      const objectiveDeleteResult = await LearningObjective.default.deleteMany({
+        quiz: { $in: folder.quizzes }
+      });
+      console.log(`✅ Deleted ${objectiveDeleteResult.deletedCount} learning objectives`);
+
+      // Step 4: Delete all generation plans for all quizzes in this folder
+      const planDeleteResult = await GenerationPlan.default.deleteMany({
+        quiz: { $in: folder.quizzes }
+      });
+      console.log(`✅ Deleted ${planDeleteResult.deletedCount} generation plans`);
+
+      // Step 5: Delete all quizzes in this folder
+      const quizDeleteResult = await Quiz.default.deleteMany({
+        _id: { $in: folder.quizzes },
+        folder: folderId
+      });
+      console.log(`✅ Deleted ${quizDeleteResult.deletedCount} quizzes`);
+    }
+
+    // Step 6: Delete all materials in this folder
+    if (folder.materials.length > 0) {
+      const materialDeleteResult = await Material.default.deleteMany({
+        _id: { $in: folder.materials },
+        folder: folderId
+      });
+      console.log(`✅ Deleted ${materialDeleteResult.deletedCount} materials`);
+    }
+
+    // Step 7: Finally, delete the folder itself
+    await Folder.findByIdAndDelete(folderId);
+    console.log(`✅ Deleted folder: ${folder.name}`);
+
+    return successResponse(res, {
+      folderId,
+      folderName: folder.name,
+      deletedCounts: {
+        materials: folder.materials.length,
+        quizzes: folder.quizzes.length,
+        vectorEmbeddings: 'cleaned'
+      }
+    }, 'Course and all associated data deleted successfully');
+
+  } catch (error) {
+    console.error('❌ Error during cascade deletion:', error);
     return errorResponse(
       res, 
-      'Cannot delete folder with existing materials or quizzes. Please remove them first.', 
-      'FOLDER_NOT_EMPTY', 
-      HTTP_STATUS.BAD_REQUEST
+      `Failed to delete course: ${error.message}`, 
+      'DELETION_ERROR', 
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
   }
-
-  await Folder.findByIdAndDelete(folderId);
-
-  return successResponse(res, null, 'Folder deleted successfully');
 }));
 
 /**

@@ -13,7 +13,9 @@
 }
 
 .notification-item {
+    position: relative;
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
     justify-content: space-between;
     padding: 16px;
@@ -34,6 +36,13 @@
         transform: translateX(0);
         opacity: 1;
     }
+}
+
+.notification-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 100%;
 }
 
 .notification-content {
@@ -193,9 +202,55 @@
     }
 }
 
+/* Timer Bar Styles */
+.notification-timer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+.notification-timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+    transition: width 0.1s linear;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Timer bar colors for different notification types */
+.notification-success .notification-timer-bar {
+    background: linear-gradient(90deg, #16a34a, #15803d);
+}
+
+.notification-error .notification-timer-bar {
+    background: linear-gradient(90deg, #dc2626, #b91c1c);
+}
+
+.notification-warning .notification-timer-bar {
+    background: linear-gradient(90deg, #d97706, #b45309);
+}
+
+.notification-info .notification-timer-bar {
+    background: linear-gradient(90deg, #2563eb, #1d4ed8);
+}
+
+/* Dark mode timer bar */
+[data-theme="dark"] .notification-timer {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+
 /* Reduce motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
     .notification-item {
         animation: none;
+    }
+    
+    .notification-timer-bar {
+        transition: none;
     }
 }

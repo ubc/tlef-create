@@ -29,6 +29,16 @@
     text-align: center;
 }
 
+/* Create Course Button Specific Styling */
+.sidebar-header .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-muted);
+    color: var(--color-foreground);
+    border-color: var(--color-border);
+    opacity: 1;
+    transform: none;
+    box-shadow: none;
+}
+
 .sidebar-section {
     padding: var(--spacing-md) var(--spacing-lg);
 }

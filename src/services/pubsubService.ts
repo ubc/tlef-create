@@ -192,7 +192,9 @@ export class PubSubService {
         const payload: NotificationPayload = {
             id: this.generateNotificationId(),
             ...notification,
+            duration: notification.duration ?? 4000, // Default 4 seconds auto-dismiss, but allow override
         };
+        console.log('🔔 Publishing notification with payload:', payload);
         this.publish(PUBSUB_EVENTS.SHOW_NOTIFICATION, payload);
     }
 

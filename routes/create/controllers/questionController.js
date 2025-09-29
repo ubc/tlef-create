@@ -33,6 +33,21 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
     .populate('createdBy', 'cwlId')
     .sort({ order: 1 });
 
+  // Debug logging for Summary questions when loading
+  const summaryQuestions = questions.filter(q => q.type === 'summary');
+  if (summaryQuestions.length > 0) {
+    console.log(`🔍 Loading ${summaryQuestions.length} Summary questions from database:`);
+    summaryQuestions.forEach((q, index) => {
+      console.log(`📋 Summary ${index + 1}: ${q._id}`);
+      console.log(`📝 Question text: ${q.questionText}`);
+      console.log(`💾 Content from DB:`, JSON.stringify(q.content, null, 2));
+      console.log(`🔑 Has keyPoints:`, !!q.content?.keyPoints);
+      if (q.content?.keyPoints) {
+        console.log(`📊 KeyPoints count:`, q.content.keyPoints.length);
+      }
+    });
+  }
+
   return successResponse(res, { questions }, 'Questions retrieved successfully');
 }));
 
@@ -77,16 +92,9 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
   try {
     console.log('🧠 Starting intelligent RAG + LLM question generation...');
 
-    // Get user preferences for AI model selection
-    const { default: User } = await import('../models/User.js');
-    const user = await User.findById(userId).select('preferences');
-    const userPreferences = user?.preferences || null;
-    
-    if (userPreferences?.llmProvider) {
-      console.log(`🤖 Using user's preferred LLM: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🤖 Using default LLM configuration');
-    }
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model}`);
 
     // Use the intelligent generation service instead of template-based generation
     const generationResult = await intelligentQuestionGenerationService.generateQuestionsForQuiz(
@@ -95,8 +103,7 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
         difficulty: 'moderate',
         useRAG: true,
         useLLM: true
-      },
-      userPreferences
+      }
     );
 
     console.log('🔍 Generation result summary:', {
@@ -121,7 +128,7 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
     let questionOrder = 0;
 
     for (const generatedQuestion of generationResult.questions) {
-      console.log(`💾 Saving question ${questionOrder + 1}: ${generatedQuestion.questionText.substring(0, 50)}...`);
+      console.log(`💾 Saving question ${questionOrder + 1}: ${generatedQuestion.questionText ? generatedQuestion.questionText.substring(0, 50) : 'No text'}...`);
       
       const question = new Question({
         quiz: quizId,
@@ -145,6 +152,15 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
 
       await question.save();
       console.log('✅ Question saved:', question._id);
+      
+      // Debug logging for Summary questions
+      if (generatedQuestion.type === 'summary') {
+        console.log('🔍 Summary question saved to database:');
+        console.log('📋 Saved content:', JSON.stringify(question.content, null, 2));
+        console.log('🆔 Question ID:', question._id);
+        console.log('📝 Question text:', question.questionText);
+      }
+      
       questions.push(question);
       await quiz.addQuestion(question._id);
     }
@@ -169,6 +185,15 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
       ragEnabled: generationResult.metadata.ragEnabled,
       success: true
     });
+
+    // Update folder stats to reflect new question count
+    const Folder = require('../models/Folder');
+    const folder = await Folder.findOne({ quizzes: quizId });
+    if (folder) {
+      console.log('📊 Updating folder stats after question generation...');
+      await folder.updateStats();
+      console.log('✅ Folder stats updated');
+    }
 
     return successResponse(res, { 
       questions,
@@ -383,6 +408,7 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
 router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const questionId = req.params.id;
   const userId = req.user.id;
+  const { customPrompt } = req.body;
 
   const question = await Question.findOne({ _id: questionId, createdBy: userId })
     .populate('learningObjective');
@@ -392,15 +418,12 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
   }
 
   try {
-    // Get user preferences for AI model selection
-    const { default: User } = await import('../models/User.js');
-    const user = await User.findById(userId).select('preferences');
-    const userPreferences = user?.preferences || null;
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🎯 Question regeneration using ${provider} model: ${model}`);
     
-    if (userPreferences?.llmProvider) {
-      console.log(`🎯 Question regeneration using: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🎯 Question regeneration using default LLM configuration');
+    if (customPrompt) {
+      console.log('📝 Custom prompt provided:', customPrompt.substring(0, 100) + '...');
     }
     
     // Import LLM service for regeneration
@@ -413,12 +436,21 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       questionType: question.type,
       relevantContent: [], // Could be enhanced with RAG content later
       difficulty: 'moderate',
-      courseContext: `Question regeneration`,
-      previousQuestions: [{ questionText: question.questionText }] // Avoid duplication
+      courseContext: customPrompt ? `Question regeneration with custom instructions: ${customPrompt}` : `Question regeneration`,
+      previousQuestions: [{ questionText: question.questionText }], // Avoid duplication
+      customPrompt: customPrompt || undefined
     };
     
-    const result = await llmService.generateQuestion(questionConfig, userPreferences);
+    const result = await llmService.generateQuestion(questionConfig);
     const newQuestionData = result.questionData;
+
+    // Debug logging for Summary regeneration
+    if (question.type === 'summary') {
+      console.log('🔄 REGENERATION: Summary question data received:');
+      console.log('📋 New question data:', JSON.stringify(newQuestionData, null, 2));
+      console.log('📝 Content field:', JSON.stringify(newQuestionData.content, null, 2));
+      console.log('🔑 Has keyPoints:', !!newQuestionData.content?.keyPoints);
+    }
 
     // Store previous version
     const previousData = {
@@ -427,9 +459,9 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       correctAnswer: question.correctAnswer
     };
 
-    // Update question
+    // Update question - use formatContentForDatabase for proper structure
     question.questionText = newQuestionData.questionText;
-    question.content = newQuestionData.content;
+    question.content = formatContentForDatabase(newQuestionData, question.type);
     question.correctAnswer = newQuestionData.correctAnswer;
     question.explanation = newQuestionData.explanation;
     
@@ -580,6 +612,15 @@ router.delete('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(a
     
     console.log(`✅ Deleted ${questionCount} questions from quiz ${quizId}`);
     
+    // Update folder stats after deleting questions
+    const Folder = require('../models/Folder');
+    const folder = await Folder.findOne({ quizzes: quizId });
+    if (folder) {
+      console.log('📊 Updating folder stats after question deletion...');
+      await folder.updateStats();
+      console.log('✅ Folder stats updated');
+    }
+    
     return successResponse(res, { 
       deletedCount: questionCount,
       quizId: quizId 
@@ -657,13 +698,34 @@ function formatContentForDatabase(generatedQuestion, questionType) {
     
     case 'cloze':
       return {
-        textWithBlanks: generatedQuestion.textWithBlanks || generatedQuestion.questionText || '',
-        blankOptions: generatedQuestion.blankOptions || [],
-        correctAnswers: generatedQuestion.correctAnswers || []
+        textWithBlanks: generatedQuestion.content?.textWithBlanks || generatedQuestion.textWithBlanks || generatedQuestion.questionText || '',
+        blankOptions: generatedQuestion.content?.blankOptions || generatedQuestion.blankOptions || [],
+        correctAnswers: generatedQuestion.content?.correctAnswers || generatedQuestion.correctAnswers || []
       };
     
+    case 'summary':
+      console.log('🔧 Formatting Summary content for database:');
+      console.log('📋 Generated question data keys:', Object.keys(generatedQuestion));
+      console.log('📝 generatedQuestion.content:', JSON.stringify(generatedQuestion.content, null, 2));
+      console.log('🔍 generatedQuestion.content type:', typeof generatedQuestion.content);
+      console.log('🔍 generatedQuestion.content exists:', !!generatedQuestion.content);
+      
+      // Check if content has keyPoints
+      if (generatedQuestion.content && generatedQuestion.content.keyPoints) {
+        console.log('✅ Found keyPoints in content:', generatedQuestion.content.keyPoints.length);
+        console.log('🔑 First keyPoint:', JSON.stringify(generatedQuestion.content.keyPoints[0], null, 2));
+      } else {
+        console.log('❌ No keyPoints found in content');
+        console.log('🔍 Available fields in generatedQuestion:', Object.keys(generatedQuestion));
+      }
+      
+      const summaryContent = generatedQuestion.content || {};
+      console.log('💾 Final content to save:', JSON.stringify(summaryContent, null, 2));
+      console.log('💾 Final content keys:', Object.keys(summaryContent));
+      return summaryContent;
+    
     default:
-      // For summary, discussion, and other text-based questions
+      // For discussion and other text-based questions
       return generatedQuestion.content || {};
   }
 }

@@ -7,7 +7,51 @@ import '../styles/components/NotificationSystem.css';
 
 interface Notification extends NotificationPayload {
     timestamp: number;
+    timeoutId?: NodeJS.Timeout;
 }
+
+// Timer Bar Component
+const TimerBar: React.FC<{ duration: number; onComplete: () => void }> = ({ duration, onComplete }) => {
+    const [timeLeft, setTimeLeft] = useState(duration);
+    const [isPaused, setIsPaused] = useState(false);
+
+    console.log('⏱️ TimerBar rendered:', { duration, timeLeft, isPaused });
+
+    useEffect(() => {
+        if (isPaused) return;
+
+        const interval = setInterval(() => {
+            setTimeLeft(prev => {
+                const newTime = prev - 100;
+                if (newTime <= 0) {
+                    clearInterval(interval);
+                    console.log('⏰ Timer completed, calling onComplete');
+                    onComplete();
+                    return 0;
+                }
+                return newTime;
+            });
+        }, 100);
+
+        return () => clearInterval(interval);
+    }, [onComplete, isPaused]);
+
+    const percentage = (timeLeft / duration) * 100;
+
+    return (
+        <div 
+            className="notification-timer"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+            style={{ backgroundColor: 'red' }} // Temporary debug color
+        >
+            <div 
+                className="notification-timer-bar" 
+                style={{ width: `${percentage}%`, backgroundColor: 'blue' }} // Temporary debug color
+            />
+        </div>
+    );
+};
 
 const NotificationSystem: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -17,10 +61,15 @@ const NotificationSystem: React.FC = () => {
         const showToken = subscribe<NotificationPayload>(
             PUBSUB_EVENTS.SHOW_NOTIFICATION,
             (data) => {
+                let timeoutId: NodeJS.Timeout | undefined;
+
                 const notification: Notification = {
                     ...data,
                     timestamp: Date.now(),
+                    timeoutId,
                 };
+
+                console.log('📥 Received notification:', notification);
 
                 // Check for duplicates before adding
                 setNotifications(prev => {
@@ -34,9 +83,16 @@ const NotificationSystem: React.FC = () => {
 
                 // Auto remove after duration
                 if (data.duration) {
-                    setTimeout(() => {
+                    timeoutId = setTimeout(() => {
                         removeNotification(data.id);
                     }, data.duration);
+                    
+                    // Update the notification with the timeout ID
+                    setNotifications(prev => 
+                        prev.map(n => 
+                            n.id === data.id ? { ...n, timeoutId } : n
+                        )
+                    );
                 }
             }
         );
@@ -54,7 +110,13 @@ const NotificationSystem: React.FC = () => {
     }, [subscribe]);
 
     const removeNotification = (id: string) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
+        setNotifications(prev => {
+            const notification = prev.find(n => n.id === id);
+            if (notification?.timeoutId) {
+                clearTimeout(notification.timeoutId);
+            }
+            return prev.filter(n => n.id !== id);
+        });
     };
 
     const getIcon = (type: string) => {
@@ -96,21 +158,32 @@ const NotificationSystem: React.FC = () => {
                     key={notification.id}
                     className={`notification-item ${getTypeClass(notification.type)}`}
                 >
-                    <div className="notification-content">
-                        <div className="notification-icon">
-                            {getIcon(notification.type)}
+                    <div className="notification-main">
+                        <div className="notification-content">
+                            <div className="notification-icon">
+                                {getIcon(notification.type)}
+                            </div>
+                            <div className="notification-text">
+                                <div className="notification-title">{notification.title}</div>
+                                <div className="notification-message">{notification.message}</div>
+                            </div>
                         </div>
-                        <div className="notification-text">
-                            <div className="notification-title">{notification.title}</div>
-                            <div className="notification-message">{notification.message}</div>
-                        </div>
+                        <button
+                            className="notification-close"
+                            onClick={() => removeNotification(notification.id)}
+                        >
+                            <X size={16} />
+                        </button>
                     </div>
-                    <button
-                        className="notification-close"
-                        onClick={() => removeNotification(notification.id)}
-                    >
-                        <X size={16} />
-                    </button>
+                    {notification.duration && (
+                        <>
+                            {console.log('🎯 Rendering TimerBar for notification:', notification.id, 'duration:', notification.duration)}
+                            <TimerBar 
+                                duration={notification.duration} 
+                                onComplete={() => removeNotification(notification.id)}
+                            />
+                        </>
+                    )}
                 </div>
             ))}
         </div>

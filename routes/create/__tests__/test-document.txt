@@ -1,0 +1,19 @@
+
+The Pragmatic Programmer emphasizes several key design principles for building evolvable systems:
+
+1. DRY (Don't Repeat Yourself): This principle states that every piece of knowledge must have a single, 
+unambiguous, authoritative representation within a system. By avoiding duplication, changes need to be 
+made in only one place, making the system more maintainable and evolvable.
+
+2. Orthogonality: Design components to be independent and self-contained. When components are orthogonal, 
+changes to one don't affect others, allowing the system to evolve more easily. This reduces risk and 
+makes testing simpler.
+
+3. Reversibility: Don't assume any decision is final. Design systems to be flexible enough to accommodate 
+change. Use abstractions and interfaces to insulate different parts of the system from each other.
+
+4. Tracer Bullets: Build a minimal end-to-end implementation first, then evolve it. This approach helps 
+you understand the system's architecture early and allows for rapid feedback and adjustment.
+
+5. Prototypes and Post-it Notes: Use cheap, disposable prototypes to explore ideas before committing to 
+a full implementation. This allows for experimentation without the cost of building production code.

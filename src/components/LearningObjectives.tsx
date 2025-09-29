@@ -34,6 +34,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const [manualObjectives, setManualObjectives] = useState<string[]>([]);
   const [newObjective, setNewObjective] = useState('');
   const [showNavigation, setShowNavigation] = useState(false);
+  const [targetObjectiveCount, setTargetObjectiveCount] = useState<number | ''>(''); // Allow empty input
   const navigationRef = useRef<HTMLDivElement>(null);
 
   // Use Redux objectives if available, otherwise fallback to props
@@ -124,8 +125,19 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return;
     }
 
+    const count = typeof targetObjectiveCount === 'number' ? targetObjectiveCount : parseInt(targetObjectiveCount.toString()) || 6;
+    
+    if (count < 1 || count > 20) {
+      alert('Please enter a number between 1 and 20 for learning objectives.');
+      return;
+    }
+
     try {
-      await dispatch(generateObjectives({ quizId, materialIds: assignedMaterials }));
+      await dispatch(generateObjectives({ 
+        quizId, 
+        materialIds: assignedMaterials, 
+        targetCount: count 
+      }));
       setMode('edit');
     } catch (error) {
       console.error('Failed to generate objectives:', error);
@@ -166,24 +178,22 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleDeleteObjective = async (index: number) => {
-    if (confirm('Are you sure you want to delete this learning objective?')) {
-      try {
-        // If using Redux objectives, delete via Redux
-        if (reduxObjectives.length > 0 && reduxObjectives[index]) {
-          const objectiveId = reduxObjectives[index]._id;
-          await dispatch(deleteObjective(objectiveId));
-        } else {
-          // Otherwise, delete from local state and save to backend
-          const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
-          const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
-          await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
-        }
-      } catch (error) {
-        console.error('Failed to delete objective:', error);
-        // Fallback to local state only
+    try {
+      // If using Redux objectives, delete via Redux
+      if (reduxObjectives.length > 0 && reduxObjectives[index]) {
+        const objectiveId = reduxObjectives[index]._id;
+        await dispatch(deleteObjective(objectiveId));
+      } else {
+        // Otherwise, delete from local state and save to backend
         const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
-        onObjectivesChange(updatedObjectives);
+        const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
+        await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
       }
+    } catch (error) {
+      console.error('Failed to delete objective:', error);
+      // Fallback to local state only
+      const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
+      onObjectivesChange(updatedObjectives);
     }
   };
 
@@ -221,7 +231,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
 
     const currentCount = currentObjectives.length;
-    if (confirm(`Are you sure you want to regenerate all ${currentCount} learning objectives? This will replace your current objectives with new AI-generated ones.`)) {
+    {
       try {
         console.log('🔄 Regenerate All: Starting with', currentCount, 'objectives');
         
@@ -248,8 +258,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const handleDeleteAll = async () => {
     console.log('🗑️ Delete All clicked - quizId:', quizId);
     
-    if (confirm('Are you sure you want to delete ALL learning objectives? This action cannot be undone.')) {
-      console.log('🗑️ Delete All confirmed - dispatching deleteAllObjectives with quizId:', quizId);
+    console.log('🗑️ Delete All confirmed - dispatching deleteAllObjectives with quizId:', quizId);
       
       try {
         // Use the dedicated delete all endpoint
@@ -259,16 +268,13 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         // Also clear local state
         onObjectivesChange([]);
         console.log('🗑️ Delete All completed successfully');
-      } catch (error) {
-        console.error('🗑️ Failed to delete all objectives:', error);
-        console.error('🗑️ Error details:', error.message, error.stack);
-        
-        // Fallback to clearing local state only
-        dispatch(clearObjectives());
-        onObjectivesChange([]);
-      }
-    } else {
-      console.log('🗑️ Delete All cancelled by user');
+    } catch (error) {
+      console.error('🗑️ Failed to delete all objectives:', error);
+      console.error('🗑️ Error details:', error.message, error.stack);
+      
+      // Fallback to clearing local state only
+      dispatch(clearObjectives());
+      onObjectivesChange([]);
     }
   };
 
@@ -283,7 +289,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       ? currentObjective.substring(0, 50) + '...' 
       : currentObjective;
 
-    if (confirm(`Are you sure you want to regenerate this learning objective?\n\nCurrent: "${truncatedObjective}"\n\nThis will be replaced with a new AI-generated objective based on your course materials.`)) {
+    {
       try {
         // If using Redux objectives, regenerate via Redux action
         if (reduxObjectives.length > 0 && reduxObjectives[index]) {
@@ -459,9 +465,49 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                       ) : (
                           <div className="generate-prompt">
                             <p>Generate learning objectives based on {assignedMaterials.length} assigned material(s)</p>
-                            <button className="btn btn-primary" onClick={handleGenerateObjectives}>
+                            
+                            <div className="objective-count-input">
+                              <label htmlFor="objectiveCount" className="input-label">
+                                Number of learning objectives to generate:
+                              </label>
+                              <input
+                                id="objectiveCount"
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={targetObjectiveCount}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  if (value === '') {
+                                    setTargetObjectiveCount('');
+                                  } else {
+                                    const numValue = parseInt(value);
+                                    if (!isNaN(numValue)) {
+                                      setTargetObjectiveCount(numValue);
+                                    }
+                                  }
+                                }}
+                                className="input number-input"
+                                placeholder="Enter number (e.g., 6)"
+                              />
+                              <small className="input-hint">
+                                Enter a number between 1 and 20 (default: 6)
+                              </small>
+                            </div>
+
+                            <button 
+                              className="btn btn-primary" 
+                              onClick={handleGenerateObjectives}
+                              disabled={
+                                targetObjectiveCount === '' || 
+                                (typeof targetObjectiveCount === 'number' && (targetObjectiveCount < 1 || targetObjectiveCount > 20))
+                              }
+                            >
                               <Sparkles size={16} />
-                              Generate Learning Objectives
+                              {targetObjectiveCount === '' ? 
+                                'Generate Learning Objectives' : 
+                                `Generate ${targetObjectiveCount} Learning Objective${targetObjectiveCount !== 1 ? 's' : ''}`
+                              }
                             </button>
                           </div>
                       )}

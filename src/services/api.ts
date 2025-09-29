@@ -227,6 +227,39 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
+  async getBlob(endpoint: string): Promise<Blob> {
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    const config: RequestInit = {
+      credentials: 'include',
+      method: 'GET',
+    };
+
+    try {
+      const response = await fetch(url, config);
+      
+      if (!response.ok) {
+        // Try to get error message if available
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const data = await response.json();
+          if (data && data.error) {
+            throw new ApiError(data.error.message, response.status, data.error.code, data.error.details);
+          }
+        }
+        throw new ApiError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+      }
+
+      return await response.blob();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      console.error('Blob download failed:', error);
+      throw new ApiError('Failed to download file', 0);
+    }
+  }
+
   // For file uploads (multipart/form-data)
   async upload<T>(endpoint: string, formData: FormData): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
@@ -617,8 +650,10 @@ export const questionsApi = {
   },
 
   // POST /api/create/questions/:id/regenerate - Regenerate specific question
-  regenerateQuestion: async (id: string): Promise<{ question: Question }> => {
-    const response = await apiClient.post<{ success: boolean; data: { question: Question }; message: string }>(`/questions/${id}/regenerate`, {});
+  regenerateQuestion: async (id: string, customPrompt?: string): Promise<{ question: Question }> => {
+    const response = await apiClient.post<{ success: boolean; data: { question: Question }; message: string }>(`/questions/${id}/regenerate`, {
+      customPrompt: customPrompt || undefined
+    });
     return response.data;
   },
 
@@ -656,6 +691,9 @@ export interface Question {
     textWithBlanks?: string;
     blankOptions?: string[][];
     correctAnswers?: string[];
+    title?: string;
+    additionalNotes?: string;
+    keyPoints?: Array<{ title: string; explanation: string }>;
   };
   correctAnswer: any;
   explanation?: string;
@@ -672,6 +710,17 @@ export interface Question {
   createdAt: string;
   updatedAt: string;
 }
+
+// Export API
+export const exportApi = {
+  exportToH5P: async (quizId: string): Promise<ApiResponse<{ exportId: string; filename: string; downloadUrl: string }>> => {
+    return await apiClient.post(`/export/h5p/${quizId}`);
+  },
+
+  downloadExport: async (exportId: string): Promise<Blob> => {
+    return await apiClient.getBlob(`/export/${exportId}/download`);
+  }
+};
 
 // Export the API client for other services
 export { apiClient };

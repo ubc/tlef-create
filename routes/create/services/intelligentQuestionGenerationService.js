@@ -27,13 +27,12 @@ class IntelligentQuestionGenerationService {
       console.log(`📝 Learning objectives: ${quizData.learningObjectives.length}`);
       console.log(`📄 Materials: ${quizData.materials.length}`);
 
-      // Step 2: Index materials in RAG system if not already done
-      if (quizData.materials.length > 0) {
-        const materialIds = quizData.materials.map(m => m._id);
-        console.log('🔍 Indexing materials in RAG system...');
-        
-        const indexResult = await ragService.indexQuizMaterials(quizId, materialIds);
-        console.log(`✅ RAG indexing result:`, indexResult);
+      // Step 2: Verify materials are already processed and embedded
+      const processedMaterials = quizData.materials.filter(m => m.processingStatus === 'completed');
+      console.log(`📊 Materials status: ${processedMaterials.length}/${quizData.materials.length} processed and embedded`);
+      
+      if (processedMaterials.length === 0) {
+        console.log('⚠️ No processed materials found for RAG retrieval');
       }
 
       // Step 3: Generate questions for each learning objective
@@ -52,27 +51,37 @@ class IntelligentQuestionGenerationService {
             generationConfig
           );
 
+          if (!questionConfigs || !Array.isArray(questionConfigs) || questionConfigs.length === 0) {
+            console.error(`❌ Failed to get question configs for LO:`, learningObjective._id);
+            console.error(`❌ questionConfigs result:`, questionConfigs);
+            console.error(`❌ generationPlan:`, quizData.generationPlan);
+            throw new Error(`Failed to get question configs for learning objective: ${learningObjective._id}`);
+          }
+
           console.log(`❓ Question types for this LO:`, 
             questionConfigs.map(c => `${c.count}x ${c.questionType}`).join(', '));
 
-          // Retrieve relevant content from RAG
+          // Retrieve relevant content from RAG using processed materials
+          const materialIds = processedMaterials.map(m => m._id.toString());
           const relevantContent = await ragService.retrieveRelevantContent(
             learningObjective.text,
             questionConfigs[0]?.questionType || 'multiple-choice',
             {
               topK: 5,
-              quizId: quizId,
+              materialIds: materialIds, // Filter by specific materials
               minScore: 0.3
             }
           );
 
-          console.log(`📊 Retrieved ${relevantContent.chunks.length} relevant content chunks`);
+          // Handle different formats of relevantContent response
+          const chunks = relevantContent?.chunks || (Array.isArray(relevantContent) ? relevantContent : []);
+          console.log(`📊 Retrieved ${chunks.length} relevant content chunks`);
 
           // Generate questions using LLM with user preferences
           const batchResult = await llmService.generateQuestionBatch({
             learningObjective: learningObjective.text,
             questionConfigs: questionConfigs,
-            relevantContent: relevantContent.chunks,
+            relevantContent: chunks, // Use the safely extracted chunks
             difficulty: generationConfig.difficulty || 'moderate',
             courseContext: this.buildCourseContext(quizData)
           }, userPreferences);
@@ -169,24 +178,37 @@ class IntelligentQuestionGenerationService {
         item => item.learningObjective.toString() === learningObjective._id.toString()
       );
       
-      if (breakdown && breakdown.questionTypes) {
-        return breakdown.questionTypes.map(qt => ({
+      if (breakdown && breakdown.questionTypes && Array.isArray(breakdown.questionTypes) && breakdown.questionTypes.length > 0) {
+        const configs = breakdown.questionTypes.map(qt => ({
           questionType: qt.type,
-          count: qt.count
+          count: qt.count || 1
         }));
+        return configs.filter(config => config.count > 0); // Remove zero-count items
       }
     }
 
     // Fallback to generation config or defaults
-    const defaultConfig = generationConfig?.questionTypes || [
-      { type: 'multiple-choice', count: 2 },
-      { type: 'true-false', count: 1 }
-    ];
+    let fallbackConfig = null;
+    
+    if (generationConfig?.questionTypes && Array.isArray(generationConfig.questionTypes) && generationConfig.questionTypes.length > 0) {
+      fallbackConfig = generationConfig.questionTypes;
+    } else {
+      // Robust fallback that includes all question types
+      fallbackConfig = [
+        { type: 'multiple-choice', count: 1 },
+        { type: 'true-false', count: 1 },
+        { type: 'flashcard', count: 1 },
+        { type: 'discussion', count: 1 },
+        { type: 'summary', count: 1 }
+      ];
+    }
 
-    return defaultConfig.map(config => ({
+    const result = fallbackConfig.map(config => ({
       questionType: config.type,
-      count: config.count
-    }));
+      count: config.count || 1
+    })).filter(config => config.count > 0); // Remove zero-count items
+    
+    return result;
   }
 
   /**

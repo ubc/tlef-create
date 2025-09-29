@@ -28,25 +28,6 @@ const userSchema = new mongoose.Schema({
     lastActivity: { type: Date, default: Date.now }
   },
 
-  // AI Model Preferences
-  preferences: {
-    llmProvider: {
-      type: String,
-      enum: ['ollama', 'openai'],
-      default: 'ollama'
-    },
-    llmModel: {
-      type: String,
-      default: function() {
-        return this.preferences?.llmProvider === 'openai' ? 'gpt-4o-mini' : 'llama3.1:8b';
-      }
-    },
-    // Store custom model parameters
-    llmSettings: {
-      temperature: { type: Number, default: 0.7, min: 0, max: 2 },
-      maxTokens: { type: Number, default: 2000, min: 100, max: 4000 }
-    }
-  }
 }, {
   timestamps: true, // Adds createdAt and updatedAt automatically
   collection: 'users'

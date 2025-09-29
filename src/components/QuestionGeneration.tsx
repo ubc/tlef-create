@@ -49,9 +49,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     // Initialize with default support approach distribution
     return {
       questionTypes: [
-        { type: 'multiple-choice', count: 1, percentage: 40, scope: 'per-lo', editMode: 'count' },
+        { type: 'multiple-choice', count: 1, percentage: 35, scope: 'per-lo', editMode: 'count' },
         { type: 'true-false', count: 1, percentage: 20, scope: 'per-lo', editMode: 'count' },
-        { type: 'flashcard', count: 1, percentage: 30, scope: 'per-lo', editMode: 'count' },
+        { type: 'flashcard', count: 1, percentage: 25, scope: 'per-lo', editMode: 'count' },
+        { type: 'discussion', count: 0, percentage: 10, scope: 'per-lo', editMode: 'count' },
         { type: 'summary', count: 0, percentage: 10, scope: 'per-lo', editMode: 'count' }
       ],
       totalQuestions: 3,
@@ -293,6 +294,92 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     showNotification('info', 'Plan Reset', 'You can now modify your approach and generate a new plan.');
   };
 
+  // Direct question generation without plan phase
+  const handleDirectGenerateQuestions = async (isRegeneration = false) => {
+    try {
+      setIsRegenerating(isRegeneration);
+      
+      // Delete existing questions if this is a regeneration
+      if (isRegeneration && hasExistingQuestions) {
+        await handleDeleteExistingQuestions();
+        showNotification('info', 'Questions Deleted', 'Previous questions deleted. Generating new ones...');
+      }
+      
+      // Create a plan data structure based on current approach settings
+      const effectiveQuestionsPerLO = approach === 'custom' ? customFormula.totalPerLO : questionsPerLO;
+      
+      const planData: any = {
+        quizId,
+        approach,
+        questionsPerLO: effectiveQuestionsPerLO
+      };
+      
+      // Add custom formula for advanced settings
+      if (approach === 'custom' || showAdvancedEdit) {
+        planData.customFormula = {
+          questionTypes: customFormula.questionTypes,
+          totalPerLO: customFormula.totalPerLO,
+          totalWholeQuiz: customFormula.totalWholeQuiz,
+          totalQuestions: (learningObjectives.length * customFormula.totalPerLO) + customFormula.totalWholeQuiz
+        };
+      }
+      
+      // Save current settings
+      saveQuizSettings(quizId);
+      
+      console.log('🎯 Direct generation with plan data:', planData);
+      
+      // Generate plan internally without showing plan phase
+      const planResult = await dispatch(generatePlan(planData));
+      console.log('✅ Plan generated internally:', planResult);
+      
+      // Get the generated plan and approve it
+      if (planResult.payload && planResult.payload._id) {
+        console.log('🔄 Approving generated plan:', planResult.payload._id);
+        await dispatch(approvePlan(planResult.payload._id));
+        console.log('✅ Plan approved, starting question generation');
+      } else {
+        throw new Error('Failed to get plan ID after generation');
+      }
+      
+      // Show generating state
+      showNotification('info', 'Generating Questions', 'AI is generating questions based on your approach...');
+      
+      // Small delay to ensure database is updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Call the question generation API
+      const result = await questionsApi.generateFromPlan(quizId);
+      console.log('🎉 Questions generated successfully:', result);
+      
+      // Store the generated questions
+      setQuestions(result.questions);
+      setHasExistingQuestions(result.questions.length > 0);
+      
+      const message = isRegeneration 
+        ? `Successfully regenerated ${result.questions.length} questions with ${approach} approach!`
+        : `Successfully generated ${result.questions.length} questions with ${approach} approach!`;
+      
+      showNotification('success', 'Questions Generated', message);
+      
+      // Redirect to Review & Edit page after generation
+      if (onQuestionsGenerated) {
+        // Small delay to allow notification to show
+        setTimeout(() => {
+          onQuestionsGenerated();
+        }, 1000);
+      }
+    } catch (error) {
+      console.error('Failed to generate questions:', error);
+      const errorMessage = isRegeneration 
+        ? 'Failed to regenerate questions'
+        : 'Failed to generate questions';
+      showNotification('error', 'Question Generation Failed', errorMessage);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const handleGenerateQuestions = async (isRegeneration = false) => {
     if (!currentPlan) return;
     
@@ -356,9 +443,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const getApproachDistribution = (approach: PedagogicalApproach, questionsPerLO: number) => {
     const distributions = {
       'support': {
-        'multiple-choice': 40,
+        'multiple-choice': 35,
         'true-false': 20,
-        'flashcard': 30,
+        'flashcard': 25,
+        'discussion': 10,
         'summary': 10
       },
       'assess': {
@@ -478,43 +566,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   return (
     <div className="question-generation">
-      {/* Phase indicator */}
-      <div className="phase-progress">
-        <div className="phase-steps">
-          <div className={`phase-step ${questions.length === 0 ? 'active' : 'completed'}`}>
-            <div className="step-indicator">
-              <div className="step-number">1</div>
-              {activePlan && <CheckCircle className="step-check" size={16} />}
-            </div>
-            <div className="step-content">
-              <div className="step-title">Plan Generation</div>
-            </div>
-          </div>
-          
-          <div className="phase-connector">
-            <div className={`connector-line ${questions.length > 0 ? 'completed' : ''}`}></div>
-          </div>
-          
-          <div className={`phase-step ${questions.length > 0 ? 'active' : ''}`}>
-            <div className="step-indicator">
-              <div className="step-number">2</div>
-              {questions.length > 0 && <CheckCircle className="step-check" size={16} />}
-            </div>
-            <div className="step-content">
-              <div className="step-title">Question Generation</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {questions.length === 0 ? (
-        // Phase 1: Plan Generation & Review
-        <div className="plan-phase">
+        // Direct Question Generation - no plan phase
+        <div className="generation-phase">
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Generation Plan</h3>
+              <h3 className="card-title">Generate Questions</h3>
               <p className="card-description">
-                Configure how questions will be generated based on your learning objectives and pedagogical approach
+                Configure your pedagogical approach and generate questions directly from your learning objectives
               </p>
             </div>
 
@@ -642,148 +701,38 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
               }}
             />
 
-            {/* Generate Plan Button */}
-            <div className="plan-action">
+            {/* Direct Generate Questions Button */}
+            <div className="generation-action">
               <button
-                className="btn btn-primary"
-                onClick={handleGeneratePlan}
-                disabled={generating || learningObjectives.length === 0 || assignedMaterials.length === 0}
+                className="btn btn-primary btn-lg"
+                onClick={handleDirectGenerateQuestions}
+                disabled={generating || isRegenerating || learningObjectives.length === 0 || assignedMaterials.length === 0}
               >
-                {generating ? (
+                {generating || isRegenerating ? (
                   <>
                     <div className="loading-spinner"></div>
-                    Generating Plan...
+                    Generating Questions...
                   </>
                 ) : (
                   <>
-                    <Wand2 size={16} />
-                    Generate Plan
+                    <Wand2 size={18} />
+                    Generate Questions
                   </>
                 )}
               </button>
-            </div>
-          </div>
-
-          {/* Plan Review */}
-          {currentPlan && (
-            <div className="card">
-              <div className="card-header">
-                <div className="card-header-content">
-                  <div>
-                    <h3 className="card-title">Plan Review</h3>
-                    <p className="card-description">
-                      Review the generated plan and approve it to proceed with question generation
-                    </p>
-                  </div>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={handleGoBackToPlan}
-                    disabled={loading || isRegenerating}
-                  >
-                    <Settings size={16} />
-                    Change Approach
-                  </button>
-                </div>
-              </div>
-
-              <div className="plan-summary">
-                {/* Plan Overview Cards */}
-                <div className="plan-overview">
-                  <div className="overview-card">
-                    <div className="overview-label">Approach</div>
-                    <div className="overview-value">{currentPlan.approach}</div>
-                  </div>
-                  <div className="overview-card">
-                    <div className="overview-label">Questions per LO</div>
-                    <div className="overview-value">{currentPlan.questionsPerLO}</div>
-                  </div>
-                  <div className="overview-card">
-                    <div className="overview-label">Total Questions</div>
-                    <div className="overview-value">{currentPlan.totalQuestions}</div>
-                  </div>
-                </div>
-
-                {/* Question Type Distribution */}
-                <div className="plan-section-card">
-                  <div className="section-header">
-                    <h4 className="section-title">Question Type Distribution</h4>
-                  </div>
-                  <div className="distribution-grid">
-                    {currentPlan.distribution.map((dist, index) => (
-                      <div key={index} className="distribution-item-card">
-                        <div className="distribution-header">
-                          <span className="question-type-label">{dist.type.replace('-', ' ')}</span>
-                          <span className="question-percentage">{dist.percentage}%</span>
-                        </div>
-                        <div className="question-count-large">{dist.totalCount}</div>
-                        <div className="question-count-label">questions</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Breakdown by Learning Objective */}
-                <div className="plan-section-card">
-                  <div className="section-header">
-                    <h4 className="section-title">Breakdown by Learning Objective</h4>
-                  </div>
-                  <div className="breakdown-grid">
-                    {currentPlan.breakdown.map((item, index) => (
-                      <div key={index} className="breakdown-item-card">
-                        <div className="lo-header">
-                          <div className="lo-number">LO {index + 1}</div>
-                        </div>
-                        <div className="lo-text">
-                          {typeof item.learningObjective === 'string' 
-                            ? learningObjectives[index] 
-                            : item.learningObjective.text}
-                        </div>
-                        <div className="lo-question-types">
-                          {item.questionTypes.map((qt, qtIndex) => (
-                            <div key={qtIndex} className="question-type-badge">
-                              <span className="question-count-badge">{qt.count}</span>
-                              <span className="question-type-name">{qt.type.replace('-', ' ')}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="plan-actions">
+              
+              {hasExistingQuestions && (
                 <button
-                  className="btn btn-secondary btn-lg"
-                  onClick={handleGoBackToPlan}
-                  disabled={loading || isRegenerating}
-                >
-                  <Settings size={18} />
-                  Change Approach & Regenerate Plan
-                </button>
-                
-                {hasExistingQuestions && (
-                  <button
-                    className="btn btn-warning"
-                    onClick={() => handleGenerateQuestions(true)}
-                    disabled={loading || isRegenerating}
-                  >
-                    <Wand2 size={16} />
-                    Regenerate Questions
-                  </button>
-                )}
-                
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handleGenerateQuestions(false)}
-                  disabled={loading || isRegenerating}
+                  className="btn btn-warning"
+                  onClick={() => handleDirectGenerateQuestions(true)}
+                  disabled={generating || isRegenerating}
                 >
                   <Wand2 size={16} />
-                  {hasExistingQuestions ? 'Add More Questions' : 'Generate Questions'}
+                  Regenerate All Questions
                 </button>
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       ) : (
         // Show Generated Questions Directly (No intermediate page)
@@ -854,7 +803,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
               <div className="prompt-analysis-actions">
                 <button
                   className="btn btn-secondary"
-                  onClick={handleGoBackToPlan}
+                  onClick={() => {
+                    // Reset to allow approach change and regeneration
+                    setQuestions([]);
+                    setHasExistingQuestions(false);
+                    showNotification('info', 'Settings Reset', 'You can now change your approach and regenerate questions.');
+                  }}
                   disabled={loading || isRegenerating}
                 >
                   <Settings size={16} />
@@ -864,11 +818,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
                 {hasExistingQuestions && (
                   <button
                     className="btn btn-warning"
-                    onClick={() => handleGenerateQuestions(true)}
+                    onClick={() => handleDirectGenerateQuestions(true)}
                     disabled={loading || isRegenerating}
                   >
                     <Wand2 size={16} />
-                    Regenerate with Same Plan
+                    Regenerate with Same Approach
                   </button>
                 )}
               </div>

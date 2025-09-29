@@ -48,6 +48,22 @@ const Dashboard = () => {
   const totalQuizzes = folders?.reduce((total, folder) => total + (folder.stats?.totalQuizzes || 0), 0) || 0;
   const totalQuestions = folders?.reduce((total, folder) => total + (folder.stats?.totalQuestions || 0), 0) || 0;
   const totalMaterials = folders?.reduce((total, folder) => total + (folder.stats?.totalMaterials || 0), 0) || 0;
+  
+  // Calculate time saved (5 minutes per question)
+  const totalMinutes = totalQuestions * 5;
+  const formatTimeSaved = (minutes: number) => {
+    if (minutes < 60) {
+      return `${minutes} min`;
+    } else {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      if (remainingMinutes === 0) {
+        return `${hours}h`;
+      } else {
+        return `${hours}h ${remainingMinutes}m`;
+      }
+    }
+  };
 
   return (
       <div>
@@ -72,7 +88,7 @@ const Dashboard = () => {
 
           <div className="card stat-card">
             <Clock size={24} style={{ margin: '0 auto var(--spacing-sm)', color: 'var(--color-primary)' }} />
-            <div className="stat-number">~{Math.floor(totalQuestions * 2.5)}h</div>
+            <div className="stat-number">~{formatTimeSaved(totalMinutes)}</div>
             <div className="stat-label">Time Saved</div>
           </div>
         </div>

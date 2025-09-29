@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import MaterialUpload from './MaterialUpload';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { foldersApi, materialsApi, Folder, Material, Quiz, ApiError } from '../services/api';
 import '../styles/components/CourseView.css';
 
@@ -25,6 +25,8 @@ const CourseView = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (courseId) {
@@ -170,13 +172,55 @@ const CourseView = () => {
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
+  const handleDeleteCourse = async () => {
+    if (!course || !courseId) return;
+    
+    setIsDeleting(true);
+    console.log('🗑️ CourseView: Deleting course:', courseId);
+    
+    try {
+      // Call the API to delete the course (this will cascade delete everything)
+      await foldersApi.deleteFolder(courseId);
+      console.log('✅ CourseView: Course deleted successfully');
+      
+      // Navigate back to dashboard
+      navigate('/');
+      
+    } catch (err) {
+      console.error('❌ CourseView: Failed to delete course:', err);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      
+      if (err instanceof ApiError) {
+        if (err.isAuthError()) {
+          alert('Your session has expired. Please log in again.');
+          window.location.href = '/login';
+        } else {
+          alert(`Failed to delete course: ${err.message}`);
+        }
+      } else {
+        alert('Failed to delete course. Please try again.');
+      }
+    }
+  };
+
   return (
     <div className="course-view">
       <div className="course-header">
-        <button className="btn btn-ghost" onClick={() => navigate('/')}>
-          <ArrowLeft size={16} />
-          Back to Dashboard
-        </button>
+        <div className="course-header-nav">
+          <button className="btn btn-ghost" onClick={() => navigate('/')}>
+            <ArrowLeft size={16} />
+            Back to Dashboard
+          </button>
+          <button 
+            className="btn btn-danger btn-outline" 
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isDeleting}
+          >
+            <Trash2 size={16} />
+            {isDeleting ? 'Deleting...' : 'Delete Course'}
+          </button>
+        </div>
         <h1>{course.name}</h1>
         <p className="course-description">
           Manage materials and quizzes for {course.name}
@@ -231,6 +275,44 @@ const CourseView = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Delete Course</h3>
+            </div>
+            <div className="modal-body">
+              <p><strong>Are you sure you want to delete "{course.name}"?</strong></p>
+              <p>This will permanently delete:</p>
+              <ul>
+                <li>All {materials.length} materials and their processed chunks</li>
+                <li>All {course.quizzes.length} quizzes and their questions</li>
+                <li>All vector database embeddings for this course</li>
+              </ul>
+              <p className="warning-text">⚠️ This action cannot be undone!</p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteCourse}
+                disabled={isDeleting}
+              >
+                <Trash2 size={16} />
+                {isDeleting ? 'Deleting...' : 'Yes, Delete Course'}
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
