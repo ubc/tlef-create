@@ -59,7 +59,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     try {
       setLoading(true);
       const result = await questionsApi.getQuestions(quizId);
-      console.log('📝 Loaded questions for review:', result.questions.length);
+      // console.log('📝 Loaded questions for review:', result.questions.length);
       setQuestions(result.questions.map(q => ({ ...q, isEditing: false })));
     } catch (error) {
       console.error('Failed to load questions:', error);

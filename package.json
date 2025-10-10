@@ -33,6 +33,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@reduxjs/toolkit": "^2.8.2",
     "@tanstack/react-query": "^5.56.2",
+    "agenda": "^5.0.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
@@ -43,6 +44,7 @@
     "date-fns": "^3.6.0",
     "dotenv": "^17.0.1",
     "embla-carousel-react": "^8.3.0",
+    "eventsource": "^4.0.0",
     "express": "^4.21.2",
     "express-rate-limit": "^8.0.1",
     "express-session": "^1.18.2",
@@ -74,6 +76,7 @@
     "ubc-genai-toolkit-embeddings": "^0.1.0",
     "ubc-genai-toolkit-llm": "^0.1.0",
     "ubc-genai-toolkit-rag": "^0.1.2",
+    "uuid": "^13.0.0",
     "vaul": "^0.9.3",
     "zod": "^3.23.8"
   },

@@ -91,6 +91,168 @@ class QuizLLMService {
 
 
   /**
+   * Generate a question with streaming support using LLM + RAG content
+   * @param {Object} questionConfig - Question configuration
+   * @param {Function} onStreamChunk - Callback for streaming text chunks
+   */
+  async generateQuestionStreaming(questionConfig, onStreamChunk = null) {
+    const {
+      learningObjective,
+      questionType,
+      relevantContent = [],
+      difficulty = 'moderate',
+      courseContext = '',
+      previousQuestions = [],
+      customPrompt = null
+    } = questionConfig;
+
+    console.log(`🎯 Generating ${questionType} question with streaming...`);
+    console.log(`📝 Learning Objective: ${learningObjective.substring(0, 100)}...`);
+    console.log(`📚 Using ${relevantContent.length} content chunks`);
+
+    if (!this.llm) {
+      throw new Error('LLM service not initialized. Please check Ollama/OpenAI configuration.');
+    }
+
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model} (streaming mode)`);
+
+    try {
+      // Build expert-level prompt
+      const prompt = this.buildExpertPrompt(
+        learningObjective, 
+        questionType, 
+        relevantContent, 
+        difficulty,
+        courseContext,
+        previousQuestions,
+        customPrompt
+      );
+
+      console.log(`📋 Generated prompt (${prompt.length} chars)`);
+
+      // Call LLM with streaming support
+      const startTime = Date.now();
+      const temperature = this.getTemperatureForQuestionType(questionType);
+      const maxTokens = 2000;
+      
+      let accumulatedContent = '';
+      let responseModel = model;
+      
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      
+      // Add streaming option
+      options.stream = true;
+      
+      console.log(`🌊 Starting streaming generation...`);
+      
+      // Check if the LLM service supports streaming
+      const response = await this.llm.sendMessage(prompt, {
+        ...options,
+        onStreamChunk: (chunk) => {
+          try {
+            // Handle different streaming formats
+            let textChunk = '';
+            
+            if (typeof chunk === 'string') {
+              textChunk = chunk;
+            } else if (chunk.content) {
+              textChunk = chunk.content;
+            } else if (chunk.delta?.content) {
+              textChunk = chunk.delta.content;
+            } else if (chunk.choices?.[0]?.delta?.content) {
+              textChunk = chunk.choices[0].delta.content;
+            }
+            
+            if (textChunk) {
+              accumulatedContent += textChunk;
+              
+              // Call the streaming callback if provided
+              if (onStreamChunk) {
+                onStreamChunk(textChunk, {
+                  totalLength: accumulatedContent.length,
+                  partial: true
+                });
+              }
+            }
+            
+            // Track model info if available
+            if (chunk.model) {
+              responseModel = chunk.model;
+            }
+            
+          } catch (chunkError) {
+            console.error('❌ Error processing stream chunk:', chunkError);
+          }
+        }
+      });
+
+      const processingTime = Date.now() - startTime;
+      console.log(`⏱️ Streaming completed in ${processingTime}ms`);
+      
+      // Use accumulated content if streaming worked, otherwise fallback to response content
+      const finalContent = accumulatedContent || response.content || '';
+      console.log(`🔍 Final content length: ${finalContent.length} chars`);
+
+      // Final streaming callback
+      if (onStreamChunk) {
+        onStreamChunk('', { 
+          totalLength: finalContent.length, 
+          partial: false, 
+          completed: true 
+        });
+      }
+
+      // Parse and validate response
+      const questionData = this.parseAndValidateResponse(finalContent, questionType);
+      
+      // Log generated Summary questions for debugging
+      if (questionType === 'summary') {
+        console.log('📋 SUMMARY QUESTION GENERATED (STREAMING):');
+        console.log('🎯 Question Text:', questionData.questionText);
+        console.log('📝 Explanation:', questionData.explanation);
+        console.log('📚 Content Structure:', JSON.stringify(questionData.content, null, 2));
+        if (questionData.content?.keyPoints) {
+          console.log('🔑 Key Points Generated:');
+          questionData.content.keyPoints.forEach((keyPoint, index) => {
+            console.log(`   ${index + 1}. Title: "${keyPoint.title}"`);
+            console.log(`      Explanation: "${keyPoint.explanation.substring(0, 100)}..."`);
+          });
+        }
+      }
+      
+      return {
+        success: true,
+        questionData: {
+          ...questionData,
+          type: questionType,
+          difficulty: difficulty || 'moderate',
+          generationMetadata: {
+            llmModel: responseModel,
+            generationPrompt: prompt,
+            learningObjective: learningObjective,
+            contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
+            processingTime: processingTime,
+            temperature: this.getTemperatureForQuestionType(questionType),
+            generationMethod: 'llm-rag-enhanced-streaming',
+            contentScore: this.calculateContentRelevanceScore(relevantContent),
+            confidence: this.estimateQuestionQuality(questionData),
+            streamingEnabled: true,
+            finalContentLength: finalContent.length
+          }
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Streaming generation failed: ${error.message}`);
+      console.error('🔄 Falling back to non-streaming generation...');
+      
+      // Fallback to regular generation if streaming fails
+      return this.generateQuestion(questionConfig);
+    }
+  }
+
+  /**
    * Generate a high-quality question using LLM + RAG content
    */
   async generateQuestion(questionConfig) {

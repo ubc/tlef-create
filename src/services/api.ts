@@ -622,6 +622,31 @@ export const questionsApi = {
     return response.data;
   },
 
+  // POST /api/create/streaming/generate-questions - Start streaming question generation
+  generateQuestionsStreaming: async (
+    quizId: string, 
+    questionConfigs: any[], 
+    generationPlan?: any
+  ): Promise<{ sessionId: string; jobId: string; sseEndpoint: string }> => {
+    const response = await apiClient.post<{ 
+      success: boolean; 
+      sessionId: string; 
+      jobId: string; 
+      message: string;
+      sseEndpoint: string;
+    }>('/streaming/generate-questions', { 
+      quizId, 
+      questionConfigs, 
+      generationPlan 
+    });
+    
+    return {
+      sessionId: response.sessionId,
+      jobId: response.jobId,
+      sseEndpoint: response.sseEndpoint
+    };
+  },
+
   // POST /api/create/questions - Create manual question
   createQuestion: async (questionData: {
     quizId: string;

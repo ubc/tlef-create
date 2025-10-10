@@ -15,7 +15,7 @@ const TimerBar: React.FC<{ duration: number; onComplete: () => void }> = ({ dura
     const [timeLeft, setTimeLeft] = useState(duration);
     const [isPaused, setIsPaused] = useState(false);
 
-    console.log('⏱️ TimerBar rendered:', { duration, timeLeft, isPaused });
+    // console.log('⏱️ TimerBar rendered:', { duration, timeLeft, isPaused });
 
     useEffect(() => {
         if (isPaused) return;
@@ -177,7 +177,7 @@ const NotificationSystem: React.FC = () => {
                     </div>
                     {notification.duration && (
                         <>
-                            {console.log('🎯 Rendering TimerBar for notification:', notification.id, 'duration:', notification.duration)}
+                            {/* {console.log('🎯 Rendering TimerBar for notification:', notification.id, 'duration:', notification.duration)} */}
                             <TimerBar 
                                 duration={notification.duration} 
                                 onComplete={() => removeNotification(notification.id)}
