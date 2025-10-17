@@ -31,12 +31,12 @@
 
 /* Create Course Button Specific Styling */
 .sidebar-header .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-muted);
-    color: var(--color-foreground);
-    border-color: var(--color-border);
+    background-color: #4a4a4a;
+    color: #ffffff;
+    border-color: #4a4a4a;
     opacity: 1;
-    transform: none;
-    box-shadow: none;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 
 .sidebar-section {

@@ -35,7 +35,8 @@
 }
 
 .btn-default:hover {
-  background-color: color-mix(in srgb, var(--color-primary) 90%, white);
+  background-color: #4a4a4a;
+  color: #ffffff;
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
