@@ -66,25 +66,56 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
   const finalSessionId = sessionId || uuidv4();
 
   try {
+    // Fetch quiz with learning objectives to get ObjectIds
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const quiz = await Quiz.findById(quizId).populate('learningObjectives');
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    console.log(`📚 Found ${quiz.learningObjectives.length} learning objectives for quiz`);
+
+    // Map learning objective text to ObjectIds
+    const enrichedConfigs = questionConfigs.map((config, index) => {
+      let learningObjective;
+
+      if (config.learningObjectiveIndex !== undefined) {
+        // Use the specified index
+        learningObjective = quiz.learningObjectives[config.learningObjectiveIndex];
+      } else if (config.learningObjective) {
+        // Try to match by text
+        learningObjective = quiz.learningObjectives.find(lo => lo.text === config.learningObjective);
+      } else {
+        // Default to cycling through learning objectives
+        learningObjective = quiz.learningObjectives[index % quiz.learningObjectives.length];
+      }
+
+      return {
+        ...config,
+        learningObjective: learningObjective || quiz.learningObjectives[0] // Fallback to first LO
+      };
+    });
+
     // Notify batch start via SSE
     sseService.notifyBatchStarted(finalSessionId, {
       quizId,
-      totalQuestions: questionConfigs.length,
-      questionTypes: questionConfigs.map(config => config.questionType),
+      totalQuestions: enrichedConfigs.length,
+      questionTypes: enrichedConfigs.map(config => config.questionType),
       userId
     });
 
     // Process questions directly (bypassing job queue for now)
     console.log('🎯 Processing questions directly for immediate streaming');
-    
+
     // Import question streaming service
     const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
     
     // Process questions in parallel
-    const questionPromises = questionConfigs.map(async (config, index) => {
+    const questionPromises = enrichedConfigs.map(async (config, index) => {
       const questionId = `question-${index + 1}`;
       console.log(`🚀 Starting generation for ${questionId} (${config.questionType})`);
-      
+
       try {
         await questionStreamingService.generateQuestionWithStreaming({
           quizId,
@@ -92,7 +123,8 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
           questionConfig: config,
           learningObjective: config.learningObjective,
           relevantContent: config.relevantContent,
-          sessionId: finalSessionId
+          sessionId: finalSessionId,
+          userId: userId // Pass the user ID for the createdBy field
         });
         console.log(`✅ Completed generation for ${questionId}`);
       } catch (error) {
@@ -101,12 +133,12 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
         sseService.emitError(finalSessionId, questionId, error.message, 'generation-error');
       }
     });
-    
+
     // Process all questions in parallel (non-blocking)
     Promise.all(questionPromises).then(() => {
       console.log('🎉 All questions completed, sending batch complete notification');
       sseService.notifyBatchComplete(finalSessionId, {
-        totalGenerated: questionConfigs.length,
+        totalGenerated: enrichedConfigs.length,
         totalTime: 'completed'
       });
     }).catch((error) => {
@@ -514,14 +546,26 @@ router.post('/test-real-llm-with-db', asyncHandler(async (req, res) => {
   console.log(`📊 Question configs received:`, questionConfigs?.length || 0);
 
   try {
+    // Import required models
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const LearningObjective = (await import('../models/LearningObjective.js')).default;
+
+    // Get quiz and its learning objectives
+    const quiz = await Quiz.findById(quizId).populate('learningObjectives');
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    console.log(`📚 Found ${quiz.learningObjectives.length} learning objectives for quiz`);
+
     // Import LLM service directly
     const { default: llmService } = await import('../services/llmService.js');
-    
+
     // Check if LLM service is properly initialized
     if (!llmService.llm) {
       throw new Error('LLM service not initialized. Please check Ollama configuration.');
     }
-    
+
     console.log('✅ LLM service is initialized');
     
     // Use provided questionConfigs or create default ones
@@ -593,12 +637,19 @@ router.post('/test-real-llm-with-db', asyncHandler(async (req, res) => {
       if (quizId && result.success && result.questionData) {
         try {
           const Question = (await import('../models/Question.js')).default;
-          
-          // Generate valid ObjectIds for required fields
-          const { ObjectId } = await import('mongodb');
-          const testLearningObjectiveId = new ObjectId();
-          const testUserId = new ObjectId();
-          
+
+          // Get the learning objective for this question
+          // For now, use the first learning objective or cycle through them
+          const learningObjectiveIndex = config.learningObjectiveIndex || (i % quiz.learningObjectives.length);
+          const learningObjectiveId = quiz.learningObjectives[learningObjectiveIndex]?._id;
+
+          if (!learningObjectiveId) {
+            console.error(`❌ No learning objective found for question ${i + 1}`);
+            throw new Error('Learning objective not found');
+          }
+
+          console.log(`📚 Using learning objective ${learningObjectiveIndex} for question ${i + 1}`);
+
           const newQuestion = new Question({
             quiz: quizId,
             type: result.questionData.type,
@@ -608,15 +659,22 @@ router.post('/test-real-llm-with-db', asyncHandler(async (req, res) => {
             explanation: result.questionData.explanation,
             content: result.questionData.content || {},
             difficulty: result.questionData.difficulty,
-            learningObjective: testLearningObjectiveId, // Use valid ObjectId
+            learningObjective: learningObjectiveId, // Use actual learning objective ID from quiz
             order: i,
             reviewStatus: 'pending',
-            createdBy: testUserId, // Use valid ObjectId
+            createdBy: quiz.createdBy, // Use quiz owner's ID
             generationMetadata: result.questionData.generationMetadata
           });
 
           const savedQuestion = await newQuestion.save();
           console.log(`💾 Saved streaming question ${i + 1} to database: ${savedQuestion._id}`);
+          
+          // Add question to quiz (like in main branch) 
+          const quizForUpdate = await Quiz.findById(quizId);
+          if (quizForUpdate) {
+            await quizForUpdate.addQuestion(savedQuestion._id);
+            console.log(`📊 Added question to quiz ${quizId} questions array`);
+          }
           
           // Update the question data with the saved ID
           result.questionData._id = savedQuestion._id;

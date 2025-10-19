@@ -224,14 +224,19 @@ class QuizLLMService {
       
       return {
         success: true,
+        promptUsed: prompt, // Add the prompt used for the question generation
         questionData: {
           ...questionData,
           type: questionType,
           difficulty: difficulty || 'moderate',
+          prompt: prompt, // Also add it to questionData for backward compatibility
           generationMetadata: {
             llmModel: responseModel,
             generationPrompt: prompt,
             learningObjective: learningObjective,
+            subObjective: this.generateSubObjective(learningObjective, questionType),
+            focusArea: this.extractFocusArea(learningObjective, questionType),
+            complexity: this.determineComplexity(learningObjective, questionType),
             contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
             processingTime: processingTime,
             temperature: this.getTemperatureForQuestionType(questionType),
@@ -333,6 +338,9 @@ class QuizLLMService {
             llmModel: response.model || 'llama3.1:8b',
             generationPrompt: prompt,
             learningObjective: learningObjective,
+            subObjective: this.generateSubObjective(learningObjective, questionType),
+            focusArea: this.extractFocusArea(learningObjective, questionType),
+            complexity: this.determineComplexity(learningObjective, questionType),
             contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
             processingTime: processingTime,
             temperature: this.getTemperatureForQuestionType(questionType),
@@ -524,17 +532,22 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
    * Simple JSON cleaning that handles the most common issues
    */
   simpleJsonClean(jsonString) {
+    // First, remove trailing commas before closing braces/brackets
+    // This is a common LLM error: {"key": "value",} or ["item",]
+    let cleaned = jsonString
+      .replace(/,\s*}/g, '}')  // Remove comma before }
+      .replace(/,\s*]/g, ']'); // Remove comma before ]
+
     // The most common issue is literal newlines in string values
     // We need to carefully replace newlines only within string values
-    
-    let cleaned = jsonString;
+
     let inString = false;
     let result = '';
     let i = 0;
-    
+
     while (i < cleaned.length) {
       const char = cleaned[i];
-      
+
       if (char === '"' && (i === 0 || cleaned[i-1] !== '\\')) {
         // Toggle string state
         inString = !inString;
@@ -1291,6 +1304,80 @@ Provide only the improved learning objective as your response (no additional tex
 
     console.log(`✅ Batch generation complete: ${results.totalGenerated}/${results.totalRequested} questions generated`);
     return results;
+  }
+
+  /**
+   * Generate sub-objective based on learning objective and question type
+   */
+  generateSubObjective(learningObjective, questionType) {
+    const types = {
+      'multiple-choice': 'conceptual understanding and application',
+      'true-false': 'validation of key principles and facts',
+      'flashcard': 'recall and memorization of important concepts',
+      'discussion': 'critical thinking and analysis',
+      'summary': 'synthesis and comprehensive understanding'
+    };
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || 'learning objective';
+    return `Students will demonstrate ${types[questionType] || 'understanding'} of ${loText.substring(0, 50)}${loText.length > 50 ? '...' : ''}`;
+  }
+
+  /**
+   * Extract focus area from learning objective
+   */
+  extractFocusArea(learningObjective, questionType) {
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || '';
+    const focusKeywords = [
+      'conceptual understanding', 'practical application', 'analytical thinking',
+      'synthesis', 'evaluation', 'problem-solving', 'real-world relevance',
+      'critical analysis', 'knowledge integration', 'skill development'
+    ];
+    
+    for (const keyword of focusKeywords) {
+      if (loText.toLowerCase().includes(keyword)) {
+        return keyword;
+      }
+    }
+    
+    // Default based on question type
+    const typeDefaults = {
+      'multiple-choice': 'conceptual understanding',
+      'true-false': 'knowledge validation',
+      'flashcard': 'recall and memorization',
+      'discussion': 'critical analysis',
+      'summary': 'synthesis'
+    };
+    
+    return typeDefaults[questionType] || 'general knowledge';
+  }
+
+  /**
+   * Determine complexity level based on learning objective and question type
+   */
+  determineComplexity(learningObjective, questionType) {
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || '';
+    const complexityIndicators = {
+      high: ['synthesis', 'evaluation', 'analysis', 'compare', 'evaluate', 'synthesize', 'create', 'design'],
+      medium: ['application', 'apply', 'demonstrate', 'solve', 'use', 'implement', 'calculate'],
+      low: ['recall', 'memorize', 'identify', 'define', 'list', 'describe', 'explain']
+    };
+    
+    const lowerText = loText.toLowerCase();
+    for (const [level, indicators] of Object.entries(complexityIndicators)) {
+      if (indicators.some(indicator => lowerText.includes(indicator))) {
+        return level;
+      }
+    }
+    
+    // Default based on question type
+    const typeDefaults = {
+      'multiple-choice': 'medium',
+      'true-false': 'low',
+      'flashcard': 'low',
+      'discussion': 'high',
+      'summary': 'high'
+    };
+    
+    return typeDefaults[questionType] || 'medium';
   }
 }
 

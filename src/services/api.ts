@@ -612,14 +612,14 @@ export const plansApi = {
 export const questionsApi = {
   // GET /api/create/questions/quiz/:quizId - Get quiz questions
   getQuestions: async (quizId: string): Promise<{ questions: Question[] }> => {
-    const response = await apiClient.get<{ success: boolean; data: { questions: Question[] }; message: string }>(`/questions/quiz/${quizId}`);
-    return response.data;
+    const response = await apiClient.get<{ questions: Question[] }>(`/questions/quiz/${quizId}`);
+    return response.data; // API client already unwraps to just the data object
   },
 
   // POST /api/create/questions/generate-from-plan - Generate questions from approved plan
   generateFromPlan: async (quizId: string): Promise<{ questions: Question[]; metadata: any }> => {
-    const response = await apiClient.post<{ success: boolean; data: { questions: Question[]; metadata: any }; message: string }>('/questions/generate-from-plan', { quizId });
-    return response.data;
+    const response = await apiClient.post<any>('/questions/generate-from-plan', { quizId });
+    return response.data; // API client already unwraps to just the data object
   },
 
   // POST /api/create/streaming/generate-questions - Start streaming question generation

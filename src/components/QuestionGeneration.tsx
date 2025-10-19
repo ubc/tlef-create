@@ -537,22 +537,22 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         batchStarted: false
       });
       
-      // Start LLM generation using test endpoint with database save
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/test-real-llm-with-db`, {
+      // Start production streaming generation
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/generate-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include session cookies for authentication
         body: JSON.stringify({
           sessionId: sessionId,
-          questionConfigs: questionConfigs, // Pass the full question configs array
-          quizId: quizId || '507f1f77bcf86cd799439013', // Use valid ObjectId if not provided
-          learningObjective: learningObjectives[0] || 'Test learning objective'
+          quizId: quizId,
+          questionConfigs: questionConfigs // Pass the full question configs with learningObjective in each config
         })
       });
       
       const result = await response.json();
-      console.log('📡 Test streaming with DB started:', result);
+      console.log('📡 Streaming generation started:', result);
       
       // Small delay to allow SSE connection to establish before backend sends events
       await new Promise(resolve => setTimeout(resolve, 500));
