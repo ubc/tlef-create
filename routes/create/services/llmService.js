@@ -20,9 +20,9 @@ class QuizLLMService {
     
     try {
       // Initialize LLM module with configurable provider
-      const provider = process.env.LLM_PROVIDER || 'ollama';
-      
-      if (provider === 'openai') {
+      this.provider = process.env.LLM_PROVIDER || 'ollama';
+
+      if (this.provider === 'openai') {
         // Initialize with OpenAI
         this.llm = new LLMModule({
           provider: 'openai',
@@ -146,47 +146,85 @@ class QuizLLMService {
       options.stream = true;
       
       console.log(`🌊 Starting streaming generation...`);
-      
-      // Check if the LLM service supports streaming
-      const response = await this.llm.sendMessage(prompt, {
-        ...options,
-        onStreamChunk: (chunk) => {
-          try {
-            // Handle different streaming formats
-            let textChunk = '';
-            
-            if (typeof chunk === 'string') {
-              textChunk = chunk;
-            } else if (chunk.content) {
-              textChunk = chunk.content;
-            } else if (chunk.delta?.content) {
-              textChunk = chunk.delta.content;
-            } else if (chunk.choices?.[0]?.delta?.content) {
-              textChunk = chunk.choices[0].delta.content;
+
+      let response;
+
+      // Use direct OpenAI API for better streaming control
+      if (this.provider === 'openai') {
+        console.log('🔧 Using direct OpenAI streaming API');
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY
+        });
+
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: temperature,
+          max_tokens: maxTokens,
+          stream: true
+        });
+
+        for await (const chunk of stream) {
+          const textChunk = chunk.choices[0]?.delta?.content;
+          if (textChunk) {
+            accumulatedContent += textChunk;
+            console.log(`📝 Received chunk: "${textChunk}" (total: ${accumulatedContent.length})`);
+
+            // Call the streaming callback if provided
+            if (onStreamChunk) {
+              onStreamChunk(textChunk, {
+                totalLength: accumulatedContent.length,
+                partial: true
+              });
             }
-            
-            if (textChunk) {
-              accumulatedContent += textChunk;
-              
-              // Call the streaming callback if provided
-              if (onStreamChunk) {
-                onStreamChunk(textChunk, {
-                  totalLength: accumulatedContent.length,
-                  partial: true
-                });
-              }
-            }
-            
-            // Track model info if available
-            if (chunk.model) {
-              responseModel = chunk.model;
-            }
-            
-          } catch (chunkError) {
-            console.error('❌ Error processing stream chunk:', chunkError);
           }
         }
-      });
+
+        responseModel = model;
+        response = { content: accumulatedContent, model: responseModel };
+      } else {
+        // Fallback to toolkit for non-OpenAI providers
+        response = await this.llm.sendMessage(prompt, {
+          ...options,
+          onStreamChunk: (chunk) => {
+            try {
+              // Handle different streaming formats
+              let textChunk = '';
+
+              if (typeof chunk === 'string') {
+                textChunk = chunk;
+              } else if (chunk.content) {
+                textChunk = chunk.content;
+              } else if (chunk.delta?.content) {
+                textChunk = chunk.delta.content;
+              } else if (chunk.choices?.[0]?.delta?.content) {
+                textChunk = chunk.choices[0].delta.content;
+              }
+
+              if (textChunk) {
+                accumulatedContent += textChunk;
+
+                // Call the streaming callback if provided
+                if (onStreamChunk) {
+                  onStreamChunk(textChunk, {
+                    totalLength: accumulatedContent.length,
+                    partial: true
+                  });
+                }
+              }
+
+              // Track model info if available
+              if (chunk.model) {
+                responseModel = chunk.model;
+              }
+
+            } catch (chunkError) {
+              console.error('❌ Error processing stream chunk:', chunkError);
+            }
+          }
+        });
+      }
 
       const processingTime = Date.now() - startTime;
       console.log(`⏱️ Streaming completed in ${processingTime}ms`);

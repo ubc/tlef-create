@@ -79,8 +79,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     };
   });
   
-  // SSE URL for streaming - use test endpoint for now (no auth required)
-  // TODO: In production, implement token-based auth for SSE since EventSource doesn't support credentials
+  // SSE URL for streaming - use test endpoint (no auth required for EventSource limitation)
   const sseUrl = streamingState.sessionId ? `${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/test-sse/${streamingState.sessionId}` : null;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalJustSaved, setModalJustSaved] = useState(false);
@@ -536,7 +535,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         totalQuestions: questionConfigs.length,
         batchStarted: false
       });
-      
+
+      // CRITICAL: Wait for SSE connection to establish BEFORE starting generation
+      console.log('⏳ Waiting for SSE connection to establish...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for SSE to connect
+      console.log('✅ SSE connection should be ready, starting generation...');
+
       // Start production streaming generation
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/generate-questions`, {
         method: 'POST',
@@ -550,12 +554,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           questionConfigs: questionConfigs // Pass the full question configs with learningObjective in each config
         })
       });
-      
+
       const result = await response.json();
       console.log('📡 Streaming generation started:', result);
-      
-      // Small delay to allow SSE connection to establish before backend sends events
-      await new Promise(resolve => setTimeout(resolve, 500));
       
       showNotification('success', 'Streaming Started', 'Questions are being generated in real-time. Watch them appear below!');
       
@@ -995,8 +996,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
                       {questionProgress.chunks.length > 0 && (
                         <div className="streaming-text">
                           <div className="text-preview">
-                            {questionProgress.chunks.join('').substring(0, 150)}
-                            {questionProgress.chunks.join('').length > 150 && '...'}
+                            {questionProgress.chunks.join('')}
                             <span className="cursor-blink">|</span>
                           </div>
                         </div>
