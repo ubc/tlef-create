@@ -47,6 +47,19 @@ const Sidebar = () => {
     });
   }, [subscribe]);
 
+  // Global keyboard shortcut for search (⌘K or Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearchModal(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const loadFolders = async () => {
     console.log('🔄 Sidebar: Loading folders from API...');
     try {

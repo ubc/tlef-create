@@ -222,6 +222,21 @@
     border-color: var(--color-primary);
 }
 
+.search-result-card:hover .search-result-title,
+.search-result-card.selected .search-result-title {
+    color: white;
+}
+
+.search-result-card:hover .search-result-snippet,
+.search-result-card.selected .search-result-snippet {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.search-result-card:hover .search-result-breadcrumb,
+.search-result-card.selected .search-result-breadcrumb {
+    color: rgba(255, 255, 255, 0.7);
+}
+
 .search-result-icon-badge {
     display: flex;
     align-items: center;
