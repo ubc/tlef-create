@@ -340,3 +340,37 @@
         align-self: flex-end;
     }
 }
+
+/* Material Processing Status */
+.material-processing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xs);
+}
+
+.material-processing .spinner {
+    animation: spin 1s linear infinite;
+    color: var(--color-primary);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.processing-badge {
+    display: inline-block;
+    margin-left: var(--spacing-xs);
+    padding: 2px var(--spacing-xs);
+    background-color: var(--color-warning);
+    color: var(--color-warning-foreground);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}

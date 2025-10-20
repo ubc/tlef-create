@@ -747,5 +747,24 @@ export const exportApi = {
   }
 };
 
+// Search API
+export interface SearchResult {
+  type: 'material' | 'question' | 'learning-objective';
+  id: string;
+  title: string;
+  snippet: string;
+  courseName: string;
+  courseId: string;
+  quizName?: string;
+  quizId?: string;
+  navigationPath: string;
+}
+
+export const searchApi = {
+  search: async (query: string): Promise<ApiResponse<{ results: SearchResult[]; counts: { materials: number; questions: number; objectives: number; total: number } }>> => {
+    return await apiClient.get(`/search?q=${encodeURIComponent(query)}`);
+  }
+};
+
 // Export the API client for other services
 export { apiClient };

@@ -183,6 +183,73 @@ class JobQueueService {
       }
     });
 
+    // Material processing job (chunking and embedding)
+    this.agenda.define('process-material', async (job) => {
+      const { materialId } = job.attrs.data;
+
+      console.log(`🔄 Processing material chunking job: ${materialId}`);
+
+      try {
+        // Import models and services
+        const Material = (await import('../models/Material.js')).default;
+        const ragService = (await import('../services/ragService.js')).default;
+        const FileService = (await import('../services/fileService.js')).default;
+
+        // Check if material still exists (may have been deleted)
+        const material = await Material.findById(materialId);
+        if (!material) {
+          console.log(`⚠️ Material ${materialId} no longer exists, skipping processing`);
+          return; // Job completes successfully but does nothing
+        }
+
+        console.log(`🔄 Chunking and embedding material: ${material.name}`);
+
+        // Process and embed the material
+        const result = await ragService.processAndEmbedMaterial(material);
+
+        if (result.success) {
+          // Check again if material still exists before updating
+          const stillExists = await Material.findById(materialId);
+          if (!stillExists) {
+            console.log(`⚠️ Material ${materialId} was deleted during processing, cleaning up vectors...`);
+            await ragService.cleanupMaterialEmbeddings(materialId);
+            return;
+          }
+
+          await material.markAsCompleted();
+          console.log(`✅ Material processed and embedded: ${material.name}`);
+          console.log(`📊 Created ${result.chunksCount} chunks, embedded successfully`);
+
+          // Clean up original file after successful processing
+          if (material.filePath) {
+            await FileService.deleteFile(material.filePath);
+            console.log(`🗑️ Original file cleaned up: ${material.filePath}`);
+            material.filePath = null;
+            await material.save();
+          }
+        } else {
+          await material.markAsFailed(result.error);
+          console.error(`❌ Failed to process material: ${result.error}`);
+        }
+
+      } catch (error) {
+        console.error(`❌ Material processing job failed: ${materialId}`, error);
+
+        // Try to mark as failed in database
+        try {
+          const Material = (await import('../models/Material.js')).default;
+          const material = await Material.findById(materialId);
+          if (material) {
+            await material.markAsFailed(error);
+          }
+        } catch (updateError) {
+          console.error('Failed to update material status:', updateError);
+        }
+
+        throw error;
+      }
+    });
+
     console.log('📋 Job definitions registered');
   }
 
@@ -231,6 +298,49 @@ class JobQueueService {
       sessionId,
       generationPlan
     });
+  }
+
+  /**
+   * Schedule material processing (chunking and embedding)
+   */
+  async scheduleMaterialProcessing(materialId) {
+    return this.addJob('process-material', { materialId });
+  }
+
+  /**
+   * Cancel all material processing jobs for a specific folder
+   */
+  async cancelMaterialJobsForFolder(folderMaterialIds) {
+    if (!this.isInitialized || !folderMaterialIds || folderMaterialIds.length === 0) {
+      return;
+    }
+
+    try {
+      console.log(`🛑 Cancelling ${folderMaterialIds.length} material processing jobs...`);
+
+      // Find all pending/running jobs for these materials
+      const materialIdStrings = folderMaterialIds.map(id => id.toString());
+      const jobs = await this.agenda.jobs({
+        'name': 'process-material',
+        'data.materialId': { $in: materialIdStrings },
+        $or: [
+          { 'nextRunAt': { $exists: true } },  // Scheduled
+          { 'lockedAt': { $exists: true } }     // Running
+        ]
+      });
+
+      console.log(`📋 Found ${jobs.length} jobs to cancel`);
+
+      // Cancel each job
+      for (const job of jobs) {
+        await job.remove();
+        console.log(`✅ Cancelled material processing job: ${job.attrs.data.materialId}`);
+      }
+
+      console.log(`✅ Cancelled all material processing jobs for folder`);
+    } catch (error) {
+      console.error('❌ Failed to cancel material jobs:', error);
+    }
   }
 
   /**

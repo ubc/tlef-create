@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Upload, Link, FileText, X, Plus } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, Link, FileText, X, Plus, Loader2 } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/MaterialUpload.css';
 
@@ -11,6 +11,7 @@ interface Material {
   content?: string;
   uploadProgress?: number;
   isUploading?: boolean;
+  processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
 }
 
 interface MaterialUploadProps {
@@ -240,7 +241,10 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
               <div className="materials-list">
                 <h4>Materials ({materials.length})</h4>
                 <div className="materials-grid">
-                  {allMaterials.map((material) => (
+                  {allMaterials.map((material) => {
+                    const isProcessing = material.processingStatus === 'pending' || material.processingStatus === 'processing';
+
+                    return (
                       <div key={material.id} className="material-card">
                         <div className="material-info">
                           {getFileIcon(material.type)}
@@ -248,17 +252,29 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                             <div className="material-name">{material.name}</div>
                             <div className="material-meta">
                               {material.type.toUpperCase()} • {material.uploadDate}
+                              {isProcessing && (
+                                <span className="processing-badge">
+                                  Processing...
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        <button
-                            className="btn btn-ghost material-remove"
-                            onClick={() => onRemoveMaterial(material.id)}
-                        >
-                          <X size={16} />
-                        </button>
+                        {isProcessing ? (
+                          <div className="material-processing">
+                            <Loader2 size={16} className="spinner" />
+                          </div>
+                        ) : (
+                          <button
+                              className="btn btn-ghost material-remove"
+                              onClick={() => onRemoveMaterial(material.id)}
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
                       </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
           )}

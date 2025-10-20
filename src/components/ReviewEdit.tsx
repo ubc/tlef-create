@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
@@ -16,6 +17,7 @@ interface ExtendedQuestion extends Question {
 }
 
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
+  const [searchParams] = useSearchParams();
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
@@ -54,6 +56,28 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   useEffect(() => {
     loadQuestions();
   }, [quizId]);
+
+  // Scroll to specific question if questionId is in URL
+  useEffect(() => {
+    const questionId = searchParams.get('questionId');
+    if (questionId && questions.length > 0 && !loading) {
+      // Wait a bit for DOM to render
+      setTimeout(() => {
+        const questionElement = document.getElementById(`question-${questionId}`);
+        if (questionElement) {
+          questionElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+          // Add a highlight effect
+          questionElement.classList.add('highlight-question');
+          setTimeout(() => {
+            questionElement.classList.remove('highlight-question');
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [searchParams, questions, loading]);
 
   const loadQuestions = async () => {
     try {
@@ -1361,7 +1385,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             ) : (
               // Edit mode - show questions as editable list items
               filteredQuestions.map((question, index) => (
-                <div key={question._id} className="question-item">
+                <div key={question._id} id={`question-${question._id}`} className="question-item">
                   <div className="question-header">
                     <div className="question-meta">
                       <span className="question-number">Q{index + 1}</span>

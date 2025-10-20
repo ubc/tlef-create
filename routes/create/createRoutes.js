@@ -14,6 +14,7 @@ import planController from './controllers/planController.js';
 import questionController from './controllers/questionController.js';
 import exportController from './controllers/exportController.js';
 import streamingController from './controllers/streamingController.js';
+import searchController from './controllers/searchController.js';
 
 const router = express.Router();
 
@@ -96,6 +97,7 @@ router.use('/plans', planController);
 router.use('/questions', questionController);
 router.use('/export', exportController);
 router.use('/streaming', streamingController);
+router.use('/search', searchController);
 
 // 404 handler for unknown API routes
 router.use((req, res) => {

@@ -92,35 +92,17 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
       // Add to folder
       await folder.addMaterial(material._id);
 
-      // Process material immediately (chunk and embed)
+      // Schedule material processing via job queue
+      await material.markAsProcessing();
+      console.log(`🔄 Scheduling material processing job for: ${material.name}`);
+
       try {
-        console.log(`🔄 Starting immediate processing for material: ${material.name}`);
-        await material.markAsProcessing();
-        
-        // Import RAG service for immediate processing
-        const ragService = await import('../services/ragService.js');
-        const result = await ragService.default.processAndEmbedMaterial(material);
-        
-        if (result.success) {
-          await material.markAsCompleted();
-          console.log(`✅ Material processed and embedded: ${material.name}`);
-          console.log(`📊 Created ${result.chunksCount} chunks, embedded successfully`);
-          
-          // Clean up original file after successful processing
-          await FileService.deleteFile(material.filePath);
-          console.log(`🗑️ Original file cleaned up: ${material.filePath}`);
-          
-          // Clear file path since file is deleted
-          material.filePath = null;
-          await material.save();
-        } else {
-          await material.markAsFailed(result.error);
-          console.error(`❌ Failed to process material: ${result.error}`);
-        }
-      } catch (processingError) {
-        console.error(`❌ Failed to process material:`, processingError);
-        await material.markAsFailed(processingError);
-        // Don't fail the upload, just mark as failed
+        const jobQueueService = (await import('../services/jobQueueService.js')).default;
+        await jobQueueService.scheduleMaterialProcessing(material._id.toString());
+        console.log(`✅ Material processing job scheduled: ${material.name}`);
+      } catch (jobError) {
+        console.error(`❌ Failed to schedule processing job:`, jobError);
+        await material.markAsFailed(jobError);
       }
 
       materials.push(material);

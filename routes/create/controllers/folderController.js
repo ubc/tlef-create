@@ -200,14 +200,21 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
   console.log(`📊 Folder "${folder.name}" contains: ${folder.materials.length} materials, ${folder.quizzes.length} quizzes`);
 
   try {
-    // Import models needed for cascade deletion
+    // Import models and services needed for cascade deletion
     const Material = await import('../models/Material.js');
     const Quiz = await import('../models/Quiz.js');
     const Question = await import('../models/Question.js');
     const LearningObjective = await import('../models/LearningObjective.js');
     const GenerationPlan = await import('../models/GenerationPlan.js');
     const ragService = await import('../services/ragService.js');
-    
+    const jobQueueService = await import('../services/jobQueueService.js');
+
+    // Step 0: Cancel any pending/running material processing jobs
+    if (folder.materials.length > 0) {
+      console.log('🛑 Cancelling pending material processing jobs...');
+      await jobQueueService.default.cancelMaterialJobsForFolder(folder.materials);
+    }
+
     // Step 1: Delete all vector embeddings for materials in this folder
     if (folder.materials.length > 0) {
       console.log('🔄 Cleaning up vector database embeddings...');

@@ -4,16 +4,19 @@ import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
+import SearchModal from './SearchModal';
 import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Sidebar.css';
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { subscribe } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingQuizForFolder, setCreatingQuizForFolder] = useState<string | null>(null);
@@ -21,6 +24,28 @@ const Sidebar = () => {
   useEffect(() => {
     loadFolders();
   }, []);
+
+  // Listen for course deletion events
+  useEffect(() => {
+    subscribe('course-deleted', (data: any) => {
+      console.log('🗑️ Sidebar: Received course-deleted event:', data);
+      if (data?.courseId) {
+        // Remove the deleted course from the sidebar
+        setFolders(prev => prev.filter(folder => folder._id !== data.courseId));
+        console.log('✅ Sidebar: Course removed from list:', data.courseId);
+      }
+    });
+    // Cleanup is automatically handled by usePubSub hook
+  }, [subscribe]);
+
+  // Listen for quiz deletion events
+  useEffect(() => {
+    subscribe('quiz-deleted', (data: any) => {
+      console.log('🗑️ Sidebar: Received quiz-deleted event:', data);
+      // Reload folders to get updated quiz list
+      loadFolders();
+    });
+  }, [subscribe]);
 
   const loadFolders = async () => {
     console.log('🔄 Sidebar: Loading folders from API...');
@@ -112,16 +137,31 @@ const Sidebar = () => {
   };
 
   const handleAddQuiz = async (folderId: string) => {
-    if (creatingQuizForFolder) return;
-    
+    if (creatingQuizForFolder || loading) return;
+
     setCreatingQuizForFolder(folderId);
     try {
       // Find the current folder to get existing quiz count
       const folder = folders.find(f => f._id === folderId);
-      if (!folder) return;
+      if (!folder) {
+        setCreatingQuizForFolder(null);
+        return;
+      }
       
       // Generate a name for the new quiz
-      const quizNumber = (folder.quizzes?.length || 0) + 1;
+      // Find the lowest available quiz number
+      const existingNumbers = folder.quizzes
+        ?.map((q: any) => {
+          const match = q.name?.match(/^Quiz (\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter((n: number) => n > 0) || [];
+
+      let quizNumber = 1;
+      while (existingNumbers.includes(quizNumber)) {
+        quizNumber++;
+      }
+
       const quizName = `Quiz ${quizNumber}`;
       
       const response = await quizApi.createQuiz(quizName, folderId);
@@ -143,6 +183,7 @@ const Sidebar = () => {
     }
   };
 
+
   return (
       <>
         <div className="sidebar">
@@ -159,24 +200,14 @@ const Sidebar = () => {
           </div>
 
           <div className="sidebar-section">
-            <h2 className="sidebar-section-title">Search chats</h2>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-muted-foreground)'
-              }} />
-              <input
-                  type="text"
-                  placeholder="Search conversations..."
-                  className="input"
-                  style={{ paddingLeft: '40px' }}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <button
+                className="search-trigger-button"
+                onClick={() => setShowSearchModal(true)}
+            >
+              <Search size={16} />
+              <span>Search...</span>
+              <kbd className="search-kbd">⌘K</kbd>
+            </button>
           </div>
 
           <div className="sidebar-section">
@@ -261,6 +292,11 @@ const Sidebar = () => {
             isOpen={showCreateModal}
             onClose={() => setShowCreateModal(false)}
             onSubmit={handleCreateCourse}
+        />
+
+        <SearchModal
+            isOpen={showSearchModal}
+            onClose={() => setShowSearchModal(false)}
         />
       </>
   );

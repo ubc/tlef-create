@@ -178,15 +178,23 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
   const quizId = req.params.id;
   const userId = req.user.id;
 
+  console.log('🗑️ Deleting quiz:', quizId, 'for user:', userId);
+
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
   if (!quiz) {
+    console.log('❌ Quiz not found or user does not own it');
     return notFoundResponse(res, 'Quiz');
   }
+
+  console.log('✅ Quiz found:', quiz.name, 'in folder:', quiz.folder);
 
   // Remove from folder
   const folder = await Folder.findById(quiz.folder);
   if (folder) {
+    console.log('📁 Removing quiz from folder:', folder.name);
     await folder.removeQuiz(quizId);
+    await folder.save();
+    console.log('✅ Quiz removed from folder and saved');
   }
 
   // Delete associated data
@@ -196,14 +204,28 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
     import('../models/GenerationPlan.js').then(m => m.default)
   ]);
 
-  await Promise.all([
+  console.log('🗑️ Deleting associated data...');
+  const deletionResults = await Promise.all([
     LearningObjective.deleteMany({ quiz: quizId }),
     Question.deleteMany({ quiz: quizId }),
     GenerationPlan.deleteMany({ quiz: quizId })
   ]);
+  console.log('✅ Deleted:', deletionResults[0].deletedCount, 'objectives,',
+    deletionResults[1].deletedCount, 'questions,',
+    deletionResults[2].deletedCount, 'plans');
 
   // Delete quiz
-  await Quiz.findByIdAndDelete(quizId);
+  console.log('🗑️ Deleting quiz document...');
+  const deleteResult = await Quiz.findByIdAndDelete(quizId);
+  console.log('✅ Quiz deleted:', deleteResult ? deleteResult.name : 'NOT FOUND');
+
+  // Verify deletion
+  const verifyDeleted = await Quiz.findById(quizId);
+  if (verifyDeleted) {
+    console.error('❌ ERROR: Quiz still exists after deletion!', verifyDeleted);
+  } else {
+    console.log('✅ Verification: Quiz no longer exists in database');
+  }
 
   return successResponse(res, null, 'Quiz deleted successfully');
 }));
