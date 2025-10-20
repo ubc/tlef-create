@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User } from 'lucide-react';
@@ -11,9 +11,10 @@ import '../styles/components/Sidebar.css';
 
 const Sidebar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const { activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
-  const { subscribe } = usePubSub('Sidebar');
+  const { subscribe, publish } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -24,6 +25,41 @@ const Sidebar = () => {
   useEffect(() => {
     loadFolders();
   }, []);
+
+  // Automatically select course and quiz based on URL, and clear selection on dashboard
+  useEffect(() => {
+    const pathParts = location.pathname.split('/').filter(Boolean);
+
+    // Check if we're on the dashboard (root path or just '/')
+    if (pathParts.length === 0 || location.pathname === '/') {
+      // Clear selections when on dashboard
+      dispatch(setActiveCourse(''));
+      dispatch(setActiveQuiz(''));
+      return;
+    }
+
+    // Match pattern: /course/:courseId or /course/:courseId/quiz/:quizId
+    if (pathParts[0] === 'course' && pathParts[1]) {
+      const courseId = pathParts[1];
+
+      // Set active course
+      dispatch(setActiveCourse(courseId));
+
+      // Expand the course to show its quizzes
+      if (!expandedCourses.includes(courseId)) {
+        setExpandedCourses(prev => [...prev, courseId]);
+      }
+
+      // If there's a quiz in the URL, set it as active
+      if (pathParts[2] === 'quiz' && pathParts[3]) {
+        const quizId = pathParts[3];
+        dispatch(setActiveQuiz(quizId));
+      } else {
+        // Clear quiz selection if we're just on the course page
+        dispatch(setActiveQuiz(''));
+      }
+    }
+  }, [location.pathname, dispatch]);
 
   // Listen for course deletion events
   useEffect(() => {
@@ -99,42 +135,75 @@ const Sidebar = () => {
     try {
       const response = await foldersApi.createFolder(courseName, 1);
       console.log('✅ Sidebar: Folder created with Quiz 1:', response.folder);
-      
+
+      // Immediately add the new folder to the sidebar state
+      setFolders(prev => [response.folder, ...prev]);
+      console.log('📋 Sidebar: Added new folder to state immediately');
+
       // Upload materials to the created folder
       if (materials.length > 0) {
         console.log('📁 Uploading materials to folder:', materials);
         console.log('📁 Folder ID for upload:', response.folder._id);
-        
-        for (const material of materials) {
-          try {
-            console.log('🔄 Processing material:', material);
-            switch (material.type) {
-              case 'pdf':
-              case 'docx':
-                if (material.file) {
-                  console.log('📄 Uploading file:', material.file.name);
-                  const files = [material.file];
-                  await materialsApi.uploadFiles(response.folder._id, files as any);
-                }
-                break;
-              case 'url':
-                console.log('🔗 Adding URL:', material.content || material.name);
-                await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
-                break;
-              case 'text':
-                console.log('📝 Adding text material:', material.name);
-                await materialsApi.addText(response.folder._id, material.content || '', material.name);
-                break;
-            }
-          } catch (materialError) {
-            console.error('❌ Failed to upload material:', material.name, materialError);
+
+        // Separate materials by type
+        const fileMaterials = materials.filter(m => m.type === 'pdf' || m.type === 'docx');
+        const urlMaterials = materials.filter(m => m.type === 'url');
+        const textMaterials = materials.filter(m => m.type === 'text');
+
+        // Upload all files at once
+        if (fileMaterials.length > 0) {
+          console.log(`📄 Uploading ${fileMaterials.length} files together`);
+          const files = fileMaterials.map(m => m.file).filter(Boolean) as File[];
+          if (files.length > 0) {
+            console.log(`📋 Files to upload:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+            // Create a DataTransfer object to convert File[] to FileList
+            const dataTransfer = new DataTransfer();
+            files.forEach(file => {
+              console.log(`➕ Adding file to DataTransfer: ${file.name}`);
+              dataTransfer.items.add(file);
+            });
+            console.log(`📤 Sending ${dataTransfer.files.length} files to API`);
+            const uploadResponse = await materialsApi.uploadFiles(response.folder._id, dataTransfer.files);
+            console.log(`✅ Upload response:`, uploadResponse);
+            console.log(`✅ Uploaded ${uploadResponse.materials?.length || 0} materials successfully`);
           }
         }
+
+        // Upload URLs one by one (they need individual names)
+        for (const material of urlMaterials) {
+          try {
+            console.log('🔗 Adding URL:', material.content || material.name);
+            await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
+          } catch (materialError) {
+            console.error('❌ Failed to upload URL material:', material.name, materialError);
+          }
+        }
+
+        // Upload text materials one by one (they need individual content and names)
+        for (const material of textMaterials) {
+          try {
+            console.log('📝 Adding text material:', material.name);
+            await materialsApi.addText(response.folder._id, material.content || '', material.name);
+          } catch (materialError) {
+            console.error('❌ Failed to upload text material:', material.name, materialError);
+          }
+        }
+
         console.log('✅ All materials processed');
+
+        // Reload folders to update material counts
+        await loadFolders();
       }
-      
-      // Reload folders to get the updated list
-      await loadFolders();
+
+      // Publish course-created event for other components
+      publish('course-created', { courseId: response.folder._id, courseName: response.folder.name });
+
+      // Automatically open the newly created course
+      const newCourseId = response.folder._id;
+      dispatch(setActiveCourse(newCourseId));
+      setExpandedCourses(prev => [...prev, newCourseId]);
+      navigate(`/course/${newCourseId}`);
+      console.log(`✅ Navigated to newly created course: ${newCourseId}`);
     } catch (err) {
       console.error('❌ Sidebar: Failed to create folder:', err);
       if (err instanceof ApiError) {

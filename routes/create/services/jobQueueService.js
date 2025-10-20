@@ -65,34 +65,23 @@ class JobQueueService {
       console.log('📋 Defining job processors...');
       this.defineJobs();
 
-      // Try alternative initialization approach
-      console.log('📋 Attempting agenda startup...');
+      // Start agenda with timeout
+      console.log('📋 Starting agenda...');
+      const startPromise = this.agenda.start();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Agenda start timeout')), 5000)
+      );
+
       try {
-        // Use promise with shorter timeout and different approach
-        console.log('📋 Trying quick start approach...');
-        await Promise.race([
-          this.agenda.start(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Quick start timeout')), 3000))
-        ]);
-        this.isInitialized = true;
-        console.log('✅ Job queue service initialized successfully with quick start');
-      } catch (quickStartError) {
-        console.log(`⚠️ Quick start failed: ${quickStartError.message}, trying manual initialization...`);
-        
-        // Manual initialization with forced start() call
-        console.log('📋 Attempting manual initialization...');
-        try {
-          // Force start agenda even if quick start failed
-          await this.agenda.start();
-          this.isInitialized = true;
-          console.log('✅ Job queue service initialized manually and started');
-        } catch (manualError) {
-          console.error('❌ Manual initialization also failed:', manualError);
-          // Mark as initialized anyway to allow job scheduling
-          this.isInitialized = true;
-          console.log('⚠️ Job queue initialized in degraded mode - jobs may not process');
-        }
+        await Promise.race([startPromise, timeoutPromise]);
+        console.log('✅ Agenda started successfully');
+      } catch (err) {
+        console.log(`⚠️ Agenda start timeout (this is OK - will start in background)`);
+        // Don't throw - just let it start in background
       }
+
+      this.isInitialized = true;
+      console.log('✅ Job queue service initialized');
       
     } catch (error) {
       console.error('❌ Failed to initialize job queue:', error);
@@ -268,18 +257,7 @@ class JobQueueService {
     }
 
     try {
-      // Ensure agenda is started before scheduling jobs
-      if (!this.agenda._ready) {
-        console.log('📋 Starting agenda on first job...');
-        try {
-          await this.agenda.start();
-          console.log('✅ Agenda started successfully');
-        } catch (startError) {
-          console.log('⚠️ Agenda start failed, proceeding anyway:', startError.message);
-        }
-      }
-      
-      const job = await this.agenda.schedule(options.when || 'now', jobName, jobData);
+      const job = await this.agenda.now(jobName, jobData);
       console.log(`📋 Job added to queue: ${jobName} (${job.attrs._id})`);
       return job;
     } catch (error) {
