@@ -35,9 +35,9 @@ class QuestionStreamingService {
       // Create streaming callback
       const onStreamChunk = (textChunk, metadata) => {
         console.log(`📝 onStreamChunk called for ${questionId}: partial=${metadata.partial}, textLength=${textChunk?.length}, totalLength=${metadata.totalLength}`);
-        
+
         if (metadata.partial && textChunk) {
-          // Stream the text chunk to the client
+          // Stream the text chunk to the client (real-time streaming)
           console.log(`📤 Sending text chunk to SSE for ${questionId}: "${textChunk.substring(0, 50)}..."`);
           const sent = sseService.streamTextChunk(sessionId, questionId, textChunk, {
             totalLength: metadata.totalLength,
@@ -45,9 +45,16 @@ class QuestionStreamingService {
             timestamp: new Date().toISOString()
           });
           console.log(`📡 SSE send result: ${sent}`);
-        } else if (metadata.completed) {
-          // Generation completed
+        } else if (metadata.completed && metadata.totalLength > 0) {
+          // Generation completed without streaming chunks (Ollama bulk response)
+          // Send a final "progress" indicator showing generation is done
           console.log(`🌊 Streaming completed for ${questionId}, total length: ${metadata.totalLength}`);
+          console.log(`📤 Sending completion indicator to SSE`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'completed',
+            message: 'Question generated successfully',
+            totalLength: metadata.totalLength
+          });
         }
       };
 

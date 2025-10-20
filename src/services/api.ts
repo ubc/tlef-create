@@ -622,6 +622,95 @@ export const questionsApi = {
     return response.data; // API client already unwraps to just the data object
   },
 
+  // POST /api/create/questions/generate-from-plan-stream - Generate questions with SSE streaming (for Ollama)
+  generateFromPlanStream: async (
+    quizId: string,
+    onStream: (event: string, data: any) => void,
+    onComplete: (data: any) => void,
+    onError: (error: string) => void
+  ): Promise<void> => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8051/api/create';
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/questions/generate-from-plan-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({ quizId })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      let buffer = '';
+      let currentEvent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim();
+            continue;
+          }
+
+          if (line.startsWith('data:')) {
+            const dataStr = line.slice(5).trim();
+            if (!dataStr) continue;
+
+            try {
+              const data = JSON.parse(dataStr);
+
+              // Handle based on event type
+              if (currentEvent === 'stream') {
+                console.log('🌊 Stream chunk:', data.chunk);
+                onStream('stream', data);
+              } else if (currentEvent === 'question-created') {
+                console.log('✅ Question created:', data.questionText);
+                onStream('question-created', data);
+              } else if (currentEvent === 'complete') {
+                console.log('🎉 Generation complete:', data);
+                onComplete(data);
+                return;
+              } else if (currentEvent === 'status') {
+                console.log('📊 Status:', data.message);
+                onStream('status', data);
+              } else if (currentEvent === 'error') {
+                console.error('❌ Error:', data.message);
+                onError(data.message);
+                return;
+              }
+
+              // Reset event after processing
+              currentEvent = '';
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ Streaming error:', error);
+      onError(error.message || 'Streaming failed');
+    }
+  },
+
   // POST /api/create/streaming/generate-questions - Start streaming question generation
   generateQuestionsStreaming: async (
     quizId: string, 

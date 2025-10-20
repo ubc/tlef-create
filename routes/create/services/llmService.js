@@ -184,23 +184,18 @@ class QuizLLMService {
         responseModel = model;
         response = { content: accumulatedContent, model: responseModel };
       } else {
-        // Fallback to toolkit for non-OpenAI providers
-        response = await this.llm.sendMessage(prompt, {
-          ...options,
-          onStreamChunk: (chunk) => {
-            try {
-              // Handle different streaming formats
-              let textChunk = '';
+        // Use streamConversation for Ollama to get real streaming
+        const messages = [{ role: 'user', content: prompt }];
+        if (options.systemPrompt) {
+          messages.unshift({ role: 'system', content: options.systemPrompt });
+        }
 
-              if (typeof chunk === 'string') {
-                textChunk = chunk;
-              } else if (chunk.content) {
-                textChunk = chunk.content;
-              } else if (chunk.delta?.content) {
-                textChunk = chunk.delta.content;
-              } else if (chunk.choices?.[0]?.delta?.content) {
-                textChunk = chunk.choices[0].delta.content;
-              }
+        response = await this.llm.streamConversation(
+          messages,
+          (chunk) => {
+            try {
+              // Handle streaming chunks from Ollama
+              const textChunk = typeof chunk === 'string' ? chunk : chunk.content || '';
 
               if (textChunk) {
                 accumulatedContent += textChunk;
@@ -214,16 +209,14 @@ class QuizLLMService {
                 }
               }
 
-              // Track model info if available
-              if (chunk.model) {
-                responseModel = chunk.model;
-              }
-
             } catch (chunkError) {
               console.error('❌ Error processing stream chunk:', chunkError);
             }
-          }
-        });
+          },
+          options
+        );
+
+        responseModel = response.model;
       }
 
       const processingTime = Date.now() - startTime;
@@ -1040,25 +1033,51 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
       questionConfigs, // Array of { questionType, count }
       relevantContent,
       difficulty,
-      courseContext
+      courseContext,
+      onStreamChunk = null // NEW: Optional streaming callback
     } = batchConfig;
 
     console.log(`🎯 Generating batch of questions for LO: ${learningObjective.substring(0, 50)}...`);
-    
+
     const questions = [];
     const errors = [];
-    
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+
     for (const config of questionConfigs) {
       for (let i = 0; i < config.count; i++) {
         try {
-          const result = await this.generateQuestion({
-            learningObjective,
-            questionType: config.questionType,
-            relevantContent,
-            difficulty,
-            courseContext,
-            previousQuestions: questions // Avoid duplication
-          });
+          let result;
+
+          // Use streaming for Ollama only
+          if (provider === 'ollama' && onStreamChunk) {
+            console.log(`🌊 Using streaming generation for ${config.questionType} (Ollama)`);
+            result = await this.generateQuestionStreaming({
+              learningObjective,
+              questionType: config.questionType,
+              relevantContent,
+              difficulty,
+              courseContext,
+              previousQuestions: questions
+            }, (chunk, metadata) => {
+              // Forward streaming chunks to the callback
+              onStreamChunk({
+                questionType: config.questionType,
+                questionIndex: i + 1,
+                chunk,
+                metadata
+              });
+            });
+          } else {
+            // Use non-streaming for OpenAI or when no callback provided
+            result = await this.generateQuestion({
+              learningObjective,
+              questionType: config.questionType,
+              relevantContent,
+              difficulty,
+              courseContext,
+              previousQuestions: questions
+            });
+          }
           
           if (result.success) {
             const questionWithMetadata = {

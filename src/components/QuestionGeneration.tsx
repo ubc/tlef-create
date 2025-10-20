@@ -583,50 +583,131 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   const handleGenerateQuestions = async (isRegeneration = false) => {
     if (!currentPlan) return;
-    
+
     try {
       setIsRegenerating(isRegeneration);
-      
+
       // Delete existing questions if this is a regeneration
       if (isRegeneration && hasExistingQuestions) {
         await handleDeleteExistingQuestions();
         showNotification('info', 'Questions Deleted', 'Previous questions deleted. Generating new ones...');
       }
-      
+
       // First approve the plan
       await dispatch(approvePlan(currentPlan._id));
       console.log('✅ Plan approved, starting question generation');
-      
+
       // Show generating state while maintaining plan phase
       showNotification('info', 'Generating Questions', 'AI is generating questions based on your plan...');
-      
+
       // Small delay to ensure database is updated
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Call the question generation API
-      const result = await questionsApi.generateFromPlan(quizId);
-      console.log('🎉 Questions generated successfully:', result);
-      
-      // Store the generated questions
-      setQuestions(result.questions);
-      setHasExistingQuestions(result.questions.length > 0);
-      
-      const message = isRegeneration 
-        ? `Successfully regenerated ${result.questions.length} questions with new approach!`
-        : `Successfully generated ${result.questions.length} questions!`;
-      
-      showNotification('success', 'Questions Generated', message);
-      
-      // Redirect to Review & Edit page after generation
-      if (onQuestionsGenerated) {
-        // Small delay to allow notification to show
-        setTimeout(() => {
-          onQuestionsGenerated();
-        }, 1000);
+
+      // Try streaming first (for Ollama), fall back to non-streaming (for OpenAI)
+      let streamingSuccess = false;
+      const generatedQuestions: Question[] = [];
+
+      try {
+        console.log('🌊 Attempting streaming generation...');
+        await questionsApi.generateFromPlanStream(
+          quizId,
+          (event: string, data: any) => {
+            // Handle streaming events
+            if (event === 'stream') {
+              console.log('🌊 Stream chunk:', data.chunk);
+              // Update UI to show streaming progress
+              setStreamingState(prev => {
+                const key = `${data.questionType}-${data.questionIndex}`;
+                const existing = prev.questionsInProgress.get(key) || {
+                  questionId: key,
+                  type: data.questionType,
+                  progress: '',
+                  chunks: []
+                };
+
+                existing.chunks.push(data.chunk);
+                existing.progress = existing.chunks.join('');
+
+                const newMap = new Map(prev.questionsInProgress);
+                newMap.set(key, existing);
+
+                return {
+                  ...prev,
+                  isStreaming: true,
+                  questionsInProgress: newMap
+                };
+              });
+            } else if (event === 'question-created') {
+              console.log('✅ Question created:', data.questionText);
+              // Add completed question
+              if (data.question) {
+                generatedQuestions.push(data.question);
+              }
+            }
+          },
+          (data: any) => {
+            // On complete
+            console.log('🎉 Streaming generation complete:', data);
+            streamingSuccess = true;
+            setQuestions(generatedQuestions);
+            setHasExistingQuestions(generatedQuestions.length > 0);
+
+            const message = isRegeneration
+              ? `Successfully regenerated ${generatedQuestions.length} questions with new approach!`
+              : `Successfully generated ${generatedQuestions.length} questions!`;
+
+            showNotification('success', 'Questions Generated', message);
+
+            // Reset streaming state
+            setStreamingState({
+              isStreaming: false,
+              sessionId: null,
+              questionsInProgress: new Map(),
+              completedQuestions: [],
+              totalQuestions: 0,
+              batchStarted: false
+            });
+
+            // Redirect to Review & Edit page after generation
+            if (onQuestionsGenerated) {
+              setTimeout(() => {
+                onQuestionsGenerated();
+              }, 1000);
+            }
+          },
+          (error: string) => {
+            // On error - fall back to non-streaming
+            console.log('⚠️ Streaming failed, falling back to non-streaming:', error);
+            throw new Error(error);
+          }
+        );
+      } catch (streamError) {
+        // Fallback to non-streaming generation (for OpenAI or if streaming fails)
+        console.log('📦 Using non-streaming generation as fallback');
+        const result = await questionsApi.generateFromPlan(quizId);
+        console.log('🎉 Questions generated successfully:', result);
+
+        // Store the generated questions
+        setQuestions(result.questions);
+        setHasExistingQuestions(result.questions.length > 0);
+
+        const message = isRegeneration
+          ? `Successfully regenerated ${result.questions.length} questions with new approach!`
+          : `Successfully generated ${result.questions.length} questions!`;
+
+        showNotification('success', 'Questions Generated', message);
+
+        // Redirect to Review & Edit page after generation
+        if (onQuestionsGenerated) {
+          // Small delay to allow notification to show
+          setTimeout(() => {
+            onQuestionsGenerated();
+          }, 1000);
+        }
       }
     } catch (error) {
       console.error('Failed to generate questions:', error);
-      const errorMessage = isRegeneration 
+      const errorMessage = isRegeneration
         ? 'Failed to regenerate questions'
         : 'Failed to generate questions';
       showNotification('error', 'Question Generation Failed', errorMessage);
