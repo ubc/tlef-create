@@ -124,7 +124,6 @@ class QuestionStreamingService {
           quiz: quizId,
           type: result.questionData.type,
           questionText: result.questionData.questionText,
-          options: result.questionData.options || [],
           correctAnswer: result.questionData.correctAnswer,
           explanation: result.questionData.explanation,
           content: result.questionData.content || {},

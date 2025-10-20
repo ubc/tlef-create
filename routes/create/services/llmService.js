@@ -775,39 +775,50 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
 
       // Type-specific validation
       if (questionType === QUESTION_TYPES.MULTIPLE_CHOICE || questionType === QUESTION_TYPES.TRUE_FALSE) {
-        if (!parsed.options || !Array.isArray(parsed.options)) {
+        // Move options into content object if they're at root level
+        if (parsed.options) {
+          parsed.content = {
+            options: parsed.options,
+            ...parsed.content // Preserve any existing content
+          };
+          delete parsed.options; // Remove from root level
+        }
+
+        if (!parsed.content?.options || !Array.isArray(parsed.content.options)) {
           throw new Error('Missing or invalid options array');
         }
-        
+
         // Normalize options - set missing isCorrect to false
-        parsed.options.forEach(option => {
+        parsed.content.options.forEach(option => {
           if (option.isCorrect === undefined || option.isCorrect === null) {
             option.isCorrect = false;
           }
         });
-        
+
         // Check if exactly one option is marked correct
-        const correctOptions = parsed.options.filter(opt => opt.isCorrect === true);
-        
+        const correctOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
+
         // If no options are marked correct, try to find the correct one from correctAnswer
         if (correctOptions.length === 0 && parsed.correctAnswer) {
           const correctAnswerText = parsed.correctAnswer.toLowerCase().trim();
-          const matchingOption = parsed.options.find(opt => 
+          const matchingOption = parsed.content.options.find(opt =>
             opt.text.toLowerCase().trim().includes(correctAnswerText) ||
             correctAnswerText.includes(opt.text.toLowerCase().trim())
           );
-          
+
           if (matchingOption) {
             matchingOption.isCorrect = true;
             console.log(`🔧 Auto-corrected missing isCorrect flag for option: "${matchingOption.text}"`);
           }
         }
-        
+
         // Final validation
-        const finalCorrectOptions = parsed.options.filter(opt => opt.isCorrect === true);
+        const finalCorrectOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
         if (finalCorrectOptions.length !== 1) {
           throw new Error(`Exactly one option must be marked as correct, found ${finalCorrectOptions.length}`);
         }
+
+        console.log(`✅ Multiple-choice/True-false question validated: ${parsed.content.options.length} options`);
       }
 
       if (questionType === QUESTION_TYPES.FLASHCARD) {
@@ -821,45 +832,129 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
         const textWithBlanks = parsed.content?.textWithBlanks || parsed.textWithBlanks;
         const blankOptions = parsed.content?.blankOptions || parsed.blankOptions;
         const correctAnswers = parsed.content?.correctAnswers || parsed.correctAnswers;
-        
+
         if (!textWithBlanks) {
           throw new Error('Cloze question missing textWithBlanks field');
         }
-        
+
         if (!blankOptions || !Array.isArray(blankOptions)) {
           throw new Error('Cloze question missing blankOptions array');
         }
-        
+
         if (!correctAnswers || !Array.isArray(correctAnswers)) {
           throw new Error('Cloze question missing correctAnswers array');
         }
-        
+
         // Count $$ markers in textWithBlanks
         const blankCount = (textWithBlanks.match(/\$\$/g) || []).length;
-        
+
         if (blankCount === 0) {
           throw new Error('Cloze question textWithBlanks must contain at least one $$ marker');
         }
-        
+
         if (blankOptions.length !== blankCount) {
           throw new Error(`Cloze question has ${blankCount} blanks but ${blankOptions.length} blankOptions arrays`);
         }
-        
+
         if (correctAnswers.length !== blankCount) {
           throw new Error(`Cloze question has ${blankCount} blanks but ${correctAnswers.length} correctAnswers`);
         }
-        
+
         // Validate each blankOptions array
         blankOptions.forEach((options, index) => {
           if (!Array.isArray(options) || options.length < 2) {
             throw new Error(`Blank ${index + 1} must have at least 2 options`);
           }
-          
+
           const correctAnswer = correctAnswers[index];
           if (!options.includes(correctAnswer)) {
             throw new Error(`Blank ${index + 1} correct answer "${correctAnswer}" not found in options: ${options.join(', ')}`);
           }
         });
+      }
+
+      if (questionType === 'matching') {
+        // Move matching-specific fields into content object if they're at root level
+        if (parsed.leftItems || parsed.rightItems || parsed.matchingPairs) {
+          parsed.content = {
+            leftItems: parsed.leftItems,
+            rightItems: parsed.rightItems,
+            matchingPairs: parsed.matchingPairs,
+            ...parsed.content // Preserve any existing content
+          };
+
+          // Remove from root level
+          delete parsed.leftItems;
+          delete parsed.rightItems;
+          delete parsed.matchingPairs;
+        }
+
+        // Validate matching question structure
+        if (!parsed.content?.leftItems || !Array.isArray(parsed.content.leftItems)) {
+          throw new Error('Matching question missing leftItems array');
+        }
+
+        if (!parsed.content?.rightItems || !Array.isArray(parsed.content.rightItems)) {
+          throw new Error('Matching question missing rightItems array');
+        }
+
+        if (!parsed.content?.matchingPairs || !Array.isArray(parsed.content.matchingPairs)) {
+          throw new Error('Matching question missing matchingPairs array');
+        }
+
+        if (parsed.content.leftItems.length !== parsed.content.rightItems.length) {
+          throw new Error(`Matching question has ${parsed.content.leftItems.length} left items but ${parsed.content.rightItems.length} right items - must be equal`);
+        }
+
+        if (parsed.content.matchingPairs.length !== parsed.content.leftItems.length) {
+          throw new Error(`Matching question has ${parsed.content.leftItems.length} items but ${parsed.content.matchingPairs.length} matching pairs`);
+        }
+
+        console.log(`✅ Matching question validated: ${parsed.content.leftItems.length} pairs`);
+      }
+
+      if (questionType === 'ordering') {
+        // Move ordering-specific fields into content object if they're at root level
+        if (parsed.items || parsed.correctOrder) {
+          parsed.content = {
+            items: parsed.items,
+            correctOrder: parsed.correctOrder,
+            ...parsed.content // Preserve any existing content
+          };
+
+          // Remove from root level
+          delete parsed.items;
+          delete parsed.correctOrder;
+        }
+
+        // Validate ordering question structure
+        if (!parsed.content?.items || !Array.isArray(parsed.content.items)) {
+          throw new Error('Ordering question missing items array');
+        }
+
+        if (!parsed.content?.correctOrder || !Array.isArray(parsed.content.correctOrder)) {
+          throw new Error('Ordering question missing correctOrder array');
+        }
+
+        if (parsed.content.items.length !== parsed.content.correctOrder.length) {
+          throw new Error(`Ordering question has ${parsed.content.items.length} items but ${parsed.content.correctOrder.length} in correctOrder - must be equal`);
+        }
+
+        // Validate that correctOrder contains all items from items array
+        const itemsSet = new Set(parsed.content.items.map(item => item.trim().toLowerCase()));
+        const orderSet = new Set(parsed.content.correctOrder.map(item => item.trim().toLowerCase()));
+
+        if (itemsSet.size !== orderSet.size) {
+          throw new Error('Ordering question correctOrder must contain exactly the same items as items array');
+        }
+
+        for (const item of parsed.content.correctOrder) {
+          if (!itemsSet.has(item.trim().toLowerCase())) {
+            throw new Error(`Ordering question correctOrder contains item "${item}" not found in items array`);
+          }
+        }
+
+        console.log(`✅ Ordering question validated: ${parsed.content.items.length} items`);
       }
 
       console.log('✅ LLM response validated successfully');
