@@ -1,7 +1,7 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { ArrowLeft, FileText, Target, Wand2, Settings } from 'lucide-react';
+import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2 } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
 import QuestionGeneration from './QuestionGeneration';
@@ -10,6 +10,7 @@ import { RootState, AppDispatch } from '../store';
 import { fetchQuizById, setCurrentQuiz, assignMaterials } from '../store/slices/quizSlice';
 import { fetchMaterials } from '../store/slices/materialSlice';
 import { clearObjectives } from '../store/slices/learningObjectiveSlice';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/QuizView.css';
 
 type TabType = 'materials' | 'objectives' | 'generation' | 'review';
@@ -18,12 +19,34 @@ const QuizView = () => {
   const { courseId, quizId } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
-  
+  const [searchParams] = useSearchParams();
+  const { showNotification, publish } = usePubSub('QuizView');
+
   const { currentQuiz, loading, error } = useSelector((state: RootState) => state.quiz);
   const { materials } = useSelector((state: RootState) => state.material);
-  const [activeTab, setActiveTab] = useState<TabType>('materials');
+
+  // Check URL params for initial tab
+  const getInitialTab = (): TabType => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'objectives' || tabParam === 'generation' || tabParam === 'review') {
+      return tabParam as TabType;
+    }
+    return 'materials';
+  };
+
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
   const [learningObjectives, setLearningObjectives] = useState<string[]>([]);
   const [assignedMaterials, setAssignedMaterials] = useState<string[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Update active tab when URL params change
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'objectives' || tabParam === 'generation' || tabParam === 'review') {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (quizId) {
@@ -76,6 +99,31 @@ const QuizView = () => {
     );
   }
 
+  const handleDeleteQuiz = async () => {
+    if (!quizId || !courseId) return;
+
+    setIsDeleting(true);
+    try {
+      // Import quizApi
+      const { quizApi } = await import('../services/api');
+      await quizApi.deleteQuiz(quizId);
+
+      showNotification('Quiz deleted successfully', 'success');
+      setShowDeleteConfirm(false);
+
+      // Notify CourseView to refresh its data
+      publish('quiz-deleted', { quizId, courseId });
+
+      // Navigate back to course page
+      navigate(`/course/${courseId}`);
+    } catch (err: any) {
+      console.error('Failed to delete quiz:', err);
+      showNotification(err.message || 'Failed to delete quiz', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const tabs = [
     { id: 'materials' as TabType, label: 'Materials', icon: FileText },
     { id: 'objectives' as TabType, label: 'Learning Objectives', icon: Target },
@@ -99,16 +147,24 @@ const QuizView = () => {
   return (
       <div className="quiz-view">
         <div className="quiz-header">
-          <button className="btn btn-ghost" onClick={() => navigate(`/course/${courseId}`)}>
-            <ArrowLeft size={16} />
-            Back to Course
-          </button>
-          <div>
-            <h1>{currentQuiz.name}</h1>
-            <p className="quiz-description">
-              {currentQuiz.folder?.name || 'Course'} • {currentQuiz.questions?.length || 0} questions
-            </p>
+          <div className="quiz-header-nav">
+            <button className="btn btn-ghost" onClick={() => navigate(`/course/${courseId}`)}>
+              <ArrowLeft size={16} />
+              Back to Course
+            </button>
+            <button
+              className="btn btn-danger btn-outline"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+            >
+              <Trash2 size={16} />
+              {isDeleting ? 'Deleting...' : 'Delete Quiz'}
+            </button>
           </div>
+          <h1>{currentQuiz.name}</h1>
+          <p className="quiz-description">
+            {currentQuiz.folder?.name || 'Course'} • {currentQuiz.questions?.length || 0} questions
+          </p>
         </div>
 
         <div className="quiz-tabs">
@@ -179,6 +235,35 @@ const QuizView = () => {
               />
           )}
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>Delete Quiz?</h2>
+              <p>
+                Are you sure you want to delete <strong>{currentQuiz.name}</strong>?
+                This will permanently delete all questions and learning objectives associated with this quiz.
+              </p>
+              <div className="modal-actions">
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={handleDeleteQuiz}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete Quiz'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 };

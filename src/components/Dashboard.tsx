@@ -2,16 +2,31 @@ import { useState, useEffect } from 'react';
 import { BookOpen, FileText, CheckCircle, Clock } from 'lucide-react';
 import { useAppSelector } from '../hooks/redux';
 import { foldersApi, Folder, ApiError } from '../services/api';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Dashboard.css';
 
 const Dashboard = () => {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { subscribe } = usePubSub('Dashboard');
 
   useEffect(() => {
     loadFolders();
   }, []);
+
+  // Listen for course deletion events
+  useEffect(() => {
+    subscribe('course-deleted', (data: any) => {
+      console.log('🗑️ Dashboard: Received course-deleted event:', data);
+      if (data?.courseId) {
+        // Remove the deleted course from the sidebar
+        setFolders(prev => prev.filter(folder => folder._id !== data.courseId));
+        console.log('✅ Dashboard: Course removed from sidebar:', data.courseId);
+      }
+    });
+    // Cleanup is automatically handled by usePubSub hook
+  }, [subscribe]);
 
   const loadFolders = async () => {
     console.log('🔄 Loading folders from API...');

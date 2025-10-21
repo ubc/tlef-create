@@ -20,9 +20,9 @@ class QuizLLMService {
     
     try {
       // Initialize LLM module with configurable provider
-      const provider = process.env.LLM_PROVIDER || 'ollama';
-      
-      if (provider === 'openai') {
+      this.provider = process.env.LLM_PROVIDER || 'ollama';
+
+      if (this.provider === 'openai') {
         // Initialize with OpenAI
         this.llm = new LLMModule({
           provider: 'openai',
@@ -89,6 +89,204 @@ class QuizLLMService {
     }
   }
 
+
+  /**
+   * Generate a question with streaming support using LLM + RAG content
+   * @param {Object} questionConfig - Question configuration
+   * @param {Function} onStreamChunk - Callback for streaming text chunks
+   */
+  async generateQuestionStreaming(questionConfig, onStreamChunk = null) {
+    const {
+      learningObjective,
+      questionType,
+      relevantContent = [],
+      difficulty = 'moderate',
+      courseContext = '',
+      previousQuestions = [],
+      customPrompt = null
+    } = questionConfig;
+
+    console.log(`🎯 Generating ${questionType} question with streaming...`);
+    console.log(`📝 Learning Objective: ${learningObjective.substring(0, 100)}...`);
+    console.log(`📚 Using ${relevantContent.length} content chunks`);
+
+    if (!this.llm) {
+      throw new Error('LLM service not initialized. Please check Ollama/OpenAI configuration.');
+    }
+
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
+    console.log(`🤖 Using ${provider} model: ${model} (streaming mode)`);
+
+    try {
+      // Build expert-level prompt
+      const prompt = this.buildExpertPrompt(
+        learningObjective, 
+        questionType, 
+        relevantContent, 
+        difficulty,
+        courseContext,
+        previousQuestions,
+        customPrompt
+      );
+
+      console.log(`📋 Generated prompt (${prompt.length} chars)`);
+
+      // Call LLM with streaming support
+      const startTime = Date.now();
+      const temperature = this.getTemperatureForQuestionType(questionType);
+      const maxTokens = 2000;
+      
+      let accumulatedContent = '';
+      let responseModel = model;
+      
+      const options = this.getSendMessageOptions(temperature, maxTokens);
+      
+      // Add streaming option
+      options.stream = true;
+      
+      console.log(`🌊 Starting streaming generation...`);
+
+      let response;
+
+      // Use direct OpenAI API for better streaming control
+      if (this.provider === 'openai') {
+        console.log('🔧 Using direct OpenAI streaming API');
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY
+        });
+
+        const stream = await openai.chat.completions.create({
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: temperature,
+          max_tokens: maxTokens,
+          stream: true
+        });
+
+        for await (const chunk of stream) {
+          const textChunk = chunk.choices[0]?.delta?.content;
+          if (textChunk) {
+            accumulatedContent += textChunk;
+            console.log(`📝 Received chunk: "${textChunk}" (total: ${accumulatedContent.length})`);
+
+            // Call the streaming callback if provided
+            if (onStreamChunk) {
+              onStreamChunk(textChunk, {
+                totalLength: accumulatedContent.length,
+                partial: true
+              });
+            }
+          }
+        }
+
+        responseModel = model;
+        response = { content: accumulatedContent, model: responseModel };
+      } else {
+        // Use streamConversation for Ollama to get real streaming
+        const messages = [{ role: 'user', content: prompt }];
+        if (options.systemPrompt) {
+          messages.unshift({ role: 'system', content: options.systemPrompt });
+        }
+
+        response = await this.llm.streamConversation(
+          messages,
+          (chunk) => {
+            try {
+              // Handle streaming chunks from Ollama
+              const textChunk = typeof chunk === 'string' ? chunk : chunk.content || '';
+
+              if (textChunk) {
+                accumulatedContent += textChunk;
+
+                // Call the streaming callback if provided
+                if (onStreamChunk) {
+                  onStreamChunk(textChunk, {
+                    totalLength: accumulatedContent.length,
+                    partial: true
+                  });
+                }
+              }
+
+            } catch (chunkError) {
+              console.error('❌ Error processing stream chunk:', chunkError);
+            }
+          },
+          options
+        );
+
+        responseModel = response.model;
+      }
+
+      const processingTime = Date.now() - startTime;
+      console.log(`⏱️ Streaming completed in ${processingTime}ms`);
+      
+      // Use accumulated content if streaming worked, otherwise fallback to response content
+      const finalContent = accumulatedContent || response.content || '';
+      console.log(`🔍 Final content length: ${finalContent.length} chars`);
+
+      // Final streaming callback
+      if (onStreamChunk) {
+        onStreamChunk('', { 
+          totalLength: finalContent.length, 
+          partial: false, 
+          completed: true 
+        });
+      }
+
+      // Parse and validate response
+      const questionData = this.parseAndValidateResponse(finalContent, questionType);
+      
+      // Log generated Summary questions for debugging
+      if (questionType === 'summary') {
+        console.log('📋 SUMMARY QUESTION GENERATED (STREAMING):');
+        console.log('🎯 Question Text:', questionData.questionText);
+        console.log('📝 Explanation:', questionData.explanation);
+        console.log('📚 Content Structure:', JSON.stringify(questionData.content, null, 2));
+        if (questionData.content?.keyPoints) {
+          console.log('🔑 Key Points Generated:');
+          questionData.content.keyPoints.forEach((keyPoint, index) => {
+            console.log(`   ${index + 1}. Title: "${keyPoint.title}"`);
+            console.log(`      Explanation: "${keyPoint.explanation.substring(0, 100)}..."`);
+          });
+        }
+      }
+      
+      return {
+        success: true,
+        promptUsed: prompt, // Add the prompt used for the question generation
+        questionData: {
+          ...questionData,
+          type: questionType,
+          difficulty: difficulty || 'moderate',
+          prompt: prompt, // Also add it to questionData for backward compatibility
+          generationMetadata: {
+            llmModel: responseModel,
+            generationPrompt: prompt,
+            learningObjective: learningObjective,
+            subObjective: this.generateSubObjective(learningObjective, questionType),
+            focusArea: this.extractFocusArea(learningObjective, questionType),
+            complexity: this.determineComplexity(learningObjective, questionType),
+            contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
+            processingTime: processingTime,
+            temperature: this.getTemperatureForQuestionType(questionType),
+            generationMethod: 'llm-rag-enhanced-streaming',
+            contentScore: this.calculateContentRelevanceScore(relevantContent),
+            confidence: this.estimateQuestionQuality(questionData),
+            streamingEnabled: true,
+            finalContentLength: finalContent.length
+          }
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Streaming generation failed: ${error.message}`);
+      console.error('🔄 Falling back to non-streaming generation...');
+      
+      // Fallback to regular generation if streaming fails
+      return this.generateQuestion(questionConfig);
+    }
+  }
 
   /**
    * Generate a high-quality question using LLM + RAG content
@@ -171,6 +369,9 @@ class QuizLLMService {
             llmModel: response.model || 'llama3.1:8b',
             generationPrompt: prompt,
             learningObjective: learningObjective,
+            subObjective: this.generateSubObjective(learningObjective, questionType),
+            focusArea: this.extractFocusArea(learningObjective, questionType),
+            complexity: this.determineComplexity(learningObjective, questionType),
             contentSources: (Array.isArray(relevantContent) ? relevantContent : (relevantContent?.chunks || [])).map(c => c.metadata?.source || c.source || 'unknown'),
             processingTime: processingTime,
             temperature: this.getTemperatureForQuestionType(questionType),
@@ -362,17 +563,22 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
    * Simple JSON cleaning that handles the most common issues
    */
   simpleJsonClean(jsonString) {
+    // First, remove trailing commas before closing braces/brackets
+    // This is a common LLM error: {"key": "value",} or ["item",]
+    let cleaned = jsonString
+      .replace(/,\s*}/g, '}')  // Remove comma before }
+      .replace(/,\s*]/g, ']'); // Remove comma before ]
+
     // The most common issue is literal newlines in string values
     // We need to carefully replace newlines only within string values
-    
-    let cleaned = jsonString;
+
     let inString = false;
     let result = '';
     let i = 0;
-    
+
     while (i < cleaned.length) {
       const char = cleaned[i];
-      
+
       if (char === '"' && (i === 0 || cleaned[i-1] !== '\\')) {
         // Toggle string state
         inString = !inString;
@@ -562,39 +768,50 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
 
       // Type-specific validation
       if (questionType === QUESTION_TYPES.MULTIPLE_CHOICE || questionType === QUESTION_TYPES.TRUE_FALSE) {
-        if (!parsed.options || !Array.isArray(parsed.options)) {
+        // Move options into content object if they're at root level
+        if (parsed.options) {
+          parsed.content = {
+            options: parsed.options,
+            ...parsed.content // Preserve any existing content
+          };
+          delete parsed.options; // Remove from root level
+        }
+
+        if (!parsed.content?.options || !Array.isArray(parsed.content.options)) {
           throw new Error('Missing or invalid options array');
         }
-        
+
         // Normalize options - set missing isCorrect to false
-        parsed.options.forEach(option => {
+        parsed.content.options.forEach(option => {
           if (option.isCorrect === undefined || option.isCorrect === null) {
             option.isCorrect = false;
           }
         });
-        
+
         // Check if exactly one option is marked correct
-        const correctOptions = parsed.options.filter(opt => opt.isCorrect === true);
-        
+        const correctOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
+
         // If no options are marked correct, try to find the correct one from correctAnswer
         if (correctOptions.length === 0 && parsed.correctAnswer) {
           const correctAnswerText = parsed.correctAnswer.toLowerCase().trim();
-          const matchingOption = parsed.options.find(opt => 
+          const matchingOption = parsed.content.options.find(opt =>
             opt.text.toLowerCase().trim().includes(correctAnswerText) ||
             correctAnswerText.includes(opt.text.toLowerCase().trim())
           );
-          
+
           if (matchingOption) {
             matchingOption.isCorrect = true;
             console.log(`🔧 Auto-corrected missing isCorrect flag for option: "${matchingOption.text}"`);
           }
         }
-        
+
         // Final validation
-        const finalCorrectOptions = parsed.options.filter(opt => opt.isCorrect === true);
+        const finalCorrectOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
         if (finalCorrectOptions.length !== 1) {
           throw new Error(`Exactly one option must be marked as correct, found ${finalCorrectOptions.length}`);
         }
+
+        console.log(`✅ Multiple-choice/True-false question validated: ${parsed.content.options.length} options`);
       }
 
       if (questionType === QUESTION_TYPES.FLASHCARD) {
@@ -608,45 +825,129 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
         const textWithBlanks = parsed.content?.textWithBlanks || parsed.textWithBlanks;
         const blankOptions = parsed.content?.blankOptions || parsed.blankOptions;
         const correctAnswers = parsed.content?.correctAnswers || parsed.correctAnswers;
-        
+
         if (!textWithBlanks) {
           throw new Error('Cloze question missing textWithBlanks field');
         }
-        
+
         if (!blankOptions || !Array.isArray(blankOptions)) {
           throw new Error('Cloze question missing blankOptions array');
         }
-        
+
         if (!correctAnswers || !Array.isArray(correctAnswers)) {
           throw new Error('Cloze question missing correctAnswers array');
         }
-        
+
         // Count $$ markers in textWithBlanks
         const blankCount = (textWithBlanks.match(/\$\$/g) || []).length;
-        
+
         if (blankCount === 0) {
           throw new Error('Cloze question textWithBlanks must contain at least one $$ marker');
         }
-        
+
         if (blankOptions.length !== blankCount) {
           throw new Error(`Cloze question has ${blankCount} blanks but ${blankOptions.length} blankOptions arrays`);
         }
-        
+
         if (correctAnswers.length !== blankCount) {
           throw new Error(`Cloze question has ${blankCount} blanks but ${correctAnswers.length} correctAnswers`);
         }
-        
+
         // Validate each blankOptions array
         blankOptions.forEach((options, index) => {
           if (!Array.isArray(options) || options.length < 2) {
             throw new Error(`Blank ${index + 1} must have at least 2 options`);
           }
-          
+
           const correctAnswer = correctAnswers[index];
           if (!options.includes(correctAnswer)) {
             throw new Error(`Blank ${index + 1} correct answer "${correctAnswer}" not found in options: ${options.join(', ')}`);
           }
         });
+      }
+
+      if (questionType === 'matching') {
+        // Move matching-specific fields into content object if they're at root level
+        if (parsed.leftItems || parsed.rightItems || parsed.matchingPairs) {
+          parsed.content = {
+            leftItems: parsed.leftItems,
+            rightItems: parsed.rightItems,
+            matchingPairs: parsed.matchingPairs,
+            ...parsed.content // Preserve any existing content
+          };
+
+          // Remove from root level
+          delete parsed.leftItems;
+          delete parsed.rightItems;
+          delete parsed.matchingPairs;
+        }
+
+        // Validate matching question structure
+        if (!parsed.content?.leftItems || !Array.isArray(parsed.content.leftItems)) {
+          throw new Error('Matching question missing leftItems array');
+        }
+
+        if (!parsed.content?.rightItems || !Array.isArray(parsed.content.rightItems)) {
+          throw new Error('Matching question missing rightItems array');
+        }
+
+        if (!parsed.content?.matchingPairs || !Array.isArray(parsed.content.matchingPairs)) {
+          throw new Error('Matching question missing matchingPairs array');
+        }
+
+        if (parsed.content.leftItems.length !== parsed.content.rightItems.length) {
+          throw new Error(`Matching question has ${parsed.content.leftItems.length} left items but ${parsed.content.rightItems.length} right items - must be equal`);
+        }
+
+        if (parsed.content.matchingPairs.length !== parsed.content.leftItems.length) {
+          throw new Error(`Matching question has ${parsed.content.leftItems.length} items but ${parsed.content.matchingPairs.length} matching pairs`);
+        }
+
+        console.log(`✅ Matching question validated: ${parsed.content.leftItems.length} pairs`);
+      }
+
+      if (questionType === 'ordering') {
+        // Move ordering-specific fields into content object if they're at root level
+        if (parsed.items || parsed.correctOrder) {
+          parsed.content = {
+            items: parsed.items,
+            correctOrder: parsed.correctOrder,
+            ...parsed.content // Preserve any existing content
+          };
+
+          // Remove from root level
+          delete parsed.items;
+          delete parsed.correctOrder;
+        }
+
+        // Validate ordering question structure
+        if (!parsed.content?.items || !Array.isArray(parsed.content.items)) {
+          throw new Error('Ordering question missing items array');
+        }
+
+        if (!parsed.content?.correctOrder || !Array.isArray(parsed.content.correctOrder)) {
+          throw new Error('Ordering question missing correctOrder array');
+        }
+
+        if (parsed.content.items.length !== parsed.content.correctOrder.length) {
+          throw new Error(`Ordering question has ${parsed.content.items.length} items but ${parsed.content.correctOrder.length} in correctOrder - must be equal`);
+        }
+
+        // Validate that correctOrder contains all items from items array
+        const itemsSet = new Set(parsed.content.items.map(item => item.trim().toLowerCase()));
+        const orderSet = new Set(parsed.content.correctOrder.map(item => item.trim().toLowerCase()));
+
+        if (itemsSet.size !== orderSet.size) {
+          throw new Error('Ordering question correctOrder must contain exactly the same items as items array');
+        }
+
+        for (const item of parsed.content.correctOrder) {
+          if (!itemsSet.has(item.trim().toLowerCase())) {
+            throw new Error(`Ordering question correctOrder contains item "${item}" not found in items array`);
+          }
+        }
+
+        console.log(`✅ Ordering question validated: ${parsed.content.items.length} items`);
       }
 
       console.log('✅ LLM response validated successfully');
@@ -732,25 +1033,51 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
       questionConfigs, // Array of { questionType, count }
       relevantContent,
       difficulty,
-      courseContext
+      courseContext,
+      onStreamChunk = null // NEW: Optional streaming callback
     } = batchConfig;
 
     console.log(`🎯 Generating batch of questions for LO: ${learningObjective.substring(0, 50)}...`);
-    
+
     const questions = [];
     const errors = [];
-    
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+
     for (const config of questionConfigs) {
       for (let i = 0; i < config.count; i++) {
         try {
-          const result = await this.generateQuestion({
-            learningObjective,
-            questionType: config.questionType,
-            relevantContent,
-            difficulty,
-            courseContext,
-            previousQuestions: questions // Avoid duplication
-          });
+          let result;
+
+          // Use streaming for Ollama only
+          if (provider === 'ollama' && onStreamChunk) {
+            console.log(`🌊 Using streaming generation for ${config.questionType} (Ollama)`);
+            result = await this.generateQuestionStreaming({
+              learningObjective,
+              questionType: config.questionType,
+              relevantContent,
+              difficulty,
+              courseContext,
+              previousQuestions: questions
+            }, (chunk, metadata) => {
+              // Forward streaming chunks to the callback
+              onStreamChunk({
+                questionType: config.questionType,
+                questionIndex: i + 1,
+                chunk,
+                metadata
+              });
+            });
+          } else {
+            // Use non-streaming for OpenAI or when no callback provided
+            result = await this.generateQuestion({
+              learningObjective,
+              questionType: config.questionType,
+              relevantContent,
+              difficulty,
+              courseContext,
+              previousQuestions: questions
+            });
+          }
           
           if (result.success) {
             const questionWithMetadata = {
@@ -1129,6 +1456,80 @@ Provide only the improved learning objective as your response (no additional tex
 
     console.log(`✅ Batch generation complete: ${results.totalGenerated}/${results.totalRequested} questions generated`);
     return results;
+  }
+
+  /**
+   * Generate sub-objective based on learning objective and question type
+   */
+  generateSubObjective(learningObjective, questionType) {
+    const types = {
+      'multiple-choice': 'conceptual understanding and application',
+      'true-false': 'validation of key principles and facts',
+      'flashcard': 'recall and memorization of important concepts',
+      'discussion': 'critical thinking and analysis',
+      'summary': 'synthesis and comprehensive understanding'
+    };
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || 'learning objective';
+    return `Students will demonstrate ${types[questionType] || 'understanding'} of ${loText.substring(0, 50)}${loText.length > 50 ? '...' : ''}`;
+  }
+
+  /**
+   * Extract focus area from learning objective
+   */
+  extractFocusArea(learningObjective, questionType) {
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || '';
+    const focusKeywords = [
+      'conceptual understanding', 'practical application', 'analytical thinking',
+      'synthesis', 'evaluation', 'problem-solving', 'real-world relevance',
+      'critical analysis', 'knowledge integration', 'skill development'
+    ];
+    
+    for (const keyword of focusKeywords) {
+      if (loText.toLowerCase().includes(keyword)) {
+        return keyword;
+      }
+    }
+    
+    // Default based on question type
+    const typeDefaults = {
+      'multiple-choice': 'conceptual understanding',
+      'true-false': 'knowledge validation',
+      'flashcard': 'recall and memorization',
+      'discussion': 'critical analysis',
+      'summary': 'synthesis'
+    };
+    
+    return typeDefaults[questionType] || 'general knowledge';
+  }
+
+  /**
+   * Determine complexity level based on learning objective and question type
+   */
+  determineComplexity(learningObjective, questionType) {
+    const loText = typeof learningObjective === 'string' ? learningObjective : learningObjective.text || '';
+    const complexityIndicators = {
+      high: ['synthesis', 'evaluation', 'analysis', 'compare', 'evaluate', 'synthesize', 'create', 'design'],
+      medium: ['application', 'apply', 'demonstrate', 'solve', 'use', 'implement', 'calculate'],
+      low: ['recall', 'memorize', 'identify', 'define', 'list', 'describe', 'explain']
+    };
+    
+    const lowerText = loText.toLowerCase();
+    for (const [level, indicators] of Object.entries(complexityIndicators)) {
+      if (indicators.some(indicator => lowerText.includes(indicator))) {
+        return level;
+      }
+    }
+    
+    // Default based on question type
+    const typeDefaults = {
+      'multiple-choice': 'medium',
+      'true-false': 'low',
+      'flashcard': 'low',
+      'discussion': 'high',
+      'summary': 'high'
+    };
+    
+    return typeDefaults[questionType] || 'medium';
   }
 }
 

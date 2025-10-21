@@ -297,6 +297,136 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
 }));
 
 /**
+ * POST /api/questions/generate-from-plan-stream
+ * Generate questions with Server-Sent Events streaming
+ */
+router.post('/generate-from-plan-stream', authenticateToken, asyncHandler(async (req, res) => {
+  const { quizId } = req.body;
+  const userId = req.user.id;
+
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    sendEvent('status', { message: 'Starting question generation...', progress: 0 });
+
+    // Verify quiz and get plan
+    const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
+    if (!quiz) {
+      sendEvent('error', { message: 'Quiz not found' });
+      return res.end();
+    }
+
+    const plan = await GenerationPlan.findOne({
+      quiz: quizId,
+      status: 'approved',
+      createdBy: userId
+    }).populate('breakdown.learningObjective');
+
+    if (!plan) {
+      sendEvent('error', { message: 'No approved plan found' });
+      return res.end();
+    }
+
+    sendEvent('status', { message: `Generating ${plan.breakdown.reduce((sum, item) => sum + item.questionTypes.reduce((s, qt) => s + qt.count, 0), 0)} questions...`, progress: 10 });
+
+    // Use intelligent generation service with streaming
+    const generationResult = await intelligentQuestionGenerationService.generateQuestionsForQuiz(
+      quizId,
+      {
+        difficulty: 'moderate',
+        useRAG: true,
+        useLLM: true,
+        onStreamChunk: (streamData) => {
+          // Send streaming text chunks to client (only for Ollama)
+          sendEvent('stream', {
+            questionType: streamData.questionType,
+            questionIndex: streamData.questionIndex,
+            chunk: streamData.chunk,
+            totalLength: streamData.metadata?.totalLength || 0,
+            partial: streamData.metadata?.partial || false
+          });
+        }
+      }
+    );
+
+    if (!generationResult.success) {
+      sendEvent('error', { message: generationResult.error || 'Generation failed' });
+      return res.end();
+    }
+
+    sendEvent('status', { message: 'Saving questions...', progress: 90 });
+
+    // Save questions
+    const questions = [];
+    let questionOrder = 0;
+
+    for (const generatedQuestion of generationResult.questions) {
+      const question = new Question({
+        quiz: quizId,
+        learningObjective: generatedQuestion.learningObjectiveId,
+        generationPlan: plan._id,
+        type: generatedQuestion.type,
+        difficulty: generatedQuestion.difficulty || 'moderate',
+        questionText: generatedQuestion.questionText,
+        content: generatedQuestion.content,
+        correctAnswer: generatedQuestion.correctAnswer,
+        explanation: generatedQuestion.explanation,
+        relevantContent: generatedQuestion.relevantContent,
+        order: questionOrder++,
+        reviewStatus: 'draft',
+        createdBy: userId
+      });
+
+      await question.save();
+      await quiz.addQuestion(question._id);
+      questions.push(question);
+
+      sendEvent('question-created', {
+        questionId: question._id,
+        questionText: question.questionText?.substring(0, 100),
+        progress: 90 + (questionOrder / generationResult.questions.length) * 10,
+        question: question // Include full question object for frontend
+      });
+    }
+
+    // Update stats
+    await quiz.addGenerationRecord({
+      approach: plan.approach,
+      questionsGenerated: questions.length,
+      processingTime: 8000,
+      llmModel: generationResult.metadata.llmModel || 'llama3.1:8b',
+      generationMethod: 'intelligent-rag-llm',
+      ragEnabled: generationResult.metadata.ragEnabled,
+      success: true
+    });
+
+    const folder = await Folder.findOne({ quizzes: quizId });
+    if (folder) {
+      await folder.updateStats();
+    }
+
+    sendEvent('complete', {
+      questionsCount: questions.length,
+      metadata: generationResult.metadata
+    });
+    res.end();
+
+  } catch (error) {
+    console.error('❌ Streaming generation error:', error);
+    sendEvent('error', { message: error.message });
+    res.end();
+  }
+}));
+
+/**
  * POST /api/questions
  * Create manual question
  */

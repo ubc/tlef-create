@@ -1024,14 +1024,26 @@ function generateH5PQuestionSet(questions) {
       // Convert ordering to H5P DragText format
       const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
       const correctOrder = question.content?.correctOrder || items;
-      
-      // Create text field with numbered blanks for ordering
+
+      // Shuffle the items array to randomize display order (Fisher-Yates shuffle)
+      const shuffledItems = [...items];
+      for (let i = shuffledItems.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledItems[i], shuffledItems[j]] = [shuffledItems[j], shuffledItems[i]];
+      }
+
+      // Create text field with the shuffled items
+      // Display the shuffled items and let users drag numbers to indicate correct order
       let textField = "";
-      correctOrder.forEach((item, index) => {
-        textField += `*${index + 1}*. ${escapeHtml(item)}\\n`;
+      shuffledItems.forEach((item, index) => {
+        // Find what position this item should be in the correct order
+        const correctPosition = correctOrder.indexOf(item) + 1;
+        textField += `*${correctPosition}*. ${escapeHtml(item)}\\n`;
       });
-      
-      const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).map(String);
+
+      // Distractors will be 1,2,3,4... but H5P DragText will shuffle them
+      // Unfortunately H5P.DragText doesn't support disabling randomization
+      const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).join(" ");
 
       h5pQuestion = {
         "params": {
@@ -1067,7 +1079,8 @@ function generateH5PQuestionSet(questions) {
             "enableRetry": true,
             "enableSolutionsButton": true,
             "enableCheckButton": true,
-            "instantFeedback": false
+            "instantFeedback": false,
+            "disableDraggablesRandomization": true
           },
           "scoreBarLabel": "You got :num out of :total points",
           "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
@@ -1434,13 +1447,23 @@ function convertQuestionToH5P(question, quiz) {
     // Convert ordering to H5P DragText format
     const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
     const correctOrder = question.content?.correctOrder || items;
-    
-    // Create text field with numbered blanks for ordering
+
+    // Shuffle the items array to randomize display order (Fisher-Yates shuffle)
+    const shuffledItems = [...items];
+    for (let i = shuffledItems.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledItems[i], shuffledItems[j]] = [shuffledItems[j], shuffledItems[i]];
+    }
+
+    // Create text field with the shuffled items
+    // Display the shuffled items and let users drag numbers to indicate correct order
     let textField = "";
-    correctOrder.forEach((item, index) => {
-      textField += `*${index + 1}*. ${escapeHtml(item)}\\n`;
+    shuffledItems.forEach((item, index) => {
+      // Find what position this item should be in the correct order
+      const correctPosition = correctOrder.indexOf(item) + 1;
+      textField += `*${correctPosition}*. ${escapeHtml(item)}\\n`;
     });
-    
+
     const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).map(String);
 
     return {
@@ -1477,7 +1500,8 @@ function convertQuestionToH5P(question, quiz) {
           "enableRetry": true,
           "enableSolutionsButton": true,
           "enableCheckButton": true,
-          "instantFeedback": false
+          "instantFeedback": false,
+          "disableDraggablesRandomization": true
         },
         "scoreBarLabel": "You got :num out of :total points",
         "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",

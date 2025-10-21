@@ -23,7 +23,8 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
     authenticated: !!req.user,
     userId: req.user?.id,
     filesCount: req.files?.length || 0,
-    folderId: req.body.folderId
+    folderId: req.body.folderId,
+    fileNames: req.files?.map(f => f.originalname) || []
   });
   
   const { folderId, names } = req.body;
@@ -78,6 +79,8 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
       });
 
       if (existingMaterial) {
+        console.log(`⚠️ Duplicate file detected: ${file.originalname} (checksum: ${fileData.checksum})`);
+        console.log(`   Existing material: ${existingMaterial.name} (${existingMaterial._id})`);
         await FileService.deleteFile(file.path);
         errors.push({
           filename: file.originalname,
@@ -88,40 +91,53 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
 
       const material = new Material(fileData);
       await material.save();
+      console.log(`✅ Material saved to database: ${material.name} (${material._id})`);
 
       // Add to folder
       await folder.addMaterial(material._id);
+      console.log(`📁 Material added to folder: ${folder.name}`);
 
-      // Process material immediately (chunk and embed)
-      try {
-        console.log(`🔄 Starting immediate processing for material: ${material.name}`);
-        await material.markAsProcessing();
-        
-        // Import RAG service for immediate processing
-        const ragService = await import('../services/ragService.js');
-        const result = await ragService.default.processAndEmbedMaterial(material);
-        
-        if (result.success) {
-          await material.markAsCompleted();
-          console.log(`✅ Material processed and embedded: ${material.name}`);
-          console.log(`📊 Created ${result.chunksCount} chunks, embedded successfully`);
-          
-          // Clean up original file after successful processing
-          await FileService.deleteFile(material.filePath);
-          console.log(`🗑️ Original file cleaned up: ${material.filePath}`);
-          
-          // Clear file path since file is deleted
-          material.filePath = null;
-          await material.save();
-        } else {
-          await material.markAsFailed(result.error);
-          console.error(`❌ Failed to process material: ${result.error}`);
+      // Process material immediately (bypass broken job queue)
+      await material.markAsProcessing();
+      console.log(`🔄 Processing material immediately: ${material.name}`);
+
+      // Process in background without blocking the response
+      setImmediate(async () => {
+        try {
+          const ragService = (await import('../services/ragService.js')).default;
+
+          console.log(`🔄 Chunking and embedding material: ${material.name}`);
+          const result = await ragService.processAndEmbedMaterial(material);
+
+          if (result.success) {
+            const Material = (await import('../models/Material.js')).default;
+            const updatedMaterial = await Material.findById(material._id);
+            if (updatedMaterial) {
+              await updatedMaterial.markAsCompleted();
+              console.log(`✅ Material processed and embedded: ${material.name}`);
+              console.log(`📊 Created ${result.chunksCount} chunks`);
+            }
+          } else {
+            const Material = (await import('../models/Material.js')).default;
+            const updatedMaterial = await Material.findById(material._id);
+            if (updatedMaterial) {
+              await updatedMaterial.markAsFailed(result.error);
+            }
+            console.error(`❌ Failed to process material: ${result.error}`);
+          }
+        } catch (error) {
+          console.error(`❌ Material processing failed: ${material.name}`, error);
+          try {
+            const Material = (await import('../models/Material.js')).default;
+            const updatedMaterial = await Material.findById(material._id);
+            if (updatedMaterial) {
+              await updatedMaterial.markAsFailed(error);
+            }
+          } catch (updateError) {
+            console.error('Failed to update material status:', updateError);
+          }
         }
-      } catch (processingError) {
-        console.error(`❌ Failed to process material:`, processingError);
-        await material.markAsFailed(processingError);
-        // Don't fail the upload, just mark as failed
-      }
+      });
 
       materials.push(material);
     } catch (error) {
@@ -144,11 +160,15 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
 
   if (errors.length > 0) {
     response.errors = errors;
+    console.log(`⚠️ Upload errors:`, errors);
   }
 
+  console.log(`📊 Upload summary: ${materials.length}/${files.length} files processed successfully`);
+  console.log(`📝 Materials created: ${materials.map(m => m.name).join(', ')}`);
+
   const statusCode = materials.length > 0 ? HTTP_STATUS.CREATED : HTTP_STATUS.BAD_REQUEST;
-  const message = materials.length > 0 ? 
-    `${materials.length} materials uploaded successfully` : 
+  const message = materials.length > 0 ?
+    `${materials.length} materials uploaded successfully` :
     'No materials were uploaded';
 
   return successResponse(res, response, message, statusCode);

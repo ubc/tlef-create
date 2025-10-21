@@ -83,7 +83,8 @@ class IntelligentQuestionGenerationService {
             questionConfigs: questionConfigs,
             relevantContent: chunks, // Use the safely extracted chunks
             difficulty: generationConfig.difficulty || 'moderate',
-            courseContext: this.buildCourseContext(quizData)
+            courseContext: this.buildCourseContext(quizData),
+            onStreamChunk: generationConfig.onStreamChunk // Pass through streaming callback
           }, userPreferences);
 
           console.log(`✅ Generated ${batchResult.totalGenerated}/${batchResult.totalRequested} questions`);

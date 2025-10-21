@@ -16,6 +16,20 @@ const connectDB = async () => {
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     
+    // Initialize job queue after MongoDB connection
+    try {
+      const { default: jobQueueService } = await import('../services/jobQueueService.js');
+      await jobQueueService.initialize();
+      
+      // Start SSE heartbeat
+      const { default: sseService } = await import('../services/sseService.js');
+      sseService.startHeartbeat();
+      
+    } catch (jobQueueError) {
+      console.error('❌ Failed to initialize job queue:', jobQueueError);
+      // Don't exit - let the app run without job queue for now
+    }
+    
     // Listen for connection events
     mongoose.connection.on('error', (err) => {
       console.error('❌ MongoDB connection error:', err);

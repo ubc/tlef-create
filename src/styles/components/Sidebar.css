@@ -31,12 +31,12 @@
 
 /* Create Course Button Specific Styling */
 .sidebar-header .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-muted);
-    color: var(--color-foreground);
-    border-color: var(--color-border);
+    background-color: #4a4a4a;
+    color: #ffffff;
+    border-color: #4a4a4a;
     opacity: 1;
-    transform: none;
-    box-shadow: none;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 
 .sidebar-section {
@@ -173,6 +173,42 @@
     border-color: var(--color-accent);
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
+}
+
+/* Search Trigger Button */
+.search-trigger-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.search-trigger-button:hover {
+    background-color: var(--color-muted);
+    border-color: var(--color-primary);
+}
+
+.search-trigger-button span {
+    flex: 1;
+    text-align: left;
+}
+
+.search-kbd {
+    padding: 2px 6px;
+    background-color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: monospace;
+    font-size: var(--font-size-xs);
+    box-shadow: 0 1px 0 var(--color-border);
 }
 
 @media (max-width: 768px) {

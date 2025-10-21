@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Wand2, Settings, Zap, Gamepad2, GraduationCap, CheckCircle, Edit } from 'lucide-react';
+import { Wand2, Settings, Zap, Gamepad2, GraduationCap, CheckCircle, Edit, Loader } from 'lucide-react';
 import { RootState, AppDispatch } from '../store';
 import { generatePlan, fetchPlans, approvePlan, setCurrentPlan } from '../store/slices/planSlice';
 import { questionsApi, Question } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
+import { useSSE } from '../hooks/useSSE';
 import AdvancedEditModal from './AdvancedEditModal';
 import '../styles/components/QuestionGeneration.css';
 
@@ -45,6 +46,23 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [hasExistingQuestions, setHasExistingQuestions] = useState(false);
+  
+  // Streaming state
+  const [streamingState, setStreamingState] = useState<{
+    isStreaming: boolean;
+    sessionId: string | null;
+    questionsInProgress: Map<string, { questionId: string; type: string; progress: string; chunks: string[] }>;
+    completedQuestions: Question[];
+    totalQuestions: number;
+    batchStarted: boolean;
+  }>({
+    isStreaming: false,
+    sessionId: null,
+    questionsInProgress: new Map<string, { questionId: string; type: string; progress: string; chunks: string[] }>(),
+    completedQuestions: [],
+    totalQuestions: 0,
+    batchStarted: false
+  });
   const [customFormula, setCustomFormula] = useState<CustomFormula>(() => {
     // Initialize with default support approach distribution
     return {
@@ -60,8 +78,129 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       totalWholeQuiz: 0
     };
   });
+  
+  // SSE URL for streaming - use test endpoint (no auth required for EventSource limitation)
+  const sseUrl = streamingState.sessionId ? `${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/test-sse/${streamingState.sessionId}` : null;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalJustSaved, setModalJustSaved] = useState(false);
+  
+  
+  // SSE connection for streaming
+  const { connectionStatus, isConnected, error: sseError, disconnect } = useSSE(sseUrl, {
+    onConnected: () => {
+      console.log('🔗 SSE connected successfully');
+    },
+    onBatchStarted: (data: any) => {
+      console.log('🚀 Batch started:', data);
+      setStreamingState(prev => ({
+        ...prev,
+        batchStarted: true,
+        totalQuestions: data.totalQuestions || 0
+      }));
+    },
+    onQuestionProgress: (questionId: string, data: any) => {
+      console.log('📊 Question progress:', questionId, data);
+      setStreamingState(prev => {
+        const newInProgress = new Map(prev.questionsInProgress);
+        const existing = newInProgress.get(questionId) || {
+          questionId,
+          type: data.type || 'unknown',
+          progress: 'Starting...',
+          chunks: []
+        };
+        
+        newInProgress.set(questionId, {
+          ...existing,
+          progress: data.status === 'started' ? 'Generating...' : existing.progress
+        });
+        
+        return {
+          ...prev,
+          questionsInProgress: newInProgress
+        };
+      });
+    },
+    onTextChunk: (questionId: string, chunk: string, metadata: any) => {
+      console.log('📝 Text chunk:', questionId, chunk.substring(0, 50) + '...');
+      setStreamingState(prev => {
+        const newInProgress = new Map(prev.questionsInProgress);
+        const existing = newInProgress.get(questionId) || {
+          questionId,
+          type: 'unknown',
+          progress: 'Generating...',
+          chunks: []
+        };
+        
+        newInProgress.set(questionId, {
+          ...existing,
+          chunks: [...existing.chunks, chunk],
+          progress: 'Streaming text...'
+        });
+        
+        return {
+          ...prev,
+          questionsInProgress: newInProgress
+        };
+      });
+    },
+    onQuestionComplete: (questionId: string, question: any) => {
+      console.log('✅ Question completed:', questionId, question);
+      setStreamingState(prev => {
+        const newInProgress = new Map(prev.questionsInProgress);
+        newInProgress.delete(questionId);
+        
+        const newCompletedQuestions = [...prev.completedQuestions, question];
+        console.log('📝 Updated completed questions:', newCompletedQuestions.length, newCompletedQuestions);
+        
+        return {
+          ...prev,
+          questionsInProgress: newInProgress,
+          completedQuestions: newCompletedQuestions
+        };
+      });
+    },
+    onBatchComplete: (summary: any) => {
+      console.log('🎉 Batch completed:', summary);
+      setStreamingState(prev => {
+        // For test mode with DB save, use the completed questions from streaming
+        // For production, reload questions from database
+        if (summary.realLLMTestWithDB) {
+          // Test mode with DB save: display the completed questions from streaming
+          console.log('🔧 Setting questions from streaming state:', prev.completedQuestions);
+          setQuestions(prev.completedQuestions);
+          setHasExistingQuestions(prev.completedQuestions.length > 0);
+        } else {
+          // Production mode: reload questions from database
+          console.log('🔧 Loading questions from database for quiz:', quizId);
+          loadExistingQuestions(quizId);
+        }
+        
+        showNotification('success', 'Questions Generated', 
+          `Successfully generated ${summary.totalGenerated || prev.completedQuestions.length} questions with streaming!`);
+        
+        // Auto-redirect to Review & Edit page after questions are generated
+        // Give more time for database save to complete
+        if (onQuestionsGenerated) {
+          setTimeout(() => {
+            onQuestionsGenerated();
+          }, 3000); // Give user 3 seconds to see completion and ensure DB save
+        }
+        
+        return {
+          ...prev,
+          isStreaming: false,
+          batchStarted: false
+        };
+      });
+    },
+    onError: (questionId: string, errorMessage: string, errorType: string) => {
+      console.error('🚨 SSE error:', questionId, errorMessage, errorType);
+      showNotification('error', 'Generation Error', `Error generating question ${questionId}: ${errorMessage}`);
+    },
+    onHeartbeat: () => {
+      // Silent heartbeat
+    }
+  });
 
   // Load existing plans and restore quiz-specific settings when component mounts
   useEffect(() => {
@@ -294,7 +433,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     showNotification('info', 'Plan Reset', 'You can now modify your approach and generate a new plan.');
   };
 
-  // Direct question generation without plan phase
+  // Direct question generation with streaming
   const handleDirectGenerateQuestions = async (isRegeneration = false) => {
     try {
       setIsRegenerating(isRegeneration);
@@ -327,7 +466,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       // Save current settings
       saveQuizSettings(quizId);
       
-      console.log('🎯 Direct generation with plan data:', planData);
+      console.log('🎯 Starting streaming generation with plan data:', planData);
       
       // Generate plan internally without showing plan phase
       const planResult = await dispatch(generatePlan(planData));
@@ -337,44 +476,106 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       if (planResult.payload && planResult.payload._id) {
         console.log('🔄 Approving generated plan:', planResult.payload._id);
         await dispatch(approvePlan(planResult.payload._id));
-        console.log('✅ Plan approved, starting question generation');
+        console.log('✅ Plan approved, starting streaming generation');
       } else {
         throw new Error('Failed to get plan ID after generation');
       }
       
-      // Show generating state
-      showNotification('info', 'Generating Questions', 'AI is generating questions based on your approach...');
+      // Show starting state
+      showNotification('info', 'Starting Generation', 'Initializing streaming question generation...');
       
       // Small delay to ensure database is updated
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Call the question generation API
-      const result = await questionsApi.generateFromPlan(quizId);
-      console.log('🎉 Questions generated successfully:', result);
+      // Prepare question configs for streaming
+      const questionConfigs = [];
+      const totalQuestions = (learningObjectives.length * customFormula.totalPerLO) + customFormula.totalWholeQuiz;
       
-      // Store the generated questions
-      setQuestions(result.questions);
-      setHasExistingQuestions(result.questions.length > 0);
-      
-      const message = isRegeneration 
-        ? `Successfully regenerated ${result.questions.length} questions with ${approach} approach!`
-        : `Successfully generated ${result.questions.length} questions with ${approach} approach!`;
-      
-      showNotification('success', 'Questions Generated', message);
-      
-      // Redirect to Review & Edit page after generation
-      if (onQuestionsGenerated) {
-        // Small delay to allow notification to show
-        setTimeout(() => {
-          onQuestionsGenerated();
-        }, 1000);
+      // Generate question configs based on the plan
+      for (let i = 0; i < learningObjectives.length; i++) {
+        const lo = learningObjectives[i];
+        customFormula.questionTypes.forEach(qtConfig => {
+          if (qtConfig.scope === 'per-lo') {
+            for (let j = 0; j < qtConfig.count; j++) {
+              questionConfigs.push({
+                questionType: qtConfig.type,
+                difficulty: 'moderate',
+                learningObjectiveIndex: i,
+                learningObjective: lo
+              });
+            }
+          }
+        });
       }
+      
+      // Add whole-quiz questions
+      customFormula.questionTypes.forEach(qtConfig => {
+        if (qtConfig.scope === 'whole-quiz') {
+          for (let j = 0; j < qtConfig.count; j++) {
+            questionConfigs.push({
+              questionType: qtConfig.type,
+              difficulty: 'moderate',
+              scope: 'whole-quiz'
+            });
+          }
+        }
+      });
+      
+      console.log('📋 Generated question configs for streaming:', questionConfigs);
+      
+      // Generate a session ID for testing with database save
+      const sessionId = `test-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Initialize streaming state with session ID for SSE connection
+      setStreamingState({
+        isStreaming: true,
+        sessionId: sessionId, // Set immediately for SSE connection
+        questionsInProgress: new Map(),
+        completedQuestions: [],
+        totalQuestions: questionConfigs.length,
+        batchStarted: false
+      });
+
+      // CRITICAL: Wait for SSE connection to establish BEFORE starting generation
+      console.log('⏳ Waiting for SSE connection to establish...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for SSE to connect
+      console.log('✅ SSE connection should be ready, starting generation...');
+
+      // Start production streaming generation
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/generate-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include session cookies for authentication
+        body: JSON.stringify({
+          sessionId: sessionId,
+          quizId: quizId,
+          questionConfigs: questionConfigs // Pass the full question configs with learningObjective in each config
+        })
+      });
+
+      const result = await response.json();
+      console.log('📡 Streaming generation started:', result);
+      
+      showNotification('success', 'Streaming Started', 'Questions are being generated in real-time. Watch them appear below!');
+      
     } catch (error) {
-      console.error('Failed to generate questions:', error);
+      console.error('Failed to start streaming generation:', error);
       const errorMessage = isRegeneration 
-        ? 'Failed to regenerate questions'
-        : 'Failed to generate questions';
-      showNotification('error', 'Question Generation Failed', errorMessage);
+        ? 'Failed to start regeneration'
+        : 'Failed to start question generation';
+      showNotification('error', 'Generation Failed', errorMessage);
+      
+      // Reset streaming state on error
+      setStreamingState({
+        isStreaming: false,
+        sessionId: null,
+        questionsInProgress: new Map(),
+        completedQuestions: [],
+        totalQuestions: 0,
+        batchStarted: false
+      });
     } finally {
       setIsRegenerating(false);
     }
@@ -382,50 +583,131 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   const handleGenerateQuestions = async (isRegeneration = false) => {
     if (!currentPlan) return;
-    
+
     try {
       setIsRegenerating(isRegeneration);
-      
+
       // Delete existing questions if this is a regeneration
       if (isRegeneration && hasExistingQuestions) {
         await handleDeleteExistingQuestions();
         showNotification('info', 'Questions Deleted', 'Previous questions deleted. Generating new ones...');
       }
-      
+
       // First approve the plan
       await dispatch(approvePlan(currentPlan._id));
       console.log('✅ Plan approved, starting question generation');
-      
+
       // Show generating state while maintaining plan phase
       showNotification('info', 'Generating Questions', 'AI is generating questions based on your plan...');
-      
+
       // Small delay to ensure database is updated
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Call the question generation API
-      const result = await questionsApi.generateFromPlan(quizId);
-      console.log('🎉 Questions generated successfully:', result);
-      
-      // Store the generated questions
-      setQuestions(result.questions);
-      setHasExistingQuestions(result.questions.length > 0);
-      
-      const message = isRegeneration 
-        ? `Successfully regenerated ${result.questions.length} questions with new approach!`
-        : `Successfully generated ${result.questions.length} questions!`;
-      
-      showNotification('success', 'Questions Generated', message);
-      
-      // Redirect to Review & Edit page after generation
-      if (onQuestionsGenerated) {
-        // Small delay to allow notification to show
-        setTimeout(() => {
-          onQuestionsGenerated();
-        }, 1000);
+
+      // Try streaming first (for Ollama), fall back to non-streaming (for OpenAI)
+      let streamingSuccess = false;
+      const generatedQuestions: Question[] = [];
+
+      try {
+        console.log('🌊 Attempting streaming generation...');
+        await questionsApi.generateFromPlanStream(
+          quizId,
+          (event: string, data: any) => {
+            // Handle streaming events
+            if (event === 'stream') {
+              console.log('🌊 Stream chunk:', data.chunk);
+              // Update UI to show streaming progress
+              setStreamingState(prev => {
+                const key = `${data.questionType}-${data.questionIndex}`;
+                const existing = prev.questionsInProgress.get(key) || {
+                  questionId: key,
+                  type: data.questionType,
+                  progress: '',
+                  chunks: []
+                };
+
+                existing.chunks.push(data.chunk);
+                existing.progress = existing.chunks.join('');
+
+                const newMap = new Map(prev.questionsInProgress);
+                newMap.set(key, existing);
+
+                return {
+                  ...prev,
+                  isStreaming: true,
+                  questionsInProgress: newMap
+                };
+              });
+            } else if (event === 'question-created') {
+              console.log('✅ Question created:', data.questionText);
+              // Add completed question
+              if (data.question) {
+                generatedQuestions.push(data.question);
+              }
+            }
+          },
+          (data: any) => {
+            // On complete
+            console.log('🎉 Streaming generation complete:', data);
+            streamingSuccess = true;
+            setQuestions(generatedQuestions);
+            setHasExistingQuestions(generatedQuestions.length > 0);
+
+            const message = isRegeneration
+              ? `Successfully regenerated ${generatedQuestions.length} questions with new approach!`
+              : `Successfully generated ${generatedQuestions.length} questions!`;
+
+            showNotification('success', 'Questions Generated', message);
+
+            // Reset streaming state
+            setStreamingState({
+              isStreaming: false,
+              sessionId: null,
+              questionsInProgress: new Map(),
+              completedQuestions: [],
+              totalQuestions: 0,
+              batchStarted: false
+            });
+
+            // Redirect to Review & Edit page after generation
+            if (onQuestionsGenerated) {
+              setTimeout(() => {
+                onQuestionsGenerated();
+              }, 1000);
+            }
+          },
+          (error: string) => {
+            // On error - fall back to non-streaming
+            console.log('⚠️ Streaming failed, falling back to non-streaming:', error);
+            throw new Error(error);
+          }
+        );
+      } catch (streamError) {
+        // Fallback to non-streaming generation (for OpenAI or if streaming fails)
+        console.log('📦 Using non-streaming generation as fallback');
+        const result = await questionsApi.generateFromPlan(quizId);
+        console.log('🎉 Questions generated successfully:', result);
+
+        // Store the generated questions
+        setQuestions(result.questions);
+        setHasExistingQuestions(result.questions.length > 0);
+
+        const message = isRegeneration
+          ? `Successfully regenerated ${result.questions.length} questions with new approach!`
+          : `Successfully generated ${result.questions.length} questions!`;
+
+        showNotification('success', 'Questions Generated', message);
+
+        // Redirect to Review & Edit page after generation
+        if (onQuestionsGenerated) {
+          // Small delay to allow notification to show
+          setTimeout(() => {
+            onQuestionsGenerated();
+          }, 1000);
+        }
       }
     } catch (error) {
       console.error('Failed to generate questions:', error);
-      const errorMessage = isRegeneration 
+      const errorMessage = isRegeneration
         ? 'Failed to regenerate questions'
         : 'Failed to generate questions';
       showNotification('error', 'Question Generation Failed', errorMessage);
@@ -566,7 +848,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   return (
     <div className="question-generation">
-      {questions.length === 0 ? (
+      {questions.length === 0 && !streamingState.isStreaming ? (
         // Direct Question Generation - no plan phase
         <div className="generation-phase">
           <div className="card">
@@ -731,6 +1013,126 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
                   Regenerate All Questions
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      ) : streamingState.isStreaming ? (
+        // Streaming Progress Phase
+        <div className="streaming-phase">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">
+                <Loader className="spinning" size={20} />
+                Generating Questions in Real-time
+              </h3>
+              <p className="card-description">
+                Questions are being generated with AI streaming. Watch them appear as they're created!
+              </p>
+            </div>
+
+            {/* Connection Status */}
+            <div className="streaming-status">
+              <div className={`connection-indicator ${connectionStatus}`}>
+                <div className="status-dot"></div>
+                <span>
+                  {connectionStatus === 'connected' && 'Connected to streaming service'}
+                  {connectionStatus === 'connecting' && 'Connecting to streaming service...'}
+                  {connectionStatus === 'disconnected' && 'Disconnected from streaming service'}
+                  {connectionStatus === 'error' && 'Connection error - attempting to reconnect...'}
+                </span>
+              </div>
+            </div>
+
+            {/* Batch Progress */}
+            {streamingState.batchStarted && (
+              <div className="batch-progress">
+                <div className="progress-header">
+                  <h4>Generation Progress</h4>
+                  <span className="progress-count">
+                    {streamingState.completedQuestions.length} / {streamingState.totalQuestions} completed
+                  </span>
+                </div>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ 
+                      width: `${(streamingState.completedQuestions.length / streamingState.totalQuestions) * 100}%` 
+                    }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* Questions in Progress */}
+            {streamingState.questionsInProgress.size > 0 && (
+              <div className="questions-in-progress">
+                <h4>Currently Generating</h4>
+                <div className="progress-questions">
+                  {Array.from(streamingState.questionsInProgress.values()).map((questionProgress) => (
+                    <div key={questionProgress.questionId} className="progress-question">
+                      <div className="question-header">
+                        <span className="question-type">{questionProgress.type.replace('-', ' ')}</span>
+                        <span className="question-status">{questionProgress.progress}</span>
+                      </div>
+                      {questionProgress.chunks.length > 0 && (
+                        <div className="streaming-text">
+                          <div className="text-preview">
+                            {questionProgress.chunks.join('')}
+                            <span className="cursor-blink">|</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed Questions Preview */}
+            {streamingState.completedQuestions.length > 0 && (
+              <div className="completed-questions-preview">
+                <h4>Recently Completed</h4>
+                <div className="completed-list">
+                  {streamingState.completedQuestions.slice(-3).map((question, index) => (
+                    <div key={index} className="completed-question">
+                      <div className="question-preview">
+                        <span className="question-type">{question.type?.replace('-', ' ')}</span>
+                        <span className="question-text">
+                          {question.questionText?.substring(0, 100)}
+                          {question.questionText?.length > 100 && '...'}
+                        </span>
+                        <CheckCircle size={16} className="completed-icon" />
+                      </div>
+                    </div>
+                  ))}
+                  {streamingState.completedQuestions.length > 3 && (
+                    <div className="more-completed">
+                      + {streamingState.completedQuestions.length - 3} more completed
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Stop Streaming Button */}
+            <div className="streaming-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  disconnect();
+                  setStreamingState({
+                    isStreaming: false,
+                    sessionId: null,
+                    questionsInProgress: new Map(),
+                    completedQuestions: [],
+                    totalQuestions: 0,
+                    batchStarted: false
+                  });
+                  showNotification('info', 'Generation Stopped', 'Streaming generation has been stopped.');
+                }}
+              >
+                Stop Generation
+              </button>
             </div>
           </div>
         </div>

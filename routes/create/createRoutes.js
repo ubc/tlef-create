@@ -13,6 +13,8 @@ import objectiveController from './controllers/objectiveController.js';
 import planController from './controllers/planController.js';
 import questionController from './controllers/questionController.js';
 import exportController from './controllers/exportController.js';
+import streamingController from './controllers/streamingController.js';
+import searchController from './controllers/searchController.js';
 
 const router = express.Router();
 
@@ -67,10 +69,10 @@ const uploadLimiter = rateLimit({
 // Apply rate limiting
 router.use('/auth/saml/login', authLimiter);
 router.use('/materials/upload', uploadLimiter);
-// Apply API rate limiting to all routes except config endpoint (needed for initial auth check)
+// Apply API rate limiting to all routes except config and streaming endpoints
 router.use((req, res, next) => {
-  if (req.path === '/auth/config') {
-    return next(); // Skip rate limiting for config endpoint
+  if (req.path === '/auth/config' || req.path.startsWith('/streaming/')) {
+    return next(); // Skip rate limiting for config and streaming endpoints
   }
   return apiLimiter(req, res, next);
 });
@@ -94,6 +96,8 @@ router.use('/objectives', objectiveController);
 router.use('/plans', planController);
 router.use('/questions', questionController);
 router.use('/export', exportController);
+router.use('/streaming', streamingController);
+router.use('/search', searchController);
 
 // 404 handler for unknown API routes
 router.use((req, res) => {

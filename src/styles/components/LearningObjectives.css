@@ -410,6 +410,8 @@
 }
 
 .btn-nav:hover {
+  background-color: #4a4a4a;
+  color: #ffffff;
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }

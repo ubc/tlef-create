@@ -1,25 +1,99 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
+import SearchModal from './SearchModal';
 import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Sidebar.css';
 
 const Sidebar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const { activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { subscribe, publish } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingQuizForFolder, setCreatingQuizForFolder] = useState<string | null>(null);
 
   useEffect(() => {
     loadFolders();
+  }, []);
+
+  // Automatically select course and quiz based on URL, and clear selection on dashboard
+  useEffect(() => {
+    const pathParts = location.pathname.split('/').filter(Boolean);
+
+    // Check if we're on the dashboard (root path or just '/')
+    if (pathParts.length === 0 || location.pathname === '/') {
+      // Clear selections when on dashboard
+      dispatch(setActiveCourse(''));
+      dispatch(setActiveQuiz(''));
+      return;
+    }
+
+    // Match pattern: /course/:courseId or /course/:courseId/quiz/:quizId
+    if (pathParts[0] === 'course' && pathParts[1]) {
+      const courseId = pathParts[1];
+
+      // Set active course
+      dispatch(setActiveCourse(courseId));
+
+      // Expand the course to show its quizzes
+      if (!expandedCourses.includes(courseId)) {
+        setExpandedCourses(prev => [...prev, courseId]);
+      }
+
+      // If there's a quiz in the URL, set it as active
+      if (pathParts[2] === 'quiz' && pathParts[3]) {
+        const quizId = pathParts[3];
+        dispatch(setActiveQuiz(quizId));
+      } else {
+        // Clear quiz selection if we're just on the course page
+        dispatch(setActiveQuiz(''));
+      }
+    }
+  }, [location.pathname, dispatch]);
+
+  // Listen for course deletion events
+  useEffect(() => {
+    subscribe('course-deleted', (data: any) => {
+      console.log('🗑️ Sidebar: Received course-deleted event:', data);
+      if (data?.courseId) {
+        // Remove the deleted course from the sidebar
+        setFolders(prev => prev.filter(folder => folder._id !== data.courseId));
+        console.log('✅ Sidebar: Course removed from list:', data.courseId);
+      }
+    });
+    // Cleanup is automatically handled by usePubSub hook
+  }, [subscribe]);
+
+  // Listen for quiz deletion events
+  useEffect(() => {
+    subscribe('quiz-deleted', (data: any) => {
+      console.log('🗑️ Sidebar: Received quiz-deleted event:', data);
+      // Reload folders to get updated quiz list
+      loadFolders();
+    });
+  }, [subscribe]);
+
+  // Global keyboard shortcut for search (⌘K or Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearchModal(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const loadFolders = async () => {
@@ -61,42 +135,75 @@ const Sidebar = () => {
     try {
       const response = await foldersApi.createFolder(courseName, 1);
       console.log('✅ Sidebar: Folder created with Quiz 1:', response.folder);
-      
+
+      // Immediately add the new folder to the sidebar state
+      setFolders(prev => [response.folder, ...prev]);
+      console.log('📋 Sidebar: Added new folder to state immediately');
+
       // Upload materials to the created folder
       if (materials.length > 0) {
         console.log('📁 Uploading materials to folder:', materials);
         console.log('📁 Folder ID for upload:', response.folder._id);
-        
-        for (const material of materials) {
-          try {
-            console.log('🔄 Processing material:', material);
-            switch (material.type) {
-              case 'pdf':
-              case 'docx':
-                if (material.file) {
-                  console.log('📄 Uploading file:', material.file.name);
-                  const files = [material.file];
-                  await materialsApi.uploadFiles(response.folder._id, files as any);
-                }
-                break;
-              case 'url':
-                console.log('🔗 Adding URL:', material.content || material.name);
-                await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
-                break;
-              case 'text':
-                console.log('📝 Adding text material:', material.name);
-                await materialsApi.addText(response.folder._id, material.content || '', material.name);
-                break;
-            }
-          } catch (materialError) {
-            console.error('❌ Failed to upload material:', material.name, materialError);
+
+        // Separate materials by type
+        const fileMaterials = materials.filter(m => m.type === 'pdf' || m.type === 'docx');
+        const urlMaterials = materials.filter(m => m.type === 'url');
+        const textMaterials = materials.filter(m => m.type === 'text');
+
+        // Upload all files at once
+        if (fileMaterials.length > 0) {
+          console.log(`📄 Uploading ${fileMaterials.length} files together`);
+          const files = fileMaterials.map(m => m.file).filter(Boolean) as File[];
+          if (files.length > 0) {
+            console.log(`📋 Files to upload:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+            // Create a DataTransfer object to convert File[] to FileList
+            const dataTransfer = new DataTransfer();
+            files.forEach(file => {
+              console.log(`➕ Adding file to DataTransfer: ${file.name}`);
+              dataTransfer.items.add(file);
+            });
+            console.log(`📤 Sending ${dataTransfer.files.length} files to API`);
+            const uploadResponse = await materialsApi.uploadFiles(response.folder._id, dataTransfer.files);
+            console.log(`✅ Upload response:`, uploadResponse);
+            console.log(`✅ Uploaded ${uploadResponse.materials?.length || 0} materials successfully`);
           }
         }
+
+        // Upload URLs one by one (they need individual names)
+        for (const material of urlMaterials) {
+          try {
+            console.log('🔗 Adding URL:', material.content || material.name);
+            await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
+          } catch (materialError) {
+            console.error('❌ Failed to upload URL material:', material.name, materialError);
+          }
+        }
+
+        // Upload text materials one by one (they need individual content and names)
+        for (const material of textMaterials) {
+          try {
+            console.log('📝 Adding text material:', material.name);
+            await materialsApi.addText(response.folder._id, material.content || '', material.name);
+          } catch (materialError) {
+            console.error('❌ Failed to upload text material:', material.name, materialError);
+          }
+        }
+
         console.log('✅ All materials processed');
+
+        // Reload folders to update material counts
+        await loadFolders();
       }
-      
-      // Reload folders to get the updated list
-      await loadFolders();
+
+      // Publish course-created event for other components
+      publish('course-created', { courseId: response.folder._id, courseName: response.folder.name });
+
+      // Automatically open the newly created course
+      const newCourseId = response.folder._id;
+      dispatch(setActiveCourse(newCourseId));
+      setExpandedCourses(prev => [...prev, newCourseId]);
+      navigate(`/course/${newCourseId}`);
+      console.log(`✅ Navigated to newly created course: ${newCourseId}`);
     } catch (err) {
       console.error('❌ Sidebar: Failed to create folder:', err);
       if (err instanceof ApiError) {
@@ -112,16 +219,31 @@ const Sidebar = () => {
   };
 
   const handleAddQuiz = async (folderId: string) => {
-    if (creatingQuizForFolder) return;
-    
+    if (creatingQuizForFolder || loading) return;
+
     setCreatingQuizForFolder(folderId);
     try {
       // Find the current folder to get existing quiz count
       const folder = folders.find(f => f._id === folderId);
-      if (!folder) return;
+      if (!folder) {
+        setCreatingQuizForFolder(null);
+        return;
+      }
       
       // Generate a name for the new quiz
-      const quizNumber = (folder.quizzes?.length || 0) + 1;
+      // Find the lowest available quiz number
+      const existingNumbers = folder.quizzes
+        ?.map((q: any) => {
+          const match = q.name?.match(/^Quiz (\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter((n: number) => n > 0) || [];
+
+      let quizNumber = 1;
+      while (existingNumbers.includes(quizNumber)) {
+        quizNumber++;
+      }
+
       const quizName = `Quiz ${quizNumber}`;
       
       const response = await quizApi.createQuiz(quizName, folderId);
@@ -143,6 +265,7 @@ const Sidebar = () => {
     }
   };
 
+
   return (
       <>
         <div className="sidebar">
@@ -159,24 +282,14 @@ const Sidebar = () => {
           </div>
 
           <div className="sidebar-section">
-            <h2 className="sidebar-section-title">Search chats</h2>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-muted-foreground)'
-              }} />
-              <input
-                  type="text"
-                  placeholder="Search conversations..."
-                  className="input"
-                  style={{ paddingLeft: '40px' }}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <button
+                className="search-trigger-button"
+                onClick={() => setShowSearchModal(true)}
+            >
+              <Search size={16} />
+              <span>Search...</span>
+              <kbd className="search-kbd">⌘K</kbd>
+            </button>
           </div>
 
           <div className="sidebar-section">
@@ -261,6 +374,11 @@ const Sidebar = () => {
             isOpen={showCreateModal}
             onClose={() => setShowCreateModal(false)}
             onSubmit={handleCreateCourse}
+        />
+
+        <SearchModal
+            isOpen={showSearchModal}
+            onClose={() => setShowSearchModal(false)}
         />
       </>
   );

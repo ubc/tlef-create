@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MaterialUpload from './MaterialUpload';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { foldersApi, materialsApi, Folder, Material, Quiz, ApiError } from '../services/api';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/CourseView.css';
 
 interface QuizData {
@@ -20,7 +21,8 @@ interface CourseData {
 const CourseView = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
-  
+  const { showNotification, publish, subscribe } = usePubSub('CourseView');
+
   const [course, setCourse] = useState<CourseData | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,11 +30,82 @@ const CourseView = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasNotifiedRef = useRef(false);
+
   useEffect(() => {
     if (courseId) {
       loadCourseData();
     }
   }, [courseId]);
+
+  // Listen for quiz deletion events
+  useEffect(() => {
+    const handleQuizDeleted = (data: { quizId: string; courseId: string }) => {
+      console.log('📢 CourseView: Received quiz-deleted event', data);
+      // Refresh course data to get updated quiz list
+      if (data.courseId === courseId) {
+        loadCourseData();
+      }
+    };
+
+    subscribe('quiz-deleted', handleQuizDeleted);
+  }, [courseId, subscribe]);
+
+  // Poll for material processing status
+  useEffect(() => {
+    const hasProcessingMaterials = materials.some(m =>
+      m.processingStatus === 'pending' || m.processingStatus === 'processing'
+    );
+
+    if (hasProcessingMaterials && courseId) {
+      // Start polling every 2 seconds
+      pollingIntervalRef.current = setInterval(async () => {
+        try {
+          const materialsResponse = await materialsApi.getMaterials(courseId);
+          setMaterials(materialsResponse.materials);
+
+          // Check if all materials are now completed
+          const allCompleted = materialsResponse.materials.every(m =>
+            m.processingStatus === 'completed' || m.processingStatus === 'failed'
+          );
+
+          if (allCompleted && !hasNotifiedRef.current) {
+            hasNotifiedRef.current = true;
+            const failedCount = materialsResponse.materials.filter(m => m.processingStatus === 'failed').length;
+            const completedCount = materialsResponse.materials.filter(m => m.processingStatus === 'completed').length;
+
+            if (failedCount > 0) {
+              showNotification(`Processing complete! ${completedCount} material(s) ready, ${failedCount} failed.`, 'warning');
+            } else {
+              showNotification(`All materials processed successfully! ${completedCount} material(s) ready.`, 'success');
+            }
+
+            // Stop polling
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+          }
+        } catch (err) {
+          console.error('❌ Failed to poll material status:', err);
+        }
+      }, 2000);
+    } else {
+      // No processing materials, stop polling
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [materials, courseId, showNotification]);
 
   const loadCourseData = async () => {
     if (!courseId) return;
@@ -174,18 +247,21 @@ const CourseView = () => {
 
   const handleDeleteCourse = async () => {
     if (!course || !courseId) return;
-    
+
     setIsDeleting(true);
     console.log('🗑️ CourseView: Deleting course:', courseId);
-    
+
     try {
       // Call the API to delete the course (this will cascade delete everything)
       await foldersApi.deleteFolder(courseId);
       console.log('✅ CourseView: Course deleted successfully');
-      
+
+      // Notify Dashboard to remove course from sidebar
+      publish('course-deleted', { courseId });
+
       // Navigate back to dashboard
       navigate('/');
-      
+
     } catch (err) {
       console.error('❌ CourseView: Failed to delete course:', err);
       setIsDeleting(false);
@@ -235,7 +311,8 @@ const CourseView = () => {
               name: m.name,
               type: m.type,
               uploadDate: new Date(m.createdAt).toLocaleDateString(),
-              content: m.content || m.url
+              content: m.content || m.url,
+              processingStatus: m.processingStatus
             }))}
             onAddMaterial={handleAddMaterial}
             onRemoveMaterial={handleDeleteMaterial}
