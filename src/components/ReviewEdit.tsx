@@ -2241,6 +2241,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             onRegenerate={handleRegenerate}
             question={questionToRegenerate}
             isLoading={regenerateLoading}
+            historyKey="question"
           />
         )}
       </div>

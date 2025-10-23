@@ -2,17 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Upload, Sparkles, Edit, Plus, Trash2, RotateCcw, X } from 'lucide-react';
 import { RootState, AppDispatch } from '../store';
-import { 
-  fetchObjectives, 
-  generateObjectives, 
-  classifyObjectives, 
-  saveObjectives, 
-  updateObjective, 
+import {
+  fetchObjectives,
+  generateObjectives,
+  classifyObjectives,
+  saveObjectives,
+  updateObjective,
   deleteObjective,
   clearObjectives,
   regenerateSingleObjective,
   deleteAllObjectives
 } from '../store/slices/learningObjectiveSlice';
+import RegeneratePromptModal from './RegeneratePromptModal';
 import '../styles/components/LearningObjectives.css';
 
 interface LearningObjectivesProps {
@@ -37,6 +38,11 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const [targetObjectiveCount, setTargetObjectiveCount] = useState<number | ''>(''); // Allow empty input
   const navigationRef = useRef<HTMLDivElement>(null);
 
+  // Regenerate modal state
+  const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
+  const [regenerateLoading, setRegenerateLoading] = useState(false);
+  const [objectiveToRegenerate, setObjectiveToRegenerate] = useState<{ index: number; text: string } | null>(null);
+
   // Use Redux objectives if available, otherwise fallback to props
   const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives;
   const isGenerating = generating || classifying;
@@ -57,12 +63,12 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   // Effect to handle navigation appearance with smooth scroll
   useEffect(() => {
-    const shouldShowNav = objectives.length > 0;
-    
+    const shouldShowNav = currentObjectives.length > 0;
+
     if (shouldShowNav && !showNavigation) {
       // Show navigation section
       setShowNavigation(true);
-      
+
       // Scroll to navigation section after it appears
       setTimeout(() => {
         if (navigationRef.current) {
@@ -77,7 +83,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       // Hide navigation section
       setShowNavigation(false);
     }
-  }, [objectives.length, showNavigation]);
+  }, [currentObjectives.length, showNavigation]);
 
   const handleClassifyObjectives = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,11 +189,18 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       if (reduxObjectives.length > 0 && reduxObjectives[index]) {
         const objectiveId = reduxObjectives[index]._id;
         await dispatch(deleteObjective(objectiveId));
+
+        // After deletion, update parent component with remaining objectives
+        const remainingObjectives = reduxObjectives
+          .filter((_, i) => i !== index)
+          .map(obj => obj.text);
+        onObjectivesChange(remainingObjectives);
       } else {
         // Otherwise, delete from local state and save to backend
         const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
         const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
         await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
+        onObjectivesChange(updatedObjectives);
       }
     } catch (error) {
       console.error('Failed to delete objective:', error);
@@ -278,40 +291,57 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
   };
 
-  const handleRegenerateSingle = async (index: number) => {
+  const openRegenerateModal = (index: number) => {
     if (!assignedMaterials || assignedMaterials.length === 0) {
       alert('Please assign materials to this quiz first to regenerate learning objectives.');
       return;
     }
 
     const currentObjective = currentObjectives[index];
-    const truncatedObjective = currentObjective.length > 50 
-      ? currentObjective.substring(0, 50) + '...' 
-      : currentObjective;
+    setObjectiveToRegenerate({ index, text: currentObjective });
+    setRegenerateModalOpen(true);
+  };
 
-    {
-      try {
-        // If using Redux objectives, regenerate via Redux action
-        if (reduxObjectives.length > 0 && reduxObjectives[index]) {
-          const objectiveId = reduxObjectives[index]._id;
-          await dispatch(regenerateSingleObjective(objectiveId));
-        } else {
-          // Fallback: regenerate all and take first result (for local state objectives)
-          const generatedObjectives = await dispatch(generateObjectives({ quizId, materialIds: assignedMaterials, targetCount: 1 }));
-          
-          if (generatedObjectives.payload && generatedObjectives.payload.length > 0) {
-            const updatedObjectives = [...currentObjectives];
-            updatedObjectives[index] = generatedObjectives.payload[0].text;
-            
-            const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
-            await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
-          }
+  const handleRegenerateSingle = async (customPrompt?: string) => {
+    if (!objectiveToRegenerate) return;
+
+    const { index } = objectiveToRegenerate;
+    setRegenerateLoading(true);
+
+    try {
+      // If using Redux objectives, regenerate via Redux action
+      if (reduxObjectives.length > 0 && reduxObjectives[index]) {
+        const objectiveId = reduxObjectives[index]._id;
+        await dispatch(regenerateSingleObjective({
+          id: objectiveId,
+          customPrompt: customPrompt?.trim() || undefined
+        }));
+      } else {
+        // Fallback: regenerate all and take first result (for local state objectives)
+        const generatedObjectives = await dispatch(generateObjectives({ quizId, materialIds: assignedMaterials, targetCount: 1 }));
+
+        if (generatedObjectives.payload && Array.isArray(generatedObjectives.payload) && generatedObjectives.payload.length > 0) {
+          const updatedObjectives = [...currentObjectives];
+          updatedObjectives[index] = generatedObjectives.payload[0].text;
+
+          const objectivesData = updatedObjectives.map((text: string, i: number) => ({ text, order: i }));
+          await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
         }
-      } catch (error) {
-        console.error('Failed to regenerate objective:', error);
-        alert('Failed to regenerate the learning objective. Please try again.');
       }
+
+      setRegenerateModalOpen(false);
+      setObjectiveToRegenerate(null);
+    } catch (error) {
+      console.error('Failed to regenerate objective:', error);
+      alert('Failed to regenerate the learning objective. Please try again.');
+    } finally {
+      setRegenerateLoading(false);
     }
+  };
+
+  const closeRegenerateModal = () => {
+    setRegenerateModalOpen(false);
+    setObjectiveToRegenerate(null);
   };
 
   if (assignedMaterials.length === 0) {
@@ -565,7 +595,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                                   <button className="btn btn-ghost" onClick={() => handleEditObjective(index)}>
                                     <Edit size={16} />
                                   </button>
-                                  <button className="btn btn-ghost" onClick={() => handleRegenerateSingle(index)}>
+                                  <button className="btn btn-ghost" onClick={() => openRegenerateModal(index)}>
                                     <RotateCcw size={16} />
                                   </button>
                                   <button className="btn btn-ghost" onClick={() => handleDeleteObjective(index)}>
@@ -583,17 +613,17 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
           {/* Navigation Section */}
           {showNavigation && (
-            <div 
+            <div
               ref={navigationRef}
-              className={`tab-navigation ${objectives.length > 0 ? 'nav-visible' : 'nav-hidden'}`}
+              className={`tab-navigation ${currentObjectives.length > 0 ? 'nav-visible' : 'nav-hidden'}`}
             >
               <div className="nav-content">
                 <div className="nav-info">
                   <h4>Learning Objectives Set</h4>
-                  <p>You have defined {objectives.length} learning objective{objectives.length !== 1 ? 's' : ''} for this quiz.</p>
+                  <p>You have defined {currentObjectives.length} learning objective{currentObjectives.length !== 1 ? 's' : ''} for this quiz.</p>
                 </div>
                 <div className="nav-actions">
-                  <button 
+                  <button
                     className="btn btn-primary btn-nav"
                     onClick={() => {
                       if (onNavigateNext) {
@@ -601,7 +631,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                       } else {
                         // Fallback method
                         const tabButtons = document.querySelectorAll('button');
-                        const questionsTab = Array.from(tabButtons).find(button => 
+                        const questionsTab = Array.from(tabButtons).find(button =>
                           button.textContent?.includes('Generate Questions')
                         );
                         if (questionsTab) {
@@ -620,6 +650,25 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
             </div>
           )}
         </div>
+
+        {/* Regenerate Prompt Modal */}
+        {objectiveToRegenerate && (
+          <RegeneratePromptModal
+            isOpen={regenerateModalOpen}
+            onClose={closeRegenerateModal}
+            onRegenerate={handleRegenerateSingle}
+            question={{
+              _id: reduxObjectives[objectiveToRegenerate.index]?._id || '',
+              type: 'learning-objective',
+              questionText: objectiveToRegenerate.text,
+              learningObjective: {
+                text: objectiveToRegenerate.text
+              }
+            }}
+            isLoading={regenerateLoading}
+            mode="learning-objective"
+          />
+        )}
       </div>
   );
 };

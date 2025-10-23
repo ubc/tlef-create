@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Wand2, Eye, EyeOff, Info } from 'lucide-react';
+import { X, Wand2, Eye, EyeOff, Info, Trash2 } from 'lucide-react';
 import '../styles/components/RegeneratePromptModal.css';
 
 interface RegeneratePromptModalProps {
@@ -15,22 +15,29 @@ interface RegeneratePromptModalProps {
     };
   };
   isLoading?: boolean;
+  historyKey?: string; // Kept for backward compatibility but now uses shared history
+  mode?: 'question' | 'learning-objective'; // Determines display text
 }
 
-const RegeneratePromptModal = ({ 
-  isOpen, 
-  onClose, 
-  onRegenerate, 
+const RegeneratePromptModal = ({
+  isOpen,
+  onClose,
+  onRegenerate,
   question,
-  isLoading = false
+  isLoading = false,
+  historyKey = 'shared', // Now using shared history
+  mode = 'question' // Default to 'question' for backward compatibility
 }: RegeneratePromptModalProps) => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
 
+  // Use shared storage key for all regeneration prompts
+  const storageKey = 'regenerate-prompt-history-shared';
+
   // Load prompt history from localStorage
   useEffect(() => {
-    const savedHistory = localStorage.getItem('regenerate-prompt-history');
+    const savedHistory = localStorage.getItem(storageKey);
     if (savedHistory) {
       try {
         setPromptHistory(JSON.parse(savedHistory));
@@ -38,15 +45,23 @@ const RegeneratePromptModal = ({
         console.error('Failed to load prompt history:', error);
       }
     }
-  }, []);
+  }, [storageKey]);
 
   // Save prompt to history
   const savePromptToHistory = (prompt: string) => {
     if (prompt.trim() && !promptHistory.includes(prompt.trim())) {
-      const newHistory = [prompt.trim(), ...promptHistory].slice(0, 10); // Keep last 10
+      const newHistory = [prompt.trim(), ...promptHistory].slice(0, 5); // Keep last 5
       setPromptHistory(newHistory);
-      localStorage.setItem('regenerate-prompt-history', JSON.stringify(newHistory));
+      localStorage.setItem(storageKey, JSON.stringify(newHistory));
     }
+  };
+
+  // Delete prompt from history
+  const deletePromptFromHistory = (index: number, e: any) => {
+    e.stopPropagation(); // Prevent the button click from triggering
+    const newHistory = promptHistory.filter((_: any, i: number) => i !== index);
+    setPromptHistory(newHistory);
+    localStorage.setItem(storageKey, JSON.stringify(newHistory));
   };
 
   const handleRegenerate = () => {
@@ -80,7 +95,7 @@ CURRENT QUESTION TO REGENERATE:
 
 INSTRUCTIONS:
 1. Create a question that directly assesses the learning objective
-2. Make the question engaging and relevant to real-world applications  
+2. Make the question engaging and relevant to real-world applications
 3. Ensure the question tests meaningful understanding, not just memorization
 4. Follow educational best practices for ${question.type} questions
 5. Create a completely new question - avoid repeating the current question
@@ -91,6 +106,10 @@ ${questionTypeFormatting[question.type as keyof typeof questionTypeFormatting] |
 Return ONLY a valid JSON object with the required structure for ${question.type} questions.`;
   };
 
+  // Get dynamic text based on mode
+  const itemType = mode === 'learning-objective' ? 'Learning Objective' : 'Question';
+  const itemTypeLabel = mode === 'learning-objective' ? question.type : `${question.type}`;
+
   if (!isOpen) return null;
 
   return (
@@ -99,7 +118,7 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
         <div className="modal-header">
           <h3 className="modal-title">
             <Wand2 size={20} />
-            Regenerate Question with Custom Prompt
+            Regenerate {itemType} with Custom Prompt
           </h3>
           <button className="modal-close" onClick={onClose}>
             <X size={20} />
@@ -109,19 +128,21 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
         <div className="modal-content">
           {/* Current Question Display */}
           <div className="current-question-section">
-            <h4>Current Question ({question.type})</h4>
+            <h4>Current {itemType} ({itemTypeLabel})</h4>
             <div className="current-question">
               {question.questionText}
             </div>
-            <div className="learning-objective">
-              <strong>Learning Objective:</strong> {question.learningObjective?.text || 'Not specified'}
-            </div>
+            {mode === 'question' && (
+              <div className="learning-objective">
+                <strong>Learning Objective:</strong> {question.learningObjective?.text || 'Not specified'}
+              </div>
+            )}
           </div>
 
           {/* System Prompt Section */}
           <div className="system-prompt-section">
             <div className="section-header">
-              <button 
+              <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
               >
@@ -131,11 +152,11 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
               <div className="info-tooltip">
                 <Info size={14} />
                 <span className="tooltip-text">
-                  This is the base prompt used to generate questions. Your custom prompt will be added to this.
+                  This is the base prompt used to generate {mode === 'learning-objective' ? 'learning objectives' : 'questions'}. Your custom prompt will be added to this.
                 </span>
               </div>
             </div>
-            
+
             {showSystemPrompt && (
               <div className="system-prompt">
                 <pre>{getSystemPrompt()}</pre>
@@ -167,13 +188,21 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
               <h4>Recent Prompts</h4>
               <div className="prompt-history">
                 {promptHistory.map((prompt, index) => (
-                  <button
-                    key={index}
-                    className="prompt-history-item"
-                    onClick={() => setCustomPrompt(prompt)}
-                  >
-                    {prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}
-                  </button>
+                  <div key={index} className="prompt-history-item-wrapper">
+                    <button
+                      className="prompt-history-item"
+                      onClick={() => setCustomPrompt(prompt)}
+                    >
+                      {prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm delete-prompt-btn"
+                      onClick={(e) => deletePromptFromHistory(index, e)}
+                      title="Delete prompt"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -184,7 +213,7 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button 
+          <button
             className="btn btn-primary"
             onClick={handleRegenerate}
             disabled={isLoading}
@@ -197,7 +226,7 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
             ) : (
               <>
                 <Wand2 size={16} />
-                Regenerate Question
+                Regenerate {itemType}
               </>
             )}
           </button>

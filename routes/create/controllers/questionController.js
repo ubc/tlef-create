@@ -562,7 +562,7 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     // Generate new question using LLM service with user preferences
     console.log('🔄 Regenerating question with LLM...');
     const questionConfig = {
-      learningObjective: question.learningObjective.text,
+      learningObjective: question.learningObjective?.text || 'General knowledge assessment',
       questionType: question.type,
       relevantContent: [], // Could be enhanced with RAG content later
       difficulty: 'moderate',

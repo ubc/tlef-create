@@ -1286,8 +1286,10 @@ Learning Objectives:`;
    * @param {String} currentObjective - Current objective text
    * @param {Array} materials - Course materials
    * @param {String} courseContext - Course context
+   * @param {Object} userPreferences - User's LLM preferences
+   * @param {String} customPrompt - Optional custom prompt for regeneration
    */
-  async regenerateSingleObjective(currentObjective, materials, courseContext = '') {
+  async regenerateSingleObjective(currentObjective, materials, courseContext = '', userPreferences = null, customPrompt = null) {
     if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
     }
@@ -1301,7 +1303,7 @@ Learning Objectives:`;
       return `**${material.name}** (${material.type})\n${content}`;
     }).join('\n\n---\n\n');
 
-    const prompt = `You are an educational expert. Based on the provided course materials, improve and regenerate this learning objective to be more specific, measurable, and aligned with the content.
+    const basePrompt = `You are an educational expert. Based on the provided course materials, improve and regenerate this learning objective to be more specific, measurable, and aligned with the content.
 
 Course Materials:
 ${materialsContent}
@@ -1318,14 +1320,16 @@ Please regenerate this learning objective to:
 4. Follow Bloom's taxonomy principles
 5. Be appropriate for university-level students
 
+${customPrompt ? `\nADDITIONAL INSTRUCTIONS:\n${customPrompt}\n` : ''}
+
 Provide only the improved learning objective as your response (no additional text or formatting):`;
 
     try {
       const temperature = 0.6;
       const maxTokens = 200;
-      
+
       const options = this.getSendMessageOptions(temperature, maxTokens);
-      const response = await this.llm.sendMessage(prompt, options);
+      const response = await this.llm.sendMessage(basePrompt, options);
 
       // Clean up the response to get just the objective text
       const cleanedObjective = response.content

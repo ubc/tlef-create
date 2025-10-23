@@ -492,6 +492,7 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
 router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const objectiveId = req.params.id;
   const userId = req.user.id;
+  const { customPrompt } = req.body; // Get custom prompt from request body
 
   // Find the objective and verify user owns it
   const objective = await LearningObjective.findById(objectiveId).populate('quiz');
@@ -537,7 +538,8 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       objective.text,
       materials,
       `Quiz: ${objective.quiz.name}`,
-      userPreferences
+      userPreferences,
+      customPrompt // Pass custom prompt to LLM service
     );
     
     const processingTime = Date.now() - startTime;

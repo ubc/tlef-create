@@ -535,8 +535,10 @@ export const objectivesApi = {
   },
 
   // POST /api/create/objectives/:id/regenerate - Regenerate single objective
-  regenerateSingleObjective: async (id: string): Promise<{ objective: LearningObjective }> => {
-    const response = await apiClient.post<{ success: boolean; data: { objective: LearningObjective }; message: string }>(`/objectives/${id}/regenerate`, {});
+  regenerateSingleObjective: async (id: string, customPrompt?: string): Promise<{ objective: LearningObjective }> => {
+    const response = await apiClient.post<{ success: boolean; data: { objective: LearningObjective }; message: string }>(`/objectives/${id}/regenerate`, {
+      customPrompt
+    });
     return response.data;
   },
 

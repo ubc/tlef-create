@@ -218,7 +218,14 @@
   overflow-y: auto;
 }
 
+.prompt-history-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .prompt-history-item {
+  flex: 1;
   background: var(--color-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -234,6 +241,17 @@
   background: var(--color-accent);
   border-color: var(--color-primary);
   color: var(--color-accent-foreground);
+}
+
+.delete-prompt-btn {
+  padding: var(--spacing-xs);
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.delete-prompt-btn:hover {
+  opacity: 1;
+  color: var(--color-destructive);
 }
 
 /* Loading State */
