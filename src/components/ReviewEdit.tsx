@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download } from 'lucide-react';
+import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download, X } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
 import RegeneratePromptModal from './RegeneratePromptModal';
@@ -29,13 +29,27 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLO, setFilterByLO] = useState<number | null>(null);
-  const [newQuestion, setNewQuestion] = useState({
+  const [newQuestion, setNewQuestion] = useState<any>({
     type: 'multiple-choice',
     difficulty: 'moderate',
     question: '',
-    answer: '',
-    correctAnswer: '',
-    loIndex: 0
+    loIndex: 0,
+    // Multiple choice specific
+    options: [
+      { text: '', isCorrect: false },
+      { text: '', isCorrect: false },
+      { text: '', isCorrect: false },
+      { text: '', isCorrect: false }
+    ],
+    // True/False specific
+    correctAnswer: 'true',
+    // Flashcard specific
+    front: '',
+    back: '',
+    // Summary specific
+    keyPoints: [
+      { title: '', explanation: '' }
+    ]
   });
   
   // State for expandable bullet points in summary questions
@@ -742,47 +756,99 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   };
 
   const addManualQuestion = async () => {
-    if (!newQuestion.question.trim()) return;
-
     try {
-      // First, we need to get the learning objective ID
-      // For now, let's assume we have access to learning objectives with IDs
-      // In a real scenario, you'd fetch this from the learningObjectives API
-      const learningObjectiveId = 'placeholder-lo-id'; // This needs to be the actual LO ID
-      
+      // Get the learning objective ID from the selected index
+      const learningObjectiveIds = learningObjectives.map((_, index) => {
+        // We need the actual LO IDs - for now using placeholder
+        // In real scenario, learningObjectives should include IDs
+        return `lo-${index}`; // This should be replaced with actual LO IDs from backend
+      });
+      const learningObjectiveId = learningObjectiveIds[newQuestion.loIndex] || learningObjectiveIds[0];
+
+      // Build question data based on type
+      let questionText = '';
+      let content: any = {};
+      let correctAnswer: any = '';
+
+      switch (newQuestion.type) {
+        case 'multiple-choice':
+          questionText = newQuestion.question;
+          content = {
+            options: newQuestion.options.map((opt: any, index: number) => ({
+              text: opt.text,
+              isCorrect: opt.isCorrect,
+              order: index
+            }))
+          };
+          correctAnswer = newQuestion.options.find((opt: any) => opt.isCorrect)?.text || '';
+          break;
+
+        case 'true-false':
+          questionText = newQuestion.question;
+          correctAnswer = newQuestion.correctAnswer;
+          content = {};
+          break;
+
+        case 'flashcard':
+          questionText = newQuestion.front;
+          content = {
+            front: newQuestion.front,
+            back: newQuestion.back
+          };
+          correctAnswer = newQuestion.back;
+          break;
+
+        case 'summary':
+          questionText = newQuestion.question;
+          content = {
+            keyPoints: newQuestion.keyPoints.map((kp: any, index: number) => ({
+              title: kp.title,
+              explanation: kp.explanation,
+              order: index
+            }))
+          };
+          correctAnswer = 'See key points';
+          break;
+
+        default:
+          questionText = newQuestion.question;
+          break;
+      }
+
       const questionData = {
         quizId,
         learningObjectiveId,
         type: newQuestion.type as any,
         difficulty: newQuestion.difficulty as any,
-        questionText: newQuestion.question,
-        content: {
-          // Parse the answer based on question type
-          ...(newQuestion.type === 'multiple-choice' && {
-            options: newQuestion.answer.split('\n').map((text, index) => ({
-              text: text.trim(),
-              isCorrect: text.trim() === newQuestion.correctAnswer,
-              order: index
-            }))
-          })
-        },
-        correctAnswer: newQuestion.correctAnswer,
+        questionText,
+        content,
+        correctAnswer,
         explanation: 'Manually created question'
       };
 
+      console.log('Creating question:', questionData);
       const result = await questionsApi.createQuestion(questionData);
       setQuestions([...questions, { ...result.question, isEditing: false }]);
-      
+
+      // Reset form
       setNewQuestion({
         type: 'multiple-choice',
         difficulty: 'moderate',
         question: '',
-        answer: '',
-        correctAnswer: '',
-        loIndex: 0
+        loIndex: 0,
+        options: [
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false }
+        ],
+        correctAnswer: 'true',
+        front: '',
+        back: '',
+        keyPoints: [{ title: '', explanation: '' }]
       });
       setShowManualAdd(false);
-      
+
       showNotification('success', 'Question Added', 'New question has been created');
     } catch (error) {
       console.error('Failed to add question:', error);
@@ -2136,25 +2202,45 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           {showManualAdd && (
               <div className="manual-add-modal">
                 <div className="modal-overlay" onClick={() => setShowManualAdd(false)}></div>
-                <div className="modal-content">
+                <div className="modal-content add-question-modal-content">
                   <div className="modal-header">
                     <h4>Add New Question</h4>
                     <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => setShowManualAdd(false)}
                     >
-                      ×
+                      <X size={20} />
                     </button>
                   </div>
 
                   <div className="manual-add-form">
+                    {/* Question Type, Difficulty, and LO Selection */}
                     <div className="form-row">
                       <div className="form-field">
                         <label>Question Type:</label>
                         <select
                             className="select-input"
                             value={newQuestion.type}
-                            onChange={(e) => setNewQuestion({...newQuestion, type: e.target.value})}
+                            onChange={(e) => {
+                              const type = e.target.value;
+                              // Reset fields when type changes
+                              setNewQuestion({
+                                type,
+                                difficulty: newQuestion.difficulty,
+                                question: '',
+                                loIndex: newQuestion.loIndex,
+                                options: [
+                                  { text: '', isCorrect: false },
+                                  { text: '', isCorrect: false },
+                                  { text: '', isCorrect: false },
+                                  { text: '', isCorrect: false }
+                                ],
+                                correctAnswer: 'true',
+                                front: '',
+                                back: '',
+                                keyPoints: [{ title: '', explanation: '' }]
+                              });
+                            }}
                         >
                           {questionTypes.map(type => (
                               <option key={type.id} value={type.id}>{type.label}</option>
@@ -2189,33 +2275,236 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                       </div>
                     </div>
 
-                    <div className="form-field">
-                      <label>Question:</label>
-                      <textarea
-                          className="textarea"
-                          placeholder="Enter your question here..."
-                          value={newQuestion.question}
-                          onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
-                          rows={3}
-                      />
-                    </div>
+                    {/* Dynamic fields based on question type */}
 
-                    <div className="form-field">
-                      <label>Answer:</label>
-                      <textarea
-                          className="textarea"
-                          placeholder="Enter the answer or options (one per line for multiple choice)..."
-                          value={newQuestion.answer}
-                          onChange={(e) => setNewQuestion({...newQuestion, answer: e.target.value})}
-                          rows={3}
-                      />
-                    </div>
+                    {/* MULTIPLE CHOICE */}
+                    {newQuestion.type === 'multiple-choice' && (
+                      <>
+                        <div className="form-field">
+                          <label>Question:</label>
+                          <textarea
+                              className="textarea"
+                              placeholder="Enter your question here..."
+                              value={newQuestion.question}
+                              onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
+                              rows={3}
+                          />
+                        </div>
+
+                        <div className="form-field">
+                          <label>Answer Options:</label>
+                          <div className="multiple-choice-editor">
+                            {newQuestion.options.map((option: any, index: number) => (
+                              <div key={index} className="option-editor">
+                                <input
+                                  type="checkbox"
+                                  checked={option.isCorrect}
+                                  onChange={(e) => {
+                                    const updatedOptions = [...newQuestion.options];
+                                    updatedOptions[index].isCorrect = e.target.checked;
+                                    setNewQuestion({...newQuestion, options: updatedOptions});
+                                  }}
+                                  className="option-checkbox"
+                                />
+                                <input
+                                  type="text"
+                                  value={option.text}
+                                  onChange={(e) => {
+                                    const updatedOptions = [...newQuestion.options];
+                                    updatedOptions[index].text = e.target.value;
+                                    setNewQuestion({...newQuestion, options: updatedOptions});
+                                  }}
+                                  placeholder={`Option ${index + 1}`}
+                                  className="option-input"
+                                />
+                                {newQuestion.options.length > 2 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => {
+                                      const updatedOptions = newQuestion.options.filter((_: any, i: number) => i !== index);
+                                      setNewQuestion({...newQuestion, options: updatedOptions});
+                                    }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => {
+                                setNewQuestion({
+                                  ...newQuestion,
+                                  options: [...newQuestion.options, { text: '', isCorrect: false }]
+                                });
+                              }}
+                            >
+                              <Plus size={14} />
+                              Add Option
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* TRUE/FALSE */}
+                    {newQuestion.type === 'true-false' && (
+                      <>
+                        <div className="form-field">
+                          <label>Question:</label>
+                          <textarea
+                              className="textarea"
+                              placeholder="Enter your true/false question here..."
+                              value={newQuestion.question}
+                              onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
+                              rows={3}
+                          />
+                        </div>
+
+                        <div className="form-field">
+                          <label>Correct Answer:</label>
+                          <div className="true-false-editor">
+                            <div className="tf-option">
+                              <input
+                                type="radio"
+                                id="new-tf-true"
+                                name="new-tf-answer"
+                                value="true"
+                                checked={String(newQuestion.correctAnswer).toLowerCase() === 'true'}
+                                onChange={(e) => setNewQuestion({...newQuestion, correctAnswer: 'true'})}
+                                className="tf-radio"
+                              />
+                              <label htmlFor="new-tf-true" className="tf-label">True</label>
+                            </div>
+                            <div className="tf-option">
+                              <input
+                                type="radio"
+                                id="new-tf-false"
+                                name="new-tf-answer"
+                                value="false"
+                                checked={String(newQuestion.correctAnswer).toLowerCase() === 'false'}
+                                onChange={(e) => setNewQuestion({...newQuestion, correctAnswer: 'false'})}
+                                className="tf-radio"
+                              />
+                              <label htmlFor="new-tf-false" className="tf-label">False</label>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* FLASHCARD */}
+                    {newQuestion.type === 'flashcard' && (
+                      <>
+                        <div className="form-field">
+                          <label>Front side (Question):</label>
+                          <textarea
+                              className="textarea"
+                              placeholder="Enter the question/front side content..."
+                              value={newQuestion.front}
+                              onChange={(e) => setNewQuestion({...newQuestion, front: e.target.value})}
+                              rows={3}
+                          />
+                        </div>
+
+                        <div className="form-field">
+                          <label>Back side (Answer):</label>
+                          <textarea
+                              className="textarea"
+                              placeholder="Enter the answer/back side content..."
+                              value={newQuestion.back}
+                              onChange={(e) => setNewQuestion({...newQuestion, back: e.target.value})}
+                              rows={3}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* SUMMARY */}
+                    {newQuestion.type === 'summary' && (
+                      <>
+                        <div className="form-field">
+                          <label>Study Guide Title:</label>
+                          <textarea
+                              className="textarea"
+                              placeholder="Enter the study guide title/question..."
+                              value={newQuestion.question}
+                              onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
+                              rows={2}
+                          />
+                        </div>
+
+                        <div className="form-field">
+                          <label>Knowledge Points:</label>
+                          <div className="summary-keypoints-editor">
+                            {newQuestion.keyPoints.map((keyPoint: any, index: number) => (
+                              <div key={index} className="keypoint-editor">
+                                <input
+                                  type="text"
+                                  value={keyPoint.title}
+                                  onChange={(e) => {
+                                    const updatedKeyPoints = [...newQuestion.keyPoints];
+                                    updatedKeyPoints[index].title = e.target.value;
+                                    setNewQuestion({...newQuestion, keyPoints: updatedKeyPoints});
+                                  }}
+                                  placeholder="Key point title"
+                                  className="keypoint-title-input"
+                                />
+                                <textarea
+                                  value={keyPoint.explanation}
+                                  onChange={(e) => {
+                                    const updatedKeyPoints = [...newQuestion.keyPoints];
+                                    updatedKeyPoints[index].explanation = e.target.value;
+                                    setNewQuestion({...newQuestion, keyPoints: updatedKeyPoints});
+                                  }}
+                                  placeholder="Detailed explanation"
+                                  className="keypoint-explanation-input"
+                                  rows={2}
+                                />
+                                {newQuestion.keyPoints.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => {
+                                      const updatedKeyPoints = newQuestion.keyPoints.filter((_: any, i: number) => i !== index);
+                                      setNewQuestion({...newQuestion, keyPoints: updatedKeyPoints});
+                                    }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => {
+                                setNewQuestion({
+                                  ...newQuestion,
+                                  keyPoints: [...newQuestion.keyPoints, { title: '', explanation: '' }]
+                                });
+                              }}
+                            >
+                              <Plus size={14} />
+                              Add Key Point
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <div className="modal-actions">
                       <button
                           className="btn btn-primary"
                           onClick={addManualQuestion}
-                          disabled={!newQuestion.question.trim()}
+                          disabled={
+                            (newQuestion.type === 'multiple-choice' && (!newQuestion.question.trim() || !newQuestion.options.some((opt: any) => opt.isCorrect))) ||
+                            (newQuestion.type === 'true-false' && !newQuestion.question.trim()) ||
+                            (newQuestion.type === 'flashcard' && (!newQuestion.front.trim() || !newQuestion.back.trim())) ||
+                            (newQuestion.type === 'summary' && (!newQuestion.question.trim() || !newQuestion.keyPoints.some((kp: any) => kp.title.trim())))
+                          }
                       >
                         <Plus size={16} />
                         Add Question
@@ -2241,6 +2530,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             onRegenerate={handleRegenerate}
             question={questionToRegenerate}
             isLoading={regenerateLoading}
+            historyKey="question"
           />
         )}
       </div>

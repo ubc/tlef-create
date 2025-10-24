@@ -52,8 +52,8 @@ export const deleteObjective = createAsyncThunk(
 
 export const regenerateSingleObjective = createAsyncThunk(
   'learningObjective/regenerateSingleObjective',
-  async (id: string) => {
-    const response = await objectivesApi.regenerateSingleObjective(id);
+  async (data: { id: string; customPrompt?: string }) => {
+    const response = await objectivesApi.regenerateSingleObjective(data.id, data.customPrompt);
     return response.objective;
   }
 );
