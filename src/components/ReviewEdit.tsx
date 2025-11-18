@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download, X } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../services/api';
@@ -936,7 +936,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
     const [showAnswer, setShowAnswer] = useState(false);
     const [isFlipped, setIsFlipped] = useState(false);
-    
+
     // State for different question types
     const [clozeAnswers, setClozeAnswers] = useState<string[]>([]);
     const [orderingItems, setOrderingItems] = useState<string[]>([]);
@@ -1029,7 +1029,10 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         </div>
 
         {question.type === 'flashcard' ? (
-          <div className={`flashcard ${isFlipped ? 'flipped' : ''}`} onClick={() => setIsFlipped(!isFlipped)}>
+          <div
+            className={`flashcard ${isFlipped ? 'flipped' : ''}`}
+            onClick={() => setIsFlipped(!isFlipped)}
+          >
             <div className="flashcard-inner">
               <div className="flashcard-front">
                 <div className="flashcard-content">

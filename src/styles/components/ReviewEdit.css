@@ -294,19 +294,20 @@
 /* Flashcard Styles */
 .flashcard {
     width: 100%;
-    height: 200px;
+    min-height: 400px;
     perspective: 1000px;
     cursor: pointer;
     margin: var(--spacing-md) 0;
+    position: relative;
 }
 
 .flashcard-inner {
-    position: relative;
     width: 100%;
-    height: 100%;
+    min-height: 400px;
     text-align: center;
     transition: transform 0.6s;
     transform-style: preserve-3d;
+    position: relative;
 }
 
 .flashcard.flipped .flashcard-inner {
@@ -314,15 +315,25 @@
 }
 
 .flashcard-front, .flashcard-back {
-    position: absolute;
     width: 100%;
-    height: 100%;
+    min-height: 400px;
     backface-visibility: hidden;
     border: 2px solid var(--color-border);
     border-radius: var(--radius-lg);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    padding: var(--spacing-xl);
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+/* Position back absolutely to overlay during flip */
+.flashcard-back {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
 }
 
 .flashcard-front {
@@ -349,6 +360,16 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.flashcard-content p {
+    margin: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.6;
 }
 
 .flip-hint {
@@ -567,7 +588,15 @@
     }
 
     .flashcard {
-        height: 150px;
+        min-height: 300px;
+    }
+
+    .flashcard-inner {
+        min-height: 300px;
+    }
+
+    .flashcard-front, .flashcard-back {
+        min-height: 300px;
     }
 
     .review-actions {
