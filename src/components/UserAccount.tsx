@@ -7,6 +7,7 @@ import '../styles/components/UserAccount.css';
 const UserAccount = () => {
   const navigate = useNavigate();
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showHelpSupport, setShowHelpSupport] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [reportData, setReportData] = useState({
     type: 'bug',
@@ -94,18 +95,14 @@ const UserAccount = () => {
                 </p>
               </div>
               <div className="settings-list">
-                <div className="setting-item">
+                <button className="setting-item" onClick={() => alert('General Settings coming soon!')}>
                   <Settings size={20} />
                   <span>General Settings</span>
-                </div>
-                <div className="setting-item">
-                  <Mail size={20} />
-                  <span>Email Preferences</span>
-                </div>
-                <div className="setting-item">
+                </button>
+                <button className="setting-item" onClick={() => setShowHelpSupport(true)}>
                   <HelpCircle size={20} />
                   <span>Help & Support</span>
-                </div>
+                </button>
               </div>
             </div>
 
@@ -214,6 +211,73 @@ const UserAccount = () => {
                 </div>
               </div>
             </div>
+        )}
+
+        {showHelpSupport && (
+          <div className="modal-overlay" onClick={() => setShowHelpSupport(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h4>Help & Support</h4>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowHelpSupport(false)}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="help-support-content">
+                <div className="help-section">
+                  <h5>Documentation</h5>
+                  <p>
+                    Learn how to use TLEF CREATE with our comprehensive documentation and guides.
+                  </p>
+                  <a
+                    href="https://docs.example.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline btn-sm"
+                  >
+                    View Documentation
+                  </a>
+                </div>
+
+                <div className="help-section">
+                  <h5>Contact Support</h5>
+                  <p>Need help? Our support team is here to assist you.</p>
+                  <p className="support-email">
+                    <Mail size={16} />
+                    <a href="mailto:support@tlef-create.ubc.ca">support@tlef-create.ubc.ca</a>
+                  </p>
+                </div>
+
+                <div className="help-section">
+                  <h5>Report an Issue</h5>
+                  <p>
+                    Found a bug or issue? Use the "Report Question Bug" button in the Report Issues
+                    section.
+                  </p>
+                </div>
+
+                <div className="help-section">
+                  <h5>Frequently Asked Questions</h5>
+                  <ul className="faq-list">
+                    <li>How do I create a new quiz?</li>
+                    <li>How do I import materials?</li>
+                    <li>How do I export questions to Canvas?</li>
+                    <li>How do I customize question types?</li>
+                  </ul>
+                  <button className="btn btn-outline btn-sm">View All FAQs</button>
+                </div>
+
+                <div className="modal-actions">
+                  <button className="btn btn-primary" onClick={() => setShowHelpSupport(false)}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>

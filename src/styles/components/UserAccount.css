@@ -148,6 +148,104 @@
     margin-bottom: var(--spacing-xs);
 }
 
+/* Email Preferences Modal */
+.email-preferences-form {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.preference-item {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-background);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.preference-description {
+    margin: 0;
+    margin-left: 26px;
+    font-size: var(--font-size-sm);
+    color: var(--color-muted-foreground);
+    line-height: 1.5;
+}
+
+/* Help & Support Modal */
+.help-support-content {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.help-section {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-background);
+}
+
+.help-section h5 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.help-section p {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--color-muted-foreground);
+    line-height: 1.6;
+}
+
+.help-section p:last-child {
+    margin-bottom: 0;
+}
+
+.support-email {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.support-email a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.support-email a:hover {
+    text-decoration: underline;
+}
+
+.faq-list {
+    margin: var(--spacing-md) 0;
+    padding-left: var(--spacing-xl);
+    color: var(--color-foreground);
+}
+
+.faq-list li {
+    margin-bottom: var(--spacing-xs);
+    line-height: 1.6;
+}
+
 @media (max-width: 768px) {
     .page-header {
         margin-bottom: var(--spacing-xl);
