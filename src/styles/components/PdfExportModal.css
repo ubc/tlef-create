@@ -1,0 +1,104 @@
+/* PDF Export Modal */
+.pdf-export-modal {
+  max-width: 600px;
+  width: 100%;
+}
+
+.pdf-export-modal .modal-body {
+  padding: var(--spacing-lg);
+}
+
+/* Export Options */
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.export-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background-color: var(--color-background);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.export-option-card:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-muted);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.export-option-card:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.export-option-card:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.export-option-icon {
+  width: 48px;
+  height: 48px;
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.export-option-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.export-option-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.export-option-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted-foreground);
+  line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .pdf-export-modal {
+    max-width: 100%;
+    margin: var(--spacing-md);
+  }
+
+  .export-option-card {
+    padding: var(--spacing-md);
+  }
+
+  .export-option-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .export-option-title {
+    font-size: var(--font-size-base);
+  }
+
+  .export-option-description {
+    font-size: var(--font-size-xs);
+  }
+}

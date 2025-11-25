@@ -4,6 +4,7 @@ import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download
 import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
 import RegeneratePromptModal from './RegeneratePromptModal';
+import PdfExportModal from './PdfExportModal';
 import '../styles/components/ReviewEdit.css';
 import '../styles/components/InteractiveQuestions.css';
 
@@ -21,6 +22,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
+  const [pdfExportModalOpen, setPdfExportModalOpen] = useState(false);
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
@@ -898,14 +900,14 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     setExportLoading(true);
     try {
       showNotification('info', 'Generating Export', 'Creating H5P package...');
-      
+
       const result = await exportApi.exportToH5P(quizId);
       console.log('Export API response:', result);
-      
+
       if (result.success && result.data) {
         // Download the file
         const blob = await exportApi.downloadExport(result.data.exportId);
-        
+
         // Create download link
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -915,7 +917,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
+
         showNotification('success', 'Export Complete', `Downloaded ${result.data.filename} successfully`);
       } else {
         console.error('Export failed - Response:', result);
@@ -926,6 +928,56 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       console.error('H5P export failed:', error);
       const message = error.message || 'Failed to export quiz to H5P format';
       showNotification('error', 'Export Failed', message);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handlePDFExport = async (type: 'questions' | 'answers' | 'combined') => {
+    if (questions.length === 0) {
+      showNotification('warning', 'No Questions', 'Add some questions before exporting to PDF');
+      return;
+    }
+
+    setExportLoading(true);
+    setPdfExportModalOpen(false);
+
+    try {
+      const typeLabels = {
+        questions: 'Questions',
+        answers: 'Answers',
+        combined: 'Questions and Answers'
+      };
+
+      showNotification('info', 'Generating PDF', `Creating ${typeLabels[type]} PDF...`);
+
+      const result = await exportApi.exportToPDF(quizId, type);
+      console.log('PDF Export API response:', result);
+
+      if (result.success && result.data) {
+        // Download the file
+        const blob = await exportApi.downloadExport(result.data.exportId);
+
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = result.data.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+        showNotification('success', 'PDF Export Complete', `Downloaded ${result.data.filename} successfully`);
+      } else {
+        console.error('PDF export failed - Response:', result);
+        const errorMessage = result.error?.message || 'Failed to generate PDF export';
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('PDF export failed:', error);
+      const message = error.message || 'Failed to export quiz to PDF format';
+      showNotification('error', 'PDF Export Failed', message);
     } finally {
       setExportLoading(false);
     }
@@ -2193,10 +2245,11 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 </button>
                 <button
                   className="btn btn-outline"
-                  onClick={() => showNotification('info', 'Export Coming Soon', 'PDF export functionality will be available soon!')}
+                  onClick={() => setPdfExportModalOpen(true)}
+                  disabled={exportLoading}
                 >
                   <Download size={16} />
-                  Export to PDF
+                  {exportLoading ? 'Exporting...' : 'Export to PDF'}
                 </button>
               </div>
             </div>
@@ -2536,6 +2589,14 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             historyKey="question"
           />
         )}
+
+        {/* PDF Export Modal */}
+        <PdfExportModal
+          isOpen={pdfExportModalOpen}
+          onClose={() => setPdfExportModalOpen(false)}
+          onExport={handlePDFExport}
+          isLoading={exportLoading}
+        />
       </div>
   );
 };

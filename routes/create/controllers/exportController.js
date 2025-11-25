@@ -12,6 +12,7 @@ import fs from 'fs/promises';
 import crypto from 'crypto';
 import archiver from 'archiver';
 import { createWriteStream } from 'fs';
+import PDFDocument from 'pdfkit';
 
 const router = express.Router();
 
@@ -126,6 +127,83 @@ router.post('/h5p/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
 }));
 
 /**
+ * POST /api/export/pdf/:quizId
+ * Generate PDF export
+ */
+router.post('/pdf/:quizId', authenticateToken, validateQuizId, asyncHandler(async (req, res) => {
+  const quizId = req.params.quizId;
+  const userId = req.user.id;
+  const { type } = req.body; // 'questions', 'answers', or 'combined'
+
+  // Validate type
+  if (!['questions', 'answers', 'combined'].includes(type)) {
+    return errorResponse(res, 'Invalid export type. Must be "questions", "answers", or "combined"', 'INVALID_TYPE', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  // Verify quiz exists and user owns it
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId })
+    .populate({
+      path: 'questions',
+      populate: {
+        path: 'learningObjective',
+        select: 'text order'
+      },
+      options: { sort: { order: 1 } }
+    })
+    .populate('learningObjectives', 'text order');
+
+  if (!quiz) {
+    return notFoundResponse(res, 'Quiz');
+  }
+
+  if (!quiz.questions || quiz.questions.length === 0) {
+    return errorResponse(res, 'Quiz must have questions before exporting', 'NO_QUESTIONS', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  try {
+    // Create export file path
+    const exportId = crypto.randomBytes(16).toString('hex');
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+    const filename = `${quiz.name.replace(/[^a-zA-Z0-9]/g, '_')}_${typeLabel}_${exportId}.pdf`;
+    const uploadsDir = path.join('./routes/create/uploads/');
+    const filePath = path.join(uploadsDir, filename);
+
+    // Ensure uploads directory exists
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    // Create PDF based on type
+    await createPDFExport(quiz, filePath, type);
+
+    // Save export record (add to quiz exports if schema supports it)
+    if (quiz.addExport) {
+      await quiz.addExport(filePath);
+    } else {
+      // Alternative: just log the export for now
+      console.log(`PDF export created for quiz ${quiz._id}: ${filePath}`);
+    }
+
+    // Get file size
+    const stats = await fs.stat(filePath);
+
+    return successResponse(res, {
+      exportId,
+      filename,
+      downloadUrl: `/api/export/${exportId}/download`,
+      metadata: {
+        questionCount: quiz.questions.length,
+        exportFormat: 'pdf',
+        exportType: type,
+        fileSize: stats.size
+      }
+    }, 'PDF export generated successfully', HTTP_STATUS.CREATED);
+
+  } catch (error) {
+    console.error('PDF export error:', error);
+    return errorResponse(res, 'Failed to generate PDF export', 'EXPORT_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+}));
+
+/**
  * GET /api/export/:exportId/download
  * Download exported file
  */
@@ -158,9 +236,14 @@ router.get('/:exportId/download', authenticateToken, asyncHandler(async (req, re
 
     // Send file
     const filename = path.basename(exportRecord.filePath);
+    const fileExtension = path.extname(filename).toLowerCase();
+
+    // Set correct content type based on file extension
+    const contentType = fileExtension === '.pdf' ? 'application/pdf' : 'application/zip';
+
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'application/zip');
-    
+    res.setHeader('Content-Type', contentType);
+
     // In a real implementation, you would stream the file
     const fileContent = await fs.readFile(exportRecord.filePath);
     res.send(fileContent);
@@ -325,6 +408,253 @@ router.delete('/:exportId', authenticateToken, asyncHandler(async (req, res) => 
 }));
 
 // Helper functions
+
+/**
+ * Create PDF export based on type
+ * @param {Object} quiz - Quiz document with populated questions
+ * @param {string} outputPath - File path to save PDF
+ * @param {string} type - Export type: 'questions', 'answers', or 'combined'
+ */
+async function createPDFExport(quiz, outputPath, type) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        margin: 50,
+        size: 'LETTER'
+      });
+
+      const stream = createWriteStream(outputPath);
+      doc.pipe(stream);
+
+      // Title
+      doc.fontSize(24).font('Helvetica-Bold').text(quiz.name, { align: 'center' });
+      doc.moveDown();
+
+      // Type label
+      const typeLabels = {
+        questions: 'Questions Only',
+        answers: 'Answer Key',
+        combined: 'Questions and Answers'
+      };
+      doc.fontSize(14).font('Helvetica').text(typeLabels[type], { align: 'center' });
+      doc.moveDown(2);
+
+      // Add questions based on type
+      quiz.questions.forEach((question, index) => {
+        const questionNumber = index + 1;
+
+        // Check if we need a new page (leave space for footer)
+        if (doc.y > 700) {
+          doc.addPage();
+        }
+
+        // Question header
+        doc.fontSize(12).font('Helvetica-Bold').text(`Question ${questionNumber}`, { continued: false });
+        doc.moveDown(0.5);
+
+        // Question text
+        doc.fontSize(11).font('Helvetica').text(question.questionText, {
+          align: 'left',
+          width: 500
+        });
+        doc.moveDown(0.5);
+
+        // Question type
+        doc.fontSize(9).font('Helvetica-Oblique').text(`Type: ${question.type}`, { align: 'left' });
+        doc.moveDown(0.5);
+
+        // Add question-specific content based on type
+        if (type === 'questions' || type === 'combined') {
+          addQuestionContent(doc, question);
+        }
+
+        // Add answers if needed
+        if (type === 'answers' || type === 'combined') {
+          doc.moveDown(0.5);
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#2563eb').text('Answer:', { continued: false });
+          doc.font('Helvetica').fillColor('#000000');
+          addAnswerContent(doc, question);
+        }
+
+        doc.moveDown(1.5);
+
+        // Add separator line between questions
+        if (questionNumber < quiz.questions.length) {
+          doc.strokeColor('#cccccc').moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+          doc.moveDown(1);
+        }
+      });
+
+      // Add page numbers to all pages
+      const range = doc.bufferedPageRange();
+      const totalPages = range.count;
+
+      // Iterate through buffered pages (start is 0-based)
+      for (let pageIndex = range.start; pageIndex < (range.start + range.count); pageIndex++) {
+        doc.switchToPage(pageIndex);
+
+        const pageNumber = pageIndex - range.start + 1; // Calculate display page number
+
+        // Save current y position
+        const originalY = doc.y;
+
+        doc.fontSize(8)
+          .font('Helvetica')
+          .fillColor('#666666')
+          .text(
+            `Generated by TLEF CREATE - Page ${pageNumber} of ${totalPages}`,
+            50,
+            doc.page.height - 50,
+            {
+              align: 'center',
+              lineBreak: false,
+              width: doc.page.width - 100
+            }
+          );
+
+        // Restore y position
+        doc.y = originalY;
+        doc.fillColor('#000000');
+      }
+
+      doc.end();
+
+      stream.on('finish', () => {
+        console.log(`PDF created: ${outputPath}`);
+        resolve();
+      });
+
+      stream.on('error', (error) => {
+        console.error('PDF creation error:', error);
+        reject(error);
+      });
+
+    } catch (error) {
+      console.error('PDF creation error:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Add question-specific content to PDF
+ */
+function addQuestionContent(doc, question) {
+  if (question.type === 'multiple-choice') {
+    const options = question.content?.options || [];
+    doc.fontSize(10).font('Helvetica').text('Options:', { underline: true });
+    doc.moveDown(0.3);
+
+    options.forEach((option, idx) => {
+      const letter = String.fromCharCode(65 + idx); // A, B, C, D...
+      doc.fontSize(10).font('Helvetica').text(`${letter}. ${option.text}`, {
+        indent: 20
+      });
+      doc.moveDown(0.2);
+    });
+  } else if (question.type === 'true-false') {
+    doc.fontSize(10).font('Helvetica').text('Options:', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text('A. True', { indent: 20 });
+    doc.moveDown(0.2);
+    doc.fontSize(10).text('B. False', { indent: 20 });
+  } else if (question.type === 'cloze') {
+    const textWithBlanks = question.content?.textWithBlanks || question.questionText;
+    doc.fontSize(10).font('Helvetica').text('Fill in the blanks:', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text(textWithBlanks, { indent: 20 });
+
+    const blankOptions = question.content?.blankOptions || [];
+    if (blankOptions.length > 0) {
+      doc.moveDown(0.5);
+      doc.fontSize(9).font('Helvetica-Oblique').text('Available options:', { indent: 20 });
+      blankOptions.forEach((options, index) => {
+        if (options && options.length > 0) {
+          doc.fontSize(9).text(`Blank ${index + 1}: ${options.join(', ')}`, { indent: 30 });
+        }
+      });
+    }
+  } else if (question.type === 'ordering') {
+    const items = question.content?.items || [];
+    doc.fontSize(10).font('Helvetica').text('Items to order:', { underline: true });
+    doc.moveDown(0.3);
+    items.forEach((item, idx) => {
+      doc.fontSize(10).text(`${idx + 1}. ${item}`, { indent: 20 });
+      doc.moveDown(0.2);
+    });
+  } else if (question.type === 'matching') {
+    const leftItems = question.content?.leftItems || [];
+    const rightItems = question.content?.rightItems || [];
+    doc.fontSize(10).font('Helvetica').text('Match the following:', { underline: true });
+    doc.moveDown(0.3);
+
+    doc.fontSize(9).font('Helvetica-Bold').text('Column A:', { indent: 20 });
+    leftItems.forEach((item, idx) => {
+      doc.fontSize(9).font('Helvetica').text(`${idx + 1}. ${item}`, { indent: 30 });
+    });
+
+    doc.moveDown(0.3);
+    doc.fontSize(9).font('Helvetica-Bold').text('Column B:', { indent: 20 });
+    rightItems.forEach((item, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      doc.fontSize(9).font('Helvetica').text(`${letter}. ${item}`, { indent: 30 });
+    });
+  } else if (question.type === 'flashcard') {
+    const front = question.content?.front || question.questionText;
+    doc.fontSize(10).font('Helvetica').text('Front:', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text(front, { indent: 20 });
+  }
+}
+
+/**
+ * Add answer content to PDF
+ */
+function addAnswerContent(doc, question) {
+  if (question.type === 'multiple-choice') {
+    const options = question.content?.options || [];
+    const correctOption = options.find(opt => opt.isCorrect);
+    if (correctOption) {
+      const correctIndex = options.indexOf(correctOption);
+      const letter = String.fromCharCode(65 + correctIndex);
+      doc.fontSize(10).text(`${letter}. ${correctOption.text}`, { indent: 20 });
+    } else {
+      doc.fontSize(10).text(question.correctAnswer || 'N/A', { indent: 20 });
+    }
+  } else if (question.type === 'true-false') {
+    const answer = String(question.correctAnswer).toLowerCase() === 'true' ? 'True' : 'False';
+    doc.fontSize(10).text(answer, { indent: 20 });
+  } else if (question.type === 'cloze') {
+    const correctAnswers = question.content?.correctAnswers || [];
+    if (correctAnswers.length > 0) {
+      correctAnswers.forEach((answer, idx) => {
+        doc.fontSize(10).text(`Blank ${idx + 1}: ${answer}`, { indent: 20 });
+      });
+    } else {
+      doc.fontSize(10).text(question.correctAnswer || 'N/A', { indent: 20 });
+    }
+  } else if (question.type === 'ordering') {
+    const correctOrder = question.content?.correctOrder || [];
+    doc.fontSize(10).text('Correct order:', { indent: 20 });
+    correctOrder.forEach((item, idx) => {
+      doc.fontSize(10).text(`${idx + 1}. ${item}`, { indent: 30 });
+    });
+  } else if (question.type === 'matching') {
+    const matchingPairs = question.content?.matchingPairs || [];
+    doc.fontSize(10).text('Correct matches:', { indent: 20 });
+    matchingPairs.forEach((pair, idx) => {
+      doc.fontSize(10).text(`${idx + 1}. ${pair[0]} → ${pair[1]}`, { indent: 30 });
+    });
+  } else if (question.type === 'flashcard') {
+    const back = question.content?.back || question.correctAnswer;
+    doc.fontSize(10).text('Back:', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text(back, { indent: 20 });
+  } else {
+    doc.fontSize(10).text(question.correctAnswer || question.explanation || 'N/A', { indent: 20 });
+  }
+}
+
 async function createH5PPackage(quiz, outputPath) {
   // Ensure uploads directory exists
   const uploadsDir = path.dirname(outputPath);
