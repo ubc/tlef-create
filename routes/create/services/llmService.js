@@ -1146,14 +1146,33 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
       const searchQuery = `course content learning objectives topics concepts ${courseContext}`;
       console.log(`🔍 Retrieving relevant chunks from vector database with query: "${searchQuery}"`);
 
-      // Use the underlying ragModule to call retrieveContext
-      const ragResults = await ragService.ragModule.retrieveContext(searchQuery, {
-        limit: 15, // Get more chunks for broader coverage
+      // Extract material IDs to filter RAG results
+      const materialIds = materials.map(m => m._id.toString());
+      console.log(`🎯 Filtering by ${materialIds.length} material IDs:`, materialIds);
+
+      // Use the underlying ragModule to call retrieveContext with higher limit
+      // We'll filter afterward since Qdrant filter syntax might not work
+      const ragResultsRaw = await ragService.ragModule.retrieveContext(searchQuery, {
+        limit: 50, // Get more chunks to ensure we have enough after filtering
         scoreThreshold: 0.3 // Lower threshold for learning objectives
       });
 
+      console.log(`📥 Retrieved ${ragResultsRaw.length} total chunks from vector database`);
+
+      // Filter results to only include chunks from selected materials
+      const ragResults = ragResultsRaw.filter(result => {
+        const resultMaterialId = result.metadata?.materialId;
+        const isIncluded = materialIds.includes(resultMaterialId);
+        if (!isIncluded) {
+          console.log(`🚫 Excluding chunk from material: ${result.metadata?.materialName} (ID: ${resultMaterialId})`);
+        }
+        return isIncluded;
+      }).slice(0, 15); // Take top 15 after filtering
+
+      console.log(`✅ After filtering: ${ragResults.length} chunks from selected materials`);
+
       if (ragResults && ragResults.length > 0) {
-        console.log(`✅ Retrieved ${ragResults.length} relevant chunks from vector database`);
+        console.log(`✅ Using ${ragResults.length} relevant chunks from selected materials`);
 
         // Debug: Log the structure of the first result
         if (ragResults.length > 0) {

@@ -243,7 +243,7 @@ class FileService {
     try {
       const urlObj = new URL(url);
       const allowedProtocols = ['http:', 'https:'];
-      
+
       if (!allowedProtocols.includes(urlObj.protocol)) {
         return {
           isValid: false,
@@ -259,6 +259,153 @@ class FileService {
       return {
         isValid: false,
         error: 'Invalid URL format'
+      };
+    }
+  }
+
+  /**
+   * Validate URL content type - check if URL leads to allowed content
+   * Allows: PDFs, static websites with text content
+   * Blocks: Websites mainly with pictures, animations, videos, dynamic content
+   * @param {string} url - URL to validate
+   * @returns {Promise<Object>} - Validation result with content type info
+   */
+  static async validateUrlContentType(url) {
+    try {
+      // Block known problematic domains that require authentication or dynamic rendering
+      const blockedDomains = [
+        'drive.google.com',
+        'docs.google.com',
+        'dropbox.com',
+        'onedrive.live.com',
+        'sharepoint.com'
+      ];
+
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname.toLowerCase();
+
+      for (const blockedDomain of blockedDomains) {
+        if (hostname === blockedDomain || hostname.endsWith('.' + blockedDomain)) {
+          return {
+            isValid: false,
+            error: `URLs from ${blockedDomain} are not supported. These services require authentication and use dynamic content. Please download the file and upload it directly, or use a direct link to a PDF.`,
+            contentType: 'blocked_domain',
+            reason: 'blocked_domain'
+          };
+        }
+      }
+
+      const fetch = (await import('node-fetch')).default;
+
+      // Perform HEAD request to check content type without downloading full content
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TLEF-Create-Bot/1.0)',
+        },
+        timeout: 10000,
+        redirect: 'follow'
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+
+      console.log('🔍 URL Content Type Check:', {
+        url,
+        contentType,
+        contentLength,
+        status: response.status
+      });
+
+      // Check for blocked content types
+      const blockedTypes = [
+        'image/', // Block direct image files
+        'video/', // Block direct video files
+        'audio/', // Block direct audio files
+        'application/octet-stream', // Block generic binary files
+        'application/zip',
+        'application/x-rar',
+        'application/x-7z-compressed'
+      ];
+
+      for (const blockedType of blockedTypes) {
+        if (contentType.toLowerCase().includes(blockedType)) {
+          return {
+            isValid: false,
+            error: `This URL contains ${blockedType.replace('/', '')} content which is not supported. Please provide URLs to PDFs or text-based web pages.`,
+            contentType,
+            reason: 'blocked_content_type'
+          };
+        }
+      }
+
+      // Allow PDFs explicitly
+      if (contentType.includes('application/pdf')) {
+        return {
+          isValid: true,
+          contentType: 'pdf',
+          message: 'PDF content detected - allowed'
+        };
+      }
+
+      // Allow HTML/text content
+      if (contentType.includes('text/html') || contentType.includes('text/plain') || contentType.includes('application/xhtml')) {
+        // Additional check: warn if content seems suspicious
+        if (contentLength === 0) {
+          console.warn('⚠️ HTML page has zero content-length - might be dynamic content');
+        }
+
+        return {
+          isValid: true,
+          contentType: 'html',
+          message: 'HTML/text content detected - allowed'
+        };
+      }
+
+      // If content type is unknown or empty, allow but warn
+      if (!contentType || contentType.trim() === '') {
+        console.warn('⚠️ No content-type header found, allowing with warning');
+        return {
+          isValid: true,
+          contentType: 'unknown',
+          warning: 'Content type could not be determined. Processing may fail if content is not text-based.'
+        };
+      }
+
+      // Default: block unknown content types for safety
+      return {
+        isValid: false,
+        error: `Content type "${contentType}" is not supported. Please provide URLs to PDFs or text-based web pages.`,
+        contentType,
+        reason: 'unsupported_content_type'
+      };
+
+    } catch (error) {
+      console.error('❌ Error validating URL content type:', error.message);
+
+      // Check if it's a network error
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        return {
+          isValid: false,
+          error: 'Unable to access the URL. Please check that the URL is correct and accessible.',
+          reason: 'network_error'
+        };
+      }
+
+      if (error.name === 'AbortError' || error.code === 'ETIMEDOUT') {
+        return {
+          isValid: false,
+          error: 'URL request timed out. The server may be too slow or unavailable.',
+          reason: 'timeout'
+        };
+      }
+
+      // For other errors, allow but log warning
+      console.warn('⚠️ Could not validate content type, allowing with warning:', error.message);
+      return {
+        isValid: true,
+        contentType: 'unknown',
+        warning: `Could not verify content type: ${error.message}. Processing may fail if content is not text-based.`
       };
     }
   }

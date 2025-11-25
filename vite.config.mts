@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8092,
     proxy: {
       '/api': {
-        target: 'http://localhost:8090',
+        target: 'http://localhost:8051',
         changeOrigin: true,
         secure: false,
       }

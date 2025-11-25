@@ -44,89 +44,53 @@ class DocumentProcessingService {
   async initialize() {
     try {
       console.log('📚 DocumentProcessingService: Initializing UBC GenAI Toolkit...');
-      
+
       // Initialize UBC GenAI Toolkit Document Parsing Module
       const docParsingConfig = {
         logger: new ConsoleLogger(),
         debug: true
       };
-      
+
       this.documentParser = new DocumentParsingModule(docParsingConfig);
       console.log('✅ UBC GenAI Toolkit Document Parser initialized');
-      
-      // Mock Embeddings Module
-      this.embeddingsModule = {
-        generateEmbeddings: async (texts) => {
-          // Mock embeddings - in reality this would call the actual embedding model
-          return texts.map(text => ({
-            text,
-            embedding: Array(this.config.vectorSize).fill(0).map(() => Math.random() - 0.5),
-            metadata: {
-              model: this.config.embeddingModel,
-              dimensions: this.config.vectorSize
-            }
-          }));
-        }
-      };
-      
-      // Mock Qdrant Client
-      this.qdrantClient = {
-        ensureCollection: async (collectionName) => {
-          console.log(`📊 Mock Qdrant: Collection "${collectionName}" ready`);
-          return true;
-        },
-        
-        upsertPoints: async (collectionName, points) => {
-          console.log(`📊 Mock Qdrant: Upserted ${points.length} points to "${collectionName}"`);
-          return { operation_id: Date.now() };
-        },
-        
-        search: async (collectionName, vector, limit = 5) => {
-          console.log(`🔍 Mock Qdrant: Searching in "${collectionName}" with limit ${limit}`);
-          return {
-            result: Array(Math.min(limit, 3)).fill(0).map((_, i) => ({
-              id: `mock-result-${i}`,
-              score: 0.95 - (i * 0.1),
-              payload: {
-                text: `Mock search result ${i + 1}`,
-                materialId: `material-${i + 1}`,
-                source: 'mock-document.pdf'
-              }
-            }))
-          };
-        }
-      };
-      
-      // Mock RAG Module
-      this.ragModule = {
-        chunkText: (text, chunkSize = 512, overlap = 50) => {
-          const words = text.split(' ');
-          const chunks = [];
-          const wordsPerChunk = Math.floor(chunkSize / 6); // Rough estimate: 6 chars per word
-          const overlapWords = Math.floor(overlap / 6);
-          
-          for (let i = 0; i < words.length; i += wordsPerChunk - overlapWords) {
-            const chunk = words.slice(i, i + wordsPerChunk).join(' ');
-            if (chunk.trim()) {
-              chunks.push({
-                text: chunk,
-                startIndex: i,
-                endIndex: Math.min(i + wordsPerChunk, words.length),
-                chunkIndex: chunks.length
-              });
-            }
+
+      // Import and use the REAL RAG service (not mock!)
+      const { default: ragService } = await import('./ragService.js');
+      await ragService.initialize();
+
+      // Use real RAG module for storage
+      this.ragModule = ragService.ragModule;
+
+      // Use real embeddings module
+      this.embeddingsModule = ragService.embeddings;
+
+      // Create a simple chunking function since RAG module doesn't expose chunkText
+      this.chunkText = (text, chunkSize = 512, overlap = 50) => {
+        const chunks = [];
+        let startIndex = 0;
+
+        while (startIndex < text.length) {
+          const endIndex = Math.min(startIndex + chunkSize, text.length);
+          const chunkText = text.substring(startIndex, endIndex);
+
+          if (chunkText.trim()) {
+            chunks.push({
+              text: chunkText.trim(),
+              startIndex,
+              endIndex,
+              chunkIndex: chunks.length
+            });
           }
-          
-          return chunks;
+
+          startIndex += (chunkSize - overlap);
         }
+
+        return chunks;
       };
-      
-      // Ensure Qdrant collection exists
-      await this.qdrantClient.ensureCollection(this.config.collectionName);
-      
-      console.log('✅ DocumentProcessingService: Initialization complete');
+
+      console.log('✅ DocumentProcessingService: Initialization complete with REAL RAG service');
       return true;
-      
+
     } catch (error) {
       console.error('❌ DocumentProcessingService: Initialization failed:', error);
       throw new Error(`Failed to initialize document processing: ${error.message}`);
@@ -149,57 +113,33 @@ class DocumentProcessingService {
       // Step 1: Extract text from document
       const extractionResult = await this.extractText(material.filePath, material.type);
       
-      // Step 2: Chunk the text for vector storage
-      const chunks = this.ragModule.chunkText(
+      // Step 2: Store document in Qdrant using RAG module
+      // The RAG module will handle chunking, embedding, and storage internally
+      const documentMetadata = {
+        materialId: material._id.toString(),
+        materialName: material.name,
+        materialType: material.type,
+        sourceFile: `${material.name}.pdf`,
+        uploadedBy: material.uploadedBy.toString(),
+        folderId: material.folder.toString(),
+        processedAt: new Date().toISOString()
+      };
+
+      console.log(`📊 Storing document in Qdrant via RAG module (will be chunked automatically)...`);
+
+      // Call addDocument ONCE with the full text
+      await this.ragModule.addDocument(
         extractionResult.text,
-        this.config.chunkSize,
-        this.config.chunkOverlap
+        documentMetadata
       );
-      
-      console.log(`📝 Created ${chunks.length} text chunks for ${material.name}`);
-      
-      // Step 3: Generate embeddings for chunks
-      const embeddings = await this.embeddingsModule.generateEmbeddings(
-        chunks.map(chunk => chunk.text)
-      );
-      
-      // Step 4: Prepare points for Qdrant
-      const points = embeddings.map((embedding, index) => ({
-        id: `${material._id}-chunk-${index}`,
-        vector: embedding.embedding,
-        payload: {
-          materialId: material._id.toString(),
-          materialName: material.name,
-          materialType: material.type,
-          chunkIndex: index,
-          text: chunks[index].text,
-          startIndex: chunks[index].startIndex,
-          endIndex: chunks[index].endIndex,
-          folderId: material.folder.toString(),
-          uploadedBy: material.uploadedBy.toString(),
-          createdAt: material.createdAt,
-          metadata: {
-            ...extractionResult.metadata,
-            chunkSize: this.config.chunkSize,
-            chunkOverlap: this.config.chunkOverlap
-          }
-        }
-      }));
-      
-      // Step 5: Store vectors in Qdrant
-      const upsertResult = await this.qdrantClient.upsertPoints(
-        this.config.collectionName,
-        points
-      );
-      
-      console.log(`✅ Document processing complete for ${material.name}`);
+
+      console.log(`✅ Document processing complete for ${material.name} - stored in Qdrant`);
       
       return {
         success: true,
         extractedText: extractionResult.text,
-        chunks: chunks.length,
-        embeddings: embeddings.length,
-        qdrantOperationId: upsertResult.operation_id,
+        chunks: 1, // RAG module handles chunking internally
+        embeddings: 1, // RAG module handles this
         qdrantDocumentId: `${material._id}-doc`,
         metadata: {
           ...extractionResult.metadata,
@@ -316,60 +256,326 @@ class DocumentProcessingService {
    * @returns {Promise<Object>} - Processing result
    */
   async processUrl(url, material) {
-    console.log(`🌐 Processing URL: ${url}`);
-    
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🌐 PROCESSING URL MATERIAL`);
+    console.log(`${'='.repeat(80)}`);
+    console.log(`📍 URL: ${url}`);
+    console.log(`📋 Material ID: ${material._id}`);
+    console.log(`📝 Material Name: ${material.name}`);
+    console.log(`📁 Folder ID: ${material.folder}`);
+    console.log(`${'='.repeat(80)}\n`);
+
     try {
-      // Mock URL content extraction
-      // In reality, this would fetch and parse the URL content
-      const mockContent = `[MOCK] Content extracted from URL: ${url}\n\nThis would contain the actual webpage content extracted using the UBC GenAI Toolkit's web scraping capabilities. The content would be cleaned, formatted, and prepared for embedding generation.`;
-      
-      // Process as text content
-      const chunks = this.ragModule.chunkText(
-        mockContent,
-        this.config.chunkSize,
-        this.config.chunkOverlap
-      );
-      
-      const embeddings = await this.embeddingsModule.generateEmbeddings(
-        chunks.map(chunk => chunk.text)
-      );
-      
-      const points = embeddings.map((embedding, index) => ({
-        id: `${material._id}-chunk-${index}`,
-        vector: embedding.embedding,
-        payload: {
-          materialId: material._id.toString(),
-          materialName: material.name,
-          materialType: material.type,
-          chunkIndex: index,
-          text: chunks[index].text,
-          url: url,
-          folderId: material.folder.toString(),
-          uploadedBy: material.uploadedBy.toString(),
-          createdAt: material.createdAt
-        }
-      }));
-      
-      const upsertResult = await this.qdrantClient.upsertPoints(
-        this.config.collectionName,
-        points
-      );
-      
-      console.log(`✅ URL processing complete for ${url}`);
-      
+      // Step 1: Detect content type
+      console.log(`🔍 Step 1: Detecting content type...`);
+      const contentType = await this.detectUrlContentType(url);
+      console.log(`✅ Content type detected: ${contentType.type}`);
+      console.log(`   MIME type: ${contentType.mimeType || 'N/A'}`);
+      console.log(`   Size: ${contentType.size ? `${(contentType.size / 1024).toFixed(2)} KB` : 'Unknown'}\n`);
+
+      let extractedContent = '';
+      let metadata = {};
+
+      // Step 2: Process based on content type
+      if (contentType.type === 'pdf') {
+        console.log(`📄 Step 2: Processing as PDF...`);
+        const result = await this.processPdfUrl(url, material);
+        extractedContent = result.content;
+        metadata = result.metadata;
+      } else if (contentType.type === 'html') {
+        console.log(`🌐 Step 2: Processing as HTML...`);
+        const result = await this.processHtmlUrl(url, material);
+        extractedContent = result.content;
+        metadata = result.metadata;
+      } else {
+        console.log(`⚠️  Step 2: Unknown content type, attempting generic text extraction...`);
+        const result = await this.processGenericUrl(url, material);
+        extractedContent = result.content;
+        metadata = result.metadata;
+      }
+
+      console.log(`\n📊 Extracted Content Summary:`);
+      console.log(`   Total characters: ${extractedContent.length}`);
+      console.log(`   Total words: ${extractedContent.split(/\s+/).filter(w => w.length > 0).length}`);
+      console.log(`   Preview (first 200 chars): ${extractedContent.substring(0, 200)}...`);
+      if (metadata.title) console.log(`   Title: ${metadata.title}`);
+      if (metadata.description) console.log(`   Description: ${metadata.description}`);
+
+      // Step 3: Process the extracted content using existing RAG pipeline
+      console.log(`\n🔄 Step 3: Processing content through RAG pipeline...`);
+      const result = await this.processTextContent(extractedContent, material);
+
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`✅ URL PROCESSING COMPLETE`);
+      console.log(`${'='.repeat(80)}`);
+      console.log(`📊 Final Statistics:`);
+      console.log(`   Chunks created: ${result.chunks}`);
+      console.log(`   Embeddings generated: ${result.embeddings}`);
+      console.log(`   Qdrant operation ID: ${result.qdrantOperationId || 'N/A'}`);
+      console.log(`${'='.repeat(80)}\n`);
+
       return {
-        success: true,
-        extractedText: mockContent,
-        chunks: chunks.length,
-        embeddings: embeddings.length,
-        qdrantOperationId: upsertResult.operation_id,
-        qdrantDocumentId: `${material._id}-url`
+        ...result,
+        extractedText: extractedContent,
+        metadata: metadata,
+        contentType: contentType.type
       };
-      
+
     } catch (error) {
-      console.error(`❌ URL processing failed for ${url}:`, error);
+      console.error(`\n❌ URL PROCESSING FAILED`);
+      console.error(`URL: ${url}`);
+      console.error(`Error: ${error.message}`);
+      console.error(`Stack trace:`, error.stack);
+      console.error(`${'='.repeat(80)}\n`);
       throw error;
     }
+  }
+
+  /**
+   * Detect URL content type by making a HEAD request
+   */
+  async detectUrlContentType(url) {
+    try {
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TLEF-Create-Bot/1.0)',
+        },
+        timeout: 10000
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const contentLength = response.headers.get('content-length');
+
+      let type = 'unknown';
+      if (contentType.includes('application/pdf')) {
+        type = 'pdf';
+      } else if (contentType.includes('text/html')) {
+        type = 'html';
+      } else if (contentType.includes('text/plain')) {
+        type = 'text';
+      }
+
+      return {
+        type,
+        mimeType: contentType,
+        size: contentLength ? parseInt(contentLength) : null
+      };
+    } catch (error) {
+      console.warn(`⚠️  Could not detect content type via HEAD request: ${error.message}`);
+      // Fallback: guess from URL extension
+      if (url.toLowerCase().endsWith('.pdf')) {
+        return { type: 'pdf', mimeType: 'application/pdf', size: null };
+      } else {
+        return { type: 'html', mimeType: 'text/html', size: null };
+      }
+    }
+  }
+
+  /**
+   * Ensure service is initialized before use
+   */
+  async ensureInitialized() {
+    if (!this.documentParser) {
+      console.log('⚠️  DocumentProcessingService not initialized, initializing now...');
+      await this.initialize();
+    }
+  }
+
+  /**
+   * Process PDF URL by downloading and parsing
+   */
+  async processPdfUrl(url, material) {
+    // Ensure service is initialized
+    await this.ensureInitialized();
+
+    console.log(`   📥 Downloading PDF from URL...`);
+    const fetch = (await import('node-fetch')).default;
+    const crypto = await import('crypto');
+    const os = await import('os');
+
+    try {
+      // Download PDF to temporary file
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TLEF-Create-Bot/1.0)',
+        },
+        timeout: 60000 // 60 seconds for large PDFs
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const buffer = await response.buffer();
+      console.log(`   ✅ Downloaded ${(buffer.length / 1024).toFixed(2)} KB`);
+
+      // Save to temporary file
+      const tempFileName = `url-pdf-${crypto.randomBytes(8).toString('hex')}.pdf`;
+      const tempFilePath = path.join(os.tmpdir(), tempFileName);
+      await fs.writeFile(tempFilePath, buffer);
+      console.log(`   💾 Saved to temporary file: ${tempFilePath}`);
+
+      try {
+        // Parse PDF using UBC toolkit
+        console.log(`   📖 Parsing PDF with UBC GenAI Toolkit...`);
+        const parseResult = await this.documentParser.parse(
+          { filePath: tempFilePath },
+          'text'
+        );
+
+        console.log(`   ✅ PDF parsed successfully`);
+        console.log(`      Content length: ${parseResult.content.length} characters`);
+
+        return {
+          content: parseResult.content,
+          metadata: {
+            title: parseResult.metadata?.title || material.name,
+            source: url,
+            contentType: 'pdf'
+          }
+        };
+      } finally {
+        // Clean up temporary file
+        try {
+          await fs.unlink(tempFilePath);
+          console.log(`   🗑️  Cleaned up temporary file`);
+        } catch (cleanupError) {
+          console.warn(`   ⚠️  Could not delete temporary file: ${cleanupError.message}`);
+        }
+      }
+    } catch (error) {
+      throw new Error(`PDF download/parse failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Process HTML URL by fetching and parsing
+   */
+  async processHtmlUrl(url, material) {
+    console.log(`   📥 Fetching HTML content...`);
+    const fetch = (await import('node-fetch')).default;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TLEF-Create-Bot/1.0)',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        timeout: 30000
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const html = await response.text();
+      console.log(`   ✅ Fetched ${(html.length / 1024).toFixed(2)} KB of HTML`);
+
+      // Extract text from HTML
+      console.log(`   🧹 Extracting text from HTML...`);
+      const extracted = await this.extractTextFromHtml(html);
+
+      console.log(`   ✅ Extracted ${(extracted.content.length / 1024).toFixed(2)} KB of text`);
+
+      return {
+        content: extracted.content,
+        metadata: {
+          title: extracted.title || material.name,
+          description: extracted.description,
+          source: url,
+          contentType: 'html'
+        }
+      };
+    } catch (error) {
+      throw new Error(`HTML fetch/parse failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Process generic URL
+   */
+  async processGenericUrl(url, material) {
+    console.log(`   📥 Fetching generic content...`);
+    const fetch = (await import('node-fetch')).default;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TLEF-Create-Bot/1.0)',
+        },
+        timeout: 30000
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const content = await response.text();
+      console.log(`   ✅ Fetched ${(content.length / 1024).toFixed(2)} KB`);
+
+      return {
+        content: content.substring(0, 50000), // Limit to 50KB
+        metadata: {
+          title: material.name,
+          source: url,
+          contentType: 'text'
+        }
+      };
+    } catch (error) {
+      throw new Error(`Generic fetch failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Extract text from HTML
+   */
+  async extractTextFromHtml(html) {
+    // Simple HTML text extraction without external dependencies
+    // Remove scripts and styles
+    let text = html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/<head\b[^<]*(?:(?!<\/head>)<[^<]*)*<\/head>/gi, '');
+
+    // Extract title
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : null;
+
+    // Extract meta description
+    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+    const description = descMatch ? descMatch[1].trim() : null;
+
+    // Remove all HTML tags
+    text = text.replace(/<[^>]+>/g, ' ');
+
+    // Decode HTML entities
+    text = text
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'");
+
+    // Clean up whitespace
+    text = text
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s*\n/g, '\n')
+      .trim();
+
+    // Check if content seems too short (might be dynamic site)
+    if (text.length < 500) {
+      console.warn(`   ⚠️  Extracted content is very short (${text.length} chars). Might be a dynamic website.`);
+    }
+
+    return {
+      content: text,
+      title,
+      description
+    };
   }
 
   /**
@@ -380,49 +586,40 @@ class DocumentProcessingService {
    */
   async processTextContent(content, material) {
     console.log(`📝 Processing text content: ${material.name}`);
-    
+
     try {
-      const chunks = this.ragModule.chunkText(
+      // Ensure service is initialized
+      await this.ensureInitialized();
+
+      // Prepare metadata for the entire document
+      const documentMetadata = {
+        materialId: material._id.toString(),
+        materialName: material.name,
+        materialType: material.type,
+        folderId: material.folder.toString(),
+        uploadedBy: material.uploadedBy.toString(),
+        processedAt: new Date().toISOString()
+      };
+
+      console.log(`📊 Storing document in Qdrant via RAG module (will be chunked automatically)...`);
+
+      // Call addDocument ONCE with the full text
+      // The RAG module will handle chunking, embedding, and storage
+      await this.ragModule.addDocument(
         content,
-        this.config.chunkSize,
-        this.config.chunkOverlap
+        documentMetadata
       );
-      
-      const embeddings = await this.embeddingsModule.generateEmbeddings(
-        chunks.map(chunk => chunk.text)
-      );
-      
-      const points = embeddings.map((embedding, index) => ({
-        id: `${material._id}-chunk-${index}`,
-        vector: embedding.embedding,
-        payload: {
-          materialId: material._id.toString(),
-          materialName: material.name,
-          materialType: material.type,
-          chunkIndex: index,
-          text: chunks[index].text,
-          folderId: material.folder.toString(),
-          uploadedBy: material.uploadedBy.toString(),
-          createdAt: material.createdAt
-        }
-      }));
-      
-      const upsertResult = await this.qdrantClient.upsertPoints(
-        this.config.collectionName,
-        points
-      );
-      
-      console.log(`✅ Text processing complete for ${material.name}`);
-      
+
+      console.log(`✅ Text processing complete for ${material.name} - stored in Qdrant`);
+
       return {
         success: true,
         extractedText: content,
-        chunks: chunks.length,
-        embeddings: embeddings.length,
-        qdrantOperationId: upsertResult.operation_id,
+        chunks: 1, // RAG module handles chunking internally
+        embeddings: 1, // RAG module handles this
         qdrantDocumentId: `${material._id}-text`
       };
-      
+
     } catch (error) {
       console.error(`❌ Text processing failed for ${material.name}:`, error);
       throw error;
