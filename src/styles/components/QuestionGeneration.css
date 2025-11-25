@@ -2170,20 +2170,72 @@
         align-items: flex-start;
         gap: var(--spacing-sm);
     }
-    
+
     .progress-question .question-header {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--spacing-xs);
     }
-    
+
     .question-preview {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--spacing-xs);
     }
-    
+
     .text-preview {
         font-size: var(--font-size-xs);
+    }
+
+    /* Improve text readability on mobile */
+    .prompt-analysis {
+        padding: var(--spacing-md);
+    }
+
+    .prompt-analysis h4 {
+        font-size: var(--font-size-lg);
+    }
+
+    .prompt-analysis > p {
+        font-size: var(--font-size-base);
+        font-weight: 500;
+        line-height: 1.6;
+        margin: 0 0 var(--spacing-lg) 0;
+        padding-left: var(--spacing-md);
+    }
+
+    .prompts-by-lo {
+        margin-left: 0;
+    }
+
+    .lo-prompt-group {
+        padding: var(--spacing-md);
+    }
+
+    .lo-title {
+        font-size: var(--font-size-base);
+    }
+
+    .sub-objective,
+    .focus-area,
+    .prompt-text {
+        margin-left: var(--spacing-sm);
+        padding: var(--spacing-sm);
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+    }
+
+    .template-description {
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+        font-weight: 400;
+    }
+
+    .breakdown-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .distribution-grid {
+        grid-template-columns: 1fr;
     }
 }

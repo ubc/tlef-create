@@ -317,13 +317,27 @@
     }
 
     .dashboard-grid {
-        grid-template-columns: 1fr;
-        gap: var(--spacing-md);
-        margin-bottom: var(--spacing-xl);
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-lg);
     }
 
     .stat-card {
-        padding: var(--spacing-lg);
+        padding: var(--spacing-md);
+    }
+
+    .stat-card svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .stat-number {
+        font-size: var(--font-size-2xl);
+        margin: var(--spacing-xs) 0;
+    }
+
+    .stat-label {
+        font-size: var(--font-size-xs);
     }
 
     .folders-grid {
@@ -341,18 +355,34 @@
         justify-content: space-between;
     }
 
+    .getting-started {
+        margin-top: var(--spacing-xl);
+    }
+
     .step-list {
         max-width: 100%;
-        padding: 0 var(--spacing-md);
+        min-width: unset;
+        margin: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
+        gap: var(--spacing-sm);
     }
 
     .step-item {
-        flex-direction: column;
-        gap: var(--spacing-md);
-        padding: var(--spacing-md);
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm);
     }
 
     .step-item::before {
-        align-self: flex-start;
+        width: 24px;
+        height: 24px;
+        font-size: var(--font-size-xs);
+    }
+
+    .step-content h3 {
+        font-size: var(--font-size-sm);
+    }
+
+    .step-content p {
+        font-size: var(--font-size-xs);
+        line-height: 1.3;
     }
 }

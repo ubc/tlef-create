@@ -2,14 +2,19 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
-import { Plus, Search, ChevronDown, ChevronRight, User } from 'lucide-react';
+import { Plus, Search, ChevronDown, ChevronRight, User, X } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
 import SearchModal from './SearchModal';
 import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Sidebar.css';
 
-const Sidebar = () => {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -268,9 +273,19 @@ const Sidebar = () => {
 
   return (
       <>
-        <div className="sidebar">
+        {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
+        <div className={`sidebar ${isOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
-            <h1 className="sidebar-title">CREATE</h1>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h1 className="sidebar-title">CREATE</h1>
+              <button
+                className="sidebar-close-button"
+                onClick={onClose}
+                aria-label="Close menu"
+              >
+                <X size={20} />
+              </button>
+            </div>
             <button
                 className="btn btn-primary"
                 style={{ width: '100%' }}
