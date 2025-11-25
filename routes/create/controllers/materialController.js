@@ -182,15 +182,46 @@ router.post('/url', authenticateToken, asyncHandler(async (req, res) => {
   const { name, url, folderId } = req.body;
   const userId = req.user.id;
 
+  console.log('📥 URL material request received:', {
+    hasName: !!name,
+    hasUrl: !!url,
+    hasFolderId: !!folderId,
+    name,
+    url,
+    folderId,
+    userId,
+    bodyKeys: Object.keys(req.body)
+  });
+
   // Validate required fields
   if (!name || !url || !folderId) {
+    console.error('❌ Validation failed - missing required fields:', {
+      name: name || 'MISSING',
+      url: url || 'MISSING',
+      folderId: folderId || 'MISSING'
+    });
     return errorResponse(res, 'Name, URL, and folder ID are required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
-  // Validate URL
+  // Validate URL format
   const urlValidation = FileService.validateUrl(url);
   if (!urlValidation.isValid) {
     return errorResponse(res, urlValidation.error, 'INVALID_URL', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  // Validate URL content type (check if it's allowed content)
+  console.log('🔍 Validating URL content type...');
+  const contentValidation = await FileService.validateUrlContentType(urlValidation.normalizedUrl);
+
+  if (!contentValidation.isValid) {
+    console.log('❌ URL content validation failed:', contentValidation.reason);
+    return errorResponse(res, contentValidation.error, 'BLOCKED_CONTENT_TYPE', HTTP_STATUS.FORBIDDEN);
+  }
+
+  if (contentValidation.warning) {
+    console.warn('⚠️ URL content validation warning:', contentValidation.warning);
+  } else {
+    console.log('✅ URL content validated:', contentValidation.message);
   }
 
   // Verify folder exists and user owns it
@@ -474,13 +505,96 @@ router.post('/search', authenticateToken, asyncHandler(async (req, res) => {
  */
 router.post('/processing/cleanup', authenticateToken, asyncHandler(async (req, res) => {
   const { maxAge = 3600000 } = req.body; // Default: 1 hour
-  
+
   const cleanedCount = processingJobService.cleanupOldJobs(maxAge);
-  
-  return successResponse(res, { 
+
+  return successResponse(res, {
     cleaned: cleanedCount,
     maxAge: maxAge
   }, `Cleaned up ${cleanedCount} old processing jobs`);
+}));
+
+/**
+ * GET /api/materials/:materialId/preview
+ * Get preview of material content by retrieving all chunks from Qdrant
+ */
+router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, res) => {
+  const { materialId } = req.params;
+  const userId = req.user.id;
+
+  console.log(`👁️ Preview request for material: ${materialId}`);
+
+  // Verify material exists and user owns it
+  const material = await Material.findById(materialId);
+
+  if (!material) {
+    return notFoundResponse(res, 'Material');
+  }
+
+  // Verify user owns the material (through folder)
+  const folder = await Folder.findOne({ _id: material.folder, instructor: userId });
+  if (!folder) {
+    return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
+  }
+
+  try {
+    // Import ragService to access Qdrant
+    const { default: ragService } = await import('../services/ragService.js');
+    await ragService.initialize();
+
+    console.log(`🔍 Retrieving chunks for material: ${materialId}`);
+
+    // Retrieve all chunks for this material using a broad query
+    // We'll filter by materialId afterward
+    const allChunks = await ragService.ragModule.retrieveContext('*', {
+      limit: 1000, // Get a large number to ensure we get all chunks
+      scoreThreshold: 0.0 // Include all chunks regardless of score
+    });
+
+    console.log(`📥 Retrieved ${allChunks.length} total chunks from Qdrant`);
+
+    // Filter chunks by materialId
+    const materialChunks = allChunks.filter(chunk => {
+      const chunkMaterialId = chunk.metadata?.materialId;
+      return chunkMaterialId === materialId;
+    });
+
+    console.log(`✅ Found ${materialChunks.length} chunks for material ${materialId}`);
+
+    if (materialChunks.length === 0) {
+      return successResponse(res, {
+        content: 'No content available. This material may still be processing.',
+        chunkCount: 0
+      }, 'No chunks found for this material');
+    }
+
+    // Sort chunks by chunkIndex if available
+    materialChunks.sort((a, b) => {
+      const indexA = a.metadata?.chunkIndex ?? 0;
+      const indexB = b.metadata?.chunkIndex ?? 0;
+      return indexA - indexB;
+    });
+
+    // Combine all chunk texts into a single content string
+    // Try different property names that RAG modules might use
+    const content = materialChunks.map(chunk => {
+      return chunk.text || chunk.content || chunk.pageContent || '';
+    }).join('\n\n---\n\n');
+
+    console.log(`📄 Preview content length: ${content.length} characters`);
+    console.log(`📊 Sample chunk properties:`, materialChunks[0] ? Object.keys(materialChunks[0]) : 'none');
+
+    return successResponse(res, {
+      content,
+      chunkCount: materialChunks.length,
+      materialName: material.name,
+      materialType: material.type
+    }, 'Material preview retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ Failed to retrieve material preview:', error);
+    return errorResponse(res, 'Failed to retrieve preview', 'PREVIEW_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
 }));
 
 export default router;

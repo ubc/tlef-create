@@ -92,6 +92,15 @@
     color: var(--color-muted-foreground);
 }
 
+/* iPad responsive styles */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .quiz-tab {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: var(--font-size-xs);
+        gap: var(--spacing-xs);
+    }
+}
+
 @media (max-width: 768px) {
     .quiz-header {
         margin-bottom: var(--spacing-xl);

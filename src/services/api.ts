@@ -833,6 +833,10 @@ export const exportApi = {
     return await apiClient.post(`/export/h5p/${quizId}`);
   },
 
+  exportToPDF: async (quizId: string, type: 'questions' | 'answers' | 'combined'): Promise<ApiResponse<{ exportId: string; filename: string; downloadUrl: string }>> => {
+    return await apiClient.post(`/export/pdf/${quizId}`, { type });
+  },
+
   downloadExport: async (exportId: string): Promise<Blob> => {
     return await apiClient.getBlob(`/export/${exportId}/download`);
   }

@@ -977,13 +977,60 @@ class QuizRAGService {
       // Note: This is a simplified implementation
       // In production, you'd want to track document IDs and delete them specifically
       console.log(`🗑️ Deleting content for quiz ${quizId}`);
-      
+
       // For now, we'll just return success
       // Real implementation would filter and delete by quizId metadata
       return { success: true, message: `Content for quiz ${quizId} marked for deletion` };
     } catch (error) {
       console.error('❌ Error deleting quiz content:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * DEBUG: Log all chunks stored in Qdrant for debugging
+   * @param {number} limit - Maximum number of chunks to retrieve (default: 50)
+   */
+  async debugLogAllChunks(limit = 50) {
+    console.log('\n========== DEBUGGING QDRANT CHUNKS ==========');
+
+    if (!this.ragModule) {
+      console.log('❌ RAG module not available');
+      return;
+    }
+
+    try {
+      // Try to retrieve chunks using a wildcard query
+      const results = await this.ragModule.retrieveContext('*', {
+        limit: limit,
+        scoreThreshold: 0.0 // Get all chunks regardless of score
+      });
+
+      console.log(`\n📊 Total chunks retrieved: ${results.length}\n`);
+
+      results.forEach((result, idx) => {
+        console.log(`\n--- Chunk ${idx + 1} ---`);
+        console.log('Metadata:', JSON.stringify(result.metadata, null, 2));
+        console.log('Score:', result.score);
+
+        // Try different field names for content
+        const content = result.content || result.pageContent || result.text || result.payload?.content || '[No content found]';
+        console.log('Content length:', content.length);
+        console.log('Content preview (first 200 chars):');
+        console.log(content.substring(0, 200));
+        console.log('Content preview (last 100 chars):');
+        console.log(content.substring(Math.max(0, content.length - 100)));
+
+        // Log all keys in the result object
+        console.log('Available keys in result:', Object.keys(result));
+      });
+
+      console.log('\n========== END DEBUG ==========\n');
+
+      return results;
+    } catch (error) {
+      console.error('❌ Error retrieving chunks:', error);
+      console.error('Error stack:', error.stack);
     }
   }
 }

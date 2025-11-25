@@ -1127,7 +1127,7 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
    */
   async generateLearningObjectives(materials, courseContext = '', targetCount = null) {
     console.log(`🎯 Generating learning objectives from ${materials.length} materials`);
-    
+
     if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
     }
@@ -1136,14 +1136,75 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
     const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
     console.log(`🤖 Using ${provider} model: ${model}`);
 
-    // Prepare materials content for the prompt
-    const materialsContent = materials.map(material => {
-      let content = '';
-      if (material.content) {
-        content = material.content.substring(0, 3000); // Limit content length
+    // Import and use RAG service to retrieve relevant chunks from vector database
+    let materialsContent = '';
+    try {
+      const { default: ragService } = await import('./ragService.js');
+      await ragService.initialize();
+
+      // Query the vector database for relevant content about course/learning objectives
+      const searchQuery = `course content learning objectives topics concepts ${courseContext}`;
+      console.log(`🔍 Retrieving relevant chunks from vector database with query: "${searchQuery}"`);
+
+      // Extract material IDs to filter RAG results
+      const materialIds = materials.map(m => m._id.toString());
+      console.log(`🎯 Filtering by ${materialIds.length} material IDs:`, materialIds);
+
+      // Use the underlying ragModule to call retrieveContext with higher limit
+      // We'll filter afterward since Qdrant filter syntax might not work
+      const ragResultsRaw = await ragService.ragModule.retrieveContext(searchQuery, {
+        limit: 50, // Get more chunks to ensure we have enough after filtering
+        scoreThreshold: 0.3 // Lower threshold for learning objectives
+      });
+
+      console.log(`📥 Retrieved ${ragResultsRaw.length} total chunks from vector database`);
+
+      // Filter results to only include chunks from selected materials
+      const ragResults = ragResultsRaw.filter(result => {
+        const resultMaterialId = result.metadata?.materialId;
+        const isIncluded = materialIds.includes(resultMaterialId);
+        if (!isIncluded) {
+          console.log(`🚫 Excluding chunk from material: ${result.metadata?.materialName} (ID: ${resultMaterialId})`);
+        }
+        return isIncluded;
+      }).slice(0, 15); // Take top 15 after filtering
+
+      console.log(`✅ After filtering: ${ragResults.length} chunks from selected materials`);
+
+      if (ragResults && ragResults.length > 0) {
+        console.log(`✅ Using ${ragResults.length} relevant chunks from selected materials`);
+
+        // Debug: Log the structure of the first result
+        if (ragResults.length > 0) {
+          console.log('🔍 First RAG result structure:', JSON.stringify({
+            keys: Object.keys(ragResults[0]),
+            metadata: ragResults[0].metadata,
+            contentPreview: {
+              content: ragResults[0].content ? ragResults[0].content.substring(0, 100) : null,
+              pageContent: ragResults[0].pageContent ? ragResults[0].pageContent.substring(0, 100) : null,
+              text: ragResults[0].text ? ragResults[0].text.substring(0, 100) : null
+            }
+          }, null, 2));
+        }
+
+        materialsContent = ragResults.map((result, idx) => {
+          const materialName = result.metadata?.materialName || result.metadata?.fileName || 'Material';
+          // Handle both content and pageContent field names
+          const content = result.content || result.pageContent || result.text || '';
+          console.log(`📄 Chunk ${idx + 1} content length: ${content.length}, preview: ${content.substring(0, 50)}`);
+          return `**Excerpt ${idx + 1} from ${materialName}**\n${content}`;
+        }).join('\n\n---\n\n');
+      } else {
+        console.warn('⚠️ No chunks retrieved from vector database, falling back to material names only');
+        materialsContent = materials.map(material => `**${material.name}** (${material.type})`).join('\n\n');
       }
-      return `**${material.name}** (${material.type})\n${content}`;
-    }).join('\n\n---\n\n');
+    } catch (error) {
+      console.error('❌ Error retrieving from RAG:', error);
+      console.error('❌ Error stack:', error.stack);
+      // Fallback to using material names if RAG fails
+      console.warn('⚠️ Falling back to material names only');
+      materialsContent = materials.map(material => `**${material.name}** (${material.type})`).join('\n\n');
+    }
 
     const countInstruction = targetCount ? `exactly ${targetCount}` : '4-6';
     const prompt = `You are an educational expert helping to create learning objectives for a university course. Based on the provided course materials, generate ${countInstruction} specific, measurable learning objectives that students should achieve.
@@ -1165,10 +1226,15 @@ Format your response as a JSON array of strings, like this:
 
 Learning Objectives:`;
 
+    // Log the complete prompt being sent to the LLM
+    console.log('\n==================== LLM PROMPT ====================');
+    console.log(prompt);
+    console.log('====================================================\n');
+
     try {
       const temperature = 0.6;
       const maxTokens = 1000;
-      
+
       const options = this.getSendMessageOptions(temperature, maxTokens);
       const response = await this.llm.sendMessage(prompt, options);
 

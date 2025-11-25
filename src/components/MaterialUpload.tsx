@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Link, FileText, X, Plus, Loader2 } from 'lucide-react';
+import { Upload, Link, FileText, X, Plus, Loader2, Eye } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/MaterialUpload.css';
 
@@ -26,6 +26,10 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [showTextForm, setShowTextForm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [previewContent, setPreviewContent] = useState<string>('');
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { showNotification } = usePubSub('MaterialUpload');
@@ -119,6 +123,36 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
     }
   };
 
+  const handlePreview = async (material: Material) => {
+    setPreviewMaterial(material);
+    setShowPreview(true);
+    setIsLoadingPreview(true);
+    setPreviewContent('');
+
+    try {
+      const response = await fetch(`/api/create/materials/${material.id}/preview`);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch material preview');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setPreviewContent(data.data.content);
+      } else {
+        showNotification('error', 'Preview Error', data.error || 'Failed to load preview');
+        setShowPreview(false);
+      }
+    } catch (error) {
+      console.error('Error fetching preview:', error);
+      showNotification('error', 'Preview Error', 'Failed to load material preview');
+      setShowPreview(false);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
   const getFileIcon = (type: string) => {
     switch (type) {
       case 'pdf':
@@ -200,6 +234,17 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                       onChange={(e) => setUrlInput(e.target.value)}
                       required
                   />
+                  <div className="url-allowlist-info">
+                    <p className="allowlist-title">Accepted URL Types:</p>
+                    <ul className="allowlist-items">
+                      <li>✓ Direct PDF links</li>
+                      <li>✓ Static websites with text content</li>
+                      <li>✗ Google Drive, Dropbox, OneDrive links</li>
+                      <li>✗ Direct image, video, or audio files</li>
+                      <li>✗ Archive files (ZIP, RAR, etc.)</li>
+                    </ul>
+                    <p className="allowlist-note">For cloud storage files, please download and upload directly.</p>
+                  </div>
                   <div className="form-actions">
                     <button type="button" className="btn btn-secondary" onClick={() => setShowUrlForm(false)}>
                       Cancel
@@ -265,16 +310,60 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                             <Loader2 size={16} className="spinner" />
                           </div>
                         ) : (
-                          <button
-                              className="btn btn-ghost material-remove"
-                              onClick={() => onRemoveMaterial(material.id)}
-                          >
-                            <X size={16} />
-                          </button>
+                          <div className="material-actions">
+                            <button
+                                className="btn btn-ghost material-preview"
+                                onClick={() => handlePreview(material)}
+                                title="Preview content"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                                className="btn btn-ghost material-remove"
+                                onClick={() => onRemoveMaterial(material.id)}
+                                title="Remove material"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
                   })}
+                </div>
+              </div>
+          )}
+
+          {/* Preview Modal */}
+          {showPreview && previewMaterial && (
+              <div className="modal-overlay" onClick={() => setShowPreview(false)}>
+                <div className="modal-content preview-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <div>
+                      <h3 className="modal-title">{previewMaterial.name}</h3>
+                      <p className="modal-subtitle">
+                        {previewMaterial.type.toUpperCase()} • {previewMaterial.uploadDate}
+                      </p>
+                    </div>
+                    <button
+                        className="btn btn-ghost modal-close"
+                        onClick={() => setShowPreview(false)}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    {isLoadingPreview ? (
+                        <div className="preview-loading">
+                          <Loader2 size={32} className="spinner" />
+                          <p>Loading content...</p>
+                        </div>
+                    ) : (
+                        <div className="preview-content">
+                          <pre>{previewContent}</pre>
+                        </div>
+                    )}
+                  </div>
                 </div>
               </div>
           )}
