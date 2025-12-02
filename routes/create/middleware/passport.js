@@ -14,8 +14,8 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 /**
- * Load certificate from file path or return placeholder for local development
- * passport-ubcshib requires a cert, so we provide one even if validation is disabled
+ * Load certificate from file path or return undefined to let passport-ubcshib fetch from metadata
+ * passport-ubcshib can automatically fetch the cert from the IdP's metadata URL
  */
 function loadCertificate() {
   const certPath = process.env.SAML_CERT_PATH;
@@ -49,23 +49,32 @@ xrJQPNE4szWO9XJft+eZ
 -----END CERTIFICATE-----`;
   }
 
-  // For staging/production, certificate file path is required
-  if (!certPath) {
-    throw new Error('SAML_CERT_PATH is required for non-LOCAL environments');
+  // For STAGING/PRODUCTION without a cert file, return undefined
+  // passport-ubcshib will automatically fetch the cert from metadataUrl
+  if (!certPath && (environment === 'STAGING' || environment === 'PRODUCTION')) {
+    console.log(`ℹ️  ${environment} mode: Certificate will be fetched from IdP metadata URL`);
+    return undefined; // passport-ubcshib will fetch from metadataUrl
   }
 
-  try {
-    const absolutePath = path.isAbsolute(certPath)
-      ? certPath
-      : path.join(process.cwd(), certPath);
+  // If cert path is provided, load it from file
+  if (certPath) {
+    try {
+      const absolutePath = path.isAbsolute(certPath)
+        ? certPath
+        : path.join(process.cwd(), certPath);
 
-    const cert = fs.readFileSync(absolutePath, 'utf-8');
-    console.log('✅ Loaded SAML certificate from:', absolutePath);
-    return cert;
-  } catch (error) {
-    console.error('❌ Failed to load certificate from:', certPath, error.message);
-    throw new Error(`Failed to load SAML certificate from ${certPath}: ${error.message}`);
+      const cert = fs.readFileSync(absolutePath, 'utf-8');
+      console.log('✅ Loaded SAML certificate from:', absolutePath);
+      return cert;
+    } catch (error) {
+      console.error('❌ Failed to load certificate from:', certPath, error.message);
+      throw new Error(`Failed to load SAML certificate from ${certPath}: ${error.message}`);
+    }
   }
+
+  // Fallback: return undefined for passport-ubcshib to fetch from metadata
+  console.log('ℹ️  No certificate path provided, will fetch from IdP metadata');
+  return undefined;
 }
 
 // SAML Strategy configuration using passport-ubcshib
