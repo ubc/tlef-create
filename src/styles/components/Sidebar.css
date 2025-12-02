@@ -21,6 +21,13 @@
     gap: var(--spacing-md);
 }
 
+.sidebar-header-top {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 0;
+    margin-bottom: calc(var(--spacing-md) * -1);
+}
+
 .sidebar-title {
     font-size: var(--font-size-2xl);
     font-weight: 700;

@@ -276,8 +276,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
         {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
         <div className={`sidebar ${isOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h1 className="sidebar-title">CREATE</h1>
+            <div className="sidebar-header-top">
               <button
                 className="sidebar-close-button"
                 onClick={onClose}
@@ -286,6 +285,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                 <X size={20} />
               </button>
             </div>
+            <h1 className="sidebar-title">CREATE</h1>
             <button
                 className="btn btn-primary"
                 style={{ width: '100%' }}
