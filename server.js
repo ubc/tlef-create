@@ -6,7 +6,6 @@ import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import createRoutes from './routes/create/createRoutes.js';
-import authController from './routes/create/controllers/authController.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
 import mongoose from 'mongoose';
@@ -127,10 +126,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Mount auth routes at root level for SAML compatibility (docker-simple-saml expects /auth/saml/callback)
-app.use('/auth', authController);
-
-// Mount the API router for non-auth routes
+// Mount the API router (includes auth routes)
 app.use('/api/create', createRoutes);
 
 // Serve static files from dist in production

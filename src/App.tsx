@@ -24,7 +24,7 @@ const App = () => {
   const checkAuth = async () => {
     console.log('🔧 checkAuth called');
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
+      const response = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
       console.log('🔧 Auth response status:', response.status);

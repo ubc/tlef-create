@@ -18,7 +18,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
 
   const handleSamlLogin = () => {
     // Redirect to backend SAML login endpoint
-    window.location.href = `${API_URL}/auth/saml/login`;
+    window.location.href = `${API_URL}/api/create/auth/saml/login`;
   };
 
   const handleAutoLogin = async () => {
@@ -31,7 +31,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
     
     try {
       // First, check if we're already authenticated
-      const authCheck = await fetch(`${API_URL}/auth/me`, {
+      const authCheck = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
       
@@ -55,7 +55,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
       }
 
       // Not authenticated, proceed with auto-login
-      const response = await fetch(`${API_URL}/auth/auto-login`, {
+      const response = await fetch(`${API_URL}/api/create/auth/auto-login`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -65,7 +65,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
 
       if (response.ok) {
         // Verify authentication after auto-login
-        const verifyAuth = await fetch(`${API_URL}/auth/me`, {
+        const verifyAuth = await fetch(`${API_URL}/api/create/auth/me`, {
           credentials: 'include'
         });
         
@@ -109,7 +109,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
     }
     
     try {
-      const response = await fetch(`${API_URL}/auth/config`);
+      const response = await fetch(`${API_URL}/api/create/auth/config`);
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
