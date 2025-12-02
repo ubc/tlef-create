@@ -122,18 +122,18 @@ router.get('/me', asyncHandler(async (req, res) => {
  * GET /api/auth/saml/login
  * Initiate SAML login
  */
-router.get('/saml/login', passport.authenticate('saml'));
+router.get('/saml/login', passport.authenticate('ubcshib'));
 
 /**
  * POST /api/auth/saml/callback
  * Handle SAML callback
  */
-router.post('/saml/callback', 
-  passport.authenticate('saml', { failureRedirect: '/login' }),
+router.post('/saml/callback',
+  passport.authenticate('ubcshib', { failureRedirect: '/' }),
   (req, res) => {
-    console.log('✅ SAML callback successful');
+    console.log('✅ SAML callback successful - user:', req.user?.cwlId);
     // Successful authentication, redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8092'}/`);
   }
 );
 

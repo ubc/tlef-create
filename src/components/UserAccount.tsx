@@ -22,7 +22,7 @@ const UserAccount = () => {
 
   const fetchUserData = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/create/auth/me`, {
+      const response = await fetch(`${API_URL}/auth/me`, {
         credentials: 'include'
       });
       if (response.ok) {
@@ -39,7 +39,7 @@ const UserAccount = () => {
 
   const handleLogout = () => {
     // Redirect to logout endpoint
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/create/auth/logout`;
+    window.location.href = `${import.meta.env.VITE_API_URL}/auth/logout`;
   };
 
   const handleSubmitReport = () => {

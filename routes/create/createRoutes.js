@@ -5,7 +5,7 @@ import { RATE_LIMITS, HTTP_STATUS, ERROR_CODES } from './config/constants.js';
 import { errorResponse } from './utils/responseFormatter.js';
 
 // Import controllers
-import authController from './controllers/authController.js';
+// NOTE: authController is mounted at root level in server.js for SAML compatibility
 import folderController from './controllers/folderController.js';
 import materialController from './controllers/materialController.js';
 import quizController from './controllers/quizController.js';
@@ -88,7 +88,7 @@ router.get('/health', (req, res) => {
 });
 
 // Mount route controllers
-router.use('/auth', authController);
+// NOTE: '/auth' is mounted at root level in server.js for SAML compatibility
 router.use('/folders', folderController);
 router.use('/materials', materialController);
 router.use('/quizzes', quizController);
