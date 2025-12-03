@@ -120,22 +120,37 @@ router.get('/me', asyncHandler(async (req, res) => {
 
 /**
  * GET /api/auth/saml/login
- * Initiate SAML login
+ * Initiate SAML login (dynamically selects ubcshib or saml strategy)
  */
-router.get('/saml/login', passport.authenticate('saml'));
+router.get('/saml/login', (req, res, next) => {
+  const useUBCShib = process.env.USE_UBC_SHIB === 'true';
+  const strategy = useUBCShib ? 'ubcshib' : 'saml';
+  console.log(`🔑 Initiating ${strategy} login...`);
+  passport.authenticate(strategy)(req, res, next);
+});
 
 /**
  * POST /api/auth/saml/callback
- * Handle SAML callback
+ * Handle SAML callback (dynamically selects ubcshib or saml strategy)
  */
-router.post('/saml/callback', 
-  passport.authenticate('saml', { failureRedirect: '/login' }),
-  (req, res) => {
-    console.log('✅ SAML callback successful');
+router.post('/saml/callback', (req, res, next) => {
+  const useUBCShib = process.env.USE_UBC_SHIB === 'true';
+  const strategy = useUBCShib ? 'ubcshib' : 'saml';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
+  console.log(`🔑 Processing ${strategy} callback...`);
+
+  passport.authenticate(strategy, {
+    failureRedirect: `${frontendUrl}/login`
+  })(req, res, (err) => {
+    if (err) {
+      console.error(`❌ ${strategy} callback error:`, err);
+      return res.redirect(`${frontendUrl}/login`);
+    }
+    console.log(`✅ ${strategy} callback successful`);
     // Successful authentication, redirect to frontend
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/`);
-  }
-);
+    res.redirect(`${frontendUrl}/`);
+  });
+});
 
 /**
  * GET /api/auth/logout
