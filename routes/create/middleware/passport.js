@@ -25,96 +25,107 @@ try {
   UBCShibStrategy = null;
 }
 
-// SAML Strategy configuration
-// Load certificate from file or use environment variable
-let samlCert;
-const samlCertPath = process.env.SAML_CERT_PATH;
-if (samlCertPath) {
-  try {
-    samlCert = fs.readFileSync(samlCertPath, 'utf8');
-    console.log(`✅ SAML certificate loaded from: ${samlCertPath}`);
-  } catch (error) {
-    console.error(`❌ Failed to read SAML certificate from ${samlCertPath}:`, error.message);
-    samlCert = null;
-  }
-}
+// Generic SAML Strategy - Only used in development (local docker-simple-saml)
+let samlStrategy = null;
 
-// If no certificate from file, use hardcoded docker-simple-saml certificate as fallback
-if (!samlCert) {
-  console.warn('⚠️ Using hardcoded SAML certificate (may be outdated)');
-}
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔧 Configuring generic SAML strategy for development...');
 
-const samlStrategy = new SamlStrategy({
-  callbackUrl: process.env.SAML_CALLBACK_URL || 'http://localhost:7736/api/create/auth/saml/callback',
-  entryPoint: process.env.SAML_ENTRY_POINT || 'http://localhost:8080/simplesaml/saml2/idp/SSOService.php',
-  logoutUrl: process.env.SAML_LOGOUT_URL || 'http://localhost:8080/simplesaml/saml2/idp/SingleLogoutService.php',
-  logoutCallbackUrl: process.env.SAML_LOGOUT_CALLBACK_URL || 'http://localhost:7736/api/create/auth/logout/callback',
-  issuer: process.env.SAML_ISSUER || 'tlef-create',
-  cert: samlCert,
-  identifierFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:transient',
-  disableRequestedAuthnContext: true,
-  acceptedClockSkewMs: 5000,
-  validateInResponseTo: false,
-  wantAssertionsSigned: true,
-  wantAuthnResponseSigned: true,
-  signatureAlgorithm: 'sha256'
-}, async (profile, done) => {
-  try {
-    console.log('SAML Profile received:', JSON.stringify(profile, null, 2));
-    
-    // Extract user information from SAML profile
-    const cwlId = profile.uid || profile.nameID;
-    
-    if (!cwlId) {
-      return done(new Error('No CWL ID found in SAML profile'));
+  // Load certificate from file or use environment variable
+  let samlCert;
+  const samlCertPath = process.env.SAML_CERT_PATH;
+  if (samlCertPath) {
+    try {
+      samlCert = fs.readFileSync(samlCertPath, 'utf8');
+      console.log(`✅ SAML certificate loaded from: ${samlCertPath}`);
+    } catch (error) {
+      console.error(`❌ Failed to read SAML certificate from ${samlCertPath}:`, error.message);
+      samlCert = null;
     }
+  }
 
-    // Find or create user
-    let user = await User.findOne({ cwlId });
-    
-    if (!user) {
-      // Create new user
-      user = new User({
-        cwlId,
-        password: 'saml-authenticated', // Placeholder - not used for SAML auth
-        stats: {
-          coursesCreated: 0,
-          quizzesGenerated: 0,
-          questionsCreated: 0,
-          totalUsageTime: 0,
-          lastActivity: new Date()
-        }
+  // If no certificate from file, use hardcoded docker-simple-saml certificate as fallback
+  if (!samlCert) {
+    console.warn('⚠️ Using hardcoded SAML certificate (may be outdated)');
+  }
+
+  samlStrategy = new SamlStrategy({
+    callbackUrl: process.env.SAML_CALLBACK_URL || 'http://localhost:7736/api/create/auth/saml/callback',
+    entryPoint: process.env.SAML_ENTRY_POINT || 'http://localhost:8080/simplesaml/saml2/idp/SSOService.php',
+    logoutUrl: process.env.SAML_LOGOUT_URL || 'http://localhost:8080/simplesaml/saml2/idp/SingleLogoutService.php',
+    logoutCallbackUrl: process.env.SAML_LOGOUT_CALLBACK_URL || 'http://localhost:7736/api/create/auth/logout/callback',
+    issuer: process.env.SAML_ISSUER || 'tlef-create',
+    cert: samlCert,
+    identifierFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:transient',
+    disableRequestedAuthnContext: true,
+    acceptedClockSkewMs: 5000,
+    validateInResponseTo: false,
+    wantAssertionsSigned: true,
+    wantAuthnResponseSigned: true,
+    signatureAlgorithm: 'sha256'
+  }, async (profile, done) => {
+    try {
+      console.log('SAML Profile received:', JSON.stringify(profile, null, 2));
+
+      // Extract user information from SAML profile
+      const cwlId = profile.uid || profile.nameID;
+
+      if (!cwlId) {
+        return done(new Error('No CWL ID found in SAML profile'));
+      }
+
+      // Find or create user
+      let user = await User.findOne({ cwlId });
+
+      if (!user) {
+        // Create new user
+        user = new User({
+          cwlId,
+          password: 'saml-authenticated', // Placeholder - not used for SAML auth
+          stats: {
+            coursesCreated: 0,
+            quizzesGenerated: 0,
+            questionsCreated: 0,
+            totalUsageTime: 0,
+            lastActivity: new Date()
+          }
+        });
+        await user.save();
+      } else {
+        // Update last login
+        user.lastLogin = new Date();
+        user.stats.lastActivity = new Date();
+        await user.save();
+      }
+
+      return done(null, {
+        _id: user._id,
+        cwlId: user.cwlId,
+        stats: user.stats
       });
-      await user.save();
-    } else {
-      // Update last login
-      user.lastLogin = new Date();
-      user.stats.lastActivity = new Date();
-      await user.save();
+    } catch (error) {
+      console.error('SAML authentication error:', error);
+      return done(error);
     }
+  });
 
-    return done(null, {
-      _id: user._id,
-      cwlId: user.cwlId,
-      stats: user.stats
-    });
-  } catch (error) {
-    console.error('SAML authentication error:', error);
-    return done(error);
-  }
-});
-
-passport.use('saml', samlStrategy);
+  passport.use('saml', samlStrategy);
+  console.log('✅ Generic SAML strategy registered for development');
+} else {
+  console.log('ℹ️ Skipping generic SAML strategy (only used in development)');
+}
 
 // UBC Shibboleth Strategy - UBC-specific SAML Authentication
 // Uses passport-ubcshib for UBC's Shibboleth IdP integration
-if (UBCShibStrategy) {
+// Only used in production/staging (not development)
+if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
+  console.log('🔧 Configuring UBC Shibboleth strategy for production/staging...');
+
   const ubcShibIssuer = process.env.SAML_ISSUER;
   const ubcShibCallbackUrl = process.env.SAML_CALLBACK_URL;
   const ubcShibCertPath = process.env.SAML_CERT_PATH;
   const ubcShibPrivateKeyPath = process.env.SAML_PRIVATE_KEY_PATH;
   const ubcShibEnvironment = process.env.SAML_ENVIRONMENT || 'STAGING';
-  const useUBCShib = process.env.USE_UBC_SHIB === 'true';
 
   // Read SAML certificate if path is provided
   let ubcShibCert = null;
@@ -134,9 +145,8 @@ if (UBCShibStrategy) {
   console.log(`   SAML_CERT: ${ubcShibCert ? '✓ Loaded' : '✗ Not loaded'}`);
   console.log(`   SAML_PRIVATE_KEY_PATH: ${ubcShibPrivateKeyPath ? '✓ Set' : '✗ Missing'}`);
   console.log(`   SAML_ENVIRONMENT: ${ubcShibEnvironment}`);
-  console.log(`   USE_UBC_SHIB: ${useUBCShib}`);
 
-  if (useUBCShib && ubcShibIssuer && ubcShibCallbackUrl && ubcShibCert) {
+  if (ubcShibIssuer && ubcShibCallbackUrl && ubcShibCert) {
     try {
       const ubcShibStrategy = new UBCShibStrategy(
         {
@@ -215,14 +225,10 @@ if (UBCShibStrategy) {
       console.error('   Error details:', error);
     }
   } else {
-    if (!useUBCShib) {
-      console.log('ℹ️ UBC Shibboleth strategy disabled (USE_UBC_SHIB=false), using generic SAML strategy');
-    } else {
-      console.log('ℹ️ UBC Shibboleth strategy not configured (missing required environment variables)');
-      console.log('   Required: SAML_ISSUER, SAML_CALLBACK_URL, and SAML_CERT_PATH');
-    }
+    console.error('❌ UBC Shibboleth strategy not configured (missing required environment variables)');
+    console.error('   Required: SAML_ISSUER, SAML_CALLBACK_URL, and SAML_CERT_PATH');
   }
-} else {
+} else if (process.env.NODE_ENV !== 'development') {
   console.log('ℹ️ UBC Shibboleth strategy not available (passport-ubcshib module not loaded)');
 }
 
