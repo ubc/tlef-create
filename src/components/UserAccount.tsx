@@ -39,7 +39,7 @@ const UserAccount = () => {
 
   const handleLogout = () => {
     // Redirect to logout endpoint
-    window.location.href = `${import.meta.env.VITE_API_URL}/api/create/auth/logout`;
+    window.location.href = `${API_URL}/api/create/auth/logout`;
   };
 
   const handleSubmitReport = () => {
