@@ -120,24 +120,26 @@ router.get('/me', asyncHandler(async (req, res) => {
 
 /**
  * GET /api/auth/saml/login
- * Initiate SAML login (dynamically selects ubcshib or saml strategy)
+ * Initiate SAML login (auto-selects strategy based on NODE_ENV)
+ * - development: uses 'saml' (generic passport-saml with docker-simple-saml)
+ * - production/staging: uses 'ubcshib' (UBC Shibboleth IdP)
  */
 router.get('/saml/login', (req, res, next) => {
-  const useUBCShib = process.env.USE_UBC_SHIB === 'true';
-  const strategy = useUBCShib ? 'ubcshib' : 'saml';
-  console.log(`🔑 Initiating ${strategy} login...`);
+  const strategy = process.env.NODE_ENV === 'development' ? 'saml' : 'ubcshib';
+  console.log(`🔑 Initiating ${strategy} login (NODE_ENV: ${process.env.NODE_ENV})...`);
   passport.authenticate(strategy)(req, res, next);
 });
 
 /**
  * POST /api/auth/saml/callback
- * Handle SAML callback (dynamically selects ubcshib or saml strategy)
+ * Handle SAML callback (auto-selects strategy based on NODE_ENV)
+ * - development: uses 'saml' (generic passport-saml with docker-simple-saml)
+ * - production/staging: uses 'ubcshib' (UBC Shibboleth IdP)
  */
 router.post('/saml/callback', (req, res, next) => {
-  const useUBCShib = process.env.USE_UBC_SHIB === 'true';
-  const strategy = useUBCShib ? 'ubcshib' : 'saml';
+  const strategy = process.env.NODE_ENV === 'development' ? 'saml' : 'ubcshib';
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
-  console.log(`🔑 Processing ${strategy} callback...`);
+  console.log(`🔑 Processing ${strategy} callback (NODE_ENV: ${process.env.NODE_ENV})...`);
 
   passport.authenticate(strategy, {
     failureRedirect: `${frontendUrl}/login`
