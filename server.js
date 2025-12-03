@@ -126,6 +126,15 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// SAML Shibboleth.sso compatibility route
+// UBC's IdP metadata uses /Shibboleth.sso/SAML2/POST, so redirect to our Express callback
+app.post('/Shibboleth.sso/SAML2/POST', (req, res) => {
+  console.log('🔄 Redirecting Shibboleth.sso callback to /api/create/auth/saml/callback');
+  // Forward the request to the actual SAML callback handler
+  req.url = '/api/create/auth/saml/callback';
+  app.handle(req, res);
+});
+
 // Mount the API router FIRST (before static files)
 app.use('/api/create', createRoutes);
 
