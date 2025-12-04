@@ -80,7 +80,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   });
   
   // SSE URL for streaming - use test endpoint (no auth required for EventSource limitation)
-  const sseUrl = streamingState.sessionId ? `${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/test-sse/${streamingState.sessionId}` : null;
+  const sseUrl = streamingState.sessionId ? `${API_URL}/api/create/streaming/test-sse/${streamingState.sessionId}` : null;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalJustSaved, setModalJustSaved] = useState(false);
   
@@ -542,7 +542,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       console.log('✅ SSE connection should be ready, starting generation...');
 
       // Start production streaming generation
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8051'}/api/create/streaming/generate-questions`, {
+      const response = await fetch(`${API_URL}/api/create/streaming/generate-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
