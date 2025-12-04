@@ -9,6 +9,44 @@ import User from '../models/User.js';
 const router = express.Router();
 
 /**
+ * Helper function to clear session and redirect
+ * Handles all session cleanup and redirect logic in one place
+ */
+function clearSessionAndRedirect(req, res, redirectUrl = null) {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
+  const defaultRedirect = `${frontendUrl}/login`;
+  const finalRedirect = redirectUrl || defaultRedirect;
+
+  // Use logout if available, otherwise just destroy session
+  const logoutFn = req.logout ? req.logout.bind(req) : (cb) => cb();
+
+  logoutFn((logoutErr) => {
+    if (logoutErr) {
+      console.error('❌ Passport logout error:', logoutErr);
+    } else {
+      console.log('✅ Passport logout successful');
+    }
+
+    // Destroy session
+    if (req.session) {
+      req.session.destroy((sessionErr) => {
+        if (sessionErr) {
+          console.error('❌ Session destruction error:', sessionErr);
+        } else {
+          console.log('✅ Session destroyed');
+        }
+
+        console.log('🔄 Redirecting to:', finalRedirect);
+        res.redirect(finalRedirect);
+      });
+    } else {
+      console.log('ℹ️ No session to destroy');
+      res.redirect(finalRedirect);
+    }
+  });
+}
+
+/**
  * GET /api/auth/config
  * Get authentication configuration (SAML availability)
  */
@@ -157,82 +195,44 @@ router.post('/saml/callback', (req, res, next) => {
 /**
  * GET /api/auth/logout
  * Logout - handles both SAML and auto-login sessions
+ * Always allows logout even if session is corrupted
  */
 router.get('/logout', (req, res, next) => {
   console.log('🚪 GET /logout - logout requested');
-  console.log('🔍 User authenticated?', req.isAuthenticated ? req.isAuthenticated() : false);
-  
-  // Check if user is authenticated
-  if (!req.isAuthenticated || !req.isAuthenticated()) {
-    console.log('❌ User not authenticated, redirecting to login');
-    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login`);
-  }
+  console.log('🔍 Session exists?', !!req.session);
+  console.log('🔍 User in session?', !!req.user);
 
+  // Even if user is not authenticated or session is corrupted, allow logout
+  // This prevents users from getting stuck with invalid sessions
   const samlAvailable = process.env.SAML_AVAILABLE === 'true';
   
-  if (samlAvailable) {
+  if (samlAvailable && samlStrategy) {
     // SAML logout - redirect to IdP for single logout
     console.log('🔄 Initiating SAML logout...');
-    samlStrategy.logout(req, (err, requestUrl) => {
-      if (err) {
-        console.error('❌ SAML logout error:', err);
-        return res.status(500).json({ 
-          error: { 
-            code: 'LOGOUT_ERROR', 
-            message: 'Logout failed', 
-            timestamp: new Date().toISOString() 
-          } 
-        });
-      }
 
-      console.log('🔑 SAML logout URL:', requestUrl);
-      
-      // Clear local session
-      req.logout((logoutErr) => {
-        if (logoutErr) {
-          console.error('❌ Passport logout error:', logoutErr);
-        } else {
-          console.log('✅ Passport logout successful');
+    try {
+      samlStrategy.logout(req, (err, requestUrl) => {
+        if (err) {
+          console.error('❌ SAML logout error:', err);
+          // Even if SAML logout fails, clear local session
+          clearSessionAndRedirect(req, res);
+          return;
         }
-        
-        // Destroy session
-        req.session.destroy((sessionErr) => {
-          if (sessionErr) {
-            console.error('❌ Session destruction error:', sessionErr);
-          } else {
-            console.log('✅ Session destroyed');
-          }
-          
-          console.log('✅ Session cleared');
-          
-          // Redirect to SAML IdP logout URL to clear IdP session
-          console.log('🔄 Redirecting to IdP logout:', requestUrl);
-          res.redirect(requestUrl);
-        });
+
+        console.log('🔑 SAML logout URL:', requestUrl);
+
+        // Clear local session and redirect to IdP
+        clearSessionAndRedirect(req, res, requestUrl);
       });
-    });
+    } catch (error) {
+      console.error('❌ SAML logout exception:', error);
+      // Fallback to simple logout if SAML fails
+      clearSessionAndRedirect(req, res);
+    }
   } else {
-    // Simple logout for auto-login sessions
-    console.log('🔄 Simple logout for auto-login session...');
-    req.logout((logoutErr) => {
-      if (logoutErr) {
-        console.error('❌ Passport logout error:', logoutErr);
-      } else {
-        console.log('✅ Passport logout successful');
-      }
-      
-      // Destroy session
-      req.session.destroy((sessionErr) => {
-        if (sessionErr) {
-          console.error('❌ Session destruction error:', sessionErr);
-        } else {
-          console.log('✅ Session destroyed');
-        }
-        
-        console.log('✅ Auto-login session cleared, redirecting to login');
-        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login`);
-      });
-    });
+    // Simple logout for auto-login sessions or when SAML is not available
+    console.log('🔄 Simple logout (auto-login or SAML unavailable)...');
+    clearSessionAndRedirect(req, res);
   }
 });
 

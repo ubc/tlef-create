@@ -4,6 +4,7 @@ import { Wand2, Settings, Zap, Gamepad2, GraduationCap, CheckCircle, Edit, Loade
 import { RootState, AppDispatch } from '../store';
 import { generatePlan, fetchPlans, approvePlan, setCurrentPlan } from '../store/slices/planSlice';
 import { questionsApi, Question } from '../services/api';
+import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
 import { useSSE } from '../hooks/useSSE';
 import AdvancedEditModal from './AdvancedEditModal';
