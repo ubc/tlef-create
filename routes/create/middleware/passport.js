@@ -241,9 +241,17 @@ passport.serializeUser((user, done) => {
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await User.findById(id).select('-password');
+    if (!user) {
+      // User was deleted from database but session still exists
+      console.warn('⚠️ User not found in database, clearing session:', id);
+      return done(null, false);
+    }
     done(null, user);
   } catch (error) {
-    done(error);
+    // Database error - log it but don't crash the request
+    console.error('❌ Error deserializing user:', error.message);
+    // Return false instead of error to allow logout to proceed
+    done(null, false);
   }
 });
 
