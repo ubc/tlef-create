@@ -213,11 +213,23 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       return;
     }
 
-    // Check if all questions are completed
+    // Debug logging
+    console.log('🔍 Auto-completion check:', {
+      completed: completedQuestions.length,
+      total: totalQuestions,
+      inProgress: questionsInProgress.size,
+      inProgressIds: Array.from(questionsInProgress.keys())
+    });
+
+    // Check if all questions are completed via SSE
     const allCompleted = completedQuestions.length >= totalQuestions && questionsInProgress.size === 0;
 
-    if (allCompleted && totalQuestions > 0) {
-      console.log('✅ All questions completed - auto-triggering batch complete');
+    // Also check if we've received enough completed events
+    const allQuestionsReceived = completedQuestions.length >= totalQuestions;
+
+    if ((allCompleted || allQuestionsReceived) && totalQuestions > 0) {
+      console.log('✅ All questions completed via SSE - auto-triggering batch complete');
+      console.log(`📊 Final stats: ${completedQuestions.length}/${totalQuestions} completed, ${questionsInProgress.size} in progress`);
 
       // Reload questions from database
       loadExistingQuestions(quizId);
@@ -236,10 +248,69 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       setStreamingState(prev => ({
         ...prev,
         isStreaming: false,
-        batchStarted: false
+        batchStarted: false,
+        questionsInProgress: new Map() // Clear in-progress questions
       }));
     }
   }, [streamingState.completedQuestions.length, streamingState.questionsInProgress.size, streamingState.batchStarted, streamingState.totalQuestions]);
+
+  // Fallback: Poll database to check if all questions are saved (in case SSE events are lost due to 502)
+  useEffect(() => {
+    const { batchStarted, totalQuestions, isStreaming, sessionId } = streamingState;
+
+    if (!batchStarted || !isStreaming || !sessionId) {
+      return;
+    }
+
+    // Poll database every 3 seconds to check for completion
+    const pollInterval = setInterval(async () => {
+      console.log('🔄 Polling database for question count...');
+
+      try {
+        const result = await questionsApi.getQuestions(quizId);
+        const savedCount = result.questions.length;
+
+        console.log(`📊 Database check: ${savedCount}/${totalQuestions} questions saved`);
+
+        // If all questions are saved to database, trigger completion
+        if (savedCount >= totalQuestions && totalQuestions > 0) {
+          console.log('✅ All questions found in database - triggering completion via polling');
+
+          // Load the questions
+          setQuestions(result.questions);
+          setHasExistingQuestions(true);
+
+          showNotification('success', 'Questions Generated',
+            `Successfully generated ${savedCount} questions!`);
+
+          // Auto-redirect
+          if (onQuestionsGenerated) {
+            setTimeout(() => {
+              onQuestionsGenerated();
+            }, 3000);
+          }
+
+          // Stop streaming
+          setStreamingState(prev => ({
+            ...prev,
+            isStreaming: false,
+            batchStarted: false,
+            questionsInProgress: new Map()
+          }));
+
+          // Clear the interval
+          clearInterval(pollInterval);
+        }
+      } catch (error) {
+        console.error('❌ Error polling database:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    // Cleanup interval on unmount or when streaming stops
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [streamingState.batchStarted, streamingState.isStreaming, streamingState.sessionId, streamingState.totalQuestions]);
 
   // Load existing plans and restore quiz-specific settings when component mounts
   useEffect(() => {
