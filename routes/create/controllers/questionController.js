@@ -2,15 +2,14 @@ import express from 'express';
 import Question from '../models/Question.js';
 import Quiz from '../models/Quiz.js';
 import LearningObjective from '../models/LearningObjective.js';
-import GenerationPlan from '../models/GenerationPlan.js';
-import Folder from '../models/Folder.js';
 import { authenticateToken, attachUser } from '../middleware/auth.js';
 import { validateCreateQuestion, validateGenerateQuestions, validateReorderQuestions, validateMongoId, validateQuizId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { HTTP_STATUS, QUESTION_TYPES, DIFFICULTY_LEVELS, REVIEW_STATUS } from '../config/constants.js';
-import { generateDetailedPrompts, generateQuestionFromPrompt } from '../services/promptGenerationService.js';
-import intelligentQuestionGenerationService from '../services/intelligentQuestionGenerationService.js';
+import { HTTP_STATUS, DIFFICULTY_LEVELS, REVIEW_STATUS } from '../config/constants.js';
+
+// NOTE: Old template-based generation imports removed (GenerationPlan, Folder, QUESTION_TYPES, etc.)
+// All generation now goes through /api/create/streaming/generate-questions
 
 const router = express.Router();
 
@@ -54,9 +53,24 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
 
 /**
  * POST /api/questions/generate-from-plan
- * Generate questions from approved plan
+ * DEPRECATED: Use /api/create/streaming/generate-questions instead
+ * This endpoint is kept for backwards compatibility but returns an error
  */
 router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, res) => {
+  return errorResponse(
+    res,
+    'This endpoint is deprecated. Please use /api/create/streaming/generate-questions for real-time streaming generation.',
+    'DEPRECATED_ENDPOINT',
+    HTTP_STATUS.GONE // 410 Gone
+  );
+}));
+
+/**
+ * POST /api/questions/generate-from-plan (OLD VERSION - COMMENTED OUT FOR REFERENCE)
+ * This was the old non-streaming template-based generation
+ * Replaced by: /api/create/streaming/generate-questions
+ *
+router.post('/generate-from-plan-OLD', authenticateToken, asyncHandler(async (req, res) => {
   const { quizId } = req.body;
   const userId = req.user.id;
 
@@ -295,12 +309,28 @@ router.post('/generate-from-plan', authenticateToken, asyncHandler(async (req, r
     }
   }
 }));
+*/
 
 /**
  * POST /api/questions/generate-from-plan-stream
- * Generate questions with Server-Sent Events streaming
+ * DEPRECATED: Use /api/create/streaming/generate-questions instead
+ * This endpoint is kept for backwards compatibility but returns an error
  */
 router.post('/generate-from-plan-stream', authenticateToken, asyncHandler(async (req, res) => {
+  return errorResponse(
+    res,
+    'This endpoint is deprecated. Please use /api/create/streaming/generate-questions for real-time streaming generation.',
+    'DEPRECATED_ENDPOINT',
+    HTTP_STATUS.GONE // 410 Gone
+  );
+}));
+
+/**
+ * POST /api/questions/generate-from-plan-stream (OLD VERSION - COMMENTED OUT FOR REFERENCE)
+ * This was the old SSE streaming implementation (before the new streaming service)
+ * Replaced by: /api/create/streaming/generate-questions
+ *
+router.post('/generate-from-plan-stream-OLD', authenticateToken, asyncHandler(async (req, res) => {
   const { quizId } = req.body;
   const userId = req.user.id;
 
@@ -425,6 +455,8 @@ router.post('/generate-from-plan-stream', authenticateToken, asyncHandler(async 
     res.end();
   }
 }));
+
+*/
 
 /**
  * POST /api/questions
@@ -860,6 +892,10 @@ function formatContentForDatabase(generatedQuestion, questionType) {
   }
 }
 
+/*
+ * OLD TEMPLATE-BASED GENERATION FUNCTIONS - COMMENTED OUT
+ * These are no longer used - all generation goes through streaming
+ *
 async function generateQuestion(quizId, learningObjectiveId, type, planId, order, userId) {
   const objective = await LearningObjective.findById(learningObjectiveId);
   const questionData = await generateQuestionContent(type, objective.text, 'moderate', order);
@@ -1059,5 +1095,6 @@ function getTemplateDescription(type, templateIndex) {
   
   return descriptions[type]?.[templateIndex] || `Template ${templateIndex + 1}`;
 }
+*/
 
 export default router;
