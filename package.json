@@ -58,6 +58,7 @@
     "multer": "^2.0.2",
     "next-themes": "^0.3.0",
     "node-fetch": "^3.3.2",
+    "openai": "^4.104.0",
     "passport": "^0.7.0",
     "passport-saml": "^3.2.4",
     "passport-ubcshib": "^0.1.4",
