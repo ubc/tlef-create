@@ -25,6 +25,14 @@ class QuestionStreamingService {
     console.log(`🔍 DEBUG - userId:`, userId);
     
     try {
+      // Send diagnostic info to frontend
+      sseService.streamQuestionProgress(sessionId, questionId, {
+        status: 'diagnostic',
+        llmProvider: process.env.LLM_PROVIDER || 'not set',
+        llmModel: process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'not set',
+        environment: process.env.NODE_ENV
+      });
+
       // Notify start of question generation
       sseService.streamQuestionProgress(sessionId, questionId, {
         status: 'started',
