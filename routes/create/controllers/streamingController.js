@@ -209,6 +209,62 @@ router.get('/test-sse/:sessionId', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * GET /api/streaming/diagnostic
+ * Diagnostic endpoint to check streaming configuration (no auth)
+ */
+router.get('/diagnostic', asyncHandler(async (req, res) => {
+  try {
+    const { default: llmService } = await import('../services/llmService.js');
+
+    // Check OpenAI package
+    let openaiInstalled = false;
+    let openaiVersion = 'not installed';
+    try {
+      const OpenAI = (await import('openai')).default;
+      openaiInstalled = true;
+      const pkg = await import('openai/package.json', { assert: { type: 'json' } });
+      openaiVersion = pkg.default.version;
+    } catch (e) {
+      openaiVersion = 'ERROR: ' + e.message;
+    }
+
+    const diagnostics = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      llmConfig: {
+        provider: process.env.LLM_PROVIDER || 'not set',
+        model: process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'not set',
+        apiKeyPresent: !!process.env.OPENAI_API_KEY,
+        apiKeyPrefix: process.env.OPENAI_API_KEY?.substring(0, 10) + '...' || 'not set',
+        llmServiceInitialized: !!llmService.llm,
+        llmProvider: llmService.provider
+      },
+      packages: {
+        openaiInstalled,
+        openaiVersion
+      },
+      streaming: {
+        sseServiceActive: true,
+        streamingControllerLoaded: true
+      }
+    };
+
+    res.json({
+      success: true,
+      message: 'Diagnostic info collected',
+      diagnostics
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+}));
+
+/**
  * POST /api/streaming/test-real-llm
  * Test real LLM streaming (no auth for testing)
  */
