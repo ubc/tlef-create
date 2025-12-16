@@ -618,14 +618,15 @@ export const questionsApi = {
     return response.data; // API client already unwraps to just the data object
   },
 
-  // POST /api/create/questions/generate-from-plan - Generate questions from approved plan
-  generateFromPlan: async (quizId: string): Promise<{ questions: Question[]; metadata: any }> => {
-    const response = await apiClient.post<any>('/questions/generate-from-plan', { quizId });
-    return response.data; // API client already unwraps to just the data object
-  },
+  // DEPRECATED: Old generation endpoints - Use /streaming/generate-questions instead
+  // generateFromPlan: REMOVED - Use streaming generation
+  // generateFromPlanStream: REMOVED - Use streaming generation
 
-  // POST /api/create/questions/generate-from-plan-stream - Generate questions with SSE streaming (for Ollama)
-  generateFromPlanStream: async (
+  // NOTE: All question generation now goes through /api/create/streaming/generate-questions
+  // This provides real-time streaming updates and uses the modern LLM service
+
+  // POST /api/create/questions/generate-from-plan-stream (OLD - KEEPING FOR REFERENCE)
+  generateFromPlanStream_DEPRECATED: async (
     quizId: string,
     onStream: (event: string, data: any) => void,
     onComplete: (data: any) => void,
