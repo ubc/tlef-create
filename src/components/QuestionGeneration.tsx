@@ -105,16 +105,17 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         const newInProgress = new Map(prev.questionsInProgress);
         const existing = newInProgress.get(questionId) || {
           questionId,
-          type: data.type || 'unknown',
+          type: 'unknown',
           progress: 'Starting...',
           chunks: []
         };
-        
+
         newInProgress.set(questionId, {
           ...existing,
+          type: data.type || existing.type, // Update type if provided
           progress: data.status === 'started' ? 'Generating...' : existing.progress
         });
-        
+
         return {
           ...prev,
           questionsInProgress: newInProgress
@@ -202,6 +203,43 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       // Silent heartbeat
     }
   });
+
+  // Auto-complete batch if all questions are done (fallback for when batch-complete event is not received)
+  useEffect(() => {
+    const { batchStarted, totalQuestions, completedQuestions, questionsInProgress, isStreaming } = streamingState;
+
+    // Only trigger if batch has started and is still streaming
+    if (!batchStarted || !isStreaming) {
+      return;
+    }
+
+    // Check if all questions are completed
+    const allCompleted = completedQuestions.length >= totalQuestions && questionsInProgress.size === 0;
+
+    if (allCompleted && totalQuestions > 0) {
+      console.log('✅ All questions completed - auto-triggering batch complete');
+
+      // Reload questions from database
+      loadExistingQuestions(quizId);
+
+      showNotification('success', 'Questions Generated',
+        `Successfully generated ${completedQuestions.length} questions!`);
+
+      // Auto-redirect to Review & Edit page
+      if (onQuestionsGenerated) {
+        setTimeout(() => {
+          onQuestionsGenerated();
+        }, 3000);
+      }
+
+      // Update state
+      setStreamingState(prev => ({
+        ...prev,
+        isStreaming: false,
+        batchStarted: false
+      }));
+    }
+  }, [streamingState.completedQuestions.length, streamingState.questionsInProgress.size, streamingState.batchStarted, streamingState.totalQuestions]);
 
   // Load existing plans and restore quiz-specific settings when component mounts
   useEffect(() => {

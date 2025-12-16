@@ -152,37 +152,52 @@ class QuizLLMService {
       // Use direct OpenAI API for better streaming control
       if (this.provider === 'openai') {
         console.log('🔧 Using direct OpenAI streaming API');
-        const OpenAI = (await import('openai')).default;
-        const openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY
-        });
 
-        const stream = await openai.chat.completions.create({
-          model: model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: temperature,
-          max_tokens: maxTokens,
-          stream: true
-        });
+        try {
+          const OpenAI = (await import('openai')).default;
+          console.log('✅ OpenAI package imported successfully');
 
-        for await (const chunk of stream) {
-          const textChunk = chunk.choices[0]?.delta?.content;
-          if (textChunk) {
-            accumulatedContent += textChunk;
-            console.log(`📝 Received chunk: "${textChunk}" (total: ${accumulatedContent.length})`);
+          const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+          });
+          console.log('✅ OpenAI client created');
 
-            // Call the streaming callback if provided
-            if (onStreamChunk) {
-              onStreamChunk(textChunk, {
-                totalLength: accumulatedContent.length,
-                partial: true
-              });
+          console.log(`📤 Sending request to OpenAI: model=${model}, temp=${temperature}, maxTokens=${maxTokens}`);
+          const stream = await openai.chat.completions.create({
+            model: model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: temperature,
+            max_tokens: maxTokens,
+            stream: true
+          });
+          console.log('✅ OpenAI stream created, starting to receive chunks...');
+
+          let chunkCount = 0;
+          for await (const chunk of stream) {
+            const textChunk = chunk.choices[0]?.delta?.content;
+            if (textChunk) {
+              chunkCount++;
+              accumulatedContent += textChunk;
+              console.log(`📝 Chunk #${chunkCount}: "${textChunk.substring(0, 30)}..." (total: ${accumulatedContent.length} chars)`);
+
+              // Call the streaming callback if provided
+              if (onStreamChunk) {
+                onStreamChunk(textChunk, {
+                  totalLength: accumulatedContent.length,
+                  partial: true
+                });
+              }
             }
           }
-        }
 
-        responseModel = model;
-        response = { content: accumulatedContent, model: responseModel };
+          console.log(`✅ Streaming completed: ${chunkCount} chunks, ${accumulatedContent.length} total chars`);
+          responseModel = model;
+          response = { content: accumulatedContent, model: responseModel };
+        } catch (openaiError) {
+          console.error('❌ OpenAI streaming error:', openaiError.message);
+          console.error('❌ OpenAI error stack:', openaiError.stack);
+          throw new Error(`OpenAI streaming failed: ${openaiError.message}`);
+        }
       } else {
         // Use streamConversation for Ollama to get real streaming
         const messages = [{ role: 'user', content: prompt }];

@@ -222,8 +222,14 @@ router.get('/diagnostic', asyncHandler(async (req, res) => {
     try {
       const OpenAI = (await import('openai')).default;
       openaiInstalled = true;
-      const pkg = await import('openai/package.json', { assert: { type: 'json' } });
-      openaiVersion = pkg.default.version;
+      // Try to get version, but don't fail if we can't
+      try {
+        const pkg = await import('openai/package.json', { assert: { type: 'json' } });
+        openaiVersion = pkg.default?.version || 'installed (version unknown)';
+      } catch (versionError) {
+        // Version check failed, but package is installed
+        openaiVersion = 'installed (version check not available in production)';
+      }
     } catch (e) {
       openaiVersion = 'ERROR: ' + e.message;
     }
