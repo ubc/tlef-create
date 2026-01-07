@@ -102,34 +102,38 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
       console.log(`🔄 Processing material immediately: ${material.name}`);
 
       // Process in background without blocking the response
-      setImmediate(async () => {
+      // Use IIFE to capture material in its own closure to avoid variable reference issues
+      (async (materialToProcess) => {
         try {
           const ragService = (await import('../services/ragService.js')).default;
 
-          console.log(`🔄 Chunking and embedding material: ${material.name}`);
-          const result = await ragService.processAndEmbedMaterial(material);
+          console.log(`🔄 Chunking and embedding material: ${materialToProcess.name} (ID: ${materialToProcess._id})`);
+          const result = await ragService.processAndEmbedMaterial(materialToProcess);
 
           if (result.success) {
             const Material = (await import('../models/Material.js')).default;
-            const updatedMaterial = await Material.findById(material._id);
+            const updatedMaterial = await Material.findById(materialToProcess._id);
             if (updatedMaterial) {
               await updatedMaterial.markAsCompleted();
-              console.log(`✅ Material processed and embedded: ${material.name}`);
+              console.log(`✅ Material processed and embedded: ${materialToProcess.name}`);
               console.log(`📊 Created ${result.chunksCount} chunks`);
+            } else {
+              console.error(`❌ Could not find material to mark as completed: ${materialToProcess._id}`);
             }
           } else {
             const Material = (await import('../models/Material.js')).default;
-            const updatedMaterial = await Material.findById(material._id);
+            const updatedMaterial = await Material.findById(materialToProcess._id);
             if (updatedMaterial) {
               await updatedMaterial.markAsFailed(result.error);
             }
             console.error(`❌ Failed to process material: ${result.error}`);
           }
         } catch (error) {
-          console.error(`❌ Material processing failed: ${material.name}`, error);
+          console.error(`❌ Material processing failed: ${materialToProcess.name}`, error);
+          console.error(`❌ Error stack:`, error.stack);
           try {
             const Material = (await import('../models/Material.js')).default;
-            const updatedMaterial = await Material.findById(material._id);
+            const updatedMaterial = await Material.findById(materialToProcess._id);
             if (updatedMaterial) {
               await updatedMaterial.markAsFailed(error);
             }
@@ -137,7 +141,7 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
             console.error('Failed to update material status:', updateError);
           }
         }
-      });
+      })(material); // Pass material immediately to avoid closure issues
 
       materials.push(material);
     } catch (error) {
@@ -164,13 +168,18 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
   }
 
   console.log(`📊 Upload summary: ${materials.length}/${files.length} files processed successfully`);
-  console.log(`📝 Materials created: ${materials.map(m => m.name).join(', ')}`);
+  console.log(`📝 Materials created:`, materials.map(m => ({
+    id: m._id,
+    name: m.name,
+    processingStatus: m.processingStatus
+  })));
 
   const statusCode = materials.length > 0 ? HTTP_STATUS.CREATED : HTTP_STATUS.BAD_REQUEST;
   const message = materials.length > 0 ?
     `${materials.length} materials uploaded successfully` :
     'No materials were uploaded';
 
+  console.log(`📤 Sending response with ${materials.length} materials`);
   return successResponse(res, response, message, statusCode);
 }));
 

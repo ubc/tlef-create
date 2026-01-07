@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ArrowLeft, ArrowRight } from 'lucide-react';
 import MaterialUpload from './MaterialUpload';
+import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/CreateCourseModal.css';
 
 interface Material {
@@ -17,13 +18,26 @@ interface Material {
 interface CreateCourseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (courseName: string, materials: Material[]) => void;
+  onSubmit: (courseName: string, materials: Material[]) => Promise<void>;
 }
 
 const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps) => {
   const [courseName, setCourseName] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const { subscribe } = usePubSub('CreateCourseModal');
+
+  // Listen for upload progress events from Sidebar
+  useEffect(() => {
+    const handleUploadProgress = (data: { progress: number }) => {
+      console.log('📊 Upload progress received:', data.progress);
+      setUploadProgress(data.progress);
+    };
+
+    subscribe('upload-progress', handleUploadProgress);
+  }, [subscribe]);
 
   if (!isOpen) return null;
 
@@ -37,7 +51,10 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     setCurrentStep(1);
   };
 
-  const handleAddMaterial = (material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File }) => {
+  const handleAddMaterial = (
+    material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
+    onProgress?: (progress: number) => void
+  ) => {
     console.log('➕ CreateCourseModal: Adding material:', material);
     const newMaterial: Material = {
       id: Date.now().toString(),
@@ -46,29 +63,51 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       uploadDate: new Date().toLocaleDateString(),
       content: material.content,
       file: material.file,
-      isUploading: false
+      isUploading: false,
+      uploadProgress: 0
     };
     console.log('✅ CreateCourseModal: Material created:', newMaterial);
     setMaterials([...materials, newMaterial]);
+
+    // Note: Actual upload happens when course is created in Sidebar.tsx
+    // This just stores the file for later upload
   };
 
   const handleRemoveMaterial = (id: string) => {
     setMaterials(materials.filter(material => material.id !== id));
   };
 
-  const handleCreateCourse = () => {
-    if (courseName.trim()) {
-      onSubmit(courseName.trim(), materials);
-      resetModal();
-      onClose();
+  const handleCreateCourse = async () => {
+    if (courseName.trim() && !isCreating) {
+      setIsCreating(true);
+      setUploadProgress(0);
+      try {
+        await onSubmit(courseName.trim(), materials);
+        resetModal();
+        onClose();
+      } catch (error) {
+        console.error('Failed to create course:', error);
+        // Error is handled in Sidebar
+      } finally {
+        setIsCreating(false);
+        setUploadProgress(0);
+      }
     }
   };
 
-  const handleSkipMaterials = () => {
-    if (courseName.trim()) {
-      onSubmit(courseName.trim(), []);
-      resetModal();
-      onClose();
+  const handleSkipMaterials = async () => {
+    if (courseName.trim() && !isCreating) {
+      setIsCreating(true);
+      try {
+        await onSubmit(courseName.trim(), []);
+        resetModal();
+        onClose();
+      } catch (error) {
+        console.error('Failed to create course:', error);
+        // Error is handled in Sidebar
+      } finally {
+        setIsCreating(false);
+      }
     }
   };
 
@@ -136,24 +175,46 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
                     onRemoveMaterial={handleRemoveMaterial}
                 />
 
+                {/* Upload Progress Indicator */}
+                {isCreating && materials.some(m => m.type === 'pdf' || m.type === 'docx') && (
+                  <div className="upload-progress-container">
+                    <div className="upload-status">
+                      <span>Creating course and uploading materials...</span>
+                      {uploadProgress > 0 && <span>{uploadProgress}%</span>}
+                    </div>
+                    {uploadProgress > 0 && (
+                      <div className="progress-bar">
+                        <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="modal-actions">
-                  <button type="button" className="btn btn-secondary" onClick={handlePreviousStep}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handlePreviousStep}
+                    disabled={isCreating}
+                  >
                     <ArrowLeft size={16} />
                     Back
                   </button>
-                  <button 
-                      type="button" 
+                  <button
+                      type="button"
                       className="btn btn-ghost"
                       onClick={handleSkipMaterials}
+                      disabled={isCreating}
                   >
-                    Skip for Now
+                    {isCreating ? 'Creating...' : 'Skip for Now'}
                   </button>
-                  <button 
-                      type="button" 
+                  <button
+                      type="button"
                       className="btn btn-primary"
                       onClick={handleCreateCourse}
+                      disabled={isCreating}
                   >
-                    Create Course
+                    {isCreating ? 'Creating...' : 'Create Course'}
                   </button>
                 </div>
               </div>

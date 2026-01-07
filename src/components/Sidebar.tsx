@@ -155,20 +155,37 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
         const urlMaterials = materials.filter(m => m.type === 'url');
         const textMaterials = materials.filter(m => m.type === 'text');
 
-        // Upload all files at once
+        // Upload all files at once with progress tracking
         if (fileMaterials.length > 0) {
           console.log(`📄 Uploading ${fileMaterials.length} files together`);
           const files = fileMaterials.map(m => m.file).filter(Boolean) as File[];
           if (files.length > 0) {
             console.log(`📋 Files to upload:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+
             // Create a DataTransfer object to convert File[] to FileList
             const dataTransfer = new DataTransfer();
             files.forEach(file => {
               console.log(`➕ Adding file to DataTransfer: ${file.name}`);
               dataTransfer.items.add(file);
             });
-            console.log(`📤 Sending ${dataTransfer.files.length} files to API`);
-            const uploadResponse = await materialsApi.uploadFiles(response.folder._id, dataTransfer.files);
+
+            console.log(`📤 Sending ${dataTransfer.files.length} files to API with progress tracking`);
+
+            // Upload with progress callback
+            const uploadResponse = await materialsApi.uploadFiles(
+              response.folder._id,
+              dataTransfer.files,
+              (progress) => {
+                console.log(`📤 Upload progress: ${progress}%`);
+                // Publish progress event for UI feedback (can be used by toast notifications, etc.)
+                publish('upload-progress', {
+                  courseId: response.folder._id,
+                  progress: progress,
+                  filesCount: files.length
+                });
+              }
+            );
+
             console.log(`✅ Upload response:`, uploadResponse);
             console.log(`✅ Uploaded ${uploadResponse.materials?.length || 0} materials successfully`);
           }
