@@ -174,13 +174,16 @@ const CourseView = () => {
     );
   }
 
-  const handleAddMaterial = async (materialData: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File }) => {
+  const handleAddMaterial = async (
+    materialData: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
+    onProgress?: (progress: number) => void
+  ) => {
     if (!course) return;
-    
+
     console.log('➕ CourseView: Adding material:', materialData);
     try {
       let response;
-      
+
       if (materialData.type === 'url' && materialData.content) {
         response = await materialsApi.addUrl(course.id, materialData.content, materialData.name);
         setMaterials(prev => [...prev, response.material]);
@@ -190,12 +193,24 @@ const CourseView = () => {
       } else if (materialData.file) {
         const fileList = new DataTransfer();
         fileList.items.add(materialData.file);
-        response = await materialsApi.uploadFiles(course.id, fileList.files);
+
+        // Upload with progress tracking
+        response = await materialsApi.uploadFiles(
+          course.id,
+          fileList.files,
+          (progress) => {
+            console.log(`📤 Upload progress for ${materialData.name}: ${progress}%`);
+            if (onProgress) {
+              onProgress(progress);
+            }
+          }
+        );
+
         setMaterials(prev => [...prev, ...response.materials]);
       }
-      
+
       console.log('✅ CourseView: Material added successfully');
-      
+
     } catch (err) {
       console.error('❌ CourseView: Failed to add material:', err);
       console.error('❌ Error details:', {
@@ -206,7 +221,7 @@ const CourseView = () => {
         isApiError: err instanceof ApiError,
         isAuthError: err instanceof ApiError ? err.isAuthError() : false
       });
-      
+
       if (err instanceof ApiError) {
         if (err.isAuthError()) {
           alert('Your session has expired. Please log in again.');

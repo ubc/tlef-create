@@ -16,7 +16,10 @@ interface Material {
 
 interface MaterialUploadProps {
   materials: Material[];
-  onAddMaterial: (material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File }) => void;
+  onAddMaterial: (
+    material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
+    onProgress?: (progress: number) => void
+  ) => void;
   onRemoveMaterial: (id: string) => void;
 }
 
@@ -31,6 +34,9 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Track upload progress for each file
+  const [uploadingFiles, setUploadingFiles] = useState<Map<string, number>>(new Map());
 
   const { showNotification } = usePubSub('MaterialUpload');
 
@@ -47,11 +53,11 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   };
 
   const processFiles = (files: FileList) => {
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach(async (file) => {
       // Validate file type
       const validTypes = ['.pdf', '.docx', '.doc'];
       const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
-      
+
       if (!validTypes.includes(fileExtension)) {
         showNotification('error', 'Invalid File Type', `${file.name} is not a supported file type. Please upload PDF or DOCX files.`);
         return;
@@ -63,11 +69,49 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
         return;
       }
 
-      onAddMaterial({
-        name: file.name,
-        type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
-        file: file
+      // Add file to uploading state
+      const fileId = `${file.name}-${Date.now()}`;
+      setUploadingFiles(prev => {
+        const newMap = new Map(prev);
+        newMap.set(fileId, 0);
+        return newMap;
       });
+
+      // Call onAddMaterial with progress callback
+      try {
+        await onAddMaterial(
+          {
+            name: file.name,
+            type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+            file: file
+          },
+          (progress) => {
+            // Update progress state
+            setUploadingFiles(prev => {
+              const newMap = new Map(prev);
+              newMap.set(fileId, progress);
+              return newMap;
+            });
+          }
+        );
+
+        // Remove from uploading state when complete
+        setUploadingFiles(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(fileId);
+          return newMap;
+        });
+
+        showNotification('success', 'Upload Complete', `${file.name} uploaded successfully!`);
+      } catch (error) {
+        // Remove from uploading state on error
+        setUploadingFiles(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(fileId);
+          return newMap;
+        });
+        // Error notification already handled in CourseView
+      }
     });
   };
 
@@ -278,6 +322,35 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                     </button>
                   </div>
                 </form>
+              </div>
+          )}
+
+          {/* Uploading Files Progress */}
+          {uploadingFiles.size > 0 && (
+              <div className="uploading-files-list">
+                <h4>Uploading ({uploadingFiles.size})</h4>
+                <div className="uploading-files">
+                  {Array.from(uploadingFiles.entries()).map(([fileId, progress]) => {
+                    const fileName = fileId.split('-').slice(0, -1).join('-'); // Remove timestamp
+                    return (
+                      <div key={fileId} className="uploading-file-card">
+                        <div className="upload-info">
+                          <Upload size={20} />
+                          <div className="upload-details">
+                            <div className="upload-name">{fileName}</div>
+                            <div className="upload-progress-bar">
+                              <div
+                                className="upload-progress-fill"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            <div className="upload-percentage">{progress}%</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
           )}
 
