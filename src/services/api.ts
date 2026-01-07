@@ -260,65 +260,92 @@ class ApiClient {
     }
   }
 
-  // For file uploads (multipart/form-data)
-  async upload<T>(endpoint: string, formData: FormData): Promise<T> {
+  // For file uploads (multipart/form-data) with progress tracking
+  async upload<T>(
+    endpoint: string,
+    formData: FormData,
+    onProgress?: (progress: number) => void
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
-    const config: RequestInit = {
-      method: 'POST',
-      credentials: 'include', // Include session cookies for SAML auth
-      body: formData,
-      // Don't set Content-Type header - let browser set it for multipart/form-data
-    };
 
-    try {
-      console.log('🔄 API Upload request:', { url, method: config.method });
-      const response = await fetch(url, config);
-      console.log('📡 API Upload response:', { 
-        status: response.status, 
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-      
-      // Handle different response types
-      const contentType = response.headers.get('content-type');
-      let data: any;
-      
-      if (contentType?.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = await response.text();
-      }
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
 
-      console.log('📦 API Upload data:', data);
-
-      if (!response.ok) {
-        // Backend returns structured error responses
-        if (data && typeof data === 'object' && data.error) {
-          console.log('❌ Structured error response:', data.error);
-          throw new ApiError(data.error.message, response.status, data.error.code, data.error.details);
-        } else if (data && typeof data === 'object' && data.data && data.data.errors && data.data.errors.length > 0) {
-          // Handle file upload errors array
-          console.log('❌ File upload errors:', data.data.errors);
-          const firstError = data.data.errors[0];
-          const errorMessage = firstError.error || 'File upload failed';
-          throw new ApiError(`Upload failed: ${errorMessage}`, response.status, 'FILE_UPLOAD_ERROR', data.data.errors);
-        } else {
-          console.log('❌ Generic error response:', data);
-          throw new ApiError(`HTTP ${response.status}: ${response.statusText}`, response.status);
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable && onProgress) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          console.log(`📤 Upload progress: ${percentComplete}%`);
+          onProgress(percentComplete);
         }
-      }
+      });
 
-      return data;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      
-      // Network or other errors
-      console.error('API Upload failed:', error);
-      throw new ApiError('Network error or server unavailable', 0);
-    }
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        try {
+          const contentType = xhr.getResponseHeader('content-type');
+          let data: any;
+
+          if (contentType?.includes('application/json')) {
+            data = JSON.parse(xhr.responseText);
+          } else {
+            data = xhr.responseText;
+          }
+
+          console.log('📡 API Upload response:', {
+            status: xhr.status,
+            statusText: xhr.statusText
+          });
+
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('✅ Upload successful:', data);
+            resolve(data);
+          } else {
+            // Handle error responses
+            if (data && typeof data === 'object' && data.error) {
+              console.log('❌ Structured error response:', data.error);
+              reject(new ApiError(data.error.message, xhr.status, data.error.code, data.error.details));
+            } else if (data && typeof data === 'object' && data.data && data.data.errors && data.data.errors.length > 0) {
+              console.log('❌ File upload errors:', data.data.errors);
+              const firstError = data.data.errors[0];
+              const errorMessage = firstError.error || 'File upload failed';
+              reject(new ApiError(`Upload failed: ${errorMessage}`, xhr.status, 'FILE_UPLOAD_ERROR', data.data.errors));
+            } else {
+              console.log('❌ Generic error response:', data);
+              reject(new ApiError(`HTTP ${xhr.status}: ${xhr.statusText}`, xhr.status));
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error parsing upload response:', error);
+          reject(new ApiError('Failed to parse server response', xhr.status));
+        }
+      });
+
+      // Handle network errors
+      xhr.addEventListener('error', () => {
+        console.error('❌ Network error during upload');
+        reject(new ApiError('Network error or server unavailable', 0));
+      });
+
+      // Handle timeout
+      xhr.addEventListener('timeout', () => {
+        console.error('❌ Upload timeout');
+        reject(new ApiError('Upload request timed out', 0));
+      });
+
+      // Handle abort
+      xhr.addEventListener('abort', () => {
+        console.error('❌ Upload aborted');
+        reject(new ApiError('Upload was aborted', 0));
+      });
+
+      // Open connection and send
+      console.log('🔄 API Upload request:', { url, method: 'POST' });
+      xhr.open('POST', url, true);
+      xhr.withCredentials = true; // Include cookies for SAML auth
+      xhr.timeout = 5 * 60 * 1000; // 5 minute timeout for large files
+      xhr.send(formData);
+    });
   }
 }
 
@@ -391,16 +418,24 @@ export const foldersApi = {
 // Materials API
 export const materialsApi = {
   // POST /api/create/materials/upload - Upload files (PDF, DOCX)
-  uploadFiles: async (folderId: string, files: FileList): Promise<{ materials: Material[] }> => {
+  uploadFiles: async (
+    folderId: string,
+    files: FileList,
+    onProgress?: (progress: number) => void
+  ): Promise<{ materials: Material[] }> => {
     const formData = new FormData();
     formData.append('folderId', folderId);
-    
+
     // Add all files to FormData
     Array.from(files).forEach(file => {
       formData.append('files', file);
     });
 
-    const response = await apiClient.upload<{ success: boolean; data: { materials: Material[] }; message: string }>('/materials/upload', formData);
+    const response = await apiClient.upload<{ success: boolean; data: { materials: Material[] }; message: string }>(
+      '/materials/upload',
+      formData,
+      onProgress
+    );
     return response.data;
   },
 
@@ -615,7 +650,7 @@ export const questionsApi = {
   // GET /api/create/questions/quiz/:quizId - Get quiz questions
   getQuestions: async (quizId: string): Promise<{ questions: Question[] }> => {
     const response = await apiClient.get<{ questions: Question[] }>(`/questions/quiz/${quizId}`);
-    return response.data; // API client already unwraps to just the data object
+    return response; // Response already has the questions array
   },
 
   // DEPRECATED: Old generation endpoints - Use /streaming/generate-questions instead
