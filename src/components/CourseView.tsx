@@ -35,6 +35,9 @@ const CourseView = () => {
 
   useEffect(() => {
     if (courseId) {
+      // Reset loading state when switching courses
+      setLoading(true);
+      setError(null);
       loadCourseData();
     }
   }, [courseId]);
@@ -109,20 +112,27 @@ const CourseView = () => {
 
   const loadCourseData = async () => {
     if (!courseId) return;
-    
+
     console.log('🔄 CourseView: Loading course data for:', courseId);
+
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('⏱️ CourseView: API call timeout - taking longer than expected');
+      // Don't set error, just log warning - let the request complete
+    }, 10000); // 10 second warning
+
     try {
       setError(null);
-      
+
       // Load folder details
       const folderResponse = await foldersApi.getFolder(courseId);
       console.log('✅ CourseView: Folder loaded:', folderResponse.folder);
-      
+
       // Load materials for this folder
       const materialsResponse = await materialsApi.getMaterials(courseId);
       console.log('✅ CourseView: Materials loaded:', materialsResponse.materials);
       setMaterials(materialsResponse.materials);
-      
+
       // Transform backend data to match your UI structure
       const course: CourseData = {
         id: folderResponse.folder._id,
@@ -133,11 +143,14 @@ const CourseView = () => {
           questionCount: quiz.questions?.length || 0
         })) || []
       };
-      
+
       setCourse(course);
       console.log('✅ CourseView: Course data structured:', course);
-      
+
+      clearTimeout(timeoutId);
+
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error('❌ CourseView: Failed to load course data:', err);
       if (err instanceof ApiError) {
         if (err.isNotFoundError()) {
@@ -158,6 +171,7 @@ const CourseView = () => {
   if (loading) {
     return (
       <div className="course-loading">
+        <div className="loading-spinner"></div>
         <div>Loading course...</div>
       </div>
     );
