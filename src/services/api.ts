@@ -649,8 +649,8 @@ export const plansApi = {
 export const questionsApi = {
   // GET /api/create/questions/quiz/:quizId - Get quiz questions
   getQuestions: async (quizId: string): Promise<{ questions: Question[] }> => {
-    const response = await apiClient.get<{ questions: Question[] }>(`/questions/quiz/${quizId}`);
-    return response; // Response already has the questions array
+    const response = await apiClient.get<{ success: boolean; data: { questions: Question[] }; message: string }>(`/questions/quiz/${quizId}`);
+    return response.data; // Extract the data object which contains { questions: [...] }
   },
 
   // DEPRECATED: Old generation endpoints - Use /streaming/generate-questions instead
