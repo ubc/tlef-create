@@ -99,6 +99,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     try {
       setLoading(true);
       const result = await questionsApi.getQuestions(quizId);
+
+      // Safety check: ensure result and questions array exist
+      if (!result || !result.questions || !Array.isArray(result.questions)) {
+        console.warn('⚠️ Invalid response from getQuestions:', result);
+        setQuestions([]);
+        showNotification('warning', 'No Questions', 'No questions found for this quiz');
+        return;
+      }
+
       // console.log('📝 Loaded questions for review:', result.questions.length);
       setQuestions(result.questions.map(q => ({ ...q, isEditing: false })));
     } catch (error) {

@@ -268,6 +268,13 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
       try {
         const result = await questionsApi.getQuestions(quizId);
+
+        // Safety check: ensure result and questions array exist
+        if (!result || !result.questions || !Array.isArray(result.questions)) {
+          console.warn('⚠️ Invalid response from getQuestions:', result);
+          return;
+        }
+
         const savedCount = result.questions.length;
 
         console.log(`📊 Database check: ${savedCount}/${totalQuestions} questions saved`);
@@ -303,6 +310,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         }
       } catch (error) {
         console.error('❌ Error polling database:', error);
+        // Don't spam errors - silently continue polling
       }
     }, 3000); // Poll every 3 seconds
 
@@ -327,6 +335,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const loadExistingQuestions = async (quizId: string) => {
     try {
       const result = await questionsApi.getQuestions(quizId);
+
+      // Safety check: ensure result and questions array exist
+      if (!result || !result.questions || !Array.isArray(result.questions)) {
+        console.warn('⚠️ Invalid response from getQuestions:', result);
+        setHasExistingQuestions(false);
+        return;
+      }
+
       if (result.questions.length > 0) {
         console.log('📝 Loaded existing questions:', result.questions.length);
         setQuestions(result.questions);
