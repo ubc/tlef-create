@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, jest } from '@jest/globals';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 
 describe('AsyncHandler Utility', () => {

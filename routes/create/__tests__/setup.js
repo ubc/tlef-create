@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { jest } from '@jest/globals';
 
 dotenv.config();
+
+// Global test timeout
+jest.setTimeout(30000);
 
 beforeAll(async () => {
   // Use test database (you can create a separate test database)
@@ -23,6 +27,3 @@ afterEach(async () => {
     await collection.deleteMany({});
   }
 });
-
-// Global test timeout
-jest.setTimeout(30000);
