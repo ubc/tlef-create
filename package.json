@@ -14,9 +14,9 @@
     "production": "npm run build && NODE_ENV=production npm start",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "cd routes/create && jest",
-    "test:watch": "cd routes/create && jest --watch",
-    "test:coverage": "cd routes/create && jest --coverage",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest --config routes/create/jest.config.js",
+    "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --config routes/create/jest.config.js --watch",
+    "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --config routes/create/jest.config.js --coverage",
     "deploy:staging": "npm run build && echo 'Ready for staging deployment!'",
     "health": "node -e \"console.log('TLEF-CREATE Health Check: OK')\""
   },
