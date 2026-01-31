@@ -183,57 +183,58 @@ const QuizView = () => {
         </div>
 
         <div className="quiz-content">
-          {activeTab === 'materials' && (
-              <MaterialAssignment
-                  courseId={courseId!}
-                  assignedMaterials={assignedMaterials}
-                  onAssignedMaterialsChange={(materialIds) => {
-                    setAssignedMaterials(materialIds);
-                    // Update backend whenever materials change (assign or unassign)
-                    if (currentQuiz) {
-                      dispatch(assignMaterials({ id: currentQuiz._id, materialIds }));
-                    }
-                  }}
-                  courseMaterials={materials}
-                  onNavigateNext={() => {
-                    setActiveTab('objectives');
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }, 100);
-                  }}
-              />
-          )}
+          {/* Keep all components mounted, use CSS to show/hide */}
+          <div style={{ display: activeTab === 'materials' ? 'block' : 'none' }}>
+            <MaterialAssignment
+                courseId={courseId!}
+                assignedMaterials={assignedMaterials}
+                onAssignedMaterialsChange={(materialIds) => {
+                  setAssignedMaterials(materialIds);
+                  // Update backend whenever materials change (assign or unassign)
+                  if (currentQuiz) {
+                    dispatch(assignMaterials({ id: currentQuiz._id, materialIds }));
+                  }
+                }}
+                courseMaterials={materials}
+                onNavigateNext={() => {
+                  setActiveTab('objectives');
+                  setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 100);
+                }}
+            />
+          </div>
 
-          {activeTab === 'objectives' && (
-              <LearningObjectives
-                  assignedMaterials={assignedMaterials}
-                  objectives={learningObjectives}
-                  onObjectivesChange={setLearningObjectives}
-                  quizId={quizId!}
-                  onNavigateNext={() => {
-                    setActiveTab('generation');
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }, 100);
-                  }}
-              />
-          )}
+          <div style={{ display: activeTab === 'objectives' ? 'block' : 'none' }}>
+            <LearningObjectives
+                assignedMaterials={assignedMaterials}
+                objectives={learningObjectives}
+                onObjectivesChange={setLearningObjectives}
+                quizId={quizId!}
+                onNavigateNext={() => {
+                  setActiveTab('generation');
+                  setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 100);
+                }}
+            />
+          </div>
 
-          {activeTab === 'generation' && (
-              <QuestionGeneration
-                  learningObjectives={learningObjectives}
-                  assignedMaterials={assignedMaterials}
-                  quizId={quizId!}
-                  onQuestionsGenerated={() => setActiveTab('review')}
-              />
-          )}
+          <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
+            <QuestionGeneration
+                learningObjectives={learningObjectives}
+                assignedMaterials={assignedMaterials}
+                quizId={quizId!}
+                onQuestionsGenerated={() => setActiveTab('review')}
+            />
+          </div>
 
-          {activeTab === 'review' && (
-              <ReviewEdit
-                  quizId={quizId!}
-                  learningObjectives={learningObjectives}
-              />
-          )}
+          <div style={{ display: activeTab === 'review' ? 'block' : 'none' }}>
+            <ReviewEdit
+                quizId={quizId!}
+                learningObjectives={learningObjectives}
+            />
+          </div>
         </div>
 
         {/* Delete Confirmation Modal */}

@@ -56,8 +56,13 @@ interface PlanState {
   activePlan: GenerationPlan | null;
   loading: boolean;
   generating: boolean;
+  questionsGenerating: boolean;
+  questionGenerationStartTime: number | null;
+  currentQuizId: string | null;
   error: string | null;
 }
+
+export type { PlanState };
 
 const initialState: PlanState = {
   plans: [],
@@ -65,6 +70,9 @@ const initialState: PlanState = {
   activePlan: null,
   loading: false,
   generating: false,
+  questionsGenerating: false,
+  questionGenerationStartTime: null,
+  currentQuizId: null,
   error: null,
 };
 
@@ -85,6 +93,18 @@ const planSlice = createSlice({
     },
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
+    },
+    setQuestionsGenerating: (state, action: PayloadAction<{ generating: boolean; quizId?: string; totalQuestions?: number }>) => {
+      console.log('📝 planSlice - setQuestionsGenerating called:', action.payload);
+      state.questionsGenerating = action.payload.generating;
+      if (action.payload.generating) {
+        state.questionGenerationStartTime = Date.now();
+        state.currentQuizId = action.payload.quizId || null;
+        console.log('🟢 planSlice - questionsGenerating set to TRUE');
+      } else {
+        state.questionGenerationStartTime = null;
+        console.log('🔴 planSlice - questionsGenerating set to FALSE');
+      }
     },
   },
   extraReducers: (builder) => {
@@ -224,5 +244,5 @@ const planSlice = createSlice({
   },
 });
 
-export const { clearPlans, setCurrentPlan, setActivePlan, setError } = planSlice.actions;
+export const { clearPlans, setCurrentPlan, setActivePlan, setError, setQuestionsGenerating } = planSlice.actions;
 export default planSlice.reducer;

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redux State Debugger</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .code {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .step {
+            margin: 15px 0;
+            padding: 10px;
+            border-left: 3px solid #2196f3;
+            background: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Redux State Debugger - questionsGenerating</h1>
+        
+        <div class="instructions">
+            <h2>调试步骤：</h2>
+            
+            <div class="step">
+                <h3>步骤 1: 打开 Redux DevTools</h3>
+                <p>在浏览器中打开你的应用，然后按 F12 打开开发者工具，切换到 "Redux" 标签页。</p>
+            </div>
+            
+            <div class="step">
+                <h3>步骤 2: 在控制台运行以下命令检查当前状态</h3>
+                <div class="code">
+// 检查 Redux store 是否存在
+console.log('Redux store:', window.store);
+
+// 获取当前状态
+const state = window.store?.getState();
+console.log('Current state:', state);
+
+// 检查 plan slice
+console.log('Plan state:', state?.plan);
+console.log('questionsGenerating:', state?.plan?.questionsGenerating);
+                </div>
+            </div>
+            
+            <div class="step">
+                <h3>步骤 3: 手动测试 dispatch</h3>
+                <div class="code">
+// 导入 action
+import { setQuestionsGenerating } from './src/store/slices/planSlice';
+
+// 手动 dispatch action
+window.store.dispatch(setQuestionsGenerating({ 
+    generating: true, 
+    quizId: 'test-quiz-123' 
+}));
+
+// 检查状态是否更新
+console.log('After dispatch:', window.store.getState().plan.questionsGenerating);
+                </div>
+            </div>
+            
+            <div class="step">
+                <h3>步骤 4: 监控状态变化</h3>
+                <div class="code">
+// 订阅 store 变化
+window.store.subscribe(() => {
+    const state = window.store.getState();
+    console.log('🔄 State changed - questionsGenerating:', state.plan.questionsGenerating);
+});
+                </div>
+            </div>
+            
+            <div class="step">
+                <h3>步骤 5: 检查控制台日志</h3>
+                <p>当你点击 "Generate Questions" 按钮时，你应该看到以下日志：</p>
+                <ul>
+                    <li>🚀 QuestionGeneration - Dispatching setQuestionsGenerating(true)</li>
+                    <li>📝 planSlice - setQuestionsGenerating called</li>
+                    <li>🟢 planSlice - questionsGenerating set to TRUE</li>
+                    <li>🔍 LearningObjectives - questionsGenerating state changed: true</li>
+                </ul>
+            </div>
+            
+            <div class="step">
+                <h3>步骤 6: 检查按钮状态</h3>
+                <p>在控制台运行以下命令检查按钮是否被禁用：</p>
+                <div class="code">
+// 查找所有 Learning Objectives 页面的按钮
+const buttons = document.querySelectorAll('.learning-objectives button');
+console.log('Total buttons:', buttons.length);
+
+// 检查每个按钮的 disabled 状态
+buttons.forEach((btn, index) => {
+    console.log(`Button ${index}:`, {
+        text: btn.textContent?.trim(),
+        disabled: btn.disabled,
+        className: btn.className
+    });
+});
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions" style="background: #fff3cd;">
+            <h2>⚠️ 常见问题：</h2>
+            <ol>
+                <li><strong>按钮没有被禁用</strong>: 检查 Redux state 是否真的更新了</li>
+                <li><strong>State 没有更新</strong>: 检查 action 是否被正确 dispatch</li>
+                <li><strong>组件没有重新渲染</strong>: 检查 useSelector 是否正确连接</li>
+                <li><strong>多个 quiz 实例</strong>: 确保 quizId 匹配</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

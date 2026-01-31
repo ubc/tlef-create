@@ -1,12 +1,22 @@
 // src/store/middleware/pubsubMiddleware.ts
 import { Middleware, PayloadAction } from '@reduxjs/toolkit';
-import { pubsubService, PUBSUB_EVENTS, NotificationPayload } from '../../services/pubsubService';
+import { pubsubService, PUBSUB_EVENTS, NotificationPayload, QuestionGenerationStartedPayload, QuestionGenerationCompletedPayload } from '../../services/pubsubService';
+import type { RootState } from '../index';
 
 // Define action types for type safety
 interface AddCoursePayload {
     name: string;
     quizCount: number;
 }
+
+interface SetQuestionsGeneratingPayload {
+    generating: boolean;
+    quizId?: string;
+    totalQuestions?: number;
+}
+
+// Track generation start times per quizId
+const generationStartTimes = new Map<string, number>();
 
 // Bridge between Redux actions and PubSub events
 export const pubsubMiddleware: Middleware = (store) => (next) => (action: PayloadAction<any>) => {
@@ -39,6 +49,44 @@ export const pubsubMiddleware: Middleware = (store) => (next) => (action: Payloa
             pubsubService.publish('QUIZ_SELECTED', {
                 quizId,
             });
+            break;
+        }
+
+        case 'plan/setQuestionsGenerating': {
+            const payload = action.payload as SetQuestionsGeneratingPayload;
+            const quizId = payload.quizId || 'unknown';
+            const timestamp = Date.now();
+
+            if (payload.generating) {
+                // Store start time for duration calculation
+                generationStartTimes.set(quizId, timestamp);
+
+                // Publish STARTED event
+                const startedPayload: QuestionGenerationStartedPayload = {
+                    quizId,
+                    timestamp,
+                    totalQuestions: payload.totalQuestions,
+                };
+                pubsubService.publish(PUBSUB_EVENTS.QUESTION_GENERATION_STARTED, startedPayload);
+            } else {
+                // Calculate duration
+                const startTime = generationStartTimes.get(quizId) || timestamp;
+                const duration = timestamp - startTime;
+                generationStartTimes.delete(quizId);
+
+                // Get state to check how many questions were generated
+                const state = store.getState() as RootState;
+                const questionsGenerated = 0; // TODO: Get actual count from state when available
+
+                // Publish COMPLETED event
+                const completedPayload: QuestionGenerationCompletedPayload = {
+                    quizId,
+                    timestamp,
+                    questionsGenerated,
+                    duration,
+                };
+                pubsubService.publish(PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED, completedPayload);
+            }
             break;
         }
 

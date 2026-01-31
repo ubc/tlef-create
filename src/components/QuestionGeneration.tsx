@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Wand2, Settings, Zap, Gamepad2, GraduationCap, CheckCircle, Edit, Loader } from 'lucide-react';
 import { RootState, AppDispatch } from '../store';
-import { generatePlan, fetchPlans, approvePlan, setCurrentPlan } from '../store/slices/planSlice';
+import { store } from '../store';
+import { generatePlan, fetchPlans, approvePlan, setCurrentPlan, setQuestionsGenerating } from '../store/slices/planSlice';
 import { questionsApi, Question } from '../services/api';
 import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS } from '../services/pubsubService';
 import { useSSE } from '../hooks/useSSE';
 import AdvancedEditModal from './AdvancedEditModal';
 import '../styles/components/QuestionGeneration.css';
@@ -37,7 +39,7 @@ interface CustomFormula {
 const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQuestionsGenerated }: QuestionGenerationProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const { currentPlan, activePlan, loading, generating, error } = useSelector((state: RootState) => state.plan);
-  const { showNotification } = usePubSub('QuestionGeneration');
+  const { showNotification, publish, subscribe, unsubscribe } = usePubSub('QuestionGeneration');
   
   // Question generation state management
   const [approach, setApproach] = useState<PedagogicalApproach>('support');
@@ -163,6 +165,20 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     },
     onBatchComplete: (summary: any) => {
       console.log('🎉 Batch completed:', summary);
+      
+      // Dispatch Redux action to set questionsGenerating to false
+      console.log('✅ QuestionGeneration - Dispatching setQuestionsGenerating(false) - Batch complete');
+      dispatch(setQuestionsGenerating({ generating: false, quizId }));
+      
+      // Publish completion event so other components can react
+      const eventData = {
+        quizId,
+        questionsGenerated: summary.totalGenerated || 0,
+        timestamp: Date.now()
+      };
+      console.log('📢 QuestionGeneration - Publishing QUESTION_GENERATION_COMPLETED event:', eventData);
+      publish(PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED, eventData);
+      
       setStreamingState(prev => {
         // For test mode with DB save, use the completed questions from streaming
         // For production, reload questions from database
@@ -230,6 +246,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     if ((allCompleted || allQuestionsReceived) && totalQuestions > 0) {
       console.log('✅ All questions completed via SSE - auto-triggering batch complete');
       console.log(`📊 Final stats: ${completedQuestions.length}/${totalQuestions} completed, ${questionsInProgress.size} in progress`);
+
+      // Dispatch Redux action to set questionsGenerating to false
+      dispatch(setQuestionsGenerating({ generating: false, quizId }));
 
       // Reload questions from database
       loadExistingQuestions(quizId);
@@ -331,6 +350,45 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     }
   }, [quizId, dispatch]);
 
+  // Subscribe to objectives deleted event to reload questions
+  useEffect(() => {
+    console.log('🎯 QuestionGeneration - Setting up PubSub subscription for quizId:', quizId);
+    
+    const objectivesDeletedToken = subscribe(
+      PUBSUB_EVENTS.OBJECTIVES_DELETED,
+      (data: any) => {
+        console.log('🎯 QuestionGeneration - Received OBJECTIVES_DELETED event:', data);
+        if (data.quizId === quizId) {
+          console.log('🎯 QuestionGeneration - LO deleted, reloading questions');
+          loadExistingQuestions(quizId);
+        }
+      }
+    );
+
+    // Subscribe to questions deleted event to reload questions
+    const questionsDeletedToken = subscribe(
+      PUBSUB_EVENTS.QUESTIONS_DELETED,
+      (data: any) => {
+        console.log('🎯 QuestionGeneration - Received QUESTIONS_DELETED event:', data);
+        if (data.quizId === quizId) {
+          console.log('🎯 QuestionGeneration - Question deleted, reloading questions');
+          loadExistingQuestions(quizId);
+        }
+      }
+    );
+
+    return () => {
+      console.log('🎯 QuestionGeneration - Unsubscribing from OBJECTIVES_DELETED and QUESTIONS_DELETED');
+      unsubscribe(objectivesDeletedToken);
+      unsubscribe(questionsDeletedToken);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]);
+
+  // NOTE: Removed cleanup effect that was resetting questionsGenerating on unmount
+  // This was causing issues when switching tabs - the generation should continue
+  // and the state will be reset when generation completes (in onBatchComplete or error handlers)
+
   // Load existing questions for the quiz
   const loadExistingQuestions = async (quizId: string) => {
     try {
@@ -339,6 +397,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       // Safety check: ensure result and questions array exist
       if (!result || !result.questions || !Array.isArray(result.questions)) {
         console.warn('⚠️ Invalid response from getQuestions:', result);
+        setQuestions([]);
         setHasExistingQuestions(false);
         return;
       }
@@ -349,10 +408,13 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         setHasExistingQuestions(true);
         // Questions loaded successfully
       } else {
+        console.log('📝 No questions found, clearing state');
+        setQuestions([]);
         setHasExistingQuestions(false);
       }
     } catch (error) {
       console.error('Failed to load existing questions:', error);
+      setQuestions([]);
       setHasExistingQuestions(false);
     }
   };
@@ -564,6 +626,24 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     try {
       setIsRegenerating(isRegeneration);
       
+      // Dispatch Redux action to set questionsGenerating to true
+      console.log('🚀 QuestionGeneration - Dispatching setQuestionsGenerating(true) for quizId:', quizId);
+      console.log('🚀 QuestionGeneration - Current Redux state BEFORE dispatch:', store.getState().plan.questionsGenerating);
+      
+      dispatch(setQuestionsGenerating({ 
+        generating: true, 
+        quizId,
+        totalQuestions: (learningObjectives.length * customFormula.totalPerLO) + customFormula.totalWholeQuiz
+      }));
+      
+      // Use setTimeout to check state after Redux has processed the action
+      setTimeout(() => {
+        console.log('🚀 QuestionGeneration - Current Redux state AFTER dispatch (async check):', store.getState().plan.questionsGenerating);
+      }, 0);
+      
+      // Small delay to ensure state propagates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Delete existing questions if this is a regeneration
       if (isRegeneration && hasExistingQuestions) {
         await handleDeleteExistingQuestions();
@@ -692,6 +772,17 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         ? 'Failed to start regeneration'
         : 'Failed to start question generation';
       showNotification('error', 'Generation Failed', errorMessage);
+      
+      // Dispatch Redux action to set questionsGenerating to false on error
+      console.log('❌ QuestionGeneration - Dispatching setQuestionsGenerating(false) - Error occurred');
+      dispatch(setQuestionsGenerating({ generating: false, quizId }));
+      
+      // Publish failure event so other components can react
+      publish(PUBSUB_EVENTS.QUESTION_GENERATION_FAILED, {
+        quizId,
+        error: errorMessage,
+        timestamp: Date.now()
+      });
       
       // Reset streaming state on error
       setStreamingState({
@@ -1113,7 +1204,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             <div className="generation-action">
               <button
                 className="btn btn-primary btn-lg"
-                onClick={handleDirectGenerateQuestions}
+                onClick={() => {
+                  console.log('🎯 Generate Questions button clicked!');
+                  handleDirectGenerateQuestions();
+                }}
                 disabled={generating || isRegenerating || learningObjectives.length === 0 || assignedMaterials.length === 0}
               >
                 {generating || isRegenerating ? (

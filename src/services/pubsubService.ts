@@ -22,6 +22,16 @@ export const PUBSUB_EVENTS = {
     // Learning Objectives Events
     OBJECTIVES_GENERATED: 'OBJECTIVES_GENERATED',
     OBJECTIVES_UPDATED: 'OBJECTIVES_UPDATED',
+    OBJECTIVES_DELETED: 'OBJECTIVES_DELETED',
+
+    // Question Events
+    QUESTIONS_DELETED: 'QUESTIONS_DELETED',
+    QUESTIONS_UPDATED: 'QUESTIONS_UPDATED',
+
+    // Question Generation State Events
+    QUESTION_GENERATION_STARTED: 'QUESTION_GENERATION_STARTED',
+    QUESTION_GENERATION_COMPLETED: 'QUESTION_GENERATION_COMPLETED',
+    QUESTION_GENERATION_FAILED: 'QUESTION_GENERATION_FAILED',
 
     // UI Events
     SHOW_NOTIFICATION: 'SHOW_NOTIFICATION',
@@ -71,6 +81,26 @@ export interface QuizGenerationCompletedPayload {
     quizId: string;
     questions: any[];
     totalTime: number;
+}
+
+export interface QuestionGenerationStartedPayload {
+    quizId: string;
+    timestamp: number;
+    totalQuestions?: number;
+}
+
+export interface QuestionGenerationCompletedPayload {
+    quizId: string;
+    timestamp: number;
+    questionsGenerated: number;
+    duration: number;
+}
+
+export interface QuestionGenerationFailedPayload {
+    quizId: string;
+    timestamp: number;
+    error: string;
+    errorType: 'network' | 'server' | 'validation' | 'unknown';
 }
 
 export interface NotificationPayload {

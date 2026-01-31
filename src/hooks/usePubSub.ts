@@ -13,6 +13,11 @@ export const usePubSub = (componentId?: string) => {
         return pubsubService.subscribe(event, callback, componentIdRef.current);
     }, []);
 
+    // Unsubscribe from events
+    const unsubscribe = useCallback((token: string): void => {
+        pubsubService.unsubscribe(token);
+    }, []);
+
     // Publish events
     const publish = useCallback(<T>(event: string, data: T): void => {
         pubsubService.publish(event, data);
@@ -53,6 +58,7 @@ export const usePubSub = (componentId?: string) => {
 
     return {
         subscribe,
+        unsubscribe,
         publish,
         showNotification,
         showLoading,

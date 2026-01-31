@@ -275,6 +275,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       
       console.log('✅ Sidebar: Quiz created successfully:', response.quiz);
       
+      // Publish quiz-created event for CourseView to refresh
+      publish('quiz-created', { 
+        quizId: response.quiz._id, 
+        courseId: folderId,
+        quizName: response.quiz.name 
+      });
+      
     } catch (err) {
       console.error('❌ Sidebar: Failed to create quiz:', err);
       if (err instanceof ApiError) {

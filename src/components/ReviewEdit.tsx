@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Edit, Trash2, Plus, Eye, EyeOff, Save, RotateCcw, Wand2, Play, Download, X } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS } from '../services/pubsubService';
+import { RootState } from '../store';
 import RegeneratePromptModal from './RegeneratePromptModal';
 import PdfExportModal from './PdfExportModal';
 import '../styles/components/ReviewEdit.css';
@@ -26,7 +29,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
-  const { showNotification } = usePubSub('ReviewEdit');
+  const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
 
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
@@ -72,6 +75,46 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   useEffect(() => {
     loadQuestions();
   }, [quizId]);
+
+  // Subscribe to question generation completion events for real-time updates
+  useEffect(() => {
+    console.log('📝 ReviewEdit - Setting up PubSub subscription for quizId:', quizId);
+    
+    // Subscribe to batch completion event
+    const completionToken = subscribe(
+      PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED,
+      (data: any) => {
+        console.log('📝 ReviewEdit - Received QUESTION_GENERATION_COMPLETED event:', data);
+        if (data.quizId === quizId) {
+          console.log('📝 ReviewEdit - Quiz ID matches, reloading questions');
+          loadQuestions();
+        } else {
+          console.log('📝 ReviewEdit - Quiz ID does not match. Expected:', quizId, 'Received:', data.quizId);
+        }
+      }
+    );
+
+    // Subscribe to objectives deleted event to reload questions
+    const objectivesDeletedToken = subscribe(
+      PUBSUB_EVENTS.OBJECTIVES_DELETED,
+      (data: any) => {
+        console.log('📝 ReviewEdit - Received OBJECTIVES_DELETED event:', data);
+        if (data.quizId === quizId) {
+          console.log('📝 ReviewEdit - LO deleted, reloading questions to sync UI');
+          loadQuestions();
+        }
+      }
+    );
+
+    console.log('📝 ReviewEdit - Subscription tokens:', { completionToken, objectivesDeletedToken });
+
+    return () => {
+      console.log('📝 ReviewEdit - Unsubscribing from events');
+      unsubscribe(completionToken);
+      unsubscribe(objectivesDeletedToken);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]); // Only re-subscribe when quizId changes
 
   // Scroll to specific question if questionId is in URL
   useEffect(() => {
@@ -147,8 +190,17 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const deleteQuestion = async (questionId: string) => {
     try {
       await questionsApi.deleteQuestion(questionId);
-      setQuestions(questions.filter(q => q._id !== questionId));
+      const updatedQuestions = questions.filter(q => q._id !== questionId);
+      setQuestions(updatedQuestions);
       showNotification('success', 'Question Deleted', 'Question has been removed');
+      
+      // Publish event to notify other components
+      publish(PUBSUB_EVENTS.QUESTIONS_DELETED, {
+        quizId,
+        deletedQuestionId: questionId,
+        remainingCount: updatedQuestions.length,
+        timestamp: Date.now()
+      });
     } catch (error) {
       console.error('Failed to delete question:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete question');

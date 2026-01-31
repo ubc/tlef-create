@@ -27,5 +27,12 @@ export const store = configureStore({
 // Setup PubSub listeners after store creation
 setupPubSubListeners(store.dispatch);
 
+// Expose store to window for debugging (development only)
+if (import.meta.env.DEV) {
+  (window as any).store = store;
+  (window as any).getReduxState = () => store.getState();
+  console.log('🔧 Redux store exposed to window.store for debugging');
+}
+
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

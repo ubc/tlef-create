@@ -55,6 +55,19 @@ const CourseView = () => {
     subscribe('quiz-deleted', handleQuizDeleted);
   }, [courseId, subscribe]);
 
+  // Listen for quiz creation events
+  useEffect(() => {
+    const handleQuizCreated = (data: { quizId: string; courseId: string; quizName: string }) => {
+      console.log('📢 CourseView: Received quiz-created event', data);
+      // Refresh course data to get updated quiz list
+      if (data.courseId === courseId) {
+        loadCourseData();
+      }
+    };
+
+    subscribe('quiz-created', handleQuizCreated);
+  }, [courseId, subscribe]);
+
   // Poll for material processing status
   useEffect(() => {
     const hasProcessingMaterials = materials.some(m =>
