@@ -59,6 +59,8 @@
 
 .notification-text {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .notification-title {
@@ -72,6 +74,8 @@
     font-size: 13px;
     line-height: 1.4;
     opacity: 0.9;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
 
 .notification-close {
