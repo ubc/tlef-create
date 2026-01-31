@@ -106,15 +106,18 @@ export const FILE_CONFIG = {
 export const RATE_LIMITS = {
   AUTH: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 50 : 5 // Higher limit for development
+    // Development and staging: 200, Production: 5
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 5 : 200
   },
   API: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 1000 : 100 // Much higher limit for development
+    // Development and staging: 5000, Production: 100
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 100 : 5000
   },
   UPLOAD: {
     windowMs: 60 * 1000, // 1 minute
-    max: 10 // limit each IP to 10 uploads per minute
+    // Development and staging: 50, Production: 10
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 10 : 50
   }
 };
 
