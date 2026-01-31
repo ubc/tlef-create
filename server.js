@@ -33,6 +33,19 @@ connectDB().catch(err => {
   }
 });
 
+// Initialize RAG service on server startup
+console.log('🔧 Initializing RAG service...');
+import('./routes/create/services/ragService.js')
+  .then(module => {
+    const ragService = module.default;
+    console.log('✅ RAG service import successful');
+    // The service will initialize itself asynchronously
+  })
+  .catch(err => {
+    console.error('❌ Failed to import RAG service:', err.message);
+    console.error('💡 RAG features may not work properly');
+  });
+
 const app = express();
 const PORT = process.env.PORT || 7736;
 

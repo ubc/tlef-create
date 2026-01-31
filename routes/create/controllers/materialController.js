@@ -107,6 +107,18 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
         try {
           const ragService = (await import('../services/ragService.js')).default;
 
+          // Wait for RAG service to be initialized (with timeout)
+          const maxWaitTime = 30000; // 30 seconds
+          const startTime = Date.now();
+          while (!ragService.isInitialized && (Date.now() - startTime) < maxWaitTime) {
+            console.log(`⏳ Waiting for RAG service to initialize... (${Math.floor((Date.now() - startTime) / 1000)}s)`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          }
+
+          if (!ragService.isInitialized) {
+            throw new Error('RAG service initialization timeout after 30 seconds');
+          }
+
           console.log(`🔄 Chunking and embedding material: ${materialToProcess.name} (ID: ${materialToProcess._id})`);
           const result = await ragService.processAndEmbedMaterial(materialToProcess);
 

@@ -82,11 +82,19 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       setIsCreating(true);
       setUploadProgress(0);
       try {
+        console.log('📤 CreateCourseModal: Starting course creation with', materials.length, 'materials');
         await onSubmit(courseName.trim(), materials);
+        console.log('✅ CreateCourseModal: Course created successfully');
+        
+        // Show success message if materials were uploaded
+        if (materials.length > 0) {
+          console.log('📊 CreateCourseModal: Materials are being processed in the background');
+        }
+        
         resetModal();
         onClose();
       } catch (error) {
-        console.error('Failed to create course:', error);
+        console.error('❌ CreateCourseModal: Failed to create course:', error);
         // Error is handled in Sidebar
       } finally {
         setIsCreating(false);
