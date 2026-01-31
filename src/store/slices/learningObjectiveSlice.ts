@@ -44,9 +44,24 @@ export const updateObjective = createAsyncThunk(
 
 export const deleteObjective = createAsyncThunk(
   'learningObjective/deleteObjective',
-  async (id: string) => {
-    await objectivesApi.deleteObjective(id);
-    return id;
+  async ({ id, confirmed = false }: { id: string; confirmed?: boolean }, { rejectWithValue }) => {
+    try {
+      const response = await objectivesApi.deleteObjective(id, confirmed);
+      
+      // If confirmation is required, return the confirmation data
+      if (response.requiresConfirmation) {
+        return rejectWithValue({
+          requiresConfirmation: true,
+          questionCount: response.questionCount,
+          objectiveId: response.objectiveId,
+          message: response.message
+        });
+      }
+      
+      return id;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to delete objective');
+    }
   }
 );
 

@@ -463,26 +463,50 @@ router.delete('/quiz/:quizId/all', authenticateToken, validateQuizId, asyncHandl
 router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const objectiveId = req.params.id;
   const userId = req.user.id;
+  const { confirmed } = req.query;
 
   const objective = await LearningObjective.findOne({ _id: objectiveId, createdBy: userId });
   if (!objective) {
     return notFoundResponse(res, 'Learning objective');
   }
 
+  // Check how many questions will be deleted
+  const Question = (await import('../models/Question.js')).default;
+  const questionCount = await Question.countDocuments({ learningObjective: objectiveId });
+
+  // If there are questions and user hasn't confirmed, return warning
+  if (questionCount > 0 && confirmed !== 'true') {
+    return successResponse(res, {
+      requiresConfirmation: true,
+      questionCount,
+      objectiveId,
+      message: `This Learning Objective has ${questionCount} question(s). Deleting it will also delete all these questions.`
+    }, 'Confirmation required');
+  }
+
+  // Get all question IDs before deleting
+  const questions = await Question.find({ learningObjective: objectiveId }).select('_id');
+  const questionIds = questions.map(q => q._id);
+
   // Remove from quiz
   const quiz = await Quiz.findById(objective.quiz);
   if (quiz) {
+    // Remove all questions from quiz.questions array
+    for (const questionId of questionIds) {
+      await quiz.removeQuestion(questionId);
+    }
     await quiz.removeLearningObjective(objectiveId);
   }
 
-  // Delete associated questions
-  const Question = (await import('../models/Question.js')).default;
+  // Delete associated questions from database
   await Question.deleteMany({ learningObjective: objectiveId });
 
   // Delete objective
   await LearningObjective.findByIdAndDelete(objectiveId);
 
-  return successResponse(res, null, 'Learning objective deleted successfully');
+  return successResponse(res, {
+    deletedQuestions: questionCount
+  }, `Learning objective and ${questionCount} question(s) deleted successfully`);
 }));
 
 /**

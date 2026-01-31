@@ -445,3 +445,43 @@
     justify-content: center;
   }
 }
+
+/* Delete Confirmation Modal Styles */
+.btn-danger {
+    background-color: #dc2626;
+    color: white;
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.btn-danger:hover {
+    background-color: #b91c1c;
+}
+
+.btn-danger:active {
+    background-color: #991b1b;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    color: var(--color-muted-foreground);
+    transition: color 0.2s ease;
+}
+
+.btn-close:hover {
+    color: var(--color-foreground);
+}

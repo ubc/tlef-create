@@ -564,9 +564,30 @@ export const objectivesApi = {
   },
 
   // DELETE /api/create/objectives/:id - Delete objective
-  deleteObjective: async (id: string): Promise<{ message: string }> => {
-    const response = await apiClient.delete<{ success: boolean; message: string }>(`/objectives/${id}`);
-    return { message: response.message };
+  deleteObjective: async (id: string, confirmed: boolean = false): Promise<{ 
+    message: string; 
+    requiresConfirmation?: boolean; 
+    questionCount?: number;
+    objectiveId?: string;
+  }> => {
+    const url = confirmed ? `/objectives/${id}?confirmed=true` : `/objectives/${id}`;
+    const response = await apiClient.delete<{ 
+      success: boolean; 
+      data?: {
+        requiresConfirmation?: boolean;
+        questionCount?: number;
+        objectiveId?: string;
+        deletedQuestions?: number;
+      };
+      message: string;
+    }>(url);
+    
+    return { 
+      message: response.message,
+      requiresConfirmation: response.data?.requiresConfirmation,
+      questionCount: response.data?.questionCount,
+      objectiveId: response.data?.objectiveId
+    };
   },
 
   // POST /api/create/objectives/:id/regenerate - Regenerate single objective

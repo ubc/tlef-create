@@ -43,6 +43,17 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [objectiveToRegenerate, setObjectiveToRegenerate] = useState<{ index: number; text: string } | null>(null);
 
+  // Delete confirmation modal state
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    show: boolean;
+    index: number;
+    objectiveId: string;
+    questionCount: number;
+  } | null>(null);
+  const [dontShowDeleteWarning, setDontShowDeleteWarning] = useState(() => {
+    return localStorage.getItem('dontShowDeleteLOWarning') === 'true';
+  });
+
   // Use Redux objectives if available, otherwise fallback to props
   const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives;
   const isGenerating = generating || classifying;
@@ -188,9 +199,38 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       // If using Redux objectives, delete via Redux
       if (reduxObjectives.length > 0 && reduxObjectives[index]) {
         const objectiveId = reduxObjectives[index]._id;
-        await dispatch(deleteObjective(objectiveId));
-
-        // After deletion, update parent component with remaining objectives
+        
+        // If user has chosen "don't show again", delete directly with confirmation
+        if (dontShowDeleteWarning) {
+          await dispatch(deleteObjective({ id: objectiveId, confirmed: true })).unwrap();
+          
+          // After deletion, update parent component with remaining objectives
+          const remainingObjectives = reduxObjectives
+            .filter((_, i) => i !== index)
+            .map(obj => obj.text);
+          onObjectivesChange(remainingObjectives);
+          return;
+        }
+        
+        // Otherwise, try to delete (will get confirmation requirement if there are questions)
+        const result = await dispatch(deleteObjective({ id: objectiveId, confirmed: false }));
+        
+        // Check if confirmation is required
+        if (result.type === 'learningObjective/deleteObjective/rejected' && result.payload) {
+          const payload = result.payload as any;
+          if (payload.requiresConfirmation) {
+            // Show confirmation dialog
+            setDeleteConfirmation({
+              show: true,
+              index,
+              objectiveId: payload.objectiveId,
+              questionCount: payload.questionCount
+            });
+            return;
+          }
+        }
+        
+        // If no confirmation needed, update parent component
         const remainingObjectives = reduxObjectives
           .filter((_, i) => i !== index)
           .map(obj => obj.text);
@@ -208,6 +248,39 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
       onObjectivesChange(updatedObjectives);
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmation) return;
+    
+    try {
+      // Delete with confirmation
+      await dispatch(deleteObjective({ 
+        id: deleteConfirmation.objectiveId, 
+        confirmed: true 
+      })).unwrap();
+      
+      // Update parent component
+      const remainingObjectives = reduxObjectives
+        .filter((_, i) => i !== deleteConfirmation.index)
+        .map(obj => obj.text);
+      onObjectivesChange(remainingObjectives);
+      
+      // Close dialog
+      setDeleteConfirmation(null);
+    } catch (error) {
+      console.error('Failed to delete objective:', error);
+      setDeleteConfirmation(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmation(null);
+  };
+
+  const handleDontShowAgainChange = (checked: boolean) => {
+    setDontShowDeleteWarning(checked);
+    localStorage.setItem('dontShowDeleteLOWarning', checked.toString());
   };
 
   const handleAddNewObjective = async () => {
@@ -668,6 +741,51 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
             isLoading={regenerateLoading}
             mode="learning-objective"
           />
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmation?.show && (
+          <div className="modal-overlay" onClick={handleCancelDelete}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Delete Learning Objective?</h3>
+                <button className="btn-close" onClick={handleCancelDelete}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  This Learning Objective has <strong>{deleteConfirmation.questionCount}</strong> question(s) associated with it.
+                </p>
+                <p>
+                  Deleting this Learning Objective will also <strong>permanently delete all {deleteConfirmation.questionCount} question(s)</strong>.
+                </p>
+                <p style={{ marginTop: '16px' }}>
+                  Are you sure you want to continue?
+                </p>
+                <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="dontShowAgain"
+                    checked={dontShowDeleteWarning}
+                    onChange={(e) => handleDontShowAgainChange(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="dontShowAgain" style={{ cursor: 'pointer', fontSize: '14px' }}>
+                    Don't show this warning again
+                  </label>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={handleCancelDelete}>
+                  Cancel
+                </button>
+                <button className="btn btn-danger" onClick={handleConfirmDelete}>
+                  Delete Learning Objective and {deleteConfirmation.questionCount} Question(s)
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
   );
