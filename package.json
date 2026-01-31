@@ -76,9 +76,9 @@
     "tailwind-merge": "^3.3.1",
     "ubc-genai-toolkit-core": "^0.1.0",
     "ubc-genai-toolkit-document-parsing": "^0.1.0",
-    "ubc-genai-toolkit-embeddings": "^0.1.0",
-    "ubc-genai-toolkit-llm": "^0.1.0",
-    "ubc-genai-toolkit-rag": "^0.1.2",
+    "ubc-genai-toolkit-embeddings": "^0.1.1",
+    "ubc-genai-toolkit-llm": "^0.2.3",
+    "ubc-genai-toolkit-rag": "^0.1.5",
     "uuid": "^13.0.0",
     "vaul": "^0.9.3",
     "zod": "^3.23.8"
