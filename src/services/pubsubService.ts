@@ -3,74 +3,41 @@ import * as PubSub from 'pubsub-js';
 
 // Event Types for type safety
 export const PUBSUB_EVENTS = {
-    // File Upload Events
-    FILE_UPLOAD_STARTED: 'FILE_UPLOAD_STARTED',
-    FILE_UPLOAD_PROGRESS: 'FILE_UPLOAD_PROGRESS',
-    FILE_UPLOAD_COMPLETED: 'FILE_UPLOAD_COMPLETED',
-    FILE_UPLOAD_FAILED: 'FILE_UPLOAD_FAILED',
-
-    // Quiz Generation Events
-    QUIZ_GENERATION_STARTED: 'QUIZ_GENERATION_STARTED',
-    QUIZ_GENERATION_PROGRESS: 'QUIZ_GENERATION_PROGRESS',
-    QUIZ_GENERATION_COMPLETED: 'QUIZ_GENERATION_COMPLETED',
-    QUIZ_GENERATION_FAILED: 'QUIZ_GENERATION_FAILED',
-
-    // Material Processing Events
-    MATERIAL_PARSED: 'MATERIAL_PARSED',
-    MATERIAL_ANALYSIS_COMPLETED: 'MATERIAL_ANALYSIS_COMPLETED',
-
     // Learning Objectives Events
-    OBJECTIVES_GENERATED: 'OBJECTIVES_GENERATED',
-    OBJECTIVES_UPDATED: 'OBJECTIVES_UPDATED',
+    OBJECTIVES_DELETED: 'OBJECTIVES_DELETED',
+
+    // Question Events
+    QUESTIONS_DELETED: 'QUESTIONS_DELETED',
+
+    // Question Generation State Events
+    QUESTION_GENERATION_STARTED: 'QUESTION_GENERATION_STARTED',
+    QUESTION_GENERATION_COMPLETED: 'QUESTION_GENERATION_COMPLETED',
+    QUESTION_GENERATION_FAILED: 'QUESTION_GENERATION_FAILED',
 
     // UI Events
     SHOW_NOTIFICATION: 'SHOW_NOTIFICATION',
     HIDE_NOTIFICATION: 'HIDE_NOTIFICATION',
-    SHOW_LOADING: 'SHOW_LOADING',
-    HIDE_LOADING: 'HIDE_LOADING',
-
-    // Error Events
-    GLOBAL_ERROR: 'GLOBAL_ERROR',
-    VALIDATION_ERROR: 'VALIDATION_ERROR',
 } as const;
 
 // Type definitions for event payloads
-export interface FileUploadStartedPayload {
-    fileId: string;
-    fileName: string;
-    fileSize: number;
-}
-
-export interface FileUploadProgressPayload {
-    fileId: string;
-    progress: number; // 0-100
-}
-
-export interface FileUploadCompletedPayload {
-    fileId: string;
-    fileName: string;
-    materialId: string;
-    parsedContent?: string;
-}
-
-export interface QuizGenerationStartedPayload {
+export interface QuestionGenerationStartedPayload {
     quizId: string;
-    totalQuestions: number;
-    approach: string;
+    timestamp: number;
+    totalQuestions?: number;
 }
 
-export interface QuizGenerationProgressPayload {
+export interface QuestionGenerationCompletedPayload {
     quizId: string;
-    currentStep: string;
-    progress: number;
+    timestamp: number;
     questionsGenerated: number;
-    totalQuestions: number;
+    duration: number;
 }
 
-export interface QuizGenerationCompletedPayload {
+export interface QuestionGenerationFailedPayload {
     quizId: string;
-    questions: any[];
-    totalTime: number;
+    timestamp: number;
+    error: string;
+    errorType: 'network' | 'server' | 'validation' | 'unknown';
 }
 
 export interface NotificationPayload {
@@ -81,25 +48,13 @@ export interface NotificationPayload {
     duration?: number;
 }
 
-export interface LoadingPayload {
-    id: string;
-    message: string;
-}
-
-export interface ErrorPayload {
-    error: Error;
-    context: string;
-    severity: 'low' | 'medium' | 'high';
-}
-
 // PubSub Service Class
 export class PubSubService {
     private static instance: PubSubService;
     private subscriptions: Map<string, string[]> = new Map();
 
-    // Private counters for unique IDs
+    // Private counter for unique IDs
     private static notificationCounter = 0;
-    private static loadingCounter = 0;
 
     // Debounce mechanism for notifications
     private recentNotifications: Map<string, number> = new Map();
@@ -118,11 +73,6 @@ export class PubSubService {
     private generateNotificationId(): string {
         PubSubService.notificationCounter++;
         return `notification-${Date.now()}-${PubSubService.notificationCounter}`;
-    }
-
-    private generateLoadingId(): string {
-        PubSubService.loadingCounter++;
-        return `loading-${Date.now()}-${PubSubService.loadingCounter}`;
     }
 
     // Check if notification should be debounced
@@ -181,11 +131,10 @@ export class PubSubService {
         PubSub.publish(event, data);
     }
 
-    // Convenience methods for common events
+    // Convenience method for notifications with deduplication
     showNotification(notification: Omit<NotificationPayload, 'id'>): void {
         // Check for debouncing
         if (this.shouldDebounceNotification(notification.title, notification.message)) {
-            console.log('Debouncing duplicate notification:', notification.title);
             return;
         }
 
@@ -194,25 +143,7 @@ export class PubSubService {
             ...notification,
             duration: notification.duration ?? 4000, // Default 4 seconds auto-dismiss, but allow override
         };
-        console.log('🔔 Publishing notification with payload:', payload);
         this.publish(PUBSUB_EVENTS.SHOW_NOTIFICATION, payload);
-    }
-
-    showLoading(message: string, id?: string): void {
-        const payload: LoadingPayload = {
-            id: id || this.generateLoadingId(),
-            message,
-        };
-        this.publish(PUBSUB_EVENTS.SHOW_LOADING, payload);
-    }
-
-    hideLoading(id: string): void {
-        this.publish(PUBSUB_EVENTS.HIDE_LOADING, { id });
-    }
-
-    reportError(error: Error, context: string, severity: 'low' | 'medium' | 'high' = 'medium'): void {
-        const payload: ErrorPayload = { error, context, severity };
-        this.publish(PUBSUB_EVENTS.GLOBAL_ERROR, payload);
     }
 }
 

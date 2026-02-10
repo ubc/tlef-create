@@ -5,19 +5,59 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+interface BatchStartedData {
+  totalQuestions: number;
+  sessionId: string;
+}
+
+interface QuestionProgressData {
+  questionId: string;
+  type: string;
+  status: string;
+  questionIndex?: number;
+}
+
+interface TextChunkMetadata {
+  questionType: string;
+  questionIndex: number;
+}
+
+interface TextChunkData {
+  chunk: string;
+  questionId: string;
+  metadata?: TextChunkMetadata;
+}
+
+interface QuestionCompleteData {
+  questionId: string;
+  question: unknown;
+  questionText?: string;
+}
+
+interface BatchCompleteData {
+  totalGenerated: number;
+  sessionId: string;
+}
+
+interface SSEErrorData {
+  message: string;
+  questionId?: string;
+  errorType?: string;
+}
+
 interface SSEEvent {
   type: string;
-  data: any;
+  data: BatchStartedData | QuestionProgressData | TextChunkData | QuestionCompleteData | BatchCompleteData | SSEErrorData;
   timestamp?: string;
 }
 
 interface SSEHookOptions {
   onConnected?: () => void;
-  onBatchStarted?: (data: any) => void;
-  onQuestionProgress?: (questionId: string, data: any) => void;
-  onTextChunk?: (questionId: string, chunk: string, metadata: any) => void;
-  onQuestionComplete?: (questionId: string, question: any) => void;
-  onBatchComplete?: (summary: any) => void;
+  onBatchStarted?: (data: BatchStartedData) => void;
+  onQuestionProgress?: (questionId: string, data: QuestionProgressData) => void;
+  onTextChunk?: (questionId: string, chunk: string, metadata?: TextChunkMetadata) => void;
+  onQuestionComplete?: (questionId: string, question: unknown) => void;
+  onBatchComplete?: (summary: BatchCompleteData) => void;
   onError?: (questionId: string, errorMessage: string, errorType: string) => void;
   onHeartbeat?: () => void;
 }
@@ -43,7 +83,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
-      // console.log('📡 Disconnecting SSE connection');
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
@@ -59,22 +98,18 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
   const connect = useCallback(() => {
     if (!sseUrl) {
-      console.warn('📡 No SSE URL provided');
       return;
     }
 
     // 如果已经有相同URL的连接，不要重复连接
     if (eventSourceRef.current && eventSourceRef.current.url === sseUrl) {
-      console.log('📡 SSE connection already exists for this URL');
       return;
     }
 
     if (eventSourceRef.current) {
-      console.log('📡 Closing existing SSE connection');
       eventSourceRef.current.close();
     }
 
-    console.log(`📡 Connecting to SSE: ${sseUrl}`);
     setConnectionStatus('connecting');
     setError(null);
 
@@ -83,7 +118,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
     // Connection opened
     eventSource.onopen = () => {
-      console.log('✅ SSE connection opened');
       setConnectionStatus('connected');
       setError(null);
       setReconnectAttempts(0);
@@ -96,8 +130,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
       
       if (reconnectAttempts < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000); // Exponential backoff
-        console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`);
-        
+
         reconnectTimeoutRef.current = setTimeout(() => {
           setReconnectAttempts(prev => prev + 1);
           connect();
@@ -112,8 +145,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.addEventListener('connected', (event) => {
       try {
         if (event.data && event.data.trim() && event.data !== 'undefined') {
-          const data = JSON.parse(event.data);
-          console.log('🔗 SSE connected event:', data);
+          JSON.parse(event.data);
         }
         onConnected?.();
       } catch (err) {
@@ -124,7 +156,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.addEventListener('batch-started', (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('🚀 Batch started:', data);
         onBatchStarted?.(data);
       } catch (err) {
         console.error('Error parsing batch-started event:', err);
@@ -134,7 +165,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.addEventListener('question-progress', (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('📊 Question progress:', data);
         onQuestionProgress?.(data.questionId, data.data);
       } catch (err) {
         console.error('Error parsing question-progress event:', err);
@@ -154,7 +184,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.addEventListener('question-complete', (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('✅ Question complete:', data.questionId);
         onQuestionComplete?.(data.questionId, data.question);
       } catch (err) {
         console.error('Error parsing question-complete event:', err);
@@ -164,7 +193,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.addEventListener('batch-complete', (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('🎉 Batch complete:', data);
         onBatchComplete?.(data.summary);
       } catch (err) {
         console.error('Error parsing batch-complete event:', err);
@@ -190,8 +218,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
     eventSource.addEventListener('heartbeat', (event) => {
       try {
-        const data = JSON.parse(event.data);
-        // Don't log heartbeats to avoid spam
+        JSON.parse(event.data);
         onHeartbeat?.();
       } catch (err) {
         console.error('Error parsing heartbeat event:', err);
@@ -201,8 +228,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     // Generic message handler (fallback)
     eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        console.log('📨 SSE generic message:', data);
+        JSON.parse(event.data);
       } catch (err) {
         console.error('Error parsing generic SSE message:', err);
       }
@@ -224,7 +250,6 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
   // Send a manual reconnect function
   const reconnect = useCallback(() => {
-    console.log('🔄 Manual reconnect triggered');
     setReconnectAttempts(0);
     connect();
   }, [connect]);

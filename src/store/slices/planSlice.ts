@@ -4,7 +4,7 @@ import { plansApi, GenerationPlan } from '../../services/api';
 // Async thunks for plan operations
 export const generatePlan = createAsyncThunk(
   'plan/generatePlan',
-  async (data: { quizId: string; approach: 'support' | 'assess' | 'gamify' | 'custom'; questionsPerLO: number; customFormula?: any }) => {
+  async (data: { quizId: string; approach: 'support' | 'assess' | 'gamify' | 'custom'; questionsPerLO: number; customFormula?: GenerationPlan['customFormula'] }) => {
     const response = await plansApi.generatePlan(data.quizId, data.approach, data.questionsPerLO, data.customFormula);
     return response.plan;
   }
@@ -50,14 +50,24 @@ export const deletePlan = createAsyncThunk(
   }
 );
 
+interface GenerationStatus {
+  generating: boolean;
+  startTime: number | null;
+  totalQuestions: number;
+}
+
 interface PlanState {
   plans: GenerationPlan[];
   currentPlan: GenerationPlan | null;
   activePlan: GenerationPlan | null;
   loading: boolean;
   generating: boolean;
+  // Per-quiz generation status keyed by quizId
+  generationStatusByQuiz: Record<string, GenerationStatus>;
   error: string | null;
 }
+
+export type { PlanState, GenerationStatus };
 
 const initialState: PlanState = {
   plans: [],
@@ -65,6 +75,7 @@ const initialState: PlanState = {
   activePlan: null,
   loading: false,
   generating: false,
+  generationStatusByQuiz: {},
   error: null,
 };
 
@@ -85,6 +96,24 @@ const planSlice = createSlice({
     },
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
+    },
+    setQuestionsGenerating: (state, action: PayloadAction<{ generating: boolean; quizId: string; totalQuestions?: number }>) => {
+      const { generating, quizId, totalQuestions } = action.payload;
+      if (generating) {
+        state.generationStatusByQuiz[quizId] = {
+          generating: true,
+          startTime: Date.now(),
+          totalQuestions: totalQuestions || 0,
+        };
+      } else {
+        if (state.generationStatusByQuiz[quizId]) {
+          state.generationStatusByQuiz[quizId].generating = false;
+          state.generationStatusByQuiz[quizId].startTime = null;
+        }
+      }
+    },
+    clearGenerationStatus: (state, action: PayloadAction<string>) => {
+      delete state.generationStatusByQuiz[action.payload];
     },
   },
   extraReducers: (builder) => {
@@ -224,5 +253,5 @@ const planSlice = createSlice({
   },
 });
 
-export const { clearPlans, setCurrentPlan, setActivePlan, setError } = planSlice.actions;
+export const { clearPlans, setCurrentPlan, setActivePlan, setError, setQuestionsGenerating, clearGenerationStatus } = planSlice.actions;
 export default planSlice.reducer;

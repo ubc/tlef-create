@@ -3,17 +3,14 @@ import { useAppSelector } from '../hooks/redux';
 import '../styles/components/Header.css';
 
 const Header = () => {
-  const { currentUser, activeCourse, activeQuiz, courses } = useAppSelector((state) => state.app);
+  const { activeCourse, activeQuiz } = useAppSelector((state) => state.app);
 
   const getPageTitle = () => {
     if (activeQuiz && activeCourse) {
-      const course = courses.find(c => c.id === activeCourse);
-      const quiz = course?.quizzes.find(q => q.id === activeQuiz);
-      return quiz?.name || 'Quiz';
+      return 'Quiz';
     }
     if (activeCourse) {
-      const course = courses.find(c => c.id === activeCourse);
-      return course?.name || 'Course';
+      return 'Course';
     }
     return 'Dashboard';
   };
@@ -33,7 +30,7 @@ const Header = () => {
         <div className="header-right">
           <div className="user-info">
             <User size={20} />
-            <span>{currentUser || 'Guest User'}</span>
+            <span>Guest User</span>
           </div>
         </div>
       </header>

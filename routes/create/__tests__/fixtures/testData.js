@@ -150,6 +150,101 @@ export const generateUniqueName = (baseName) => {
   return `${baseName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 };
 
+// Export test fixtures — matches Question model schema (lowercase types, content field)
+export const testExportQuestions = {
+  multipleChoice: {
+    type: 'multiple-choice',
+    difficulty: 'moderate',
+    questionText: 'What is 2 + 2?',
+    content: {
+      options: [
+        { text: '3', isCorrect: false },
+        { text: '4', isCorrect: true },
+        { text: '5', isCorrect: false },
+        { text: '6', isCorrect: false }
+      ]
+    },
+    correctAnswer: '4',
+    reviewStatus: 'approved',
+    order: 0
+  },
+  trueFalse: {
+    type: 'true-false',
+    difficulty: 'easy',
+    questionText: 'The Earth orbits the Sun.',
+    correctAnswer: 'true',
+    reviewStatus: 'approved',
+    order: 1
+  },
+  flashcard: {
+    type: 'flashcard',
+    difficulty: 'easy',
+    questionText: 'What is DNA?',
+    content: {
+      front: 'What is DNA?',
+      back: 'Deoxyribonucleic acid, the molecule that carries genetic information.'
+    },
+    correctAnswer: 'Deoxyribonucleic acid',
+    reviewStatus: 'approved',
+    order: 2
+  },
+  matching: {
+    type: 'matching',
+    difficulty: 'moderate',
+    questionText: 'Match each country to its capital city.',
+    content: {
+      leftItems: ['France', 'Germany', 'Japan'],
+      rightItems: ['Paris', 'Berlin', 'Tokyo'],
+      matchingPairs: [['France', 'Paris'], ['Germany', 'Berlin'], ['Japan', 'Tokyo']]
+    },
+    reviewStatus: 'approved',
+    order: 3
+  },
+  ordering: {
+    type: 'ordering',
+    difficulty: 'hard',
+    questionText: 'Order these animals from smallest to largest.',
+    content: {
+      items: ['Ant', 'Dog', 'Elephant'],
+      correctOrder: ['Ant', 'Dog', 'Elephant']
+    },
+    reviewStatus: 'approved',
+    order: 4
+  },
+  cloze: {
+    type: 'cloze',
+    difficulty: 'moderate',
+    questionText: 'The capital of France is Paris.',
+    content: {
+      textWithBlanks: 'The capital of $$ is $$.',
+      blankOptions: [['France', 'Germany', 'Spain'], ['Paris', 'Berlin', 'Madrid']],
+      correctAnswers: ['France', 'Paris']
+    },
+    reviewStatus: 'approved',
+    order: 5
+  },
+  discussion: {
+    type: 'discussion',
+    difficulty: 'hard',
+    questionText: 'Discuss the impact of artificial intelligence on modern education.',
+    reviewStatus: 'approved',
+    order: 6
+  },
+  summary: {
+    type: 'summary',
+    difficulty: 'easy',
+    questionText: 'Key concepts review',
+    content: {
+      keyPoints: [
+        { title: 'Concept A', explanation: 'Explanation of concept A in detail.' },
+        { title: 'Concept B', explanation: 'Explanation of concept B in detail.' }
+      ]
+    },
+    reviewStatus: 'approved',
+    order: 7
+  }
+};
+
 // Common test scenarios
 export const testScenarios = {
   // Authentication scenarios

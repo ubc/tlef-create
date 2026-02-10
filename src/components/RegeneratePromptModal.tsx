@@ -57,9 +57,9 @@ const RegeneratePromptModal = ({
   };
 
   // Delete prompt from history
-  const deletePromptFromHistory = (index: number, e: any) => {
+  const deletePromptFromHistory = (index: number, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent the button click from triggering
-    const newHistory = promptHistory.filter((_: any, i: number) => i !== index);
+    const newHistory = promptHistory.filter((_: string, i: number) => i !== index);
     setPromptHistory(newHistory);
     localStorage.setItem(storageKey, JSON.stringify(newHistory));
   };

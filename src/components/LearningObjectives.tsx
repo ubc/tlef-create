@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Upload, Sparkles, Edit, Plus, Trash2, RotateCcw, X } from 'lucide-react';
-import { RootState, AppDispatch } from '../store';
+import { RootState, AppDispatch, store } from '../store';
 import {
   fetchObjectives,
   generateObjectives,
@@ -14,12 +14,17 @@ import {
   deleteAllObjectives
 } from '../store/slices/learningObjectiveSlice';
 import RegeneratePromptModal from './RegeneratePromptModal';
+import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS, QuestionGenerationStartedPayload, QuestionGenerationCompletedPayload, QuestionGenerationFailedPayload } from '../services/pubsubService';
+import { pubsubService } from '../services/pubsubService';
+import { selectIsGenerating } from '../store/selectors';
+import { LearningObjectiveData } from './generation/generationTypes';
 import '../styles/components/LearningObjectives.css';
 
 interface LearningObjectivesProps {
   assignedMaterials: string[];
-  objectives: string[];
-  onObjectivesChange: (objectives: string[]) => void;
+  objectives: LearningObjectiveData[];
+  onObjectivesChange: (objectives: LearningObjectiveData[]) => void;
   quizId: string;
   onNavigateNext?: () => void;
 }
@@ -27,6 +32,10 @@ interface LearningObjectivesProps {
 const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange, quizId, onNavigateNext }: LearningObjectivesProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const { objectives: reduxObjectives, loading, generating, classifying, error } = useSelector((state: RootState) => state.learningObjective);
+  const questionsGenerating = useSelector((state: RootState) => selectIsGenerating(state, quizId));
+  
+  // PubSub hook for event subscriptions
+  const { subscribe, showNotification, publish } = usePubSub('LearningObjectives');
   
   const [mode, setMode] = useState<'classify' | 'generate' | 'edit' | 'manual'>('classify');
   const [textInput, setTextInput] = useState('');
@@ -37,14 +46,31 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const [showNavigation, setShowNavigation] = useState(false);
   const [targetObjectiveCount, setTargetObjectiveCount] = useState<number | ''>(''); // Allow empty input
   const navigationRef = useRef<HTMLDivElement>(null);
+  const newObjectiveRef = useRef<HTMLDivElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Regenerate modal state
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [objectiveToRegenerate, setObjectiveToRegenerate] = useState<{ index: number; text: string } | null>(null);
 
+  // Regenerate All modal state
+  const [regenerateAllModalOpen, setRegenerateAllModalOpen] = useState(false);
+  const [regenerateAllLoading, setRegenerateAllLoading] = useState(false);
+
+  // Delete confirmation modal state
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    show: boolean;
+    index: number;
+    objectiveId: string;
+    questionCount: number;
+  } | null>(null);
+  const [dontShowDeleteWarning, setDontShowDeleteWarning] = useState(() => {
+    return localStorage.getItem('dontShowDeleteLOWarning') === 'true';
+  });
+
   // Use Redux objectives if available, otherwise fallback to props
-  const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives;
+  const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives.map(obj => obj.text);
   const isGenerating = generating || classifying;
 
   // Load objectives when component mounts
@@ -57,9 +83,72 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   // Sync Redux objectives with parent component
   useEffect(() => {
     if (reduxObjectives.length > 0) {
-      onObjectivesChange(reduxObjectives.map(obj => obj.text));
+      const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
+        _id: obj._id,
+        text: obj.text,
+        order: obj.order !== undefined ? obj.order : idx
+      }));
+      onObjectivesChange(objectiveData);
     }
   }, [reduxObjectives, onObjectivesChange]);
+
+  // Subscribe to PubSub events for question generation
+  useEffect(() => {
+    // Subscribe to generation started event
+    const startToken = subscribe<QuestionGenerationStartedPayload>(
+      PUBSUB_EVENTS.QUESTION_GENERATION_STARTED,
+      (data) => {
+        showNotification(
+          'info',
+          'Question Generation Started',
+          'Please wait while questions are being generated...',
+          5000
+        );
+      }
+    );
+
+    // Subscribe to generation completed event
+    const completeToken = subscribe<QuestionGenerationCompletedPayload>(
+      PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED,
+      (data) => {
+        showNotification(
+          'success',
+          'Question Generation Completed',
+          'Successfully generated questions!',
+          4000
+        );
+      }
+    );
+
+    // Subscribe to generation failed event
+    const failToken = subscribe<QuestionGenerationFailedPayload>(
+      PUBSUB_EVENTS.QUESTION_GENERATION_FAILED,
+      (data) => {
+        console.error('Question generation failed:', data);
+        showNotification(
+          'error',
+          'Question Generation Failed',
+          `Failed to generate questions: ${data.error}`,
+          6000
+        );
+      }
+    );
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      pubsubService.unsubscribe(startToken);
+      pubsubService.unsubscribe(completeToken);
+      pubsubService.unsubscribe(failToken);
+    };
+  }, [subscribe, showNotification]);
+
+  // Auto-focus textarea when entering edit mode
+  useEffect(() => {
+    if (editingIndex !== null && editTextareaRef.current) {
+      editTextareaRef.current.focus();
+      editTextareaRef.current.select();
+    }
+  }, [editingIndex]);
 
   // Effect to handle navigation appearance with smooth scroll
   useEffect(() => {
@@ -151,6 +240,12 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleEditObjective = (index: number) => {
+    // Guard: Prevent editing while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
+    
     setEditingIndex(index);
     setEditText(currentObjectives[index]);
   };
@@ -184,23 +279,100 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleDeleteObjective = async (index: number) => {
+    // Guard: Prevent deletion while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
+    
     try {
       // If using Redux objectives, delete via Redux
       if (reduxObjectives.length > 0 && reduxObjectives[index]) {
-        const objectiveId = reduxObjectives[index]._id;
-        await dispatch(deleteObjective(objectiveId));
-
-        // After deletion, update parent component with remaining objectives
+        const objective = reduxObjectives[index];
+        
+        // If objective doesn't have an _id, it's a new unsaved objective
+        // Delete it directly without confirmation
+        if (!objective._id) {
+          const remainingObjectives = reduxObjectives
+            .filter((_, i) => i !== index)
+            .map(obj => obj.text);
+          onObjectivesChange(remainingObjectives);
+          
+          // Also clear editing state if we're deleting the one being edited
+          if (editingIndex === index) {
+            setEditingIndex(null);
+            setEditText('');
+          }
+          return;
+        }
+        
+        const objectiveId = objective._id;
+        
+        // If user has chosen "don't show again", delete directly with confirmation
+        if (dontShowDeleteWarning) {
+          await dispatch(deleteObjective({ id: objectiveId, confirmed: true })).unwrap();
+          
+          // After deletion, update parent component with remaining objectives
+          const remainingObjectives = reduxObjectives
+            .filter((_, i) => i !== index)
+            .map(obj => obj.text);
+          onObjectivesChange(remainingObjectives);
+          
+          // Publish event to notify other components
+          publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
+            quizId,
+            deletedObjective: objective.text,
+            remainingCount: remainingObjectives.length,
+            timestamp: Date.now()
+          });
+          return;
+        }
+        
+        // Otherwise, try to delete (will get confirmation requirement if there are questions)
+        const result = await dispatch(deleteObjective({ id: objectiveId, confirmed: false }));
+        
+        // Check if confirmation is required
+        if (result.type === 'learningObjective/deleteObjective/rejected' && result.payload) {
+          const payload = result.payload as { requiresConfirmation?: boolean; objectiveId?: string; questionCount?: number; message?: string };
+          if (payload.requiresConfirmation) {
+            // Show confirmation dialog
+            setDeleteConfirmation({
+              show: true,
+              index,
+              objectiveId: payload.objectiveId || objectiveId,
+              questionCount: payload.questionCount || 0
+            });
+            return;
+          }
+        }
+        
+        // If no confirmation needed, update parent component
         const remainingObjectives = reduxObjectives
           .filter((_, i) => i !== index)
           .map(obj => obj.text);
         onObjectivesChange(remainingObjectives);
+        
+        // Publish event to notify other components
+        publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
+          quizId,
+          deletedObjective: objective.text,
+          remainingCount: remainingObjectives.length,
+          timestamp: Date.now()
+        });
       } else {
         // Otherwise, delete from local state and save to backend
         const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
         const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
         await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
         onObjectivesChange(updatedObjectives);
+        
+        // Publish event to notify other components
+        publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
+          quizId,
+          deletedObjective: currentObjectives[index],
+          remainingCount: updatedObjectives.length,
+          timestamp: Date.now()
+        });
       }
     } catch (error) {
       console.error('Failed to delete objective:', error);
@@ -210,7 +382,55 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmation) return;
+    
+    try {
+      // Delete with confirmation
+      await dispatch(deleteObjective({ 
+        id: deleteConfirmation.objectiveId, 
+        confirmed: true 
+      })).unwrap();
+      
+      // Update parent component
+      const remainingObjectives = reduxObjectives
+        .filter((_, i) => i !== deleteConfirmation.index)
+        .map(obj => obj.text);
+      onObjectivesChange(remainingObjectives);
+      
+      // Publish event to notify other components
+      const deletedObjective = reduxObjectives[deleteConfirmation.index];
+      publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
+        quizId,
+        deletedObjective: deletedObjective.text,
+        remainingCount: remainingObjectives.length,
+        timestamp: Date.now()
+      });
+      
+      // Close dialog
+      setDeleteConfirmation(null);
+    } catch (error) {
+      console.error('Failed to delete objective:', error);
+      setDeleteConfirmation(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmation(null);
+  };
+
+  const handleDontShowAgainChange = (checked: boolean) => {
+    setDontShowDeleteWarning(checked);
+    localStorage.setItem('dontShowDeleteLOWarning', checked.toString());
+  };
+
   const handleAddNewObjective = async () => {
+    // Guard: Prevent adding while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
+    
     const newObjectiveText = 'New learning objective...';
     try {
       // Use current objectives (which could be from Redux or local state)
@@ -220,19 +440,61 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         { text: newObjectiveText, order: currentObjectives.length }
       ];
       
+      const newIndex = currentObjectives.length;
+      
       await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
-      setEditingIndex(currentObjectives.length);
+      
+      // Set editing mode for the new objective
+      setEditingIndex(newIndex);
       setEditText(newObjectiveText);
+      
+      // Scroll to the new objective and auto-focus after a short delay
+      setTimeout(() => {
+        if (newObjectiveRef.current) {
+          newObjectiveRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+        
+        // Auto-focus the textarea
+        if (editTextareaRef.current) {
+          editTextareaRef.current.focus();
+          // Select all text for easy replacement
+          editTextareaRef.current.select();
+        }
+      }, 100);
     } catch (error) {
       console.error('Failed to add objective:', error);
       // Fall back to local state
+      const newIndex = currentObjectives.length;
       onObjectivesChange([...currentObjectives, newObjectiveText]);
-      setEditingIndex(currentObjectives.length);
+      setEditingIndex(newIndex);
       setEditText(newObjectiveText);
+      
+      // Still try to scroll and focus
+      setTimeout(() => {
+        if (newObjectiveRef.current) {
+          newObjectiveRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+        if (editTextareaRef.current) {
+          editTextareaRef.current.focus();
+          editTextareaRef.current.select();
+        }
+      }, 100);
     }
   };
 
-  const handleRegenerateAll = async () => {
+  const handleRegenerateAll = () => {
+    // Guard: Prevent regeneration while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
+    
     if (currentObjectives.length === 0) {
       alert('No learning objectives to regenerate.');
       return;
@@ -243,47 +505,53 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return;
     }
 
+    // Open the regenerate all modal
+    setRegenerateAllModalOpen(true);
+  };
+
+  const handleRegenerateAllWithPrompt = async (customPrompt?: string) => {
     const currentCount = currentObjectives.length;
-    {
-      try {
-        console.log('🔄 Regenerate All: Starting with', currentCount, 'objectives');
-        
-        // First, delete all existing objectives from backend
-        console.log('🔄 Regenerate All: Deleting all existing objectives');
-        await dispatch(deleteAllObjectives(quizId));
-        
-        // Also clear local state
-        onObjectivesChange([]);
-        console.log('🔄 Regenerate All: Cleared local state');
-        
-        // Generate new objectives with the same count as before
-        console.log('🔄 Regenerate All: Generating new objectives with targetCount:', currentCount);
-        await dispatch(generateObjectives({ quizId, materialIds: assignedMaterials, targetCount: currentCount }));
-        
-        console.log('🔄 Regenerate All: Completed successfully');
-      } catch (error) {
-        console.error('Failed to regenerate all objectives:', error);
-        alert('Failed to regenerate learning objectives. Please try again.');
-      }
+    setRegenerateAllLoading(true);
+
+    try {
+      // First, delete all existing objectives from backend
+      await dispatch(deleteAllObjectives(quizId));
+
+      // Also clear local state
+      onObjectivesChange([]);
+
+      // Generate new objectives with the same count as before, with optional custom prompt
+      await dispatch(generateObjectives({ 
+        quizId, 
+        materialIds: assignedMaterials, 
+        targetCount: currentCount,
+        customPrompt: customPrompt?.trim() || undefined
+      }));
+
+      setRegenerateAllModalOpen(false);
+    } catch (error) {
+      console.error('Failed to regenerate all objectives:', error);
+      alert('Failed to regenerate learning objectives. Please try again.');
+    } finally {
+      setRegenerateAllLoading(false);
     }
   };
 
   const handleDeleteAll = async () => {
-    console.log('🗑️ Delete All clicked - quizId:', quizId);
+    // Guard: Prevent deletion while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
     
-    console.log('🗑️ Delete All confirmed - dispatching deleteAllObjectives with quizId:', quizId);
-      
-      try {
+    try {
         // Use the dedicated delete all endpoint
-        const result = await dispatch(deleteAllObjectives(quizId));
-        console.log('🗑️ Delete All result:', result);
-        
+        await dispatch(deleteAllObjectives(quizId));
+
         // Also clear local state
         onObjectivesChange([]);
-        console.log('🗑️ Delete All completed successfully');
     } catch (error) {
-      console.error('🗑️ Failed to delete all objectives:', error);
-      console.error('🗑️ Error details:', error.message, error.stack);
+      console.error('Failed to delete all objectives:', error);
       
       // Fallback to clearing local state only
       dispatch(clearObjectives());
@@ -292,6 +560,12 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const openRegenerateModal = (index: number) => {
+    // Guard: Prevent regeneration while questions are being generated
+    if (questionsGenerating) {
+      showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
+      return;
+    }
+    
     if (!assignedMaterials || assignedMaterials.length === 0) {
       alert('Please assign materials to this quiz first to regenerate learning objectives.');
       return;
@@ -458,7 +732,8 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                                       <button
                                           className="btn btn-ghost btn-sm"
                                           onClick={() => handleRemoveManualObjective(index)}
-                                          title="Remove objective"
+                                          disabled={questionsGenerating}
+                                          title={questionsGenerating ? 'Cannot remove while generating questions' : 'Remove objective'}
                                       >
                                         <Trash2 size={14} />
                                       </button>
@@ -551,15 +826,30 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                 <div className="objectives-header">
                   <h4>Learning Objectives ({currentObjectives.length})</h4>
                   <div className="objectives-actions">
-                    <button className="btn btn-outline" onClick={handleAddNewObjective}>
+                    <button 
+                      className="btn btn-outline" 
+                      onClick={handleAddNewObjective}
+                      disabled={questionsGenerating}
+                      title={questionsGenerating ? 'Cannot add while generating questions' : 'Add new learning objective'}
+                    >
                       <Plus size={16} />
                       Add New
                     </button>
-                    <button className="btn btn-outline btn-danger" onClick={handleDeleteAll}>
+                    <button 
+                      className="btn btn-outline btn-danger" 
+                      onClick={handleDeleteAll}
+                      disabled={questionsGenerating}
+                      title={questionsGenerating ? 'Cannot delete while generating questions' : 'Delete all learning objectives'}
+                    >
                       <X size={16} />
                       Delete All
                     </button>
-                    <button className="btn btn-outline" onClick={handleRegenerateAll}>
+                    <button 
+                      className="btn btn-outline" 
+                      onClick={handleRegenerateAll}
+                      disabled={questionsGenerating}
+                      title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate all learning objectives'}
+                    >
                       <Sparkles size={16} />
                       Regenerate All
                     </button>
@@ -568,12 +858,17 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
                 <div className="objectives-items">
                   {currentObjectives.map((objective, index) => (
-                      <div key={index} className="objective-item">
+                      <div 
+                        key={index} 
+                        className="objective-item"
+                        ref={index === editingIndex ? newObjectiveRef : null}
+                      >
                         <div className="objective-number">LO {index + 1}</div>
                         <div className="objective-content">
                           {editingIndex === index ? (
                               <div className="objective-edit">
                         <textarea
+                            ref={editTextareaRef}
                             className="textarea"
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
@@ -592,13 +887,26 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                               <div className="objective-display">
                                 <p>{objective}</p>
                                 <div className="objective-actions">
-                                  <button className="btn btn-ghost" onClick={() => handleEditObjective(index)}>
+                                  <button 
+                                    className="btn btn-ghost" 
+                                    onClick={() => handleEditObjective(index)}
+                                    disabled={questionsGenerating}
+                                  >
                                     <Edit size={16} />
                                   </button>
-                                  <button className="btn btn-ghost" onClick={() => openRegenerateModal(index)}>
+                                  <button 
+                                    className="btn btn-ghost" 
+                                    onClick={() => openRegenerateModal(index)}
+                                    disabled={questionsGenerating}
+                                  >
                                     <RotateCcw size={16} />
                                   </button>
-                                  <button className="btn btn-ghost" onClick={() => handleDeleteObjective(index)}>
+                                  <button 
+                                    className="btn btn-ghost" 
+                                    onClick={() => handleDeleteObjective(index)}
+                                    disabled={questionsGenerating}
+                                    title={questionsGenerating ? 'Cannot delete while generating questions' : 'Delete learning objective'}
+                                  >
                                     <Trash2 size={16} />
                                   </button>
                                 </div>
@@ -651,7 +959,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
           )}
         </div>
 
-        {/* Regenerate Prompt Modal */}
+        {/* Regenerate Single Objective Modal */}
         {objectiveToRegenerate && (
           <RegeneratePromptModal
             isOpen={regenerateModalOpen}
@@ -668,6 +976,68 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
             isLoading={regenerateLoading}
             mode="learning-objective"
           />
+        )}
+
+        {/* Regenerate All Objectives Modal */}
+        <RegeneratePromptModal
+          isOpen={regenerateAllModalOpen}
+          onClose={() => setRegenerateAllModalOpen(false)}
+          onRegenerate={handleRegenerateAllWithPrompt}
+          question={{
+            _id: 'regenerate-all',
+            type: 'learning-objective',
+            questionText: `All ${currentObjectives.length} learning objectives`,
+            learningObjective: {
+              text: currentObjectives.join('\n')
+            }
+          }}
+          isLoading={regenerateAllLoading}
+          mode="learning-objective"
+        />
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmation?.show && (
+          <div className="modal-overlay" onClick={handleCancelDelete}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Delete Learning Objective?</h3>
+                <button className="btn-close" onClick={handleCancelDelete}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  This Learning Objective has <strong>{deleteConfirmation.questionCount}</strong> question(s) associated with it.
+                </p>
+                <p>
+                  Deleting this Learning Objective will also <strong>permanently delete all {deleteConfirmation.questionCount} question(s)</strong>.
+                </p>
+                <p style={{ marginTop: '16px' }}>
+                  Are you sure you want to continue?
+                </p>
+                <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="dontShowAgain"
+                    checked={dontShowDeleteWarning}
+                    onChange={(e) => handleDontShowAgainChange(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="dontShowAgain" style={{ cursor: 'pointer', fontSize: '14px' }}>
+                    Don't show this warning again
+                  </label>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={handleCancelDelete}>
+                  Cancel
+                </button>
+                <button className="btn btn-danger" onClick={handleConfirmDelete}>
+                  Delete Learning Objective and {deleteConfirmation.questionCount} Question(s)
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
   );

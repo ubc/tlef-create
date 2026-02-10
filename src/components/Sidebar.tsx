@@ -18,7 +18,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const { activeCourse, activeQuiz, currentUser } = useAppSelector((state) => state.app);
+  const { activeCourse, activeQuiz } = useAppSelector((state) => state.app);
   const { subscribe, publish } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -68,12 +68,10 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
   // Listen for course deletion events
   useEffect(() => {
-    subscribe('course-deleted', (data: any) => {
-      console.log('🗑️ Sidebar: Received course-deleted event:', data);
+    subscribe<{ courseId: string }>('course-deleted', (data) => {
       if (data?.courseId) {
         // Remove the deleted course from the sidebar
         setFolders(prev => prev.filter(folder => folder._id !== data.courseId));
-        console.log('✅ Sidebar: Course removed from list:', data.courseId);
       }
     });
     // Cleanup is automatically handled by usePubSub hook
@@ -81,8 +79,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
   // Listen for quiz deletion events
   useEffect(() => {
-    subscribe('quiz-deleted', (data: any) => {
-      console.log('🗑️ Sidebar: Received quiz-deleted event:', data);
+    subscribe<{ quizId: string; courseId: string }>('quiz-deleted', () => {
       // Reload folders to get updated quiz list
       loadFolders();
     });
@@ -102,10 +99,8 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   }, []);
 
   const loadFolders = async () => {
-    console.log('🔄 Sidebar: Loading folders from API...');
     try {
       const response = await foldersApi.getFolders();
-      console.log('✅ Sidebar: Folders loaded:', response.folders);
       setFolders(response.folders);
     } catch (err) {
       console.error('❌ Sidebar: Failed to load folders:', err);
@@ -135,21 +130,15 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
-  const handleCreateCourse = async (courseName: string, materials: any[] = []) => {
-    console.log('➕ Sidebar: Creating folder:', courseName, 'with default Quiz 1 and', materials.length, 'materials');
+  const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = []) => {
     try {
       const response = await foldersApi.createFolder(courseName, 1);
-      console.log('✅ Sidebar: Folder created with Quiz 1:', response.folder);
 
       // Immediately add the new folder to the sidebar state
       setFolders(prev => [response.folder, ...prev]);
-      console.log('📋 Sidebar: Added new folder to state immediately');
 
       // Upload materials to the created folder
       if (materials.length > 0) {
-        console.log('📁 Uploading materials to folder:', materials);
-        console.log('📁 Folder ID for upload:', response.folder._id);
-
         // Separate materials by type
         const fileMaterials = materials.filter(m => m.type === 'pdf' || m.type === 'docx');
         const urlMaterials = materials.filter(m => m.type === 'url');
@@ -157,26 +146,19 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
         // Upload all files at once with progress tracking
         if (fileMaterials.length > 0) {
-          console.log(`📄 Uploading ${fileMaterials.length} files together`);
           const files = fileMaterials.map(m => m.file).filter(Boolean) as File[];
           if (files.length > 0) {
-            console.log(`📋 Files to upload:`, files.map(f => ({ name: f.name, size: f.size, type: f.type })));
-
             // Create a DataTransfer object to convert File[] to FileList
             const dataTransfer = new DataTransfer();
             files.forEach(file => {
-              console.log(`➕ Adding file to DataTransfer: ${file.name}`);
               dataTransfer.items.add(file);
             });
 
-            console.log(`📤 Sending ${dataTransfer.files.length} files to API with progress tracking`);
-
             // Upload with progress callback
-            const uploadResponse = await materialsApi.uploadFiles(
+            await materialsApi.uploadFiles(
               response.folder._id,
               dataTransfer.files,
               (progress) => {
-                console.log(`📤 Upload progress: ${progress}%`);
                 // Publish progress event for UI feedback (can be used by toast notifications, etc.)
                 publish('upload-progress', {
                   courseId: response.folder._id,
@@ -186,15 +168,12 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
               }
             );
 
-            console.log(`✅ Upload response:`, uploadResponse);
-            console.log(`✅ Uploaded ${uploadResponse.materials?.length || 0} materials successfully`);
           }
         }
 
         // Upload URLs one by one (they need individual names)
         for (const material of urlMaterials) {
           try {
-            console.log('🔗 Adding URL:', material.content || material.name);
             await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
           } catch (materialError) {
             console.error('❌ Failed to upload URL material:', material.name, materialError);
@@ -204,14 +183,11 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
         // Upload text materials one by one (they need individual content and names)
         for (const material of textMaterials) {
           try {
-            console.log('📝 Adding text material:', material.name);
             await materialsApi.addText(response.folder._id, material.content || '', material.name);
           } catch (materialError) {
             console.error('❌ Failed to upload text material:', material.name, materialError);
           }
         }
-
-        console.log('✅ All materials processed');
 
         // Reload folders to update material counts
         await loadFolders();
@@ -225,7 +201,6 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       dispatch(setActiveCourse(newCourseId));
       setExpandedCourses(prev => [...prev, newCourseId]);
       navigate(`/course/${newCourseId}`);
-      console.log(`✅ Navigated to newly created course: ${newCourseId}`);
     } catch (err) {
       console.error('❌ Sidebar: Failed to create folder:', err);
       if (err instanceof ApiError) {
@@ -255,8 +230,9 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       // Generate a name for the new quiz
       // Find the lowest available quiz number
       const existingNumbers = folder.quizzes
-        ?.map((q: any) => {
-          const match = q.name?.match(/^Quiz (\d+)$/);
+        ?.map((q: string | { _id: string; name?: string; questions?: string[] }) => {
+          const quizName = typeof q === 'string' ? null : q.name;
+          const match = quizName?.match(/^Quiz (\d+)$/);
           return match ? parseInt(match[1]) : 0;
         })
         .filter((n: number) => n > 0) || [];
@@ -272,8 +248,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       
       // Reload folders to get the updated quiz list
       await loadFolders();
-      
-      console.log('✅ Sidebar: Quiz created successfully:', response.quiz);
+
+      // Publish quiz-created event for CourseView to refresh
+      publish('quiz-created', { 
+        quizId: response.quiz._id, 
+        courseId: folderId,
+        quizName: response.quiz.name 
+      });
       
     } catch (err) {
       console.error('❌ Sidebar: Failed to create quiz:', err);
@@ -352,10 +333,10 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
                       {expandedCourses.includes(folder._id) && folder.quizzes && (
                           <div className="quiz-list">
-                            {folder.quizzes.map((quiz: any) => {
-                              const quizId = quiz._id || quiz;
-                              const quizName = quiz.name || `Quiz ${quizId}`;
-                              const questionCount = quiz.questions?.length || 0;
+                            {folder.quizzes.map((quiz: string | { _id: string; name?: string; questions?: string[] }) => {
+                              const quizId = typeof quiz === 'string' ? quiz : quiz._id;
+                              const quizName = typeof quiz === 'string' ? `Quiz ${quiz}` : (quiz.name || `Quiz ${quizId}`);
+                              const questionCount = typeof quiz === 'string' ? 0 : (quiz.questions?.length || 0);
                               
                               return (
                                 <div
@@ -397,7 +378,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                 onClick={handleUserAccountClick}
             >
               <User size={20} />
-              <span>{currentUser || 'Guest User'}</span>
+              <span>Guest User</span>
             </div>
           </div>
         </div>

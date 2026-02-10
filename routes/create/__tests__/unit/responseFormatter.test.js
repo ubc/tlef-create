@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { successResponse, errorResponse, notFoundResponse, unauthorizedResponse } from '../../utils/responseFormatter.js';
 
 describe('Response Formatter Utils', () => {
@@ -43,12 +43,11 @@ describe('Response Formatter Utils', () => {
       });
     });
 
-    test('should handle null data', () => {
+    test('should omit data field when data is null', () => {
       successResponse(mockRes, null, 'Success');
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: null,
         message: 'Success',
         timestamp: expect.any(String)
       });
@@ -135,7 +134,7 @@ describe('Response Formatter Utils', () => {
         success: false,
         error: {
           code: 'AUTH_ERROR',
-          message: 'Unauthorized',
+          message: 'Unauthorized access',
           timestamp: expect.any(String)
         }
       });

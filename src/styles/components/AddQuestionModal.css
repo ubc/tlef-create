@@ -1,0 +1,374 @@
+/* Add Question Modal Styles */
+.add-question-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-question-modal .modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.add-question-modal .modal-content {
+  position: relative;
+  background: var(--color-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 1001;
+}
+
+.add-question-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.add-question-modal .modal-header h3 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+/* Mode Selector */
+.mode-selector {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-muted);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-muted);
+}
+
+.mode-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* Modal Body */
+.modal-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Form Styles */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.form-field {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-field label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin-bottom: var(--spacing-xs);
+}
+
+.field-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted-foreground);
+  margin-top: var(--spacing-xs);
+  font-style: italic;
+}
+
+/* AI Mode Specific */
+.ai-mode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Modal Footer */
+.modal-footer {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  padding: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* Reuse ReviewEdit styles for question editors */
+/* Multiple Choice Editor */
+.multiple-choice-editor {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  background-color: var(--color-background);
+}
+
+.option-editor {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-muted);
+}
+
+.option-input-group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.option-radio {
+  margin-top: var(--spacing-sm);
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.option-text-input {
+  flex: 1;
+  min-height: 50px;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.option-text-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.remove-option {
+  flex-shrink: 0;
+  color: var(--color-destructive);
+  padding: var(--spacing-xs);
+}
+
+.remove-option:hover:not(:disabled) {
+  background-color: var(--color-destructive);
+  color: var(--color-destructive-foreground);
+}
+
+.option-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-success);
+  margin-left: 26px;
+  font-weight: 600;
+}
+
+.add-option {
+  margin-top: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  justify-content: center;
+  padding: var(--spacing-sm);
+  border: 1px dashed var(--color-border);
+  background-color: transparent;
+}
+
+.add-option:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-muted);
+}
+
+/* True/False Editor */
+.true-false-editor {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+}
+
+.tf-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  justify-content: center;
+}
+
+.tf-option:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light);
+}
+
+.tf-option.selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.tf-option input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.tf-label {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Summary KeyPoints Editor */
+.summary-keypoints-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+}
+
+.keypoint-editor {
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-muted);
+}
+
+.keypoint-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.keypoint-header strong {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+}
+
+.remove-keypoint {
+  padding: var(--spacing-xs);
+  color: var(--color-destructive);
+}
+
+.remove-keypoint:hover:not(:disabled) {
+  background-color: var(--color-destructive);
+  color: var(--color-destructive-foreground);
+}
+
+.keypoint-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.keypoint-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.keypoint-explanation {
+  min-height: 80px;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.add-keypoint {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border: 1px dashed var(--color-border);
+  background-color: transparent;
+}
+
+.add-keypoint:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-muted);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .add-question-modal .modal-content {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .mode-selector {
+    flex-direction: column;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
+
+  .true-false-editor {
+    flex-direction: column;
+  }
+}

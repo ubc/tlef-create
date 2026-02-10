@@ -7,6 +7,7 @@ export const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  GONE: 410,
   INTERNAL_SERVER_ERROR: 500,
   SERVICE_UNAVAILABLE: 503
 };
@@ -18,7 +19,8 @@ export const ERROR_CODES = {
   DUPLICATE_RESOURCE: 'DUPLICATE_RESOURCE',
   FILE_UPLOAD_ERROR: 'FILE_UPLOAD_ERROR',
   AI_SERVICE_ERROR: 'AI_SERVICE_ERROR',
-  DATABASE_ERROR: 'DATABASE_ERROR'
+  DATABASE_ERROR: 'DATABASE_ERROR',
+  INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR'
 };
 
 export const MATERIAL_TYPES = {
@@ -106,15 +108,18 @@ export const FILE_CONFIG = {
 export const RATE_LIMITS = {
   AUTH: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 50 : 5 // Higher limit for development
+    // Development and staging: 200, Production: 5
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 5 : 200
   },
   API: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'development' ? 1000 : 100 // Much higher limit for development
+    // Development and staging: 5000, Production: 100
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 100 : 5000
   },
   UPLOAD: {
     windowMs: 60 * 1000, // 1 minute
-    max: 10 // limit each IP to 10 uploads per minute
+    // Development and staging: 50, Production: 10
+    max: process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL?.includes('staging') ? 10 : 50
   }
 };
 

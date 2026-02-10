@@ -9,7 +9,7 @@ import createRoutes from './routes/create/createRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
 import mongoose from 'mongoose';
-import StorageMonitor from './routes/create/services/storageMonitor.js';
+
 
 // ES6 __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +32,19 @@ connectDB().catch(err => {
     process.exit(1);
   }
 });
+
+// Initialize RAG service on server startup
+console.log('🔧 Initializing RAG service...');
+import('./routes/create/services/ragService.js')
+  .then(module => {
+    const ragService = module.default;
+    console.log('✅ RAG service import successful');
+    // The service will initialize itself asynchronously
+  })
+  .catch(err => {
+    console.error('❌ Failed to import RAG service:', err.message);
+    console.error('💡 RAG features may not work properly');
+  });
 
 const app = express();
 const PORT = process.env.PORT || 7736;
@@ -182,10 +195,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📡 Health check available at http://localhost:${PORT}/health`);
   console.log(`🎯 CREATE app API available at http://localhost:${PORT}/api/create`);
   
-  // Start storage monitoring (only in production to avoid development clutter)
-  if (process.env.NODE_ENV === 'production') {
-    StorageMonitor.startMonitoring();
-  }
 });
 
 // Graceful shutdown

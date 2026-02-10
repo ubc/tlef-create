@@ -32,7 +32,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   // Listen for upload progress events from Sidebar
   useEffect(() => {
     const handleUploadProgress = (data: { progress: number }) => {
-      console.log('📊 Upload progress received:', data.progress);
       setUploadProgress(data.progress);
     };
 
@@ -55,7 +54,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
     onProgress?: (progress: number) => void
   ) => {
-    console.log('➕ CreateCourseModal: Adding material:', material);
     const newMaterial: Material = {
       id: Date.now().toString(),
       name: material.name,
@@ -66,7 +64,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       isUploading: false,
       uploadProgress: 0
     };
-    console.log('✅ CreateCourseModal: Material created:', newMaterial);
     setMaterials([...materials, newMaterial]);
 
     // Note: Actual upload happens when course is created in Sidebar.tsx
@@ -83,6 +80,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       setUploadProgress(0);
       try {
         await onSubmit(courseName.trim(), materials);
+
         resetModal();
         onClose();
       } catch (error) {

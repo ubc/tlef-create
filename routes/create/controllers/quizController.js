@@ -160,7 +160,12 @@ router.put('/:id', authenticateToken, validateUpdateQuiz, asyncHandler(async (re
       if (field === 'name') {
         quiz[field] = updates[field].trim();
       } else if (field === 'settings') {
-        quiz.settings = { ...quiz.settings, ...updates.settings };
+        // Merge only provided settings keys to avoid setting undefined on subdocuments
+        for (const [key, value] of Object.entries(updates.settings)) {
+          if (value !== undefined) {
+            quiz.settings[key] = value;
+          }
+        }
       }
     }
   });

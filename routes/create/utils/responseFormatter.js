@@ -31,6 +31,7 @@ export const successResponse = (res, data = null, message = 'Success', statusCod
  */
 export const errorResponse = (res, message = 'An error occurred', code = ERROR_CODES.INTERNAL_SERVER_ERROR, statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR, details = null) => {
   const response = {
+    success: false,
     error: {
       code,
       message,

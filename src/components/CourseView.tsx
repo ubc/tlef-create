@@ -45,7 +45,6 @@ const CourseView = () => {
   // Listen for quiz deletion events
   useEffect(() => {
     const handleQuizDeleted = (data: { quizId: string; courseId: string }) => {
-      console.log('📢 CourseView: Received quiz-deleted event', data);
       // Refresh course data to get updated quiz list
       if (data.courseId === courseId) {
         loadCourseData();
@@ -53,6 +52,18 @@ const CourseView = () => {
     };
 
     subscribe('quiz-deleted', handleQuizDeleted);
+  }, [courseId, subscribe]);
+
+  // Listen for quiz creation events
+  useEffect(() => {
+    const handleQuizCreated = (data: { quizId: string; courseId: string; quizName: string }) => {
+      // Refresh course data to get updated quiz list
+      if (data.courseId === courseId) {
+        loadCourseData();
+      }
+    };
+
+    subscribe('quiz-created', handleQuizCreated);
   }, [courseId, subscribe]);
 
   // Poll for material processing status
@@ -91,7 +102,7 @@ const CourseView = () => {
             }
           }
         } catch (err) {
-          console.error('❌ Failed to poll material status:', err);
+          console.error('Failed to poll material status:', err);
         }
       }, 2000);
     } else {
@@ -113,45 +124,31 @@ const CourseView = () => {
   const loadCourseData = async () => {
     if (!courseId) return;
 
-    console.log('🔄 CourseView: Loading course data for:', courseId);
-
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.warn('⏱️ CourseView: API call timeout - taking longer than expected');
-      // Don't set error, just log warning - let the request complete
-    }, 10000); // 10 second warning
-
     try {
       setError(null);
 
       // Load folder details
       const folderResponse = await foldersApi.getFolder(courseId);
-      console.log('✅ CourseView: Folder loaded:', folderResponse.folder);
 
       // Load materials for this folder
       const materialsResponse = await materialsApi.getMaterials(courseId);
-      console.log('✅ CourseView: Materials loaded:', materialsResponse.materials);
       setMaterials(materialsResponse.materials);
 
       // Transform backend data to match your UI structure
       const course: CourseData = {
         id: folderResponse.folder._id,
         name: folderResponse.folder.name,
-        quizzes: folderResponse.folder.quizzes?.map((quiz: any) => ({
-          id: quiz._id || quiz,
-          name: quiz.name || `Quiz ${quiz.name?.split(' ')[1] || '1'}`,
-          questionCount: quiz.questions?.length || 0
+        quizzes: folderResponse.folder.quizzes?.map((quiz: string | { _id: string; name?: string; questions?: string[] }) => ({
+          id: typeof quiz === 'string' ? quiz : quiz._id,
+          name: typeof quiz === 'string' ? `Quiz 1` : (quiz.name || `Quiz ${quiz.name?.split(' ')[1] || '1'}`),
+          questionCount: typeof quiz === 'string' ? 0 : (quiz.questions?.length || 0)
         })) || []
       };
 
       setCourse(course);
-      console.log('✅ CourseView: Course data structured:', course);
-
-      clearTimeout(timeoutId);
 
     } catch (err) {
-      clearTimeout(timeoutId);
-      console.error('❌ CourseView: Failed to load course data:', err);
+      console.error('Failed to load course data:', err);
       if (err instanceof ApiError) {
         if (err.isNotFoundError()) {
           setError('Course not found');
@@ -194,7 +191,6 @@ const CourseView = () => {
   ) => {
     if (!course) return;
 
-    console.log('➕ CourseView: Adding material:', materialData);
     try {
       let response;
 
@@ -213,7 +209,6 @@ const CourseView = () => {
           course.id,
           fileList.files,
           (progress) => {
-            console.log(`📤 Upload progress for ${materialData.name}: ${progress}%`);
             if (onProgress) {
               onProgress(progress);
             }
@@ -223,18 +218,9 @@ const CourseView = () => {
         setMaterials(prev => [...prev, ...response.materials]);
       }
 
-      console.log('✅ CourseView: Material added successfully');
 
     } catch (err) {
-      console.error('❌ CourseView: Failed to add material:', err);
-      console.error('❌ Error details:', {
-        name: err.name,
-        message: err.message,
-        status: err.status,
-        code: err.code,
-        isApiError: err instanceof ApiError,
-        isAuthError: err instanceof ApiError ? err.isAuthError() : false
-      });
+      console.error('Failed to add material:', err);
 
       if (err instanceof ApiError) {
         if (err.isAuthError()) {
@@ -251,17 +237,15 @@ const CourseView = () => {
   };
 
   const handleDeleteMaterial = async (materialId: string) => {
-    console.log('🗑️ CourseView: Deleting material:', materialId);
     try {
       // Find the material by the frontend ID (which is _id from backend)
       const materialToDelete = materials.find(m => m._id === materialId);
       if (materialToDelete) {
         await materialsApi.deleteMaterial(materialToDelete._id);
         setMaterials(prev => prev.filter(m => m._id !== materialId));
-        console.log('✅ CourseView: Material deleted successfully');
       }
     } catch (err) {
-      console.error('❌ CourseView: Failed to delete material:', err);
+      console.error('Failed to delete material:', err);
       if (err instanceof ApiError) {
         alert(`Failed to delete material: ${err.message}`);
       } else {
@@ -278,12 +262,10 @@ const CourseView = () => {
     if (!course || !courseId) return;
 
     setIsDeleting(true);
-    console.log('🗑️ CourseView: Deleting course:', courseId);
 
     try {
       // Call the API to delete the course (this will cascade delete everything)
       await foldersApi.deleteFolder(courseId);
-      console.log('✅ CourseView: Course deleted successfully');
 
       // Notify Dashboard to remove course from sidebar
       publish('course-deleted', { courseId });
@@ -292,7 +274,7 @@ const CourseView = () => {
       navigate('/');
 
     } catch (err) {
-      console.error('❌ CourseView: Failed to delete course:', err);
+      console.error('Failed to delete course:', err);
       setIsDeleting(false);
       setShowDeleteConfirm(false);
       

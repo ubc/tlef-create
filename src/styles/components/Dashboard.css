@@ -127,14 +127,13 @@
 
 .step-list {
     list-style: none;
-    padding: 0;
-    margin: 0 var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
+    padding: 0 var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
+    margin: 0;
     counter-reset: step-counter;
-    min-width: 600px;
-    max-width: 1200px;
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+    box-sizing: border-box;
 }
 
 .step-item {
@@ -153,10 +152,6 @@
 .step-item:hover {
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
-}
-
-.step-item:last-child {
-    /* No special styling needed since we're using flexbox gap */
 }
 
 .step-item::before {
@@ -309,6 +304,16 @@
     gap: var(--spacing-xs);
 }
 
+@media (max-width: 1024px) {
+    .step-list {
+        padding: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+    }
+
+    .step-item {
+        gap: var(--spacing-md);
+    }
+}
+
 @media (max-width: 768px) {
     .dashboard-header {
         flex-direction: column;
@@ -360,9 +365,7 @@
     }
 
     .step-list {
-        max-width: 100%;
-        min-width: unset;
-        margin: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
+        padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
         gap: var(--spacing-sm);
     }
 

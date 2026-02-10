@@ -33,6 +33,7 @@ export const authenticateToken = async (req, res, next) => {
     // No valid authentication found
     console.log('❌ No valid authentication found');
     return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+      success: false,
       error: {
         code: ERROR_CODES.AUTH_ERROR,
         message: 'Authentication required - please log in',

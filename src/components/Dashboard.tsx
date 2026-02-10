@@ -17,46 +17,24 @@ const Dashboard = () => {
 
   // Listen for course deletion events
   useEffect(() => {
-    subscribe('course-deleted', (data: any) => {
-      console.log('🗑️ Dashboard: Received course-deleted event:', data);
+    subscribe<{ courseId: string }>('course-deleted', (data) => {
       if (data?.courseId) {
         // Remove the deleted course from the sidebar
         setFolders(prev => prev.filter(folder => folder._id !== data.courseId));
-        console.log('✅ Dashboard: Course removed from sidebar:', data.courseId);
       }
     });
     // Cleanup is automatically handled by usePubSub hook
   }, [subscribe]);
 
   const loadFolders = async () => {
-    console.log('🔄 Loading folders from API...');
     try {
       setError(null);
       const response = await foldersApi.getFolders();
-      console.log('✅ Folders API response:', response);
-      console.log('📁 Number of folders received:', response.folders?.length || 0);
-      console.log('📋 Folder details:', response.folders);
-      
-      // Debug folder stats
-      console.log('📊 DASHBOARD DEBUG - Folder Stats Analysis:');
-      response.folders?.forEach((folder, index) => {
-        console.log(`  Folder ${index + 1}: ${folder.name}`);
-        console.log(`    - stats object:`, folder.stats);
-        console.log(`    - totalQuestions:`, folder.stats?.totalQuestions || 0);
-        console.log(`    - totalQuizzes:`, folder.stats?.totalQuizzes || 0);
-        console.log(`    - totalMaterials:`, folder.stats?.totalMaterials || 0);
-      });
-      
+
       setFolders(response.folders);
     } catch (err) {
-      console.error('❌ Failed to load folders:', err);
+      console.error('Failed to load folders:', err);
       if (err instanceof ApiError) {
-        console.error('🚨 API Error details:', {
-          status: err.status,
-          code: err.code,
-          message: err.message,
-          details: err.details
-        });
         if (err.isAuthError()) {
           setError('Please log in again to continue');
         } else {
@@ -74,27 +52,7 @@ const Dashboard = () => {
   const totalQuizzes = folders?.reduce((total, folder) => total + (folder.stats?.totalQuizzes || 0), 0) || 0;
   const totalQuestions = folders?.reduce((total, folder) => total + (folder.stats?.totalQuestions || 0), 0) || 0;
   const totalMaterials = folders?.reduce((total, folder) => total + (folder.stats?.totalMaterials || 0), 0) || 0;
-  
-  // Debug the calculations
-  console.log('📊 DASHBOARD DEBUG - Stats Calculations:');
-  console.log('  folders array:', folders);
-  console.log('  folders length:', folders?.length || 0);
-  console.log('  totalQuizzes calculated:', totalQuizzes);
-  console.log('  totalQuestions calculated:', totalQuestions);
-  console.log('  totalMaterials calculated:', totalMaterials);
-  
-  // Show breakdown of question calculation
-  if (folders && folders.length > 0) {
-    console.log('📊 DASHBOARD DEBUG - Question Count Breakdown:');
-    let runningTotal = 0;
-    folders.forEach((folder, index) => {
-      const folderQuestions = folder.stats?.totalQuestions || 0;
-      runningTotal += folderQuestions;
-      console.log(`  ${folder.name}: ${folderQuestions} questions (running total: ${runningTotal})`);
-    });
-    console.log(`  FINAL TOTAL QUESTIONS: ${runningTotal}`);
-  }
-  
+
   // Calculate time saved (5 minutes per question)
   const totalMinutes = totalQuestions * 5;
   const formatTimeSaved = (minutes: number) => {

@@ -1139,9 +1139,14 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
    * @param {Array} materials - Course materials
    * @param {String} courseContext - Course context string
    * @param {Number} targetCount - Target number of objectives
+   * @param {Object} userPreferences - User preferences for LLM
+   * @param {String} customPrompt - Optional custom prompt to guide generation
    */
-  async generateLearningObjectives(materials, courseContext = '', targetCount = null) {
+  async generateLearningObjectives(materials, courseContext = '', targetCount = null, userPreferences = null, customPrompt = null) {
     console.log(`🎯 Generating learning objectives from ${materials.length} materials`);
+    if (customPrompt) {
+      console.log(`📝 Custom prompt provided: ${customPrompt}`);
+    }
 
     if (!this.llm) {
       throw new Error('LLM service not initialized. Please check LLM configuration.');
@@ -1222,12 +1227,13 @@ EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", t
     }
 
     const countInstruction = targetCount ? `exactly ${targetCount}` : '4-6';
+    const customInstructions = customPrompt ? `\n\nAdditional Instructions from User:\n${customPrompt}` : '';
     const prompt = `You are an educational expert helping to create learning objectives for a university course. Based on the provided course materials, generate ${countInstruction} specific, measurable learning objectives that students should achieve.
 
 Course Materials:
 ${materialsContent}
 
-${courseContext ? `Course Context: ${courseContext}` : ''}
+${courseContext ? `Course Context: ${courseContext}` : ''}${customInstructions}
 
 Please generate learning objectives that:
 1. Use action verbs (analyze, evaluate, create, apply, etc.)

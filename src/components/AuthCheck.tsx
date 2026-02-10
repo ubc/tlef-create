@@ -23,7 +23,7 @@ const AuthCheck = ({ children }: AuthCheckProps) => {
 
   const checkAuth = async () => {
     try {
-      const response = await apiClient.get<{ authenticated: boolean; user?: any }>('/auth/me');
+      const response = await apiClient.get<{ authenticated: boolean; user?: Record<string, unknown> }>('/auth/me');
       setAuthStatus({
         authenticated: response.authenticated,
         loading: false

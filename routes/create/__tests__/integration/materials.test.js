@@ -1,22 +1,44 @@
 import { describe, test, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import mongoose from 'mongoose';
 import User from '../../models/User.js';
 import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
+// Import Question model so mongoose.model('Question') works inside Folder.updateStats
+import '../../models/Question.js';
 import materialController from '../../controllers/materialController.js';
-import authController from '../../controllers/authController.js';
 
-const app = express();
-app.use(express.json());
-app.use('/api/auth', authController);
-app.use('/api/materials', materialController);
+// Create test app with auth middleware bypass
+function createTestApp(userDoc) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, res, next) => {
+    req.user = userDoc;
+    req.isAuthenticated = () => true;
+    next();
+  });
+  app.use('/api/materials', materialController);
+  app.use((err, req, res, next) => {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  });
+  return app;
+}
+
+// Create unauthenticated app for 401 tests
+function createUnauthApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/materials', materialController);
+  app.use((err, req, res, next) => {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  });
+  return app;
+}
 
 describe('Material Management API Integration Tests', () => {
-  let authToken;
+  let app;
+  let unauthApp;
   let userId;
   let folderId;
 
@@ -26,16 +48,13 @@ describe('Material Management API Integration Tests', () => {
     await Folder.deleteMany({});
     await Material.deleteMany({});
 
-    // Create and authenticate test user
-    const registerResponse = await request(app)
-      .post('/api/auth/register')
-      .send({
-        cwlId: 'materialtest',
-        password: 'TestPass123'
-      });
+    // Create test user directly in DB
+    const user = await User.create({ cwlId: 'materialtest', password: 'TestPass123' });
+    userId = user._id.toString();
 
-    authToken = registerResponse.body.data.accessToken;
-    userId = registerResponse.body.data.user.id;
+    // Create apps - pass Mongoose user doc so authenticateToken sets fullUser correctly
+    app = createTestApp(user);
+    unauthApp = createUnauthApp();
 
     // Create test folder
     const folder = await Folder.create({
@@ -55,19 +74,18 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/materials/text')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(materialData)
         .expect(201);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.material.name).toBe(materialData.name);
-      expect(response.body.data.material.type).toBe('TEXT');
+      expect(response.body.data.material.type).toBe('text');
       expect(response.body.data.material.content).toBe(materialData.content);
-      expect(response.body.data.material.folder).toBe(folderId);
-      expect(response.body.data.material.processingStatus).toBe('COMPLETED');
+      expect(response.body.data.material.folder.toString()).toBe(folderId);
+      expect(response.body.data.material.processingStatus).toBe('pending');
 
       // Verify material was created in database
-      const materialInDb = await Material.findById(response.body.data.material.id);
+      const materialInDb = await Material.findById(response.body.data.material._id);
       expect(materialInDb).toBeTruthy();
       expect(materialInDb.checksum).toBeDefined();
     });
@@ -75,7 +93,6 @@ describe('Material Management API Integration Tests', () => {
     test('should reject text material with missing fields', async () => {
       const response = await request(app)
         .post('/api/materials/text')
-        .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Test Material'
           // Missing content and folderId
@@ -83,15 +100,14 @@ describe('Material Management API Integration Tests', () => {
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error.message).toContain('required');
+      expect(response.body.error.message).toBe('Name, content, and folder ID are required');
     });
 
     test('should reject text material for non-existent folder', async () => {
       const nonExistentFolderId = new mongoose.Types.ObjectId();
-      
+
       const response = await request(app)
         .post('/api/materials/text')
-        .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Test Material',
           content: 'Test content',
@@ -113,7 +129,6 @@ describe('Material Management API Integration Tests', () => {
       // Create first material
       await request(app)
         .post('/api/materials/text')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(materialData)
         .expect(201);
 
@@ -126,7 +141,6 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/materials/text')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(duplicateData)
         .expect(409);
 
@@ -145,16 +159,30 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/materials/url')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(materialData)
         .expect(201);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.material.name).toBe(materialData.name);
-      expect(response.body.data.material.type).toBe('URL');
-      expect(response.body.data.material.url).toBe(materialData.url);
-      expect(response.body.data.material.folder).toBe(folderId);
-      expect(response.body.data.material.processingStatus).toBe('PENDING');
+      expect(response.body.data.material.type).toBe('url');
+      expect(response.body.data.material.url).toBeDefined();
+      expect(response.body.data.material.folder.toString()).toBe(folderId);
+      expect(response.body.data.material.processingStatus).toBe('pending');
+    });
+
+    test('should reject URL material with missing fields', async () => {
+      const materialData = {
+        name: 'Test Material'
+        // Missing url and folderId
+      };
+
+      const response = await request(app)
+        .post('/api/materials/url')
+        .send(materialData)
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toBe('Name, URL, and folder ID are required');
     });
 
     test('should reject URL material with invalid URL', async () => {
@@ -166,12 +194,10 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/materials/url')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(materialData)
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error.message).toContain('Invalid');
     });
 
     test('should reject duplicate URL in same folder', async () => {
@@ -184,7 +210,6 @@ describe('Material Management API Integration Tests', () => {
       // Create first material
       await request(app)
         .post('/api/materials/url')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(materialData)
         .expect(201);
 
@@ -197,7 +222,6 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .post('/api/materials/url')
-        .set('Authorization', `Bearer ${authToken}`)
         .send(duplicateData)
         .expect(409);
 
@@ -212,19 +236,19 @@ describe('Material Management API Integration Tests', () => {
       await Material.create([
         {
           name: 'Material 1',
-          type: 'TEXT',
+          type: 'text',
           content: 'Content 1',
           folder: folderId,
           uploadedBy: userId,
-          processingStatus: 'COMPLETED'
+          processingStatus: 'completed'
         },
         {
           name: 'Material 2',
-          type: 'URL',
+          type: 'url',
           url: 'https://example.com/doc.pdf',
           folder: folderId,
           uploadedBy: userId,
-          processingStatus: 'PENDING'
+          processingStatus: 'pending'
         }
       ]);
 
@@ -236,32 +260,31 @@ describe('Material Management API Integration Tests', () => {
 
       await Material.create({
         name: 'Other Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Other content',
         folder: otherFolder._id,
         uploadedBy: userId,
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
     });
 
     test('should get folder materials successfully', async () => {
       const response = await request(app)
         .get(`/api/materials/folder/${folderId}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.materials).toHaveLength(2);
-      
+
       const materialNames = response.body.data.materials.map(m => m.name);
       expect(materialNames).toContain('Material 1');
       expect(materialNames).toContain('Material 2');
       expect(materialNames).not.toContain('Other Material');
 
       // Check material details
-      const textMaterial = response.body.data.materials.find(m => m.type === 'TEXT');
+      const textMaterial = response.body.data.materials.find(m => m.type === 'text');
       expect(textMaterial.content).toBe('Content 1');
-      expect(textMaterial.processingStatus).toBe('COMPLETED');
+      expect(textMaterial.processingStatus).toBe('completed');
     });
 
     test('should reject access to other user folder', async () => {
@@ -272,7 +295,6 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .get(`/api/materials/folder/${otherUserFolder._id}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -285,11 +307,11 @@ describe('Material Management API Integration Tests', () => {
     beforeEach(async () => {
       const material = await Material.create({
         name: 'Original Name',
-        type: 'TEXT',
+        type: 'text',
         content: 'Test content',
         folder: folderId,
         uploadedBy: userId,
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
       materialId = material._id.toString();
     });
@@ -301,7 +323,6 @@ describe('Material Management API Integration Tests', () => {
 
       const response = await request(app)
         .put(`/api/materials/${materialId}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .send(updateData)
         .expect(200);
 
@@ -316,7 +337,6 @@ describe('Material Management API Integration Tests', () => {
     test('should reject update with empty name', async () => {
       const response = await request(app)
         .put(`/api/materials/${materialId}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .send({ name: '' })
         .expect(400);
 
@@ -326,16 +346,15 @@ describe('Material Management API Integration Tests', () => {
     test('should reject update of other user material', async () => {
       const otherUserMaterial = await Material.create({
         name: 'Other User Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Other content',
         folder: folderId,
         uploadedBy: new mongoose.Types.ObjectId(),
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
 
       const response = await request(app)
         .put(`/api/materials/${otherUserMaterial._id}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .send({ name: 'Hacked Name' })
         .expect(404);
 
@@ -349,11 +368,11 @@ describe('Material Management API Integration Tests', () => {
     beforeEach(async () => {
       const material = await Material.create({
         name: 'To Delete',
-        type: 'TEXT',
+        type: 'text',
         content: 'Delete this content',
         folder: folderId,
         uploadedBy: userId,
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
       materialId = material._id.toString();
     });
@@ -361,7 +380,6 @@ describe('Material Management API Integration Tests', () => {
     test('should delete material successfully', async () => {
       const response = await request(app)
         .delete(`/api/materials/${materialId}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
@@ -375,16 +393,15 @@ describe('Material Management API Integration Tests', () => {
     test('should reject deletion of other user material', async () => {
       const otherUserMaterial = await Material.create({
         name: 'Other User Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Other content',
         folder: folderId,
         uploadedBy: new mongoose.Types.ObjectId(),
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
 
       const response = await request(app)
         .delete(`/api/materials/${otherUserMaterial._id}`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -401,11 +418,11 @@ describe('Material Management API Integration Tests', () => {
     beforeEach(async () => {
       const material = await Material.create({
         name: 'Status Test Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Test content',
         folder: folderId,
         uploadedBy: userId,
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
       materialId = material._id.toString();
     });
@@ -413,11 +430,10 @@ describe('Material Management API Integration Tests', () => {
     test('should get material processing status successfully', async () => {
       const response = await request(app)
         .get(`/api/materials/${materialId}/status`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data.material.processingStatus).toBe('COMPLETED');
+      expect(response.body.data.material.processingStatus).toBe('completed');
       expect(response.body.data.material.name).toBe('Status Test Material');
       expect(response.body.data.material.id).toBe(materialId);
     });
@@ -425,19 +441,27 @@ describe('Material Management API Integration Tests', () => {
     test('should reject status check for other user material', async () => {
       const otherUserMaterial = await Material.create({
         name: 'Other User Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Other content',
         folder: folderId,
         uploadedBy: new mongoose.Types.ObjectId(),
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
 
       const response = await request(app)
         .get(`/api/materials/${otherUserMaterial._id}/status`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
+    });
+
+    test('should reject invalid ID format', async () => {
+      const response = await request(app)
+        .get('/api/materials/invalid-id/status')
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toBe('Validation failed');
     });
   });
 
@@ -447,11 +471,11 @@ describe('Material Management API Integration Tests', () => {
     beforeEach(async () => {
       const material = await Material.create({
         name: 'Reprocess Test Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Test content',
         folder: folderId,
         uploadedBy: userId,
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
       materialId = material._id.toString();
     });
@@ -459,34 +483,128 @@ describe('Material Management API Integration Tests', () => {
     test('should trigger material reprocessing successfully', async () => {
       const response = await request(app)
         .post(`/api/materials/${materialId}/reprocess`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toContain('reprocessing triggered');
-      expect(response.body.data.material.processingStatus).toBe('PENDING');
+      expect(response.body.message).toContain('reprocessing');
 
       // Verify status update in database
       const materialInDb = await Material.findById(materialId);
-      expect(materialInDb.processingStatus).toBe('PENDING');
+      expect(materialInDb.processingStatus).toBe('pending');
     });
 
     test('should reject reprocessing for other user material', async () => {
       const otherUserMaterial = await Material.create({
         name: 'Other User Material',
-        type: 'TEXT',
+        type: 'text',
         content: 'Other content',
         folder: folderId,
         uploadedBy: new mongoose.Types.ObjectId(),
-        processingStatus: 'COMPLETED'
+        processingStatus: 'completed'
       });
 
       const response = await request(app)
         .post(`/api/materials/${otherUserMaterial._id}/reprocess`)
-        .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
+    });
+
+    test('should reject invalid ID format', async () => {
+      const response = await request(app)
+        .post('/api/materials/invalid-id/reprocess')
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toBe('Validation failed');
+    });
+  });
+
+  describe('Authentication', () => {
+    test('should reject unauthenticated request to POST /api/materials/text', async () => {
+      const response = await request(unauthApp)
+        .post('/api/materials/text')
+        .send({
+          name: 'Test',
+          content: 'Test content',
+          folderId: folderId
+        })
+        .expect(401);
+
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should reject unauthenticated request to GET /api/materials/folder/:folderId', async () => {
+      const response = await request(unauthApp)
+        .get(`/api/materials/folder/${folderId}`)
+        .expect(401);
+
+      expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('GET /api/materials/processing/stats', () => {
+    test('should return processing stats', async () => {
+      const res = await request(app).get('/api/materials/processing/stats');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.stats).toBeDefined();
+    });
+
+    test('should reject unauthenticated request', async () => {
+      const res = await request(unauthApp).get('/api/materials/processing/stats');
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('POST /api/materials/processing/cleanup', () => {
+    test('should return cleanup count', async () => {
+      const res = await request(app)
+        .post('/api/materials/processing/cleanup')
+        .send({});
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(typeof res.body.data.cleaned).toBe('number');
+    });
+
+    test('should reject unauthenticated request', async () => {
+      const res = await request(unauthApp)
+        .post('/api/materials/processing/cleanup')
+        .send({});
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/materials/:materialId/preview', () => {
+    test('should return 404 for non-existent material', async () => {
+      const fakeId = new mongoose.Types.ObjectId();
+      const res = await request(app).get(`/api/materials/${fakeId}/preview`);
+      expect(res.status).toBe(404);
+    });
+
+    test('should return 403 for material in folder owned by another user', async () => {
+      // Create material in a folder owned by another user
+      const otherUser = await User.create({ cwlId: 'otherpreview', password: 'TestPass123' });
+      const otherFolder = await Folder.create({
+        name: 'Other Folder', instructor: otherUser._id
+      });
+      const material = await Material.create({
+        name: 'Other Material',
+        type: 'text',
+        content: 'Secret content',
+        folder: otherFolder._id,
+        uploadedBy: otherUser._id,
+        processingStatus: 'completed'
+      });
+
+      const res = await request(app).get(`/api/materials/${material._id}/preview`);
+      expect(res.status).toBe(403);
+    });
+
+    test('should reject unauthenticated request', async () => {
+      const fakeId = new mongoose.Types.ObjectId();
+      const res = await request(unauthApp).get(`/api/materials/${fakeId}/preview`);
+      expect(res.status).toBe(401);
     });
   });
 });

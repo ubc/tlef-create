@@ -38,7 +38,7 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
  * AI generate from materials
  */
 router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHandler(async (req, res) => {
-  const { quizId, materialIds, targetCount } = req.body;
+  const { quizId, materialIds, targetCount, customPrompt } = req.body;
   const userId = req.user.id;
 
   // Verify quiz exists and user owns it
@@ -81,18 +81,13 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
     const user = await User.findById(userId).select('preferences');
     const userPreferences = user?.preferences || null;
     
-    if (userPreferences?.llmProvider) {
-      console.log(`🎯 Objectives generation using: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🎯 Objectives generation using default LLM configuration');
-    }
-    
     // Generate learning objectives using user's preferred LLM
     const generatedObjectives = await llmService.generateLearningObjectives(
       materials,
       `Quiz: ${quiz.name}`, // Add context about the quiz
       targetCount, // Pass target count if provided
-      userPreferences // Pass user preferences
+      userPreferences, // Pass user preferences
+      customPrompt // Pass custom prompt if provided
     );
     
     const processingTime = Date.now() - startTime;
@@ -162,12 +157,6 @@ router.post('/classify', authenticateToken, validateClassifyObjectives, asyncHan
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(userId).select('preferences');
     const userPreferences = user?.preferences || null;
-    
-    if (userPreferences?.llmProvider) {
-      console.log(`🎯 Objectives classification using: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🎯 Objectives classification using default LLM configuration');
-    }
     
     // Classify learning objectives using user's preferred LLM
     const classifiedObjectives = await llmService.classifyLearningObjectives(text, userPreferences);
@@ -334,33 +323,9 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 /**
- * PUT /api/objectives/:id
- * Update objective
- */
-router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
-  const objectiveId = req.params.id;
-  const userId = req.user.id;
-  const { text, order } = req.body;
-
-  const objective = await LearningObjective.findOne({ _id: objectiveId, createdBy: userId });
-  if (!objective) {
-    return notFoundResponse(res, 'Learning objective');
-  }
-
-  if (text && text.trim() !== objective.text) {
-    await objective.updateText(text.trim(), userId);
-  }
-
-  if (order !== undefined && order !== objective.order) {
-    await objective.reorder(order);
-  }
-
-  return successResponse(res, { objective }, 'Learning objective updated successfully');
-}));
-
-/**
  * PUT /api/objectives/reorder
  * Reorder objectives
+ * NOTE: Must be registered before /:id routes to avoid matching "reorder" as :id
  */
 router.put('/reorder', authenticateToken, asyncHandler(async (req, res) => {
   const { quizId, objectiveIds } = req.body;
@@ -402,6 +367,31 @@ router.put('/reorder', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 /**
+ * PUT /api/objectives/:id
+ * Update objective
+ */
+router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
+  const objectiveId = req.params.id;
+  const userId = req.user.id;
+  const { text, order } = req.body;
+
+  const objective = await LearningObjective.findOne({ _id: objectiveId, createdBy: userId });
+  if (!objective) {
+    return notFoundResponse(res, 'Learning objective');
+  }
+
+  if (text && text.trim() !== objective.text) {
+    await objective.updateText(text.trim(), userId);
+  }
+
+  if (order !== undefined && order !== objective.order) {
+    await objective.reorder(order);
+  }
+
+  return successResponse(res, { objective }, 'Learning objective updated successfully');
+}));
+
+/**
  * DELETE /api/objectives/quiz/:quizId/all
  * Delete all learning objectives for a quiz
  */
@@ -409,51 +399,20 @@ router.delete('/quiz/:quizId/all', authenticateToken, validateQuizId, asyncHandl
   const quizId = req.params.quizId;
   const userId = req.user.id;
 
-  console.log('🟢 Backend DELETE /quiz/:quizId/all called');
-  console.log('🟢 quizId:', quizId);
-  console.log('🟢 userId:', userId);
-  console.log('🟢 req.params:', req.params);
-
-  // Verify quiz exists and user owns it
-  console.log('🟢 Looking for quiz with _id:', quizId, 'createdBy:', userId);
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
-  console.log('🟢 Found quiz:', quiz ? 'YES' : 'NO');
-  
   if (!quiz) {
-    console.log('🟢 Quiz not found, returning 404');
     return notFoundResponse(res, 'Quiz');
   }
 
-  try {
-    console.log('🟢 Deleting objectives for quiz:', quizId);
-    
-    // Delete all objectives for this quiz
-    const result = await LearningObjective.deleteMany({ quiz: quizId });
-    console.log('🟢 Delete result:', result);
-    
-    // Clear learning objectives from quiz
-    console.log('🟢 Clearing quiz.learningObjectives array');
-    quiz.learningObjectives = [];
-    await quiz.save();
-    console.log('🟢 Quiz saved successfully');
+  const result = await LearningObjective.deleteMany({ quiz: quizId });
 
-    const responseData = { 
-      deletedCount: result.deletedCount,
-      quizId: quizId 
-    };
-    console.log('🟢 Sending success response:', responseData);
+  quiz.learningObjectives = [];
+  await quiz.save();
 
-    return successResponse(res, responseData, `${result.deletedCount} learning objectives deleted successfully`);
-
-  } catch (error) {
-    console.error('🟢 Delete all objectives error:', error);
-    return errorResponse(
-      res, 
-      'Failed to delete learning objectives', 
-      'DELETE_ERROR', 
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
+  return successResponse(res, {
+    deletedCount: result.deletedCount,
+    quizId: quizId
+  }, `${result.deletedCount} learning objectives deleted successfully`);
 }));
 
 /**
@@ -463,26 +422,50 @@ router.delete('/quiz/:quizId/all', authenticateToken, validateQuizId, asyncHandl
 router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const objectiveId = req.params.id;
   const userId = req.user.id;
+  const { confirmed } = req.query;
 
   const objective = await LearningObjective.findOne({ _id: objectiveId, createdBy: userId });
   if (!objective) {
     return notFoundResponse(res, 'Learning objective');
   }
 
+  // Check how many questions will be deleted
+  const Question = (await import('../models/Question.js')).default;
+  const questionCount = await Question.countDocuments({ learningObjective: objectiveId });
+
+  // If there are questions and user hasn't confirmed, return warning
+  if (questionCount > 0 && confirmed !== 'true') {
+    return successResponse(res, {
+      requiresConfirmation: true,
+      questionCount,
+      objectiveId,
+      message: `This Learning Objective has ${questionCount} question(s). Deleting it will also delete all these questions.`
+    }, 'Confirmation required');
+  }
+
+  // Get all question IDs before deleting
+  const questions = await Question.find({ learningObjective: objectiveId }).select('_id');
+  const questionIds = questions.map(q => q._id);
+
   // Remove from quiz
   const quiz = await Quiz.findById(objective.quiz);
   if (quiz) {
+    // Remove all questions from quiz.questions array
+    for (const questionId of questionIds) {
+      await quiz.removeQuestion(questionId);
+    }
     await quiz.removeLearningObjective(objectiveId);
   }
 
-  // Delete associated questions
-  const Question = (await import('../models/Question.js')).default;
+  // Delete associated questions from database
   await Question.deleteMany({ learningObjective: objectiveId });
 
   // Delete objective
   await LearningObjective.findByIdAndDelete(objectiveId);
 
-  return successResponse(res, null, 'Learning objective deleted successfully');
+  return successResponse(res, {
+    deletedQuestions: questionCount
+  }, `Learning objective and ${questionCount} question(s) deleted successfully`);
 }));
 
 /**
@@ -526,12 +509,6 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(userId).select('preferences');
     const userPreferences = user?.preferences || null;
-    
-    if (userPreferences?.llmProvider) {
-      console.log(`🎯 Objective regeneration using: ${userPreferences.llmProvider} (${userPreferences.llmModel || 'default'})`);
-    } else {
-      console.log('🎯 Objective regeneration using default LLM configuration');
-    }
     
     // Regenerate the single objective using user's preferred LLM
     const regeneratedText = await llmService.regenerateSingleObjective(

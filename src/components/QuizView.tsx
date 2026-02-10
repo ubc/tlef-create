@@ -4,13 +4,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2 } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
-import QuestionGeneration from './QuestionGeneration';
-import ReviewEdit from './ReviewEdit';
+import QuestionGeneration from './generation';
+import ReviewEdit from './review';
 import { RootState, AppDispatch } from '../store';
 import { fetchQuizById, setCurrentQuiz, assignMaterials } from '../store/slices/quizSlice';
 import { fetchMaterials } from '../store/slices/materialSlice';
 import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
+import { LearningObjectiveData } from './generation/generationTypes';
 import '../styles/components/QuizView.css';
 
 type TabType = 'materials' | 'objectives' | 'generation' | 'review';
@@ -35,7 +36,7 @@ const QuizView = () => {
   };
 
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
-  const [learningObjectives, setLearningObjectives] = useState<string[]>([]);
+  const [learningObjectives, setLearningObjectives] = useState<LearningObjectiveData[]>([]);
   const [assignedMaterials, setAssignedMaterials] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -64,18 +65,25 @@ const QuizView = () => {
   useEffect(() => {
     if (currentQuiz) {
       // Set assigned materials from backend
-      const materialIds = currentQuiz.materials.map((m: any) => 
+      const materialIds = currentQuiz.materials.map((m: string | { _id: string }) =>
         typeof m === 'string' ? m : m._id
       );
       setAssignedMaterials(materialIds);
-      
-      // Set learning objectives if they exist
+
+      // Set learning objectives if they exist - NEW: Keep full objects
       if (currentQuiz.learningObjectives) {
-        // Ensure learning objectives are strings, not objects
-        const objectiveTexts = currentQuiz.learningObjectives.map((obj: any) => 
-          typeof obj === 'string' ? obj : obj.text || obj
-        );
-        setLearningObjectives(objectiveTexts);
+        const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number }, idx: number) => {
+          if (typeof obj === 'string') {
+            // Fallback for string-only objectives (shouldn't happen but handle it)
+            return { _id: obj, text: obj, order: idx };
+          }
+          return {
+            _id: obj._id,
+            text: obj.text,
+            order: obj.order !== undefined ? obj.order : idx
+          };
+        });
+        setLearningObjectives(objectiveData);
       }
     }
   }, [currentQuiz]);
@@ -116,9 +124,9 @@ const QuizView = () => {
 
       // Navigate back to course page
       navigate(`/course/${courseId}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete quiz:', err);
-      showNotification(err.message || 'Failed to delete quiz', 'error');
+      showNotification(err instanceof Error ? err.message : 'Failed to delete quiz', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -183,57 +191,58 @@ const QuizView = () => {
         </div>
 
         <div className="quiz-content">
-          {activeTab === 'materials' && (
-              <MaterialAssignment
-                  courseId={courseId!}
-                  assignedMaterials={assignedMaterials}
-                  onAssignedMaterialsChange={(materialIds) => {
-                    setAssignedMaterials(materialIds);
-                    // Update backend whenever materials change (assign or unassign)
-                    if (currentQuiz) {
-                      dispatch(assignMaterials({ id: currentQuiz._id, materialIds }));
-                    }
-                  }}
-                  courseMaterials={materials}
-                  onNavigateNext={() => {
-                    setActiveTab('objectives');
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }, 100);
-                  }}
-              />
-          )}
+          {/* Keep all components mounted, use CSS to show/hide */}
+          <div style={{ display: activeTab === 'materials' ? 'block' : 'none' }}>
+            <MaterialAssignment
+                courseId={courseId!}
+                assignedMaterials={assignedMaterials}
+                onAssignedMaterialsChange={(materialIds) => {
+                  setAssignedMaterials(materialIds);
+                  // Update backend whenever materials change (assign or unassign)
+                  if (currentQuiz) {
+                    dispatch(assignMaterials({ id: currentQuiz._id, materialIds }));
+                  }
+                }}
+                courseMaterials={materials}
+                onNavigateNext={() => {
+                  setActiveTab('objectives');
+                  setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 100);
+                }}
+            />
+          </div>
 
-          {activeTab === 'objectives' && (
-              <LearningObjectives
-                  assignedMaterials={assignedMaterials}
-                  objectives={learningObjectives}
-                  onObjectivesChange={setLearningObjectives}
-                  quizId={quizId!}
-                  onNavigateNext={() => {
-                    setActiveTab('generation');
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }, 100);
-                  }}
-              />
-          )}
+          <div style={{ display: activeTab === 'objectives' ? 'block' : 'none' }}>
+            <LearningObjectives
+                assignedMaterials={assignedMaterials}
+                objectives={learningObjectives}
+                onObjectivesChange={setLearningObjectives}
+                quizId={quizId!}
+                onNavigateNext={() => {
+                  setActiveTab('generation');
+                  setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 100);
+                }}
+            />
+          </div>
 
-          {activeTab === 'generation' && (
-              <QuestionGeneration
-                  learningObjectives={learningObjectives}
-                  assignedMaterials={assignedMaterials}
-                  quizId={quizId!}
-                  onQuestionsGenerated={() => setActiveTab('review')}
-              />
-          )}
+          <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
+            <QuestionGeneration
+                learningObjectives={learningObjectives}
+                assignedMaterials={assignedMaterials}
+                quizId={quizId!}
+                onQuestionsGenerated={() => setActiveTab('review')}
+            />
+          </div>
 
-          {activeTab === 'review' && (
-              <ReviewEdit
-                  quizId={quizId!}
-                  learningObjectives={learningObjectives}
-              />
-          )}
+          <div style={{ display: activeTab === 'review' ? 'block' : 'none' }}>
+            <ReviewEdit
+                quizId={quizId!}
+                learningObjectives={learningObjectives}
+            />
+          </div>
         </div>
 
         {/* Delete Confirmation Modal */}

@@ -44,7 +44,6 @@ const UserAccount = () => {
 
   const handleSubmitReport = () => {
     // Mock report submission
-    console.log('Report submitted:', reportData);
     alert('Report submitted successfully! We will review it and get back to you.');
     setShowReportModal(false);
     setReportData({ type: 'bug', description: '', email: '' });
