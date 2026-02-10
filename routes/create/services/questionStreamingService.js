@@ -189,7 +189,14 @@ class QuestionStreamingService {
             message: 'Saving question to database...'
           });
           
-          savedQuestion = await newQuestion.save();
+          // Add timeout for database save operation
+          const DB_SAVE_TIMEOUT = 30000; // 30 seconds
+          const savePromise = newQuestion.save();
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Database save timeout after 30s')), DB_SAVE_TIMEOUT)
+          );
+          
+          savedQuestion = await Promise.race([savePromise, timeoutPromise]);
           console.log(`[${questionId}] Question saved: ${savedQuestion._id}`);
           sseService.streamQuestionProgress(sessionId, questionId, {
             status: 'db-saved',
@@ -210,7 +217,13 @@ class QuestionStreamingService {
             message: 'Adding question to quiz...'
           });
           
-          await quiz.addQuestion(savedQuestion._id);
+          // Add timeout for addQuestion operation
+          const addPromise = quiz.addQuestion(savedQuestion._id);
+          const addTimeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Add to quiz timeout after 30s')), DB_SAVE_TIMEOUT)
+          );
+          
+          await Promise.race([addPromise, addTimeoutPromise]);
           console.log(`[${questionId}] Question added to quiz successfully`);
           sseService.streamQuestionProgress(sessionId, questionId, {
             status: 'added-to-quiz',
