@@ -46,6 +46,17 @@ import('./routes/create/services/ragService.js')
     console.error('💡 RAG features may not work properly');
   });
 
+// Initialize system prompt templates on server startup
+console.log('🔧 Initializing system prompt templates...');
+import('./routes/create/services/promptTemplateInitializer.js')
+  .then(module => {
+    module.initializePromptTemplates();
+  })
+  .catch(err => {
+    console.error('❌ Failed to initialize prompt templates:', err.message);
+    console.error('💡 Prompt template features may not work properly');
+  });
+
 const app = express();
 const PORT = process.env.PORT || 7736;
 
