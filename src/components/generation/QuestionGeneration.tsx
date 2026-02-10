@@ -115,6 +115,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       });
     },
     onBatchComplete: (summary: { totalGenerated?: number; totalFailed?: number }) => {
+      console.log('[QuestionGeneration] onBatchComplete called with:', summary);
       dispatch(setQuestionsGenerating({ generating: false, quizId }));
       reloadQuestions();
 

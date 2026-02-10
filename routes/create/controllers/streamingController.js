@@ -125,23 +125,30 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
       const failureCount = results.filter(r => !r.success).length;
       
       console.log(`✅ Batch complete: ${successCount} succeeded, ${failureCount} failed`);
+      console.log(`📤 Sending batch-complete event to session: ${finalSessionId}`);
       
-      sseService.notifyBatchComplete(finalSessionId, {
-        totalGenerated: successCount,
-        totalFailed: failureCount,
-        totalTime: 'completed'
-      });
+      // Add a small delay to ensure all question-complete events are processed first
+      setTimeout(() => {
+        const sent = sseService.notifyBatchComplete(finalSessionId, {
+          totalGenerated: successCount,
+          totalFailed: failureCount,
+          totalTime: 'completed'
+        });
+        console.log(`📡 batch-complete sent result: ${sent}`);
+      }, 500);
     }).catch((error) => {
       // This should rarely happen now since we catch errors in individual promises
       console.error('❌ Unexpected batch error:', error);
       sseService.emitError(finalSessionId, 'batch', error.message, 'batch-error');
       
       // Still send batch-complete to unblock the UI
-      sseService.notifyBatchComplete(finalSessionId, {
-        totalGenerated: 0,
-        totalFailed: enrichedConfigs.length,
-        error: true
-      });
+      setTimeout(() => {
+        sseService.notifyBatchComplete(finalSessionId, {
+          totalGenerated: 0,
+          totalFailed: enrichedConfigs.length,
+          error: true
+        });
+      }, 500);
     });
 
     res.json({
