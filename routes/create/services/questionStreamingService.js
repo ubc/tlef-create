@@ -67,6 +67,12 @@ class QuestionStreamingService {
       };
 
       // Use real LLM streaming generation
+      console.log(`[${questionId}] Calling llmService.generateQuestionStreaming...`);
+      sseService.streamQuestionProgress(sessionId, questionId, {
+        status: 'llm-started',
+        message: 'Calling LLM service...'
+      });
+      
       const result = await llmService.generateQuestionStreaming({
         learningObjective: learningObjective.text || learningObjective,
         questionType: questionConfig.questionType,
@@ -76,14 +82,28 @@ class QuestionStreamingService {
         previousQuestions: questionConfig.previousQuestions || [],
         customPrompt: questionConfig.customPrompt
       }, onStreamChunk);
+      
+      console.log(`[${questionId}] LLM returned, success=${result.success}`);
+      sseService.streamQuestionProgress(sessionId, questionId, {
+        status: 'llm-complete',
+        message: `LLM returned, success=${result.success}`
+      });
 
       if (result.success) {
+        console.log(`[${questionId}] Starting database save...`);
+        sseService.streamQuestionProgress(sessionId, questionId, {
+          status: 'db-save-started',
+          message: 'Starting database save...'
+        });
+        
         // Save question to database
         const Question = (await import('../models/Question.js')).default;
         const Quiz = (await import('../models/Quiz.js')).default;
         
         // Get current question count for proper ordering
+        console.log(`[${questionId}] Counting existing questions...`);
         const existingQuestionsCount = await Question.countDocuments({ quiz: quizId });
+        console.log(`[${questionId}] Existing questions count: ${existingQuestionsCount}`);
         
         // Generate metadata fields to match non-streaming implementation
         console.log(`🔍 DEBUG - questionConfig received:`, questionConfig);
@@ -163,38 +183,48 @@ class QuestionStreamingService {
 
         let savedQuestion;
         try {
+          console.log(`[${questionId}] Saving question to database...`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'db-saving',
+            message: 'Saving question to database...'
+          });
+          
           savedQuestion = await newQuestion.save();
-          console.log(`💾 Saved streaming question to database: ${savedQuestion._id}`);
-          console.log(`🔍 DEBUG - Saved question with learningObjective:`, savedQuestion.learningObjective);
+          console.log(`[${questionId}] Question saved: ${savedQuestion._id}`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'db-saved',
+            message: `Question saved: ${savedQuestion._id}`
+          });
 
           // Add question to quiz using the proper method (like in main branch)
+          console.log(`[${questionId}] Finding quiz...`);
           const quiz = await Quiz.findById(quizId);
-          console.log(`🔍 DEBUG - Quiz before addQuestion:`, {
-            id: quiz._id,
-            questionCount: quiz.questions?.length,
-            questions: quiz.questions
+          
+          if (!quiz) {
+            throw new Error(`Quiz not found: ${quizId}`);
+          }
+
+          console.log(`[${questionId}] Adding question to quiz...`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'adding-to-quiz',
+            message: 'Adding question to quiz...'
           });
-
-          const addResult = await quiz.addQuestion(savedQuestion._id);
-          console.log(`📊 Added question to quiz ${quizId} using addQuestion method`);
-          console.log(`🔍 DEBUG - addQuestion result:`, addResult);
-
-          // Verify the question was added
-          const updatedQuiz = await Quiz.findById(quizId);
-          console.log(`🔍 DEBUG - Quiz after addQuestion:`, {
-            id: updatedQuiz._id,
-            questionCount: updatedQuiz.questions?.length,
-            questions: updatedQuiz.questions
+          
+          await quiz.addQuestion(savedQuestion._id);
+          console.log(`[${questionId}] Question added to quiz successfully`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'added-to-quiz',
+            message: 'Question added to quiz successfully'
           });
         } catch (saveError) {
-          console.error(`❌ ERROR saving question or adding to quiz:`, saveError);
-          // Notify error via SSE
+          console.error(`[${questionId}] ERROR saving question:`, saveError.message);
           sseService.emitError(sessionId, questionId, `Failed to save question: ${saveError.message}`, 'database-error');
           throw saveError;
         }
 
         // Only notify completion if save was successful
         if (savedQuestion) {
+          console.log(`[${questionId}] Sending question-complete SSE event...`);
           // Notify completion with the saved question
           sseService.notifyQuestionComplete(sessionId, questionId, {
             _id: savedQuestion._id,
@@ -208,7 +238,7 @@ class QuestionStreamingService {
             streamingGenerated: true
           });
 
-          console.log(`✅ Completed streaming generation for question: ${questionId}`);
+          console.log(`[${questionId}] Completed successfully`);
           return savedQuestion;
         } else {
           throw new Error('Question save failed - savedQuestion is undefined');

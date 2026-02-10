@@ -151,51 +151,80 @@ class QuizLLMService {
 
       // Use direct OpenAI API for better streaming control
       if (this.provider === 'openai') {
-        console.log('🔧 Using direct OpenAI streaming API');
+        console.log('Using direct OpenAI streaming API');
 
         try {
           const OpenAI = (await import('openai')).default;
-          console.log('✅ OpenAI package imported successfully');
+          console.log('OpenAI package imported successfully');
 
           const openai = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY
           });
-          console.log('✅ OpenAI client created');
+          console.log('OpenAI client created');
 
-          console.log(`📤 Sending request to OpenAI: model=${model}, temp=${temperature}, maxTokens=${maxTokens}`);
-          const stream = await openai.chat.completions.create({
-            model: model,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: temperature,
-            max_tokens: maxTokens,
-            stream: true
-          });
-          console.log('✅ OpenAI stream created, starting to receive chunks...');
+          console.log(`Sending request to OpenAI: model=${model}, temp=${temperature}, maxTokens=${maxTokens}`);
+          
+          // Add timeout for OpenAI streaming to prevent hanging
+          const OPENAI_STREAM_TIMEOUT = 90000; // 90 seconds
+          let streamTimeoutId;
+          
+          const streamPromise = (async () => {
+            const stream = await openai.chat.completions.create({
+              model: model,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: temperature,
+              max_tokens: maxTokens,
+              stream: true
+            });
+            console.log('OpenAI stream created, starting to receive chunks...');
 
-          let chunkCount = 0;
-          for await (const chunk of stream) {
-            const textChunk = chunk.choices[0]?.delta?.content;
-            if (textChunk) {
-              chunkCount++;
-              accumulatedContent += textChunk;
-              console.log(`📝 Chunk #${chunkCount}: "${textChunk.substring(0, 30)}..." (total: ${accumulatedContent.length} chars)`);
+            let chunkCount = 0;
+            let lastChunkTime = Date.now();
+            
+            for await (const chunk of stream) {
+              // Reset timeout on each chunk
+              lastChunkTime = Date.now();
+              
+              const textChunk = chunk.choices[0]?.delta?.content;
+              if (textChunk) {
+                chunkCount++;
+                accumulatedContent += textChunk;
 
-              // Call the streaming callback if provided
-              if (onStreamChunk) {
-                onStreamChunk(textChunk, {
-                  totalLength: accumulatedContent.length,
-                  partial: true
-                });
+                // Call the streaming callback if provided
+                if (onStreamChunk) {
+                  onStreamChunk(textChunk, {
+                    totalLength: accumulatedContent.length,
+                    partial: true
+                  });
+                }
+              }
+              
+              // Check for finish reason
+              if (chunk.choices[0]?.finish_reason) {
+                console.log(`OpenAI stream finished with reason: ${chunk.choices[0].finish_reason}`);
+                break;
               }
             }
-          }
 
-          console.log(`✅ Streaming completed: ${chunkCount} chunks, ${accumulatedContent.length} total chars`);
+            console.log(`Streaming completed: ${chunkCount} chunks, ${accumulatedContent.length} total chars`);
+            return { content: accumulatedContent, model: model };
+          })();
+          
+          const timeoutPromise = new Promise((_, reject) => {
+            streamTimeoutId = setTimeout(() => {
+              reject(new Error(`OpenAI streaming timeout after ${OPENAI_STREAM_TIMEOUT/1000}s`));
+            }, OPENAI_STREAM_TIMEOUT);
+          });
+          
+          try {
+            response = await Promise.race([streamPromise, timeoutPromise]);
+          } finally {
+            clearTimeout(streamTimeoutId);
+          }
+          
           responseModel = model;
-          response = { content: accumulatedContent, model: responseModel };
         } catch (openaiError) {
-          console.error('❌ OpenAI streaming error:', openaiError.message);
-          console.error('❌ OpenAI error stack:', openaiError.stack);
+          console.error('OpenAI streaming error:', openaiError.message);
           throw new Error(`OpenAI streaming failed: ${openaiError.message}`);
         }
       } else {
