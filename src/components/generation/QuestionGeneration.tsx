@@ -48,7 +48,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   });
 
   // SSE connection
-  const sseUrl = streamingState.sessionId ? `${API_URL}/api/create/streaming/test-sse/${streamingState.sessionId}` : null;
+  const sseUrl = streamingState.sessionId ? `${API_URL}/api/create/streaming/questions/${streamingState.sessionId}` : null;
   const { disconnect } = useSSE(sseUrl, {
     onConnected: () => {},
     onBatchStarted: (data: { totalQuestions?: number }) => {
