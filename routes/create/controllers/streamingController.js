@@ -104,19 +104,44 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
           sessionId: finalSessionId,
           userId
         });
+        return { success: true, questionId };
       } catch (error) {
         console.error(`Failed to generate ${questionId}:`, error);
         sseService.emitError(finalSessionId, questionId, error.message, 'generation-error');
+        
+        // Send a "complete" event even for failed questions to unblock the UI
+        sseService.notifyQuestionComplete(finalSessionId, questionId, {
+          error: true,
+          errorMessage: error.message,
+          questionId
+        });
+        
+        return { success: false, questionId, error: error.message };
       }
     });
 
-    Promise.all(questionPromises).then(() => {
+    Promise.all(questionPromises).then((results) => {
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+      
+      console.log(`✅ Batch complete: ${successCount} succeeded, ${failureCount} failed`);
+      
       sseService.notifyBatchComplete(finalSessionId, {
-        totalGenerated: enrichedConfigs.length,
+        totalGenerated: successCount,
+        totalFailed: failureCount,
         totalTime: 'completed'
       });
     }).catch((error) => {
+      // This should rarely happen now since we catch errors in individual promises
+      console.error('❌ Unexpected batch error:', error);
       sseService.emitError(finalSessionId, 'batch', error.message, 'batch-error');
+      
+      // Still send batch-complete to unblock the UI
+      sseService.notifyBatchComplete(finalSessionId, {
+        totalGenerated: 0,
+        totalFailed: enrichedConfigs.length,
+        error: true
+      });
     });
 
     res.json({

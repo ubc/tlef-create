@@ -101,19 +101,33 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         const newInProgress = new Map(prev.questionsInProgress);
         newInProgress.delete(questionId);
 
+        // Only add to completed if it's not an error
+        const isError = (question as { error?: boolean }).error;
+        const completedQuestions = isError 
+          ? prev.completedQuestions 
+          : [...prev.completedQuestions, question];
+
         return {
           ...prev,
           questionsInProgress: newInProgress,
-          completedQuestions: [...prev.completedQuestions, question]
+          completedQuestions
         };
       });
     },
-    onBatchComplete: (summary: { totalGenerated?: number }) => {
+    onBatchComplete: (summary: { totalGenerated?: number; totalFailed?: number }) => {
       dispatch(setQuestionsGenerating({ generating: false, quizId }));
       reloadQuestions();
 
-      showNotification('success', 'Questions Generated',
-        `Successfully generated ${summary.totalGenerated || streamingState.completedQuestions.length} questions!`);
+      const successCount = summary.totalGenerated || streamingState.completedQuestions.length;
+      const failureCount = summary.totalFailed || 0;
+      
+      if (failureCount > 0) {
+        showNotification('warning', 'Generation Completed with Errors',
+          `Generated ${successCount} questions successfully, ${failureCount} failed.`);
+      } else {
+        showNotification('success', 'Questions Generated',
+          `Successfully generated ${successCount} questions!`);
+      }
 
       if (onQuestionsGenerated) {
         setTimeout(() => { onQuestionsGenerated(); }, 3000);
