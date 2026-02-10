@@ -92,21 +92,41 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
 
     const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
 
+    // Helper function to add timeout to a promise
+    const withTimeout = (promise, timeoutMs, questionId) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Generation timeout after ${timeoutMs/1000}s`)), timeoutMs)
+        )
+      ]).catch(error => {
+        console.error(`[${questionId}] Timeout or error:`, error.message);
+        throw error;
+      });
+    };
+
+    const QUESTION_TIMEOUT_MS = 120000; // 2 minutes per question
+
     const questionPromises = enrichedConfigs.map(async (config, index) => {
       const questionId = `question-${index + 1}`;
       try {
-        await questionStreamingService.generateQuestionWithStreaming({
-          quizId,
-          questionId,
-          questionConfig: config,
-          learningObjective: config.learningObjective,
-          relevantContent: config.relevantContent,
-          sessionId: finalSessionId,
-          userId
-        });
+        await withTimeout(
+          questionStreamingService.generateQuestionWithStreaming({
+            quizId,
+            questionId,
+            questionConfig: config,
+            learningObjective: config.learningObjective,
+            relevantContent: config.relevantContent,
+            sessionId: finalSessionId,
+            userId
+          }),
+          QUESTION_TIMEOUT_MS,
+          questionId
+        );
+        console.log(`[${questionId}] Generation completed successfully`);
         return { success: true, questionId };
       } catch (error) {
-        console.error(`Failed to generate ${questionId}:`, error);
+        console.error(`[${questionId}] Failed to generate:`, error.message);
         sseService.emitError(finalSessionId, questionId, error.message, 'generation-error');
         
         // Send a "complete" event even for failed questions to unblock the UI
