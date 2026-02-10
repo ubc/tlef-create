@@ -16,7 +16,7 @@ class SSEService extends EventEmitter {
    * Add SSE client connection
    */
   addClient(sessionId, res, metadata = {}) {
-    console.log(`📡 SSE client connected: ${sessionId}`);
+    console.log(`[SSE] Client connected: ${sessionId}`);
     
     // Store client response object
     this.clients.set(sessionId, res);
@@ -26,14 +26,20 @@ class SSEService extends EventEmitter {
       status: 'connected'
     });
 
-    // Setup SSE headers
+    // Setup SSE headers - include X-Accel-Buffering to disable nginx buffering
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control'
     });
+    
+    // Flush headers immediately
+    if (res.flushHeaders) {
+      res.flushHeaders();
+    }
 
     // Send initial connection message
     this.sendToClient(sessionId, 'connected', {
@@ -44,12 +50,12 @@ class SSEService extends EventEmitter {
 
     // Handle client disconnect
     res.on('close', () => {
-      console.log(`📡 SSE client disconnected: ${sessionId}`);
+      console.log(`[SSE] Client disconnected: ${sessionId}`);
       this.removeClient(sessionId);
     });
 
     res.on('error', (error) => {
-      console.error(`📡 SSE client error for ${sessionId}:`, error);
+      console.error(`[SSE] Client error for ${sessionId}:`, error);
       this.removeClient(sessionId);
     });
 
@@ -62,7 +68,7 @@ class SSEService extends EventEmitter {
   removeClient(sessionId) {
     this.clients.delete(sessionId);
     this.sessions.delete(sessionId);
-    console.log(`📡 Removed SSE client: ${sessionId}`);
+    console.log(`[SSE] Removed client: ${sessionId}`);
   }
 
   /**
@@ -71,7 +77,7 @@ class SSEService extends EventEmitter {
   sendToClient(sessionId, eventType, data) {
     const client = this.clients.get(sessionId);
     if (!client) {
-      console.warn(`📡 No client found for session: ${sessionId}`);
+      console.warn(`[SSE] No client found for session: ${sessionId}`);
       return false;
     }
 
@@ -80,10 +86,16 @@ class SSEService extends EventEmitter {
       const cleanData = JSON.parse(JSON.stringify(data || {}));
       const sseData = `event: ${eventType}\ndata: ${JSON.stringify(cleanData)}\n\n`;
       client.write(sseData);
+      
+      // Force flush the response buffer to ensure data is sent immediately
+      if (client.flush) {
+        client.flush();
+      }
+      
       return true;
     } catch (error) {
-      console.error(`📡 Failed to send to client ${sessionId}:`, error);
-      console.error(`📡 Problematic data:`, data);
+      console.error(`[SSE] Failed to send to client ${sessionId}:`, error);
+      console.error(`[SSE] Problematic data:`, data);
       this.removeClient(sessionId);
       return false;
     }
@@ -99,7 +111,7 @@ class SSEService extends EventEmitter {
         successCount++;
       }
     }
-    console.log(`📡 Broadcasted to ${successCount}/${this.clients.size} clients`);
+    console.log(`[SSE] Broadcasted to ${successCount}/${this.clients.size} clients`);
     return successCount;
   }
 
@@ -210,7 +222,7 @@ class SSEService extends EventEmitter {
       }
     }, intervalMs);
     
-    console.log(`💓 SSE heartbeat started (${intervalMs}ms interval)`);
+    console.log(`[SSE] Heartbeat started (${intervalMs}ms interval)`);
   }
 }
 
