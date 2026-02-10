@@ -225,8 +225,13 @@ class QuestionStreamingService {
         // Only notify completion if save was successful
         if (savedQuestion) {
           console.log(`[${questionId}] Sending question-complete SSE event...`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'sending-complete',
+            message: 'Sending question-complete event...'
+          });
+          
           // Notify completion with the saved question
-          sseService.notifyQuestionComplete(sessionId, questionId, {
+          const sent = sseService.notifyQuestionComplete(sessionId, questionId, {
             _id: savedQuestion._id,
             questionText: savedQuestion.questionText,
             type: savedQuestion.type,
@@ -238,7 +243,12 @@ class QuestionStreamingService {
             streamingGenerated: true
           });
 
-          console.log(`[${questionId}] Completed successfully`);
+          console.log(`[${questionId}] question-complete sent: ${sent}`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'complete-sent',
+            message: `question-complete sent: ${sent}`
+          });
+          
           return savedQuestion;
         } else {
           throw new Error('Question save failed - savedQuestion is undefined');
