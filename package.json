@@ -18,9 +18,9 @@
     "test:ui": "vitest --ui",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
-    "test:backend": "cd routes/create && jest",
-    "test:backend:watch": "cd routes/create && jest --watch",
-    "test:backend:coverage": "cd routes/create && jest --coverage",
+    "test:backend": "cd routes/create && NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:backend:watch": "cd routes/create && NODE_OPTIONS=--experimental-vm-modules jest --runInBand --watch",
+    "test:backend:coverage": "cd routes/create && NODE_OPTIONS=--experimental-vm-modules jest --runInBand --coverage",
     "deploy:staging": "npm run build && echo 'Ready for staging deployment!'",
     "health": "node -e \"console.log('TLEF-CREATE Health Check: OK')\""
   },

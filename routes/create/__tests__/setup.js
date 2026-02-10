@@ -1,19 +1,29 @@
 import mongoose from 'mongoose';
+import { beforeAll, afterAll, afterEach } from '@jest/globals';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+// Load .env from project root
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 beforeAll(async () => {
-  // Use test database (you can create a separate test database)
-  const testDbUri = process.env.MONGODB_TEST_URI || 'mongodb://localhost:27017/tlef_test';
+  // Use test database — derive from MONGODB_URI if MONGODB_TEST_URI not set
+  let testDbUri = process.env.MONGODB_TEST_URI;
+  if (!testDbUri && process.env.MONGODB_URI) {
+    // Replace the database name in the production URI with the test database
+    testDbUri = process.env.MONGODB_URI.replace(/\/[^/?]+(\?|$)/, '/tlef_test$1');
+  }
+  testDbUri = testDbUri || 'mongodb://localhost:27017/tlef_test';
   await mongoose.connect(testDbUri);
-});
+}, 30000);
 
 afterAll(async () => {
   // Clean up database connections
   await mongoose.connection.dropDatabase();
   await mongoose.connection.close();
-});
+}, 30000);
 
 afterEach(async () => {
   // Clean up all collections after each test
@@ -23,6 +33,3 @@ afterEach(async () => {
     await collection.deleteMany({});
   }
 });
-
-// Global test timeout
-jest.setTimeout(30000);

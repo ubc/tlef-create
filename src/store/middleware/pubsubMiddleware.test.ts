@@ -91,8 +91,8 @@ describe('pubsubMiddleware - Question Generation Events', () => {
     });
 
     it('should NOT publish question generation events for other Redux actions', () => {
-        // Act - dispatch a different action
-        store.dispatch({ type: 'app/addCourse', payload: { name: 'Test Course', quizCount: 5 } });
+        // Act - dispatch an unrelated action
+        store.dispatch({ type: 'unknown/action', payload: {} });
 
         // Assert - should not have called publish with question generation events
         expect(publishSpy).not.toHaveBeenCalledWith(

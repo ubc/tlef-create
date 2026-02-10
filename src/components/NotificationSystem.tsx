@@ -15,8 +15,6 @@ const TimerBar: React.FC<{ duration: number; onComplete: () => void }> = ({ dura
     const [timeLeft, setTimeLeft] = useState(duration);
     const [isPaused, setIsPaused] = useState(false);
 
-    // console.log('⏱️ TimerBar rendered:', { duration, timeLeft, isPaused });
-
     useEffect(() => {
         if (isPaused) return;
 
@@ -25,7 +23,6 @@ const TimerBar: React.FC<{ duration: number; onComplete: () => void }> = ({ dura
                 const newTime = prev - 100;
                 if (newTime <= 0) {
                     clearInterval(interval);
-                    console.log('⏰ Timer completed, calling onComplete');
                     onComplete();
                     return 0;
                 }
@@ -69,13 +66,10 @@ const NotificationSystem: React.FC = () => {
                     timeoutId,
                 };
 
-                console.log('📥 Received notification:', notification);
-
                 // Check for duplicates before adding
                 setNotifications(prev => {
                     const exists = prev.some(n => n.id === notification.id);
                     if (exists) {
-                        console.warn('Duplicate notification ID detected:', notification.id);
                         return prev; // Don't add duplicate
                     }
                     return [...prev, notification];
@@ -177,8 +171,7 @@ const NotificationSystem: React.FC = () => {
                     </div>
                     {notification.duration && (
                         <>
-                            {/* {console.log('🎯 Rendering TimerBar for notification:', notification.id, 'duration:', notification.duration)} */}
-                            <TimerBar 
+                            <TimerBar
                                 duration={notification.duration} 
                                 onComplete={() => removeNotification(notification.id)}
                             />

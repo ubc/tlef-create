@@ -23,7 +23,7 @@ export const usePubSub = (componentId?: string) => {
         pubsubService.publish(event, data);
     }, []);
 
-    // Convenience methods
+    // Convenience method for notifications
     const showNotification = useCallback((
         type: 'success' | 'error' | 'warning' | 'info',
         title: string,
@@ -31,22 +31,6 @@ export const usePubSub = (componentId?: string) => {
         duration?: number
     ) => {
         pubsubService.showNotification({ type, title, message, duration });
-    }, []);
-
-    const showLoading = useCallback((message: string, id?: string) => {
-        return pubsubService.showLoading(message, id);
-    }, []);
-
-    const hideLoading = useCallback((id: string) => {
-        pubsubService.hideLoading(id);
-    }, []);
-
-    const reportError = useCallback((
-        error: Error,
-        context: string,
-        severity: 'low' | 'medium' | 'high' = 'medium'
-    ) => {
-        pubsubService.reportError(error, context, severity);
     }, []);
 
     // Cleanup on unmount
@@ -61,8 +45,5 @@ export const usePubSub = (componentId?: string) => {
         unsubscribe,
         publish,
         showNotification,
-        showLoading,
-        hideLoading,
-        reportError,
     };
 };

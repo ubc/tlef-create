@@ -12,8 +12,8 @@ export const fetchObjectives = createAsyncThunk(
 
 export const generateObjectives = createAsyncThunk(
   'learningObjective/generateObjectives',
-  async (data: { quizId: string; materialIds: string[]; targetCount?: number }) => {
-    const response = await objectivesApi.generateObjectives(data.quizId, data.materialIds, data.targetCount);
+  async (data: { quizId: string; materialIds: string[]; targetCount?: number; customPrompt?: string }) => {
+    const response = await objectivesApi.generateObjectives(data.quizId, data.materialIds, data.targetCount, data.customPrompt);
     return response.objectives;
   }
 );
@@ -59,8 +59,8 @@ export const deleteObjective = createAsyncThunk(
       }
       
       return id;
-    } catch (error: any) {
-      return rejectWithValue(error.message || 'Failed to delete objective');
+    } catch (error: unknown) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete objective');
     }
   }
 );
@@ -76,10 +76,8 @@ export const regenerateSingleObjective = createAsyncThunk(
 export const deleteAllObjectives = createAsyncThunk(
   'learningObjective/deleteAllObjectives',
   async (quizId: string) => {
-    console.log('🔴 Redux deleteAllObjectives action - quizId:', quizId);
     try {
       const response = await objectivesApi.deleteAllObjectives(quizId);
-      console.log('🔴 Redux deleteAllObjectives response:', response);
       return response;
     } catch (error) {
       console.error('🔴 Redux deleteAllObjectives error:', error);

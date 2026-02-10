@@ -32,7 +32,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   // Listen for upload progress events from Sidebar
   useEffect(() => {
     const handleUploadProgress = (data: { progress: number }) => {
-      console.log('📊 Upload progress received:', data.progress);
       setUploadProgress(data.progress);
     };
 
@@ -55,7 +54,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
     onProgress?: (progress: number) => void
   ) => {
-    console.log('➕ CreateCourseModal: Adding material:', material);
     const newMaterial: Material = {
       id: Date.now().toString(),
       name: material.name,
@@ -66,7 +64,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       isUploading: false,
       uploadProgress: 0
     };
-    console.log('✅ CreateCourseModal: Material created:', newMaterial);
     setMaterials([...materials, newMaterial]);
 
     // Note: Actual upload happens when course is created in Sidebar.tsx
@@ -82,19 +79,12 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       setIsCreating(true);
       setUploadProgress(0);
       try {
-        console.log('📤 CreateCourseModal: Starting course creation with', materials.length, 'materials');
         await onSubmit(courseName.trim(), materials);
-        console.log('✅ CreateCourseModal: Course created successfully');
-        
-        // Show success message if materials were uploaded
-        if (materials.length > 0) {
-          console.log('📊 CreateCourseModal: Materials are being processed in the background');
-        }
-        
+
         resetModal();
         onClose();
       } catch (error) {
-        console.error('❌ CreateCourseModal: Failed to create course:', error);
+        console.error('Failed to create course:', error);
         // Error is handled in Sidebar
       } finally {
         setIsCreating(false);

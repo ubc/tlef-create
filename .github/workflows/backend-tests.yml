@@ -1,0 +1,39 @@
+name: Backend Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'routes/create/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'routes/create/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run backend tests
+        run: npm run test:backend -- --ci --forceExit
+        env:
+          MONGODB_TEST_URI: mongodb://localhost:27017/tlef_test
+          NODE_ENV: test

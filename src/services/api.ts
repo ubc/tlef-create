@@ -4,13 +4,13 @@ import { API_URL } from '../config/api';
 const API_BASE = API_URL;
 
 // Types for API responses
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success?: boolean;
   data?: T;
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: Record<string, unknown>;
     timestamp: string;
   };
 }
@@ -70,8 +70,24 @@ export interface Quiz {
     questionTypes: Array<{
       type: string;
       count: number;
+      scope?: 'per-lo' | 'whole-quiz';
+      percentage?: number;
     }>;
+    totalPerLO?: number;
+    totalWholeQuiz?: number;
     difficulty: 'easy' | 'moderate' | 'hard';
+    // NEW: Plan-based system
+    planMode?: 'manual' | 'ai-auto';
+    planItems?: Array<{
+      type: string;
+      learningObjective: string;
+      count: number;
+    }>;
+    aiConfig?: {
+      totalQuestions: number;
+      approach: 'support' | 'assess' | 'gamify';
+      additionalInstructions?: string;
+    };
   };
   status: 'draft' | 'materials-assigned' | 'objectives-set' | 'plan-generated' | 'plan-approved' | 'generating' | 'generated' | 'reviewing' | 'completed';
   progress: {
@@ -209,14 +225,14 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<T> {
+  async post<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<T> {
+  async put<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -275,7 +291,6 @@ class ApiClient {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable && onProgress) {
           const percentComplete = Math.round((event.loaded / event.total) * 100);
-          console.log(`📤 Upload progress: ${percentComplete}%`);
           onProgress(percentComplete);
         }
       });
@@ -284,34 +299,27 @@ class ApiClient {
       xhr.addEventListener('load', () => {
         try {
           const contentType = xhr.getResponseHeader('content-type');
-          let data: any;
+          let data: unknown;
 
           if (contentType?.includes('application/json')) {
-            data = JSON.parse(xhr.responseText);
+            data = JSON.parse(xhr.responseText) as unknown;
           } else {
             data = xhr.responseText;
           }
 
-          console.log('📡 API Upload response:', {
-            status: xhr.status,
-            statusText: xhr.statusText
-          });
-
           if (xhr.status >= 200 && xhr.status < 300) {
-            console.log('✅ Upload successful:', data);
-            resolve(data);
+            resolve(data as T);
           } else {
             // Handle error responses
-            if (data && typeof data === 'object' && data.error) {
-              console.log('❌ Structured error response:', data.error);
-              reject(new ApiError(data.error.message, xhr.status, data.error.code, data.error.details));
-            } else if (data && typeof data === 'object' && data.data && data.data.errors && data.data.errors.length > 0) {
-              console.log('❌ File upload errors:', data.data.errors);
-              const firstError = data.data.errors[0];
-              const errorMessage = firstError.error || 'File upload failed';
-              reject(new ApiError(`Upload failed: ${errorMessage}`, xhr.status, 'FILE_UPLOAD_ERROR', data.data.errors));
+            const errorData = data as Record<string, Record<string, unknown>>;
+            if (data && typeof data === 'object' && (data as Record<string, unknown>).error) {
+              const err = (data as Record<string, Record<string, unknown>>).error;
+              reject(new ApiError(err.message as string, xhr.status, err.code as string, err.details as Record<string, unknown>));
+            } else if (data && typeof data === 'object' && errorData.data && Array.isArray(errorData.data.errors) && (errorData.data.errors as unknown[]).length > 0) {
+              const firstError = (errorData.data.errors as Record<string, unknown>[])[0];
+              const errorMessage = (firstError.error as string) || 'File upload failed';
+              reject(new ApiError(`Upload failed: ${errorMessage}`, xhr.status, 'FILE_UPLOAD_ERROR', errorData.data.errors as unknown as Record<string, unknown>));
             } else {
-              console.log('❌ Generic error response:', data);
               reject(new ApiError(`HTTP ${xhr.status}: ${xhr.statusText}`, xhr.status));
             }
           }
@@ -340,7 +348,6 @@ class ApiClient {
       });
 
       // Open connection and send
-      console.log('🔄 API Upload request:', { url, method: 'POST' });
       xhr.open('POST', url, true);
       xhr.withCredentials = true; // Include cookies for SAML auth
       xhr.timeout = 5 * 60 * 1000; // 5 minute timeout for large files
@@ -353,9 +360,9 @@ class ApiClient {
 export class ApiError extends Error {
   public status: number;
   public code?: string;
-  public details?: any;
+  public details?: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string, details?: any) {
+  constructor(message: string, status: number, code?: string, details?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -517,8 +524,8 @@ export const quizApi = {
   },
 
   // GET /api/create/quizzes/:id/progress - Get quiz progress
-  getQuizProgress: async (id: string): Promise<{ progress: any }> => {
-    const response = await apiClient.get<{ success: boolean; data: { progress: any }; message: string }>(`/quizzes/${id}/progress`);
+  getQuizProgress: async (id: string): Promise<{ progress: Quiz['progress'] }> => {
+    const response = await apiClient.get<{ success: boolean; data: { progress: Quiz['progress'] }; message: string }>(`/quizzes/${id}/progress`);
     return response.data;
   },
 
@@ -538,8 +545,8 @@ export const objectivesApi = {
   },
 
   // POST /api/create/objectives/generate - AI generate from materials
-  generateObjectives: async (quizId: string, materialIds: string[], targetCount?: number): Promise<{ objectives: LearningObjective[] }> => {
-    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives/generate', { quizId, materialIds, targetCount });
+  generateObjectives: async (quizId: string, materialIds: string[], targetCount?: number, customPrompt?: string): Promise<{ objectives: LearningObjective[] }> => {
+    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives/generate', { quizId, materialIds, targetCount, customPrompt });
     return response.data;
   },
 
@@ -600,17 +607,11 @@ export const objectivesApi = {
 
   // DELETE /api/create/objectives/quiz/:quizId/all - Delete all objectives for a quiz
   deleteAllObjectives: async (quizId: string): Promise<{ deletedCount: number; quizId: string }> => {
-    console.log('🟡 API deleteAllObjectives called with quizId:', quizId);
-    console.log('🟡 Making DELETE request to:', `/objectives/quiz/${quizId}/all`);
-    
     try {
       const response = await apiClient.delete<{ success: boolean; data: { deletedCount: number; quizId: string }; message: string }>(`/objectives/quiz/${quizId}/all`);
-      console.log('🟡 API deleteAllObjectives response:', response);
       return response.data;
     } catch (error) {
-      console.error('🟡 API deleteAllObjectives error:', error);
-      console.error('🟡 Error response:', error.response?.data);
-      console.error('🟡 Error status:', error.response?.status);
+      console.error('API deleteAllObjectives error:', error);
       throw error;
     }
   },
@@ -618,19 +619,51 @@ export const objectivesApi = {
 
 // Generation Plan API
 export const plansApi = {
-  // POST /api/create/plans/generate - Generate AI plan for quiz
-  generatePlan: async (quizId: string, approach: 'support' | 'assess' | 'gamify' | 'custom', questionsPerLO: number = 3, customFormula?: any): Promise<{ plan: GenerationPlan }> => {
-    const requestData: any = { 
-      quizId, 
-      approach, 
-      questionsPerLO 
+  // POST /api/create/plans/generate-ai - Generate AI-powered plan (NEW)
+  generateAIPlan: async (
+    quizId: string,
+    totalQuestions: number,
+    approach: 'support' | 'assess' | 'gamify',
+    additionalInstructions?: string
+  ): Promise<{
+    planItems: Array<{
+      type: string;
+      learningObjectiveIndex: number;
+      count: number;
+    }>
+  }> => {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: {
+        planItems: Array<{
+          type: string;
+          learningObjectiveIndex: number;
+          count: number;
+        }>
+      };
+      message: string
+    }>('/plans/generate-ai', {
+      quizId,
+      totalQuestions,
+      approach,
+      additionalInstructions
+    });
+    return response.data;
+  },
+
+  // POST /api/create/plans/generate - Generate AI plan for quiz (OLD)
+  generatePlan: async (quizId: string, approach: 'support' | 'assess' | 'gamify' | 'custom', questionsPerLO: number = 3, customFormula?: GenerationPlan['customFormula']): Promise<{ plan: GenerationPlan }> => {
+    const requestData: { quizId: string; approach: string; questionsPerLO: number; customFormula?: GenerationPlan['customFormula'] } = {
+      quizId,
+      approach,
+      questionsPerLO
     };
-    
+
     // Add custom formula if provided
     if (customFormula) {
       requestData.customFormula = customFormula;
     }
-    
+
     const response = await apiClient.post<{ success: boolean; data: { plan: GenerationPlan }; message: string }>('/plans/generate', requestData);
     return response.data;
   },
@@ -666,6 +699,21 @@ export const plansApi = {
   },
 };
 
+// Types for streaming question generation
+export interface QuestionConfig {
+  questionType: string;
+  difficulty: string;
+  learningObjectiveIndex?: number;
+  learningObjective?: LearningObjective;
+  scope?: 'per-lo' | 'whole-quiz';
+}
+
+export interface GenerationPlanReference {
+  _id: string;
+  approach: string;
+  breakdown: GenerationPlan['breakdown'];
+}
+
 // Question API
 export const questionsApi = {
   // GET /api/create/questions/quiz/:quizId - Get quiz questions
@@ -684,8 +732,8 @@ export const questionsApi = {
   // POST /api/create/questions/generate-from-plan-stream (OLD - KEEPING FOR REFERENCE)
   generateFromPlanStream_DEPRECATED: async (
     quizId: string,
-    onStream: (event: string, data: any) => void,
-    onComplete: (data: any) => void,
+    onStream: (event: string, data: Record<string, unknown>) => void,
+    onComplete: (data: Record<string, unknown>) => void,
     onError: (error: string) => void
   ): Promise<void> => {
     try {
@@ -736,17 +784,13 @@ export const questionsApi = {
 
               // Handle based on event type
               if (currentEvent === 'stream') {
-                console.log('🌊 Stream chunk:', data.chunk);
                 onStream('stream', data);
               } else if (currentEvent === 'question-created') {
-                console.log('✅ Question created:', data.questionText);
                 onStream('question-created', data);
               } else if (currentEvent === 'complete') {
-                console.log('🎉 Generation complete:', data);
                 onComplete(data);
                 return;
               } else if (currentEvent === 'status') {
-                console.log('📊 Status:', data.message);
                 onStream('status', data);
               } else if (currentEvent === 'error') {
                 console.error('❌ Error:', data.message);
@@ -762,17 +806,17 @@ export const questionsApi = {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Streaming error:', error);
-      onError(error.message || 'Streaming failed');
+      onError(error instanceof Error ? error.message : 'Streaming failed');
     }
   },
 
   // POST /api/create/streaming/generate-questions - Start streaming question generation
   generateQuestionsStreaming: async (
-    quizId: string, 
-    questionConfigs: any[], 
-    generationPlan?: any
+    quizId: string,
+    questionConfigs: QuestionConfig[],
+    generationPlan?: GenerationPlanReference
   ): Promise<{ sessionId: string; jobId: string; sseEndpoint: string }> => {
     const response = await apiClient.post<{ 
       success: boolean; 
@@ -800,7 +844,7 @@ export const questionsApi = {
     type: string;
     difficulty: string;
     questionText: string;
-    content?: any;
+    content?: Question['content'];
     correctAnswer: string;
     explanation?: string;
   }): Promise<{ question: Question }> => {
@@ -866,7 +910,7 @@ export interface Question {
     additionalNotes?: string;
     keyPoints?: Array<{ title: string; explanation: string }>;
   };
-  correctAnswer: any;
+  correctAnswer: string | string[] | boolean;
   explanation?: string;
   order: number;
   reviewStatus: 'pending' | 'approved' | 'needs-review' | 'rejected';

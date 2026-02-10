@@ -45,7 +45,6 @@ const Login = ({ onAuthChange }: LoginProps) => {
         const authData = await authCheck.json();
         if (authData.data?.authenticated) {
           // Already authenticated, trigger auth change and navigate
-          console.log('🔧 Already authenticated, triggering auth change and navigating to dashboard');
           if (onAuthChange) {
             onAuthChange();
           }
@@ -79,7 +78,6 @@ const Login = ({ onAuthChange }: LoginProps) => {
           const verifyData = await verifyAuth.json();
           if (verifyData.data?.authenticated) {
             // Add a small delay to ensure session is fully established
-            console.log('🔧 Auto-login successful, triggering auth change and navigating to dashboard');
             // Trigger the App component to re-check authentication
             if (onAuthChange) {
               onAuthChange();
@@ -144,8 +142,6 @@ const Login = ({ onAuthChange }: LoginProps) => {
   };
 
   useEffect(() => {
-    console.log('🔧 Login useEffect triggered:', { samlAvailable, autoLoginAttempted, isAutoLoggingIn });
-    
     // Check if we're returning from SAML callback with error
     const urlParams = new URLSearchParams(window.location.search);
     const error = urlParams.get('error');
@@ -155,10 +151,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
 
     // Only check SAML availability once and if we haven't already started auto-login
     if (samlAvailable === null && !autoLoginAttempted) {
-      console.log('🔧 Calling checkSamlAvailability');
       checkSamlAvailability();
-    } else {
-      console.log('🔧 Skipping checkSamlAvailability:', { samlAvailable, autoLoginAttempted });
     }
   }, []);
 

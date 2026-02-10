@@ -16,18 +16,15 @@ const App = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    console.log('🔧 App useEffect triggered - checking auth');
     // Check authentication status on mount
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
-    console.log('🔧 checkAuth called');
     try {
       const response = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
       });
-      console.log('🔧 Auth response status:', response.status);
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
@@ -36,37 +33,25 @@ const App = () => {
           return;
         }
         const data = await response.json();
-        console.log('🔧 Auth response data:', data);
         if (data.data?.authenticated) {
-          console.log('🔧 User authenticated, setting state');
           setIsAuthenticated(true);
           setUser(data.data.user);
         } else {
-          console.log('🔧 User not authenticated, setting false');
           setIsAuthenticated(false);
         }
       } else {
-        // Don't log rate limiting errors as they're expected during loops
-        if (response.status !== 429) {
-          console.error('Auth check failed with status:', response.status);
-        }
-        console.log('🔧 Auth failed, setting false');
         setIsAuthenticated(false);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      console.log('🔧 Auth error, setting false');
       setIsAuthenticated(false);
     }
   };
 
   // Loading state while checking authentication
   if (isAuthenticated === null) {
-    console.log('🔧 App rendering: Loading state');
     return <div>Loading...</div>;
   }
-
-  console.log('🔧 App rendering with isAuthenticated:', isAuthenticated);
 
   return (
     <Provider store={store}>

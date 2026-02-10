@@ -9,7 +9,7 @@ import createRoutes from './routes/create/createRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
 import connectDB from './routes/create/config/database.js';
 import mongoose from 'mongoose';
-import StorageMonitor from './routes/create/services/storageMonitor.js';
+
 
 // ES6 __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -195,10 +195,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📡 Health check available at http://localhost:${PORT}/health`);
   console.log(`🎯 CREATE app API available at http://localhost:${PORT}/api/create`);
   
-  // Start storage monitoring (only in production to avoid development clutter)
-  if (process.env.NODE_ENV === 'production') {
-    StorageMonitor.startMonitoring();
-  }
 });
 
 // Graceful shutdown

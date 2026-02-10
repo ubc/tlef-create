@@ -53,14 +53,14 @@ const quizSchema = new mongoose.Schema({
       default: PEDAGOGICAL_APPROACHES.SUPPORT,
       index: true
     },
-    
+
     questionsPerObjective: {
       type: Number,
       default: 3,
       min: 1,
       max: 10
     },
-    
+
     questionTypes: [{
       type: {
         type: String,
@@ -71,13 +71,74 @@ const quizSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 0
+      },
+      scope: {
+        type: String,
+        enum: ['per-lo', 'whole-quiz'],
+        default: 'per-lo'
+      },
+      percentage: {
+        type: Number,
+        default: 0
       }
     }],
-    
+
+    // Custom formula totals
+    totalPerLO: {
+      type: Number,
+      default: 0
+    },
+    totalWholeQuiz: {
+      type: Number,
+      default: 0
+    },
+
     difficulty: {
       type: String,
       enum: Object.values(DIFFICULTY_LEVELS),
       default: DIFFICULTY_LEVELS.MODERATE
+    },
+
+    // New plan-based system
+    planMode: {
+      type: String,
+      enum: ['manual', 'ai-auto'],
+      default: 'manual'
+    },
+
+    planItems: [{
+      type: {
+        type: String,
+        enum: Object.values(QUESTION_TYPES),
+        required: true
+      },
+      learningObjective: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'LearningObjective',
+        required: true
+      },
+      count: {
+        type: Number,
+        required: true,
+        min: 1
+      }
+    }],
+
+    aiConfig: {
+      totalQuestions: {
+        type: Number,
+        default: 30,
+        min: 5,
+        max: 100
+      },
+      approach: {
+        type: String,
+        enum: [...Object.values(PEDAGOGICAL_APPROACHES).filter(a => a !== 'custom'), null]
+      },
+      additionalInstructions: {
+        type: String,
+        maxlength: 1000
+      }
     }
   },
   

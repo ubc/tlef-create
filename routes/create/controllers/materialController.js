@@ -19,14 +19,6 @@ const upload = FileService.configureUpload();
  * Upload files (PDF, DOCX)
  */
 router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandler(async (req, res) => {
-  console.log('📤 Upload request received:', {
-    authenticated: !!req.user,
-    userId: req.user?.id,
-    filesCount: req.files?.length || 0,
-    folderId: req.body.folderId,
-    fileNames: req.files?.map(f => f.originalname) || []
-  });
-  
   const { folderId, names } = req.body;
   const files = req.files;
   const userId = req.user.id;
@@ -40,11 +32,8 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
   }
 
   // Verify folder exists and user owns it
-  console.log('🔍 Looking for folder:', { folderId, userId });
   const folder = await Folder.findOne({ _id: folderId, instructor: userId });
-  console.log('📁 Folder found:', !!folder);
   if (!folder) {
-    console.log('❌ Folder not found or user does not own it');
     return notFoundResponse(res, 'Folder');
   }
 
@@ -64,23 +53,14 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
         folder: folderId,
         uploadedBy: userId
       });
-      
-      console.log('📋 Processed file data:', {
-        name: fileData.name,
-        type: fileData.type,
-        hasFolder: !!fileData.folder,
-        hasUploadedBy: !!fileData.uploadedBy
-      });
 
       // Check for duplicate files
-      const existingMaterial = await Material.findOne({ 
-        checksum: fileData.checksum, 
-        folder: folderId 
+      const existingMaterial = await Material.findOne({
+        checksum: fileData.checksum,
+        folder: folderId
       });
 
       if (existingMaterial) {
-        console.log(`⚠️ Duplicate file detected: ${file.originalname} (checksum: ${fileData.checksum})`);
-        console.log(`   Existing material: ${existingMaterial.name} (${existingMaterial._id})`);
         await FileService.deleteFile(file.path);
         errors.push({
           filename: file.originalname,
@@ -91,35 +71,29 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
 
       const material = new Material(fileData);
       await material.save();
-      console.log(`✅ Material saved to database: ${material.name} (${material._id})`);
 
       // Add to folder
       await folder.addMaterial(material._id);
-      console.log(`📁 Material added to folder: ${folder.name}`);
 
       // Process material immediately (bypass broken job queue)
       await material.markAsProcessing();
-      console.log(`🔄 Processing material immediately: ${material.name}`);
 
       // Process in background without blocking the response
-      // Use IIFE to capture material in its own closure to avoid variable reference issues
       (async (materialToProcess) => {
         try {
           const ragService = (await import('../services/ragService.js')).default;
 
           // Wait for RAG service to be initialized (with timeout)
-          const maxWaitTime = 30000; // 30 seconds
+          const maxWaitTime = 30000;
           const startTime = Date.now();
           while (!ragService.isInitialized && (Date.now() - startTime) < maxWaitTime) {
-            console.log(`⏳ Waiting for RAG service to initialize... (${Math.floor((Date.now() - startTime) / 1000)}s)`);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
 
           if (!ragService.isInitialized) {
             throw new Error('RAG service initialization timeout after 30 seconds');
           }
 
-          console.log(`🔄 Chunking and embedding material: ${materialToProcess.name} (ID: ${materialToProcess._id})`);
           const result = await ragService.processAndEmbedMaterial(materialToProcess);
 
           if (result.success) {
@@ -127,10 +101,8 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
             const updatedMaterial = await Material.findById(materialToProcess._id);
             if (updatedMaterial) {
               await updatedMaterial.markAsCompleted();
-              console.log(`✅ Material processed and embedded: ${materialToProcess.name}`);
-              console.log(`📊 Created ${result.chunksCount} chunks`);
             } else {
-              console.error(`❌ Could not find material to mark as completed: ${materialToProcess._id}`);
+              console.error(`Could not find material to mark as completed: ${materialToProcess._id}`);
             }
           } else {
             const Material = (await import('../models/Material.js')).default;
@@ -138,11 +110,10 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
             if (updatedMaterial) {
               await updatedMaterial.markAsFailed(result.error);
             }
-            console.error(`❌ Failed to process material: ${result.error}`);
+            console.error(`Failed to process material: ${result.error}`);
           }
         } catch (error) {
-          console.error(`❌ Material processing failed: ${materialToProcess.name}`, error);
-          console.error(`❌ Error stack:`, error.stack);
+          console.error(`Material processing failed: ${materialToProcess.name}`, error);
           try {
             const Material = (await import('../models/Material.js')).default;
             const updatedMaterial = await Material.findById(materialToProcess._id);
@@ -153,11 +124,11 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
             console.error('Failed to update material status:', updateError);
           }
         }
-      })(material); // Pass material immediately to avoid closure issues
+      })(material);
 
       materials.push(material);
     } catch (error) {
-      console.error(`❌ Error processing file ${file.originalname}:`, error);
+      console.error(`Error processing file ${file.originalname}:`, error);
       errors.push({
         filename: file.originalname,
         error: error.message
@@ -176,22 +147,13 @@ router.post('/upload', authenticateToken, upload.array('files', 10), asyncHandle
 
   if (errors.length > 0) {
     response.errors = errors;
-    console.log(`⚠️ Upload errors:`, errors);
   }
-
-  console.log(`📊 Upload summary: ${materials.length}/${files.length} files processed successfully`);
-  console.log(`📝 Materials created:`, materials.map(m => ({
-    id: m._id,
-    name: m.name,
-    processingStatus: m.processingStatus
-  })));
 
   const statusCode = materials.length > 0 ? HTTP_STATUS.CREATED : HTTP_STATUS.BAD_REQUEST;
   const message = materials.length > 0 ?
     `${materials.length} materials uploaded successfully` :
     'No materials were uploaded';
 
-  console.log(`📤 Sending response with ${materials.length} materials`);
   return successResponse(res, response, message, statusCode);
 }));
 
@@ -203,24 +165,8 @@ router.post('/url', authenticateToken, asyncHandler(async (req, res) => {
   const { name, url, folderId } = req.body;
   const userId = req.user.id;
 
-  console.log('📥 URL material request received:', {
-    hasName: !!name,
-    hasUrl: !!url,
-    hasFolderId: !!folderId,
-    name,
-    url,
-    folderId,
-    userId,
-    bodyKeys: Object.keys(req.body)
-  });
-
   // Validate required fields
   if (!name || !url || !folderId) {
-    console.error('❌ Validation failed - missing required fields:', {
-      name: name || 'MISSING',
-      url: url || 'MISSING',
-      folderId: folderId || 'MISSING'
-    });
     return errorResponse(res, 'Name, URL, and folder ID are required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
@@ -231,18 +177,10 @@ router.post('/url', authenticateToken, asyncHandler(async (req, res) => {
   }
 
   // Validate URL content type (check if it's allowed content)
-  console.log('🔍 Validating URL content type...');
   const contentValidation = await FileService.validateUrlContentType(urlValidation.normalizedUrl);
 
   if (!contentValidation.isValid) {
-    console.log('❌ URL content validation failed:', contentValidation.reason);
     return errorResponse(res, contentValidation.error, 'BLOCKED_CONTENT_TYPE', HTTP_STATUS.FORBIDDEN);
-  }
-
-  if (contentValidation.warning) {
-    console.warn('⚠️ URL content validation warning:', contentValidation.warning);
-  } else {
-    console.log('✅ URL content validated:', contentValidation.message);
   }
 
   // Verify folder exists and user owns it
@@ -252,9 +190,9 @@ router.post('/url', authenticateToken, asyncHandler(async (req, res) => {
   }
 
   // Check for duplicate URL in folder
-  const existingMaterial = await Material.findOne({ 
-    url: urlValidation.normalizedUrl, 
-    folder: folderId 
+  const existingMaterial = await Material.findOne({
+    url: urlValidation.normalizedUrl,
+    folder: folderId
   });
 
   if (existingMaterial) {
@@ -276,10 +214,8 @@ router.post('/url', authenticateToken, asyncHandler(async (req, res) => {
   // Enqueue for URL processing
   try {
     await processingJobService.enqueueProcessingJob(material._id, 'url');
-    console.log(`📋 URL processing job enqueued for material: ${material._id}`);
   } catch (processingError) {
-    console.error(`❌ Failed to enqueue URL processing job:`, processingError);
-    // Don't fail the creation, just log the error
+    console.error('Failed to enqueue URL processing job:', processingError);
   }
 
   return successResponse(res, { material }, 'URL material created successfully', HTTP_STATUS.CREATED);
@@ -309,9 +245,9 @@ router.post('/text', authenticateToken, asyncHandler(async (req, res) => {
   const checksum = crypto.createHash('md5').update(content).digest('hex');
 
   // Check for duplicate content in folder
-  const existingMaterial = await Material.findOne({ 
-    checksum, 
-    folder: folderId 
+  const existingMaterial = await Material.findOne({
+    checksum,
+    folder: folderId
   });
 
   if (existingMaterial) {
@@ -326,7 +262,7 @@ router.post('/text', authenticateToken, asyncHandler(async (req, res) => {
     uploadedBy: userId,
     fileSize: Buffer.byteLength(content, 'utf8'),
     checksum,
-    processingStatus: PROCESSING_STATUS.PENDING // Will be processed for embeddings
+    processingStatus: PROCESSING_STATUS.PENDING
   });
 
   await material.save();
@@ -335,10 +271,8 @@ router.post('/text', authenticateToken, asyncHandler(async (req, res) => {
   // Enqueue for text processing (embeddings generation)
   try {
     await processingJobService.enqueueProcessingJob(material._id, 'text');
-    console.log(`📋 Text processing job enqueued for material: ${material._id}`);
   } catch (processingError) {
-    console.error(`❌ Failed to enqueue text processing job:`, processingError);
-    // Don't fail the creation, just log the error
+    console.error('Failed to enqueue text processing job:', processingError);
   }
 
   return successResponse(res, { material }, 'Text material created successfully', HTTP_STATUS.CREATED);
@@ -410,7 +344,7 @@ router.get('/:id/status', authenticateToken, validateMongoId, asyncHandler(async
     return notFoundResponse(res, 'Material');
   }
 
-  return successResponse(res, { 
+  return successResponse(res, {
     material: {
       id: material._id,
       name: material.name,
@@ -462,9 +396,6 @@ router.post('/:id/reprocess', authenticateToken, validateMongoId, asyncHandler(a
   // Reset processing status
   await material.updateProcessingStatus(PROCESSING_STATUS.PENDING);
 
-  // Here you would trigger the actual processing job
-  // This could be a queue job, webhook, etc.
-
   return successResponse(res, { material }, 'Material reprocessing triggered');
 }));
 
@@ -475,49 +406,6 @@ router.post('/:id/reprocess', authenticateToken, validateMongoId, asyncHandler(a
 router.get('/processing/stats', authenticateToken, asyncHandler(async (req, res) => {
   const stats = processingJobService.getProcessingStats();
   return successResponse(res, { stats }, 'Processing statistics retrieved');
-}));
-
-/**
- * POST /api/materials/search
- * Search materials using RAG
- */
-router.post('/search', authenticateToken, asyncHandler(async (req, res) => {
-  const { query, folderId, limit = 5 } = req.body;
-  const userId = req.user.id;
-
-  if (!query || query.trim().length === 0) {
-    return errorResponse(res, 'Search query is required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
-  }
-
-  // Verify folder access if specified
-  if (folderId) {
-    const folder = await Folder.findOne({ _id: folderId, instructor: userId });
-    if (!folder) {
-      return notFoundResponse(res, 'Folder');
-    }
-  }
-
-  try {
-    // Import document processing service dynamically to avoid initialization issues
-    const { default: documentProcessingService } = await import('../services/documentProcessingService.js');
-    
-    const searchResults = await documentProcessingService.searchContent(
-      query.trim(),
-      folderId,
-      Math.min(limit, 20) // Cap at 20 results
-    );
-
-    return successResponse(res, { 
-      query: query.trim(),
-      results: searchResults,
-      folderId: folderId || null,
-      limit: searchResults.length
-    }, 'Search completed successfully');
-    
-  } catch (error) {
-    console.error('❌ Material search failed:', error);
-    return errorResponse(res, 'Search failed', 'SEARCH_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
-  }
 }));
 
 /**
@@ -543,9 +431,6 @@ router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, r
   const { materialId } = req.params;
   const userId = req.user.id;
 
-  console.log(`👁️ Preview request for material: ${materialId}`);
-
-  // Verify material exists and user owns it
   const material = await Material.findById(materialId);
 
   if (!material) {
@@ -559,28 +444,19 @@ router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, r
   }
 
   try {
-    // Import ragService to access Qdrant
     const { default: ragService } = await import('../services/ragService.js');
     await ragService.initialize();
 
-    console.log(`🔍 Retrieving chunks for material: ${materialId}`);
-
-    // Retrieve all chunks for this material using a broad query
-    // We'll filter by materialId afterward
     const allChunks = await ragService.ragModule.retrieveContext('*', {
-      limit: 1000, // Get a large number to ensure we get all chunks
-      scoreThreshold: 0.0 // Include all chunks regardless of score
+      limit: 1000,
+      scoreThreshold: 0.0
     });
-
-    console.log(`📥 Retrieved ${allChunks.length} total chunks from Qdrant`);
 
     // Filter chunks by materialId
     const materialChunks = allChunks.filter(chunk => {
       const chunkMaterialId = chunk.metadata?.materialId;
       return chunkMaterialId === materialId;
     });
-
-    console.log(`✅ Found ${materialChunks.length} chunks for material ${materialId}`);
 
     if (materialChunks.length === 0) {
       return successResponse(res, {
@@ -596,14 +472,9 @@ router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, r
       return indexA - indexB;
     });
 
-    // Combine all chunk texts into a single content string
-    // Try different property names that RAG modules might use
     const content = materialChunks.map(chunk => {
       return chunk.text || chunk.content || chunk.pageContent || '';
     }).join('\n\n---\n\n');
-
-    console.log(`📄 Preview content length: ${content.length} characters`);
-    console.log(`📊 Sample chunk properties:`, materialChunks[0] ? Object.keys(materialChunks[0]) : 'none');
 
     return successResponse(res, {
       content,
@@ -613,7 +484,7 @@ router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, r
     }, 'Material preview retrieved successfully');
 
   } catch (error) {
-    console.error('❌ Failed to retrieve material preview:', error);
+    console.error('Failed to retrieve material preview:', error);
     return errorResponse(res, 'Failed to retrieve preview', 'PREVIEW_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }));

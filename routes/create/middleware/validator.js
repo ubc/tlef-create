@@ -11,6 +11,7 @@ export const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({
+      success: false,
       error: {
         code: ERROR_CODES.VALIDATION_ERROR,
         message: 'Validation failed',
