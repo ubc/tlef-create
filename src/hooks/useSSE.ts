@@ -177,7 +177,9 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
     eventSource.addEventListener('question-complete', (event) => {
       try {
+        console.log('[SSE] Received question-complete event:', event.data);
         const data = JSON.parse(event.data);
+        console.log('[SSE] Parsed question-complete:', data.questionId);
         callbacksRef.current.onQuestionComplete?.(data.questionId, data.question);
       } catch (err) {
         console.error('[SSE] Error parsing question-complete event:', err);
@@ -186,7 +188,9 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
 
     eventSource.addEventListener('batch-complete', (event) => {
       try {
+        console.log('[SSE] Received batch-complete event:', event.data);
         const data = JSON.parse(event.data);
+        console.log('[SSE] Parsed batch-complete, calling callback...');
         callbacksRef.current.onBatchComplete?.(data.summary);
       } catch (err) {
         console.error('[SSE] Error parsing batch-complete event:', err);
