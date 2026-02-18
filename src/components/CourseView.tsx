@@ -277,7 +277,7 @@ const CourseView = () => {
       console.error('Failed to delete course:', err);
       setIsDeleting(false);
       setShowDeleteConfirm(false);
-      
+
       if (err instanceof ApiError) {
         if (err.isAuthError()) {
           alert('Your session has expired. Please log in again.');

@@ -98,18 +98,23 @@ const isStaging = process.env.NODE_ENV === 'production' &&
                   (process.env.FRONTEND_URL?.includes('staging') || 
                    process.env.PORT === '8090');
 
-app.use(session({
+// Session configuration with environment-specific cookie settings
+const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // HARDCODED: Disable secure cookies for staging to fix auth
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax' // Protect against CSRF
+    ...(process.env.NODE_ENV === 'production'
+      ? { secure: false, sameSite: 'lax' } // Production/staging: CSRF protection
+      : { sameSite: false } // Development: allow cross-port cookies
+    )
   },
   name: 'tlef.sid' // Custom session name
-}));
+};
+
+app.use(session(sessionConfig));
 
 // Initialize passport
 app.use(passport.initialize());

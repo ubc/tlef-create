@@ -272,6 +272,37 @@ class FileService {
    */
   static async validateUrlContentType(url) {
     try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname.toLowerCase();
+
+      // Check domain allowlist if ALLOWED_DOMAINS is configured
+      const allowedDomainsEnv = process.env.ALLOWED_DOMAINS;
+      if (allowedDomainsEnv) {
+        let allowedDomains;
+        try {
+          allowedDomains = JSON.parse(allowedDomainsEnv);
+        } catch (e) {
+          console.error('❌ Invalid ALLOWED_DOMAINS format in .env, expected JSON array');
+          allowedDomains = null;
+        }
+
+        if (Array.isArray(allowedDomains) && allowedDomains.length > 0) {
+          const isAllowed = allowedDomains.some(domain => {
+            const d = domain.toLowerCase();
+            return hostname === d || hostname.endsWith('.' + d);
+          });
+
+          if (!isAllowed) {
+            return {
+              isValid: false,
+              error: `This domain is not in the allowed list. Allowed domains: ${allowedDomains.join(', ')}`,
+              contentType: 'blocked_domain',
+              reason: 'not_in_allowlist'
+            };
+          }
+        }
+      }
+
       // Block known problematic domains that require authentication or dynamic rendering
       const blockedDomains = [
         'drive.google.com',
@@ -280,9 +311,6 @@ class FileService {
         'onedrive.live.com',
         'sharepoint.com'
       ];
-
-      const urlObj = new URL(url);
-      const hostname = urlObj.hostname.toLowerCase();
 
       for (const blockedDomain of blockedDomains) {
         if (hostname === blockedDomain || hostname.endsWith('.' + blockedDomain)) {

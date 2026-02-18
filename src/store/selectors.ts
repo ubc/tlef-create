@@ -18,9 +18,14 @@ export const selectQuestionsLoading = (state: RootState, quizId: string): boolea
 
 /**
  * Select whether a specific quiz is currently generating questions.
+ * Reads from both the plan slice (plan/setQuestionsGenerating) and the
+ * question slice (question/setQuestionsGenerating), since QuestionGeneration.tsx
+ * dispatches from the question slice while the plan slice bridges to PubSub.
  */
 export const selectIsGenerating = (state: RootState, quizId: string): boolean =>
-  state.plan.generationStatusByQuiz[quizId]?.generating || false;
+  state.plan.generationStatusByQuiz[quizId]?.generating ||
+  state.question.generatingByQuiz[quizId] ||
+  false;
 
 /**
  * Select the full generation status for a specific quiz.

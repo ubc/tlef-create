@@ -483,6 +483,12 @@ export const materialsApi = {
     const response = await apiClient.get<{ success: boolean; data: { material: Material }; message: string }>(`/materials/${id}/status`);
     return response.data;
   },
+
+  // GET /api/create/materials/allowed-domains - Get allowed URL domains
+  getAllowedDomains: async (): Promise<{ domains: string[] | null }> => {
+    const response = await apiClient.get<{ success: boolean; data: { domains: string[] | null }; message: string }>('/materials/allowed-domains');
+    return response.data;
+  },
 };
 
 // Quiz API

@@ -424,6 +424,28 @@ router.post('/processing/cleanup', authenticateToken, asyncHandler(async (req, r
 }));
 
 /**
+ * GET /api/materials/allowed-domains
+ * Return the list of allowed URL domains from environment config
+ */
+router.get('/allowed-domains', asyncHandler(async (req, res) => {
+  const allowedDomainsEnv = process.env.ALLOWED_DOMAINS;
+  let domains = null;
+
+  if (allowedDomainsEnv) {
+    try {
+      const parsed = JSON.parse(allowedDomainsEnv);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        domains = parsed;
+      }
+    } catch (e) {
+      console.error('❌ Invalid ALLOWED_DOMAINS format in .env');
+    }
+  }
+
+  return successResponse(res, { domains }, 'Allowed domains retrieved');
+}));
+
+/**
  * GET /api/materials/:materialId/preview
  * Get preview of material content by retrieving all chunks from Qdrant
  */

@@ -132,75 +132,50 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
   const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = []) => {
     try {
+      // Step 1: Create the folder/course (await this - it's fast)
+      console.log(`📁 Creating course: ${courseName}`);
       const response = await foldersApi.createFolder(courseName, 1);
+      const courseId = response.folder._id;
 
-      // Immediately add the new folder to the sidebar state
+      // Step 2: Immediately add the new folder to the sidebar state
       setFolders(prev => [response.folder, ...prev]);
 
-      // Upload materials to the created folder
-      if (materials.length > 0) {
-        // Separate materials by type
-        const fileMaterials = materials.filter(m => m.type === 'pdf' || m.type === 'docx');
-        const urlMaterials = materials.filter(m => m.type === 'url');
-        const textMaterials = materials.filter(m => m.type === 'text');
-
-        // Upload all files at once with progress tracking
-        if (fileMaterials.length > 0) {
-          const files = fileMaterials.map(m => m.file).filter(Boolean) as File[];
-          if (files.length > 0) {
-            // Create a DataTransfer object to convert File[] to FileList
-            const dataTransfer = new DataTransfer();
-            files.forEach(file => {
-              dataTransfer.items.add(file);
-            });
-
-            // Upload with progress callback
-            await materialsApi.uploadFiles(
-              response.folder._id,
-              dataTransfer.files,
-              (progress) => {
-                // Publish progress event for UI feedback (can be used by toast notifications, etc.)
-                publish('upload-progress', {
-                  courseId: response.folder._id,
-                  progress: progress,
-                  filesCount: files.length
-                });
-              }
-            );
-
-          }
-        }
-
-        // Upload URLs one by one (they need individual names)
-        for (const material of urlMaterials) {
-          try {
-            await materialsApi.addUrl(response.folder._id, material.content || material.name, material.name);
-          } catch (materialError) {
-            console.error('❌ Failed to upload URL material:', material.name, materialError);
-          }
-        }
-
-        // Upload text materials one by one (they need individual content and names)
-        for (const material of textMaterials) {
-          try {
-            await materialsApi.addText(response.folder._id, material.content || '', material.name);
-          } catch (materialError) {
-            console.error('❌ Failed to upload text material:', material.name, materialError);
-          }
-        }
-
-        // Reload folders to update material counts
-        await loadFolders();
-      }
-
-      // Publish course-created event for other components
-      publish('course-created', { courseId: response.folder._id, courseName: response.folder.name });
-
-      // Automatically open the newly created course
+      // Step 3: Navigate to dashboard immediately (don't wait for uploads)
       const newCourseId = response.folder._id;
       dispatch(setActiveCourse(newCourseId));
       setExpandedCourses(prev => [...prev, newCourseId]);
       navigate(`/course/${newCourseId}`);
+
+      // Publish course-created event for other components
+      publish('course-created', { courseId: newCourseId, courseName: response.folder.name });
+
+      // Step 4: If materials exist, start background upload (non-blocking)
+      if (materials.length > 0) {
+        console.log(`📤 Starting background upload for ${materials.length} materials`);
+
+        // Upload materials in background (fire and forget)
+        // Materials will appear in CourseView as they're created with "processing" status
+        (async () => {
+          for (const material of materials) {
+            try {
+              if (material.type === 'url') {
+                await materialsApi.addUrl(courseId, material.content || material.name, material.name);
+              } else if (material.type === 'text') {
+                await materialsApi.addText(courseId, material.content || '', material.name);
+              } else if (material.file) {
+                const fileList = new DataTransfer();
+                fileList.items.add(material.file);
+                await materialsApi.uploadFiles(courseId, fileList.files);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to upload material: ${material.name}`, error);
+            }
+          }
+          // Reload folders to update material count
+          await loadFolders();
+        })();
+      }
+
     } catch (err) {
       console.error('❌ Sidebar: Failed to create folder:', err);
       if (err instanceof ApiError) {

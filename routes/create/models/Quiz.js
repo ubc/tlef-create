@@ -128,7 +128,7 @@ const quizSchema = new mongoose.Schema({
       totalQuestions: {
         type: Number,
         default: 30,
-        min: 5,
+        min: 1, // Allow at least 1 question (will be validated based on # of LOs in controller)
         max: 100
       },
       approach: {

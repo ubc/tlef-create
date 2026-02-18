@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Upload, Link, FileText, X, Plus, Loader2, Eye } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
+import { materialsApi } from '../services/api';
 import '../styles/components/MaterialUpload.css';
 
 interface Material {
@@ -38,7 +39,17 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   // Track upload progress for each file
   const [uploadingFiles, setUploadingFiles] = useState<Map<string, number>>(new Map());
 
+  const [allowedDomains, setAllowedDomains] = useState<string[] | null>(null);
+
   const { showNotification } = usePubSub('MaterialUpload');
+
+  useEffect(() => {
+    materialsApi.getAllowedDomains().then(({ domains }) => {
+      setAllowedDomains(domains);
+    }).catch(() => {
+      // silently ignore — fallback UI will show static list
+    });
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -294,15 +305,29 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                       required
                   />
                   <div className="url-allowlist-info">
-                    <p className="allowlist-title">Accepted URL Types:</p>
-                    <ul className="allowlist-items">
-                      <li>✓ Direct PDF links</li>
-                      <li>✓ Static websites with text content</li>
-                      <li>✗ Google Drive, Dropbox, OneDrive links</li>
-                      <li>✗ Direct image, video, or audio files</li>
-                      <li>✗ Archive files (ZIP, RAR, etc.)</li>
-                    </ul>
-                    <p className="allowlist-note">For cloud storage files, please download and upload directly.</p>
+                    {allowedDomains ? (
+                      <>
+                        <p className="allowlist-title">Allowed Domains:</p>
+                        <ul className="allowlist-items">
+                          {allowedDomains.map(domain => (
+                            <li key={domain}>✓ {domain} (and subdomains)</li>
+                          ))}
+                        </ul>
+                        <p className="allowlist-note">Only URLs from the above domains are accepted.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="allowlist-title">Accepted URL Types:</p>
+                        <ul className="allowlist-items">
+                          <li>✓ Direct PDF links</li>
+                          <li>✓ Static websites with text content</li>
+                          <li>✗ Google Drive, Dropbox, OneDrive links</li>
+                          <li>✗ Direct image, video, or audio files</li>
+                          <li>✗ Archive files (ZIP, RAR, etc.)</li>
+                        </ul>
+                        <p className="allowlist-note">For cloud storage files, please download and upload directly.</p>
+                      </>
+                    )}
                   </div>
                   <div className="form-actions">
                     <button type="button" className="btn btn-secondary" onClick={() => setShowUrlForm(false)}>

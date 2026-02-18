@@ -165,7 +165,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         }
 
         if (quiz.settings?.aiConfig) {
-          setAIConfig(quiz.settings.aiConfig);
+          // Merge with defaults to ensure all fields are present
+          setAIConfig({
+            totalQuestions: quiz.settings.aiConfig.totalQuestions || Math.max(30, learningObjectives.length),
+            approach: quiz.settings.aiConfig.approach || 'support',
+            additionalInstructions: quiz.settings.aiConfig.additionalInstructions || ''
+          });
         }
       } catch (error) {
         console.error('Failed to restore settings:', error);
@@ -206,6 +211,21 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       // Get current quiz to merge settings
       const { quiz } = await quizApi.getQuiz(quizId);
 
+      // Clean aiConfig - remove empty strings and ensure proper types
+      const cleanedAiConfig: any = {
+        totalQuestions: aiConfig.totalQuestions
+      };
+
+      // Only include approach if it has a value
+      if (aiConfig.approach && aiConfig.approach !== '') {
+        cleanedAiConfig.approach = aiConfig.approach;
+      }
+
+      // Only include additionalInstructions if it has a value
+      if (aiConfig.additionalInstructions && aiConfig.additionalInstructions.trim() !== '') {
+        cleanedAiConfig.additionalInstructions = aiConfig.additionalInstructions.trim();
+      }
+
       await quizApi.updateQuiz(quizId, {
         settings: {
           ...quiz.settings, // Keep existing settings
@@ -215,7 +235,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             learningObjective: item.learningObjectiveId,
             count: item.count
           })),
-          aiConfig
+          aiConfig: cleanedAiConfig
         }
       });
       setHasUnsavedChanges(false);
@@ -234,6 +254,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     const minQuestions = learningObjectives.length;
     if (aiConfig.totalQuestions < minQuestions || aiConfig.totalQuestions > 100) {
       showNotification('error', 'Invalid Input', `Please enter a number between ${minQuestions} and 100`);
+      return;
+    }
+
+    // Validate approach is selected
+    if (!aiConfig.approach || !['support', 'assess', 'gamify'].includes(aiConfig.approach)) {
+      showNotification('error', 'Approach Required', 'Please select a pedagogical approach');
       return;
     }
 

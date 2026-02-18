@@ -1,0 +1,180 @@
+/* Material Upload Progress Component */
+.material-upload-progress {
+  background: var(--surface-color, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.upload-progress-header {
+  margin-bottom: 1rem;
+}
+
+.upload-progress-header h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #1f2937);
+  margin: 0 0 0.25rem 0;
+}
+
+.upload-info-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #6b7280);
+  margin: 0;
+}
+
+.upload-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Upload Item */
+.upload-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--background-color, #f9fafb);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.upload-item--uploading,
+.upload-item--processing,
+.upload-item--pending {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.upload-item--completed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.upload-item--failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.upload-item-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.status-icon {
+  display: block;
+}
+
+.status-icon.success {
+  color: #22c55e;
+}
+
+.status-icon.error {
+  color: #ef4444;
+}
+
+.status-icon.processing,
+.status-icon.uploading,
+.status-icon.pending {
+  color: #3b82f6;
+}
+
+.status-icon.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.upload-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-item-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary, #1f2937);
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-item-status {
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #6b7280);
+  margin-bottom: 0.5rem;
+}
+
+.upload-item--failed .upload-item-status {
+  color: #dc2626;
+}
+
+/* Progress Bar */
+.upload-progress-bar {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  transition: width 0.3s ease;
+  animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+/* Processing uses Loader2 spinner icon - no additional styles needed */
+
+/* Actions */
+.upload-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.upload-item-actions .btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .material-upload-progress {
+    padding: 1rem;
+  }
+
+  .upload-item {
+    flex-wrap: wrap;
+  }
+
+  .upload-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+  }
+}

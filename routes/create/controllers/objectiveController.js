@@ -404,15 +404,28 @@ router.delete('/quiz/:quizId/all', authenticateToken, validateQuizId, asyncHandl
     return notFoundResponse(res, 'Quiz');
   }
 
+  const Question = (await import('../models/Question.js')).default;
+
+  // Get all objective IDs for this quiz before deleting
+  const objectives = await LearningObjective.find({ quiz: quizId }).select('_id');
+  const objectiveIds = objectives.map(o => o._id);
+
+  // Delete all questions linked to these objectives
+  const questionResult = await Question.deleteMany({ learningObjective: { $in: objectiveIds } });
+
+  // Delete all objectives
   const result = await LearningObjective.deleteMany({ quiz: quizId });
 
+  // Clear arrays on quiz document
   quiz.learningObjectives = [];
+  quiz.questions = [];
   await quiz.save();
 
   return successResponse(res, {
     deletedCount: result.deletedCount,
+    deletedQuestions: questionResult.deletedCount,
     quizId: quizId
-  }, `${result.deletedCount} learning objectives deleted successfully`);
+  }, `${result.deletedCount} learning objectives and ${questionResult.deletedCount} question(s) deleted successfully`);
 }));
 
 /**

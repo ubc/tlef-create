@@ -13,6 +13,7 @@ import {
   regenerateSingleObjective,
   deleteAllObjectives
 } from '../store/slices/learningObjectiveSlice';
+import { clearQuestionsForQuiz } from '../store/slices/questionSlice';
 import RegeneratePromptModal from './RegeneratePromptModal';
 import { usePubSub } from '../hooks/usePubSub';
 import { PUBSUB_EVENTS, QuestionGenerationStartedPayload, QuestionGenerationCompletedPayload, QuestionGenerationFailedPayload } from '../services/pubsubService';
@@ -33,6 +34,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const dispatch = useDispatch<AppDispatch>();
   const { objectives: reduxObjectives, loading, generating, classifying, error } = useSelector((state: RootState) => state.learningObjective);
   const questionsGenerating = useSelector((state: RootState) => selectIsGenerating(state, quizId));
+  const questionsByQuiz = useSelector((state: RootState) => state.question.questionsByQuiz);
   
   // PubSub hook for event subscriptions
   const { subscribe, showNotification, publish } = usePubSub('LearningObjectives');
@@ -63,6 +65,10 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     show: boolean;
     index: number;
     objectiveId: string;
+    questionCount: number;
+  } | null>(null);
+  const [deleteAllConfirmation, setDeleteAllConfirmation] = useState<{
+    show: boolean;
     questionCount: number;
   } | null>(null);
   const [dontShowDeleteWarning, setDontShowDeleteWarning] = useState(() => {
@@ -537,26 +543,34 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
   };
 
-  const handleDeleteAll = async () => {
+  const handleDeleteAll = () => {
     // Guard: Prevent deletion while questions are being generated
     if (questionsGenerating) {
       showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
       return;
     }
-    
-    try {
-        // Use the dedicated delete all endpoint
-        await dispatch(deleteAllObjectives(quizId));
 
-        // Also clear local state
-        onObjectivesChange([]);
+    const questionCount = (questionsByQuiz[quizId] || []).length;
+    setDeleteAllConfirmation({ show: true, questionCount });
+  };
+
+  const handleConfirmDeleteAll = async () => {
+    try {
+      await dispatch(deleteAllObjectives(quizId));
+      // Also clear questions from Redux so the UI updates immediately without a page refresh
+      dispatch(clearQuestionsForQuiz(quizId));
+      onObjectivesChange([]);
     } catch (error) {
       console.error('Failed to delete all objectives:', error);
-      
-      // Fallback to clearing local state only
       dispatch(clearObjectives());
       onObjectivesChange([]);
+    } finally {
+      setDeleteAllConfirmation(null);
     }
+  };
+
+  const handleCancelDeleteAll = () => {
+    setDeleteAllConfirmation(null);
   };
 
   const openRegenerateModal = (index: number) => {
@@ -1034,6 +1048,40 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                 </button>
                 <button className="btn btn-danger" onClick={handleConfirmDelete}>
                   Delete Learning Objective and {deleteConfirmation.questionCount} Question(s)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteAllConfirmation?.show && (
+          <div className="modal-overlay" onClick={handleCancelDeleteAll}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Delete All Learning Objectives?</h3>
+                <button className="btn-close" onClick={handleCancelDeleteAll}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>
+                  This will permanently delete all <strong>{currentObjectives.length}</strong> learning objective(s).
+                </p>
+                {deleteAllConfirmation.questionCount > 0 && (
+                  <p>
+                    This will also <strong>permanently delete all {deleteAllConfirmation.questionCount} question(s)</strong> associated with these objectives.
+                  </p>
+                )}
+                <p style={{ marginTop: '16px' }}>
+                  Are you sure you want to continue?
+                </p>
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={handleCancelDeleteAll}>
+                  Cancel
+                </button>
+                <button className="btn btn-danger" onClick={handleConfirmDeleteAll}>
+                  Delete All{deleteAllConfirmation.questionCount > 0 ? ` (${currentObjectives.length} Objectives + ${deleteAllConfirmation.questionCount} Questions)` : ` ${currentObjectives.length} Objectives`}
                 </button>
               </div>
             </div>

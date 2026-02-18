@@ -17,7 +17,7 @@ class SSEService extends EventEmitter {
    */
   addClient(sessionId, res, metadata = {}) {
     console.log(`[SSE] Client connected: ${sessionId}`);
-    
+
     // Store client response object
     this.clients.set(sessionId, res);
     this.sessions.set(sessionId, {
@@ -26,15 +26,29 @@ class SSEService extends EventEmitter {
       status: 'connected'
     });
 
-    // Setup SSE headers - include X-Accel-Buffering to disable nginx buffering
-    res.writeHead(200, {
+    // Get the request object to access origin header
+    const req = res.req;
+    const origin = req.headers.origin || req.headers.referer;
+
+    // Setup SSE headers with proper CORS for credentials
+    const headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control'
-    });
+    };
+
+    // Set CORS headers for credentials support
+    if (origin) {
+      headers['Access-Control-Allow-Origin'] = origin;
+      headers['Access-Control-Allow-Credentials'] = 'true';
+    } else {
+      // Fallback for same-origin requests
+      headers['Access-Control-Allow-Origin'] = '*';
+    }
+
+    res.writeHead(200, headers);
     
     // Flush headers immediately
     if (res.flushHeaders) {

@@ -106,7 +106,10 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     setConnectionStatus('connecting');
     setError(null);
 
-    const eventSource = new EventSource(sseUrl);
+    // Use EventSource with credentials enabled for cross-origin requests
+    // Note: EventSource will automatically include cookies if same-origin,
+    // but for cross-origin we rely on CORS with credentials: true
+    const eventSource = new EventSource(sseUrl, { withCredentials: true });
     eventSourceRef.current = eventSource;
 
     // Connection opened
