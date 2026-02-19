@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Save, Wand2 } from 'lucide-react';
 import { RootState, AppDispatch } from '../../store';
@@ -36,6 +36,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const loadingAnimationRef = useRef<HTMLDivElement>(null);
 
   // Streaming state
   const [streamingState, setStreamingState] = useState<StreamingState>({
@@ -264,6 +265,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     }
 
     setIsGeneratingPlan(true);
+    // Scroll to loading animation after state update renders it
+    setTimeout(() => {
+      loadingAnimationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
     try {
       console.log('Generating AI plan with:', { quizId, totalQuestions: aiConfig.totalQuestions, approach: aiConfig.approach });
 
@@ -516,7 +521,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
                 learningObjectives={learningObjectives}
               />
 
-              {isGeneratingPlan && <AILoadingAnimation />}
+              {isGeneratingPlan && (
+                <div ref={loadingAnimationRef}>
+                  <AILoadingAnimation />
+                </div>
+              )}
             </>
           )}
 
