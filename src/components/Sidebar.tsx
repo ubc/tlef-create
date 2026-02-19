@@ -151,7 +151,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
       // Step 4: If materials exist, start background upload (non-blocking)
       if (materials.length > 0) {
-        console.log(`📤 Starting background upload for ${materials.length} materials`);
+        console.log(`Starting background upload for ${materials.length} materials`);
 
         // Upload materials in background (fire and forget)
         // Materials will appear in CourseView as they're created with "processing" status
@@ -167,8 +167,11 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                 fileList.items.add(material.file);
                 await materialsApi.uploadFiles(courseId, fileList.files);
               }
+
+              // Notify CourseView to refresh materials after each upload
+              publish('materials-updated', { courseId });
             } catch (error) {
-              console.error(`❌ Failed to upload material: ${material.name}`, error);
+              console.error(`Failed to upload material: ${material.name}`, error);
             }
           }
           // Reload folders to update material count

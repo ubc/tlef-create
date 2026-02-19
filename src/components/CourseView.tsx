@@ -66,6 +66,21 @@ const CourseView = () => {
     subscribe('quiz-created', handleQuizCreated);
   }, [courseId, subscribe]);
 
+  // Listen for materials-updated events (e.g., from background uploads in Sidebar)
+  useEffect(() => {
+    const handleMaterialsUpdated = (data: { courseId: string }) => {
+      if (data.courseId === courseId && courseId) {
+        materialsApi.getMaterials(courseId).then(response => {
+          setMaterials(response.materials);
+        }).catch(err => {
+          console.error('Failed to refresh materials:', err);
+        });
+      }
+    };
+
+    subscribe('materials-updated', handleMaterialsUpdated);
+  }, [courseId, subscribe]);
+
   // Poll for material processing status
   useEffect(() => {
     const hasProcessingMaterials = materials.some(m =>
