@@ -462,12 +462,19 @@
     overflow: hidden;
 }
 
+/* Preview modal — wider to show document content comfortably */
+.modal-content.preview-modal {
+    max-width: min(90vw, 900px);
+    max-height: 85vh;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
 }
 
 .modal-title {
@@ -475,6 +482,7 @@
     font-size: var(--font-size-xl);
     font-weight: 600;
     color: var(--color-foreground);
+    word-break: break-word;
 }
 
 .modal-subtitle {
@@ -486,6 +494,7 @@
 .modal-close {
     padding: var(--spacing-xs);
     color: var(--color-muted-foreground);
+    flex-shrink: 0;
 }
 
 .modal-close:hover {
@@ -497,6 +506,7 @@
     padding: var(--spacing-lg);
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
 }
 
 .preview-loading {
@@ -525,10 +535,44 @@
     margin: 0;
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
     font-size: var(--font-size-sm);
-    line-height: 1.6;
+    line-height: 1.7;
     color: var(--color-foreground);
+}
+
+/* Preview modal — tablet */
+@media (max-width: 1024px) {
+    .modal-content.preview-modal {
+        max-width: 92vw;
+        max-height: 85vh;
+    }
+}
+
+/* Preview modal — mobile */
+@media (max-width: 640px) {
+    .modal-overlay {
+        padding: 0;
+    }
+
+    .modal-content.preview-modal {
+        max-width: 100%;
+        max-height: 100%;
+        height: 100%;
+        border-radius: 0;
+    }
+
+    .modal-content.preview-modal .modal-header {
+        padding: var(--spacing-md);
+    }
+
+    .modal-content.preview-modal .modal-body {
+        padding: var(--spacing-md);
+    }
+
+    .modal-content.preview-modal .preview-content {
+        padding: var(--spacing-md);
+    }
 }
 
 /* Uploading Files Progress Styles */

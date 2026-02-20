@@ -75,13 +75,21 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
 
   try {
     const Quiz = (await import('../models/Quiz.js')).default;
-    const quiz = await Quiz.findById(quizId).populate('learningObjectives');
+    const quiz = await Quiz.findById(quizId)
+      .populate('learningObjectives')
+      .populate('materials');
 
     if (!quiz) {
       return res.status(404).json({ error: 'Quiz not found' });
     }
 
     const enrichedConfigs = enrichQuestionConfigsWithObjectives(questionConfigs, quiz);
+
+    // Get processed material IDs for RAG retrieval
+    const processedMaterialIds = (quiz.materials || [])
+      .filter(m => m.processingStatus === 'completed')
+      .map(m => m._id.toString());
+    console.log(`📚 RAG: ${processedMaterialIds.length} processed materials available for retrieval`);
 
     sseService.notifyBatchStarted(finalSessionId, {
       quizId,
@@ -91,6 +99,7 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
     });
 
     const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
+    const { default: ragService } = await import('../services/ragService.js');
 
     // Helper function to add timeout to a promise
     const withTimeout = (promise, timeoutMs, questionId) => {
@@ -110,13 +119,30 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
     const questionPromises = enrichedConfigs.map(async (config, index) => {
       const questionId = `question-${index + 1}`;
       try {
+        // Retrieve relevant content from RAG for this question's learning objective
+        let relevantContent = [];
+        if (ragService.isInitialized && processedMaterialIds.length > 0) {
+          try {
+            const loText = config.learningObjective?.text || config.learningObjective;
+            const ragResult = await ragService.retrieveRelevantContent(
+              loText,
+              config.questionType,
+              { topK: 5, materialIds: processedMaterialIds, minScore: 0.3 }
+            );
+            relevantContent = ragResult?.chunks || [];
+            console.log(`[${questionId}] RAG retrieved ${relevantContent.length} chunks`);
+          } catch (ragError) {
+            console.error(`[${questionId}] RAG retrieval failed, proceeding without:`, ragError.message);
+          }
+        }
+
         await withTimeout(
           questionStreamingService.generateQuestionWithStreaming({
             quizId,
             questionId,
             questionConfig: config,
             learningObjective: config.learningObjective,
-            relevantContent: config.relevantContent,
+            relevantContent: relevantContent,
             sessionId: finalSessionId,
             userId
           }),

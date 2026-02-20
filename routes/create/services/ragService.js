@@ -9,6 +9,7 @@ import { DocumentParsingModule } from 'ubc-genai-toolkit-document-parsing';
 import { ConsoleLogger } from 'ubc-genai-toolkit-core';
 import Material from '../models/Material.js';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -666,7 +667,40 @@ class QuizRAGService {
       if (material.type === 'text') {
         content = material.content;
       } else if (material.type === 'url') {
-        content = material.content || 'URL content not available';
+        // Use cached content if already extracted, otherwise fetch from URL
+        if (material.content && material.content !== 'URL content not available') {
+          content = material.content;
+          console.log(`📋 Using cached URL content (${content.length} chars)`);
+        } else {
+          console.log(`🌐 Fetching URL content: ${material.url}`);
+          const urlExtractService = (await import('./urlExtractService.js')).default;
+          const extractResult = await urlExtractService.extract(material.url);
+
+          if (extractResult.tempFilePath) {
+            // PDF URL — parse the downloaded temp file with DocumentParsingModule
+            try {
+              console.log(`📄 Parsing downloaded PDF: ${extractResult.tempFilePath}`);
+              const parseResult = await this.documentParser.parse(
+                { filePath: extractResult.tempFilePath },
+                'text'
+              );
+              content = parseResult.content;
+              console.log(`✅ Parsed PDF from URL: ${content.length} characters`);
+            } finally {
+              // Always clean up temp file
+              await fs.unlink(extractResult.tempFilePath).catch(() => {});
+            }
+          } else {
+            content = extractResult.content;
+          }
+
+          // Cache extracted content on the material document for future use
+          if (content && content.trim().length > 0) {
+            material.content = content;
+            await material.save();
+            console.log(`💾 Cached extracted content (${content.length} chars) on material`);
+          }
+        }
       } else if (material.filePath && (material.type === 'pdf' || material.type === 'docx')) {
         // Parse documents using UBC toolkit
         try {
