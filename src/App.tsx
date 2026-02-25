@@ -8,6 +8,7 @@ import QuizView from './components/QuizView';
 import UserAccount from './components/UserAccount';
 import Login from './components/Login';
 import NotFound from "./pages/NotFound";
+import H5PPreview from "./pages/H5PPreview";
 import { useState, useEffect } from 'react';
 import { API_URL } from './config/api';
 
@@ -66,6 +67,9 @@ const App = () => {
           <Route path="/course/:courseId/quiz/:quizId" element={isAuthenticated ? <Layout><QuizView /></Layout> : <Navigate to="/login" />} />
           <Route path="/account" element={isAuthenticated ? <Layout><UserAccount /></Layout> : <Navigate to="/login" />} />
           
+          {/* H5P Preview — no auth required (dev tool) */}
+          <Route path="/h5p-preview" element={<H5PPreview />} />
+
           {/* SAML callback route */}
           <Route path="/auth/callback" element={<AuthCallback onAuthChange={checkAuth} />} />
           

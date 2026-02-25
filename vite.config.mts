@@ -13,6 +13,11 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8051',
         changeOrigin: true,
         secure: false,
+      },
+      '/h5p-preview-files': {
+        target: 'http://localhost:8051',
+        changeOrigin: true,
+        secure: false,
       }
     }
   },
