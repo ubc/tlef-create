@@ -167,6 +167,9 @@ app.post('/Shibboleth.sso/SAML2/POST', (req, res) => {
 // Static serving for extracted H5P preview files (before API routes to avoid rate limiting)
 app.use('/h5p-preview-files', express.static(path.join(__dirname, 'routes', 'create', 'uploads', 'h5p-preview')));
 
+// Static serving for H5P library files (used by quiz preview rendering)
+app.use('/h5p-libs', express.static(path.join(__dirname, 'routes', 'create', 'h5p-libs')));
+
 // Mount the API router FIRST (before static files)
 app.use('/api/create', createRoutes);
 
