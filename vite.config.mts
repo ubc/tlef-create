@@ -18,11 +18,6 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8051',
         changeOrigin: true,
         secure: false,
-      },
-      '/h5p-libs': {
-        target: 'http://localhost:8051',
-        changeOrigin: true,
-        secure: false,
       }
     }
   },

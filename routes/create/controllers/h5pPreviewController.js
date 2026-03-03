@@ -86,6 +86,26 @@ router.get('/core/h5p-core.js', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * GET /libs/* — Serve H5P library files (JS, CSS, fonts, images).
+ * Uses the existing /api/create/h5p-preview/ route so no nginx config is needed.
+ */
+router.get('/libs/*', (req, res) => {
+  const requestedPath = req.params[0];
+
+  // Security: prevent directory traversal
+  if (requestedPath.includes('..')) {
+    return res.status(400).send('Invalid path');
+  }
+
+  const filePath = path.join(H5P_LIBS_DIR, requestedPath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      res.status(404).send('Library file not found');
+    }
+  });
+});
+
+/**
  * GET /quiz/:quizId/render — Render quiz questions as real H5P content in-browser.
  * Each question gets its own numbered header + H5P.newRunnable() instance.
  * Supports ?lo=<loId> to filter by a specific learning objective.
@@ -169,7 +189,9 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
   // Read directly from h5p-libs (no temp dir or symlinks needed).
   const { cssFiles, jsFiles } = await resolveLibraryDependencies(syntheticH5pJson);
 
-  const libBasePath = '/h5p-libs';
+  // Serve library files through the existing /api route — works on all environments
+  // without needing extra nginx/proxy configuration.
+  const libBasePath = '/api/create/h5p-preview/libs';
   const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${libBasePath}/${f}">`).join('\n');
   const jsTags = jsFiles.map(f => `  <script src="${libBasePath}/${f}" onerror="window.__h5pLoadErrors=(window.__h5pLoadErrors||[]);window.__h5pLoadErrors.push('${f.replace(/'/g, "\\'")}')"></script>`).join('\n');
 
