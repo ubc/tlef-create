@@ -165,37 +165,13 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
     preloadedDependencies
   };
 
-  // Create a temp directory for this preview, copy needed library files
-  const previewId = uuidv4();
-  const extractDir = path.join(UPLOAD_BASE, previewId);
-  await fs.mkdir(extractDir, { recursive: true });
+  // Resolve CSS/JS dependencies in correct load order.
+  // Read directly from h5p-libs (no temp dir or symlinks needed).
+  const { cssFiles, jsFiles } = await resolveLibraryDependencies(syntheticH5pJson);
 
-  // Symlink ALL library dirs from h5p-libs into the temp directory.
-  // This is instant (vs mergeDir copying thousands of files) and ensures
-  // resolveDependencies finds transitive deps without triggering mergeDir.
-  try {
-    const libEntries = await fs.readdir(H5P_LIBS_DIR, { withFileTypes: true });
-    for (const entry of libEntries) {
-      if (entry.isDirectory()) {
-        const src = path.join(H5P_LIBS_DIR, entry.name);
-        const dest = path.join(extractDir, entry.name);
-        try {
-          await fs.symlink(src, dest, 'dir');
-        } catch {
-          // Already exists or other issue, skip
-        }
-      }
-    }
-  } catch {
-    // h5p-libs dir not accessible
-  }
-
-  // Resolve CSS/JS dependencies in correct load order
-  const { cssFiles, jsFiles } = await resolveDependencies(syntheticH5pJson, extractDir);
-
-  const basePath = `/h5p-preview-files/${previewId}`;
-  const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${basePath}/${f}">`).join('\n');
-  const jsTags = jsFiles.map(f => `  <script src="${basePath}/${f}" onerror="window.__h5pLoadErrors=(window.__h5pLoadErrors||[]);window.__h5pLoadErrors.push('${f.replace(/'/g, "\\'")}')"></script>`).join('\n');
+  const libBasePath = '/h5p-libs';
+  const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${libBasePath}/${f}">`).join('\n');
+  const jsTags = jsFiles.map(f => `  <script src="${libBasePath}/${f}" onerror="window.__h5pLoadErrors=(window.__h5pLoadErrors||[]);window.__h5pLoadErrors.push('${f.replace(/'/g, "\\'")}')"></script>`).join('\n');
 
   // Build per-question HTML blocks and H5P.newRunnable() calls
   const questionBlocks = [];
@@ -221,7 +197,7 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
         var library = ${JSON.stringify(h5pContent)};
         var $container = jQuery('#${containerId}');
         $container.addClass('h5p-content');
-        H5P.newRunnable(library, 'preview-${previewId}-${idx}', $container, false, {
+        H5P.newRunnable(library, 'preview-${quizId}-${idx}', $container, false, {
           metadata: library.metadata || {}
         });
       })();`);
@@ -313,9 +289,6 @@ ${runnableCalls.join('\n')}
   </script>
 </body>
 </html>`;
-
-  // Fire-and-forget cleanup of old previews
-  cleanupOldPreviews().catch(() => {});
 
   res.removeHeader('Content-Security-Policy');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
@@ -422,8 +395,124 @@ ${jsTags}
 }));
 
 /**
+ * Resolve library dependencies directly from h5p-libs directory.
+ * No temp directory, symlinks, or file copying needed — files are served
+ * via the /h5p-libs static route.
+ * Uses topological sort (Kahn's algorithm) to ensure correct load order.
+ */
+async function resolveLibraryDependencies(h5pJson) {
+  const deps = h5pJson.preloadedDependencies || [];
+
+  const libMap = new Map();
+  const adjacency = new Map();
+
+  // BFS to discover all libraries and their transitive dependencies
+  const queue = [...deps];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const dep = queue.shift();
+    const key = `${dep.machineName}-${dep.majorVersion}.${dep.minorVersion}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+
+    const dirName = key;
+    const libJsonPath = path.join(H5P_LIBS_DIR, dirName, 'library.json');
+
+    let libDirExists = false;
+    try {
+      await fs.access(libJsonPath);
+      libDirExists = true;
+    } catch {
+      // Library not found — skip
+    }
+
+    if (!libDirExists) {
+      libMap.set(key, { dirName, css: [], js: [], deps: [] });
+      adjacency.set(key, []);
+      continue;
+    }
+
+    const libJson = JSON.parse(await fs.readFile(libJsonPath, 'utf-8'));
+
+    const css = (libJson.preloadedCss || []).map(f => `${dirName}/${f.path}`);
+    const js = (libJson.preloadedJs || []).map(f => `${dirName}/${f.path}`);
+    const subDeps = libJson.preloadedDependencies || [];
+    const subDepKeys = subDeps.map(d => `${d.machineName}-${d.majorVersion}.${d.minorVersion}`);
+
+    libMap.set(key, { dirName, css, js, deps: subDepKeys });
+    adjacency.set(key, subDepKeys);
+
+    for (const subDep of subDeps) {
+      queue.push(subDep);
+    }
+  }
+
+  // Build reverse adjacency and in-degree for Kahn's algorithm
+  const reverseAdj = new Map();
+  const realInDegree = new Map();
+  for (const key of adjacency.keys()) {
+    reverseAdj.set(key, []);
+    realInDegree.set(key, 0);
+  }
+  for (const [key, depKeys] of adjacency) {
+    for (const depKey of depKeys) {
+      if (!reverseAdj.has(depKey)) reverseAdj.set(depKey, []);
+      reverseAdj.get(depKey).push(key);
+      realInDegree.set(key, (realInDegree.get(key) || 0) + 1);
+    }
+  }
+
+  // Kahn's algorithm — topological sort
+  const sorted = [];
+  const q = [];
+  for (const [key, deg] of realInDegree) {
+    if (deg === 0) q.push(key);
+  }
+  while (q.length > 0) {
+    const current = q.shift();
+    sorted.push(current);
+    for (const neighbor of (reverseAdj.get(current) || [])) {
+      realInDegree.set(neighbor, realInDegree.get(neighbor) - 1);
+      if (realInDegree.get(neighbor) === 0) {
+        q.push(neighbor);
+      }
+    }
+  }
+  // Add any remaining nodes (cycles) at the end
+  for (const key of adjacency.keys()) {
+    if (!sorted.includes(key)) sorted.push(key);
+  }
+
+  // Collect CSS and JS in dependency order, verifying files exist on disk.
+  // f is like "H5P.DragText-1.10/dist/h5p-drag-text.js" and H5P_LIBS_DIR
+  // is the parent containing those library directories.
+  const cssFiles = [];
+  const jsFiles = [];
+  for (const key of sorted) {
+    const lib = libMap.get(key);
+    if (!lib) continue;
+    for (const f of lib.css) {
+      try {
+        await fs.access(path.join(H5P_LIBS_DIR, f));
+        cssFiles.push(f);
+      } catch { /* skip missing */ }
+    }
+    for (const f of lib.js) {
+      try {
+        await fs.access(path.join(H5P_LIBS_DIR, f));
+        jsFiles.push(f);
+      } catch { /* skip missing */ }
+    }
+  }
+
+  return { cssFiles, jsFiles };
+}
+
+/**
  * Resolve the full dependency tree from h5p.json into ordered CSS and JS file lists.
  * Uses topological sort (Kahn's algorithm) to ensure correct load order.
+ * Used by the upload-based preview (/:id/render).
  */
 async function resolveDependencies(h5pJson, extractDir) {
   const deps = h5pJson.preloadedDependencies || [];
