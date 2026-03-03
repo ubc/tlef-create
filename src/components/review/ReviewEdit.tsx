@@ -10,13 +10,11 @@ import { fetchQuestions, deleteQuestion, updateQuestion as updateQuestionThunk }
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import RegeneratePromptModal from '../RegeneratePromptModal';
 import PdfExportModal from '../PdfExportModal';
-import InteractiveQuestionView from './InteractiveQuestionView';
 import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
 import '../../styles/components/ReviewEdit.css';
-import '../../styles/components/InteractiveQuestions.css';
 
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [searchParams] = useSearchParams();
@@ -34,18 +32,6 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLO, setFilterByLO] = useState<number | null>(null);
-
-  const [expandedBulletPoints, setExpandedBulletPoints] = useState<{[questionId: string]: {[bulletIndex: number]: boolean}}>({});
-
-  const toggleBulletPoint = (questionId: string, bulletIndex: number) => {
-    setExpandedBulletPoints(prev => ({
-      ...prev,
-      [questionId]: {
-        ...prev[questionId],
-        [bulletIndex]: !prev[questionId]?.[bulletIndex]
-      }
-    }));
-  };
 
   const handlers = useQuestionEditHandlers(questions, setQuestions);
 
@@ -343,17 +329,36 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </div>
           ) : viewMode === 'interact' ? (
             <div className="questions-interactive">
-              {filteredQuestions.map((question, index) => (
-                <div key={question._id}>
-                  <InteractiveQuestionView
-                    question={question}
-                    index={index}
-                    expandedBulletPoints={expandedBulletPoints}
-                    toggleBulletPoint={toggleBulletPoint}
-                    learningObjectives={learningObjectives}
-                  />
-                </div>
-              ))}
+              <iframe
+                key={`h5p-preview-${quizId}-${filterByLO ?? 'all'}`}
+                src={`/api/create/h5p-preview/quiz/${quizId}/render${filterByLO !== null ? `?lo=${filterByLO}` : ''}`}
+                style={{
+                  width: '100%',
+                  height: `${Math.max(800, filteredQuestions.length * 350)}px`,
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#f9fafb'
+                }}
+                title="H5P Quiz Preview"
+                onLoad={(e) => {
+                  // H5P content renders after iframe load, so poll briefly to catch final height
+                  const iframe = e.target as HTMLIFrameElement;
+                  let attempts = 0;
+                  const resize = () => {
+                    try {
+                      const body = iframe.contentDocument?.body;
+                      if (body) {
+                        const contentHeight = body.scrollHeight;
+                        if (contentHeight > 100) {
+                          iframe.style.height = `${contentHeight + 48}px`;
+                        }
+                      }
+                    } catch { /* cross-origin */ }
+                    if (++attempts < 10) setTimeout(resize, 500);
+                  };
+                  resize();
+                }}
+              />
             </div>
           ) : (
             filteredQuestions.map((question, index) => (

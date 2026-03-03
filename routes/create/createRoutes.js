@@ -15,6 +15,7 @@ import questionController from './controllers/questionController.js';
 import exportController from './controllers/exportController.js';
 import streamingController from './controllers/streamingController.js';
 import searchController from './controllers/searchController.js';
+import h5pPreviewController from './controllers/h5pPreviewController.js';
 
 const router = express.Router();
 
@@ -71,8 +72,8 @@ router.use('/auth/saml/login', authLimiter);
 router.use('/materials/upload', uploadLimiter);
 // Apply API rate limiting to all routes except config and streaming endpoints
 router.use((req, res, next) => {
-  if (req.path === '/auth/config' || req.path.startsWith('/streaming/')) {
-    return next(); // Skip rate limiting for config and streaming endpoints
+  if (req.path === '/auth/config' || req.path.startsWith('/streaming/') || req.path.startsWith('/h5p-preview/')) {
+    return next(); // Skip rate limiting for config, streaming, and h5p-preview endpoints
   }
   return apiLimiter(req, res, next);
 });
@@ -98,6 +99,7 @@ router.use('/questions', questionController);
 router.use('/export', exportController);
 router.use('/streaming', streamingController);
 router.use('/search', searchController);
+router.use('/h5p-preview', h5pPreviewController);
 
 // DEBUG: Route to log all chunks in Qdrant (for debugging purposes)
 router.get('/debug/qdrant-chunks', async (req, res) => {
