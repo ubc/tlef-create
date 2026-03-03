@@ -891,6 +891,72 @@ export function convertQuestionToH5P(question, quiz) {
         "title": "Cloze question"
       }
     };
+  } else if (question.type === 'flashcard') {
+    const front = question.content?.front || question.questionText || "Front of card";
+    const back = question.content?.back || question.correctAnswer || "Back of card";
+    const escapedFront = front.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escapedBack = back.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    return {
+      "params": {
+        "mode": "normal",
+        "dialogs": [
+          {
+            "text": `<p style="text-align:center;">${escapedFront}</p>`,
+            "answer": `<p style="text-align:center;">${escapedBack}</p>`,
+            "tips": {},
+            "imageAltText": ""
+          }
+        ],
+        "behaviour": {
+          "enableRetry": true,
+          "disableBackwardsNavigation": false,
+          "scaleTextNotCard": false,
+          "randomCards": false,
+          "maxProficiency": 5,
+          "quickProgression": false
+        },
+        "answer": "Turn",
+        "next": "Next",
+        "prev": "Previous",
+        "retry": "Retry",
+        "correctAnswer": "I got it right!",
+        "incorrectAnswer": "I got it wrong",
+        "round": "Round @round",
+        "cardsLeft": "Cards left: @number",
+        "nextRound": "Proceed to round @round",
+        "startOver": "Start over",
+        "showSummary": "Next",
+        "summary": "Summary",
+        "summaryCardsRight": "Cards you got right:",
+        "summaryCardsWrong": "Cards you got wrong:",
+        "summaryCardsNotShown": "Cards in pool not shown:",
+        "summaryOverallScore": "Overall Score",
+        "summaryCardsCompleted": "Cards you have completed learning:",
+        "summaryCompletedRounds": "Completed rounds:",
+        "summaryAllDone": "Well done! You have mastered all @cards cards!",
+        "progressText": "Card @card of @total",
+        "cardFrontLabel": "Card front",
+        "cardBackLabel": "Card back",
+        "tipButtonLabel": "Show tip",
+        "audioNotSupported": "Your browser does not support this audio",
+        "confirmStartingOver": {
+          "header": "Start over?",
+          "body": "All progress will be lost. Are you sure you want to start over?",
+          "cancelLabel": "Cancel",
+          "confirmLabel": "Start over"
+        },
+        "title": "",
+        "description": ""
+      },
+      "library": "H5P.Dialogcards 1.9",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Dialog Cards",
+        "license": "U",
+        "title": "Flashcard"
+      }
+    };
   } else if (question.type === 'discussion') {
     return {
       "params": {

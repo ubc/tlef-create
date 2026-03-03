@@ -195,7 +195,7 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
 
   const basePath = `/h5p-preview-files/${previewId}`;
   const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${basePath}/${f}">`).join('\n');
-  const jsTags = jsFiles.map(f => `  <script src="${basePath}/${f}"></script>`).join('\n');
+  const jsTags = jsFiles.map(f => `  <script src="${basePath}/${f}" onerror="window.__h5pLoadErrors=(window.__h5pLoadErrors||[]);window.__h5pLoadErrors.push('${f.replace(/'/g, "\\'")}')"></script>`).join('\n');
 
   // Build per-question HTML blocks and H5P.newRunnable() calls
   const questionBlocks = [];
@@ -281,6 +281,15 @@ ${cssTags}
 ${questionBlocks.join('\n')}
   </div>
 
+  <script>
+    // Track JS errors during library loading (must be before library scripts)
+    window.__h5pErrors = [];
+    window.__h5pLoadErrors = [];
+    window.onerror = function(msg, src, line, col, err) {
+      window.__h5pErrors.push({msg: msg, src: src, line: line});
+      console.error('H5P Script Error:', msg, 'in', src, 'line', line);
+    };
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
   <script src="/api/create/h5p-preview/core/h5p-core.js"></script>
 ${jsTags}
@@ -291,6 +300,14 @@ ${jsTags}
     H5P.$window = jQuery(window);
 
     jQuery(document).ready(function() {
+      // Log load failures and available constructors for debugging
+      if (window.__h5pLoadErrors.length > 0) {
+        console.error('H5P: Failed to load scripts:', window.__h5pLoadErrors);
+      }
+      if (window.__h5pErrors.length > 0) {
+        console.error('H5P: JS errors during loading:', window.__h5pErrors);
+      }
+
 ${runnableCalls.join('\n')}
     });
   </script>
