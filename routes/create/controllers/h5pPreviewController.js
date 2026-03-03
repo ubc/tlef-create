@@ -94,12 +94,16 @@ router.get('/libs/*', (req, res) => {
 
   // Security: prevent directory traversal
   if (requestedPath.includes('..')) {
+    console.log('[H5P-LIBS] BLOCKED traversal attempt:', requestedPath);
     return res.status(400).send('Invalid path');
   }
 
   const filePath = path.join(H5P_LIBS_DIR, requestedPath);
+  console.log('[H5P-LIBS] Serving:', requestedPath, '->', filePath);
+
   res.sendFile(filePath, (err) => {
     if (err) {
+      console.error('[H5P-LIBS] NOT FOUND:', filePath, err.message);
       res.status(404).send('Library file not found');
     }
   });
@@ -188,6 +192,17 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
   // Resolve CSS/JS dependencies in correct load order.
   // Read directly from h5p-libs (no temp dir or symlinks needed).
   const { cssFiles, jsFiles } = await resolveLibraryDependencies(syntheticH5pJson);
+
+  // Build server-side diagnostic info to embed in HTML (user has no backend access)
+  const serverDiag = {
+    quizId,
+    questionTypes: [...questionTypes],
+    dependencies: preloadedDependencies.map(d => `${d.machineName}-${d.majorVersion}.${d.minorVersion}`),
+    resolvedJsFiles: jsFiles,
+    resolvedCssFiles: cssFiles,
+    h5pLibsDir: H5P_LIBS_DIR,
+    timestamp: new Date().toISOString()
+  };
 
   // Serve library files through the existing /api route — works on all environments
   // without needing extra nginx/proxy configuration.
@@ -280,12 +295,12 @@ ${questionBlocks.join('\n')}
   </div>
 
   <script>
-    // Track JS errors during library loading (must be before library scripts)
+    // ===== DIAGNOSTICS: Track all errors during library loading =====
     window.__h5pErrors = [];
     window.__h5pLoadErrors = [];
     window.onerror = function(msg, src, line, col, err) {
-      window.__h5pErrors.push({msg: msg, src: src, line: line});
-      console.error('H5P Script Error:', msg, 'in', src, 'line', line);
+      window.__h5pErrors.push({msg: String(msg), src: String(src), line: line});
+      console.error('[H5P-DIAG] Script Error:', msg, 'in', src, 'line', line);
     };
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -297,16 +312,122 @@ ${jsTags}
     H5P.$body = jQuery('body');
     H5P.$window = jQuery(window);
 
-    jQuery(document).ready(function() {
-      // Log load failures and available constructors for debugging
-      if (window.__h5pLoadErrors.length > 0) {
-        console.error('H5P: Failed to load scripts:', window.__h5pLoadErrors);
-      }
-      if (window.__h5pErrors.length > 0) {
-        console.error('H5P: JS errors during loading:', window.__h5pErrors);
+    // ===== SERVER-SIDE INFO (embedded at render time) =====
+    var __serverDiag = ${JSON.stringify(serverDiag)};
+    var __libScripts = __serverDiag.resolvedJsFiles;
+    var __libBasePath = '${libBasePath}';
+
+    async function runDiagnostics() {
+      console.log('%c===== H5P LOADING DIAGNOSTICS =====', 'color: yellow; font-size: 16px; font-weight: bold;');
+      console.log('Time:', new Date().toISOString());
+      console.log('Page URL:', window.location.href);
+
+      // 1. Server-side info (dependency resolution results from backend)
+      console.log('%c--- SERVER-SIDE INFO (from backend) ---', 'color: cyan; font-weight: bold;');
+      console.log('Quiz ID:', __serverDiag.quizId);
+      console.log('Question types:', __serverDiag.questionTypes);
+      console.log('h5p-libs dir:', __serverDiag.h5pLibsDir);
+      console.log('Dependencies resolved:', __serverDiag.dependencies);
+      console.log('JS files resolved (' + __serverDiag.resolvedJsFiles.length + '):', __serverDiag.resolvedJsFiles);
+      console.log('CSS files resolved (' + __serverDiag.resolvedCssFiles.length + '):', __serverDiag.resolvedCssFiles);
+
+      // 2. Check which H5P constructors are registered after script loading
+      console.log('%c--- H5P CONSTRUCTOR CHECK ---', 'color: cyan; font-weight: bold;');
+      var h5pKeys = Object.keys(window.H5P || {}).filter(function(k) {
+        return typeof H5P[k] === 'function';
+      });
+      console.log('Registered constructors (' + h5pKeys.length + '):', h5pKeys);
+      var criticalLibs = ['DragText', 'Dialogcards', 'MultiChoice', 'TrueFalse', 'Question', 'Column', 'JoubelUI', 'TextUtilities'];
+      criticalLibs.forEach(function(name) {
+        var val = H5P[name];
+        var status = val ? '✅ ' + typeof val : '❌ MISSING';
+        console.log('  H5P.' + name + ':', status);
+      });
+
+      // 3. Fetch each script URL to check HTTP status and content-type
+      console.log('%c--- SCRIPT URL FETCH CHECKS ---', 'color: cyan; font-weight: bold;');
+
+      // Check h5p-core.js first
+      try {
+        var coreResp = await fetch('/api/create/h5p-preview/core/h5p-core.js', { method: 'HEAD' });
+        console.log('h5p-core.js → Status:', coreResp.status, 'Content-Type:', coreResp.headers.get('content-type'));
+      } catch(e) {
+        console.error('h5p-core.js → FETCH ERROR:', e.message);
       }
 
+      // Check each library script
+      var problems = [];
+      for (var i = 0; i < __libScripts.length; i++) {
+        var scriptUrl = __libBasePath + '/' + __libScripts[i];
+        try {
+          var resp = await fetch(scriptUrl);
+          var ct = resp.headers.get('content-type') || 'unknown';
+          var status = resp.status;
+          var bodyText = await resp.text();
+          var isJS = ct.includes('javascript') || ct.includes('ecmascript');
+          var isHTML = ct.includes('html') || bodyText.trimStart().startsWith('<!') || bodyText.trimStart().startsWith('<html');
+          var bodyPreview = bodyText.substring(0, 150).replace(/\\n/g, ' ');
+
+          if (status === 200 && isJS && !isHTML) {
+            console.log('✅', __libScripts[i], '→ Status:', status, 'Type:', ct, 'Size:', bodyText.length, 'bytes');
+          } else {
+            console.error('❌', __libScripts[i], '→ Status:', status, 'Type:', ct, 'Size:', bodyText.length, 'IsHTML:', isHTML);
+            console.error('   Body preview:', bodyPreview);
+            problems.push({ file: __libScripts[i], status: status, contentType: ct, isHTML: isHTML, preview: bodyPreview });
+          }
+        } catch(fetchErr) {
+          console.error('❌', __libScripts[i], '→ FETCH ERROR:', fetchErr.message);
+          problems.push({ file: __libScripts[i], error: fetchErr.message });
+        }
+      }
+
+      // 4. Errors collected during loading
+      console.log('%c--- ERRORS DURING SCRIPT LOADING ---', 'color: cyan; font-weight: bold;');
+      console.log('window.onerror events:', window.__h5pErrors.length);
+      window.__h5pErrors.forEach(function(e, i) {
+        console.error('  Error ' + i + ':', e.msg, '| src:', e.src, '| line:', e.line);
+      });
+      console.log('Script onerror events:', window.__h5pLoadErrors.length);
+      window.__h5pLoadErrors.forEach(function(f, i) {
+        console.error('  Failed to load:', f);
+      });
+
+      // 5. List all script tags actually in the DOM
+      console.log('%c--- ALL SCRIPT TAGS IN DOM ---', 'color: cyan; font-weight: bold;');
+      var allScripts = document.querySelectorAll('script[src]');
+      console.log('Total script tags:', allScripts.length);
+      allScripts.forEach(function(s, i) {
+        console.log('  [' + i + ']', s.src);
+      });
+
+      // 6. Summary
+      console.log('%c--- SUMMARY ---', 'color: yellow; font-weight: bold; font-size: 14px;');
+      if (problems.length > 0) {
+        console.error('🔴 ' + problems.length + ' scripts have problems:');
+        problems.forEach(function(p) {
+          if (p.isHTML) {
+            console.error('   ' + p.file + ' → Server returned HTML instead of JS! This means nginx is NOT routing to Express.');
+          } else if (p.error) {
+            console.error('   ' + p.file + ' → Network error: ' + p.error);
+          } else {
+            console.error('   ' + p.file + ' → Status: ' + p.status + ', Type: ' + p.contentType);
+          }
+        });
+      } else if (h5pKeys.length === 0) {
+        console.error('🔴 No H5P constructors registered even though all scripts loaded OK. Possible execution error.');
+      } else {
+        console.log('🟢 All ' + __libScripts.length + ' scripts loaded, ' + h5pKeys.length + ' constructors registered.');
+      }
+      console.log('%c===== END DIAGNOSTICS =====', 'color: yellow; font-size: 16px; font-weight: bold;');
+
+      return problems;
+    }
+
+    jQuery(document).ready(function() {
+      // Run diagnostics first, then render
+      runDiagnostics().then(function(problems) {
 ${runnableCalls.join('\n')}
+      });
     });
   </script>
 </body>
