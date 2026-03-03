@@ -8,6 +8,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
+import { authenticateToken } from '../middleware/auth.js';
+import Quiz from '../models/Quiz.js';
+import { convertQuestionToH5P } from '../services/h5pExportService.js';
+import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +83,226 @@ router.post('/upload', upload.single('h5pFile'), asyncHandler(async (req, res) =
 router.get('/core/h5p-core.js', asyncHandler(async (req, res) => {
   const corePath = path.join(__dirname, '..', 'h5p-core', 'h5p-core.js');
   res.type('application/javascript').sendFile(corePath);
+}));
+
+/**
+ * GET /quiz/:quizId/render — Render quiz questions as real H5P content in-browser.
+ * Each question gets its own numbered header + H5P.newRunnable() instance.
+ * Supports ?lo=<loId> to filter by a specific learning objective.
+ */
+router.get('/quiz/:quizId/render', authenticateToken, asyncHandler(async (req, res) => {
+  const { quizId } = req.params;
+  const loFilter = req.query.lo || null;
+
+  // Fetch quiz with populated questions and learning objectives
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id })
+    .populate({
+      path: 'questions',
+      populate: { path: 'learningObjective', select: 'text order' },
+      options: { sort: { order: 1 } }
+    })
+    .populate('learningObjectives', 'text order');
+
+  if (!quiz) {
+    return errorResponse(res, 'Quiz not found', 'NOT_FOUND', HTTP_STATUS.NOT_FOUND);
+  }
+
+  let questions = quiz.questions || [];
+
+  // Filter by learning objective if specified
+  if (loFilter && loFilter !== 'null') {
+    const loIndex = parseInt(loFilter, 10);
+    if (!isNaN(loIndex) && quiz.learningObjectives && quiz.learningObjectives[loIndex]) {
+      const targetLOText = quiz.learningObjectives[loIndex].text;
+      questions = questions.filter(q => {
+        const loText = q.learningObjective?.text;
+        return loText === targetLOText;
+      });
+    }
+  }
+
+  if (questions.length === 0) {
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    return res.type('text/html').send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#666; text-align:center; }
+</style></head><body><p>No questions to display.</p></body></html>`);
+  }
+
+  // Convert each question to H5P format
+  const h5pQuestions = [];
+  for (const question of questions) {
+    const h5pContent = convertQuestionToH5P(question, quiz);
+    if (h5pContent) {
+      h5pQuestions.push({ question, h5pContent });
+    }
+  }
+
+  // Determine needed libraries from all question types
+  const questionTypes = new Set(questions.map(q => q.type));
+  const neededLibNames = getNeededLibraries(questionTypes, {
+    hasMixedContent: false,
+    isFlashcardOnly: questionTypes.size === 1 && questionTypes.has('flashcard')
+  });
+
+  // Build a synthetic h5p.json with those dependencies for resolveDependencies
+  const preloadedDependencies = [];
+  for (const libName of neededLibNames) {
+    const lib = LIBRARY_REGISTRY[libName];
+    if (lib) {
+      preloadedDependencies.push({
+        machineName: libName,
+        majorVersion: lib.majorVersion,
+        minorVersion: lib.minorVersion
+      });
+    }
+  }
+
+  const syntheticH5pJson = {
+    title: quiz.name || 'Quiz Preview',
+    mainLibrary: 'H5P.Column',
+    preloadedDependencies
+  };
+
+  // Create a temp directory for this preview, copy needed library files
+  const previewId = uuidv4();
+  const extractDir = path.join(UPLOAD_BASE, previewId);
+  await fs.mkdir(extractDir, { recursive: true });
+
+  // Symlink ALL library dirs from h5p-libs into the temp directory.
+  // This is instant (vs mergeDir copying thousands of files) and ensures
+  // resolveDependencies finds transitive deps without triggering mergeDir.
+  try {
+    const libEntries = await fs.readdir(H5P_LIBS_DIR, { withFileTypes: true });
+    for (const entry of libEntries) {
+      if (entry.isDirectory()) {
+        const src = path.join(H5P_LIBS_DIR, entry.name);
+        const dest = path.join(extractDir, entry.name);
+        try {
+          await fs.symlink(src, dest, 'dir');
+        } catch {
+          // Already exists or other issue, skip
+        }
+      }
+    }
+  } catch {
+    // h5p-libs dir not accessible
+  }
+
+  // Resolve CSS/JS dependencies in correct load order
+  const { cssFiles, jsFiles } = await resolveDependencies(syntheticH5pJson, extractDir);
+
+  const basePath = `/h5p-preview-files/${previewId}`;
+  const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${basePath}/${f}">`).join('\n');
+  const jsTags = jsFiles.map(f => `  <script src="${basePath}/${f}"></script>`).join('\n');
+
+  // Build per-question HTML blocks and H5P.newRunnable() calls
+  const questionBlocks = [];
+  const runnableCalls = [];
+
+  h5pQuestions.forEach(({ question, h5pContent }, idx) => {
+    const num = idx + 1;
+    const typeLabel = formatQuestionType(question.type);
+    const difficulty = question.difficulty ? ` \u00b7 ${capitalize(question.difficulty)}` : '';
+    const containerId = `h5p-question-${idx}`;
+
+    questionBlocks.push(`
+      <div class="question-block">
+        <div class="question-header">
+          <span class="question-number">Q${num}</span>
+          <span class="question-meta">${escapeHtml(typeLabel)}${escapeHtml(difficulty)}</span>
+        </div>
+        <div id="${containerId}" class="h5p-question-container"></div>
+      </div>`);
+
+    runnableCalls.push(`
+      (function() {
+        var library = ${JSON.stringify(h5pContent)};
+        var $container = jQuery('#${containerId}');
+        $container.addClass('h5p-content');
+        H5P.newRunnable(library, 'preview-${previewId}-${idx}', $container, false, {
+          metadata: library.metadata || {}
+        });
+      })();`);
+  });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(quiz.name || 'Quiz Preview')}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f9fafb;
+    }
+    .questions-container { max-width: 960px; margin: 0 auto; }
+    .question-block {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .question-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+      color: #374151;
+    }
+    .question-number {
+      font-weight: 700;
+      color: #2563eb;
+    }
+    .question-meta {
+      color: #6b7280;
+    }
+    .h5p-question-container {
+      padding: 8px;
+    }
+    .h5p-content { max-width: none; }
+
+    /* Ensure H5P buttons are visible */
+    .h5p-question-buttons { margin-top: 1em; }
+    .h5p-joubelui-button { cursor: pointer; }
+  </style>
+${cssTags}
+</head>
+<body>
+  <div class="questions-container">
+${questionBlocks.join('\n')}
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="/api/create/h5p-preview/core/h5p-core.js"></script>
+${jsTags}
+
+  <script>
+    H5P.jQuery = jQuery;
+    H5P.$body = jQuery('body');
+    H5P.$window = jQuery(window);
+
+    jQuery(document).ready(function() {
+${runnableCalls.join('\n')}
+    });
+  </script>
+</body>
+</html>`;
+
+  // Fire-and-forget cleanup of old previews
+  cleanupOldPreviews().catch(() => {});
+
+  res.removeHeader('Content-Security-Policy');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.type('text/html').send(html);
 }));
 
 /**
@@ -399,6 +623,31 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Format a question type for display
+ */
+function formatQuestionType(type) {
+  const labels = {
+    'multiple-choice': 'Multiple Choice',
+    'true-false': 'True / False',
+    'flashcard': 'Flashcard',
+    'matching': 'Matching',
+    'ordering': 'Ordering',
+    'cloze': 'Fill in the Blanks',
+    'summary': 'Summary',
+    'discussion': 'Discussion'
+  };
+  return labels[type] || type;
+}
+
+/**
+ * Capitalize the first letter
+ */
+function capitalize(str) {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 export default router;
