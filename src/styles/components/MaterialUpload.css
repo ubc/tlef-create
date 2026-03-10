@@ -69,70 +69,6 @@
     justify-content: center;
 }
 
-/* Button Styles */
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-    text-decoration: none;
-    gap: var(--spacing-xs);
-}
-
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.btn-outline {
-    background-color: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-foreground);
-}
-
-.btn-outline:hover:not(:disabled) {
-    background-color: var(--color-muted);
-    border-color: var(--color-primary);
-}
-
-.btn-secondary {
-    background-color: var(--color-secondary);
-    color: var(--color-secondary-foreground);
-}
-
-.btn-secondary:hover:not(:disabled) {
-    opacity: 0.9;
-}
-
-.btn-primary {
-    background-color: var(--color-primary);
-    color: var(--color-primary-foreground);
-}
-
-.btn-primary:hover:not(:disabled) {
-    opacity: 0.9;
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-
-.btn-ghost {
-    background-color: transparent;
-    border: none;
-    color: var(--color-muted-foreground);
-    padding: var(--spacing-xs);
-}
-
-.btn-ghost:hover:not(:disabled) {
-    background-color: var(--color-muted);
-    color: var(--color-foreground);
-}
-
 /* Form Styles */
 .url-form,
 .text-form {
@@ -268,6 +204,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     transition: all 0.2s ease;
+    overflow: hidden;
 }
 
 .material-card:hover {
@@ -279,12 +216,21 @@
     align-items: center;
     gap: var(--spacing-md);
     flex: 1;
+    min-width: 0;
+}
+
+.material-details {
+    min-width: 0;
+    flex: 1;
 }
 
 .material-name {
     font-weight: 500;
     color: var(--color-foreground);
     margin-bottom: var(--spacing-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .material-meta {
@@ -374,13 +320,8 @@
     }
 
     .material-card {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
         gap: var(--spacing-sm);
-    }
-
-    .material-remove {
-        align-self: flex-end;
     }
 }
 
@@ -423,6 +364,7 @@
     display: flex;
     gap: var(--spacing-xs);
     align-items: center;
+    flex-shrink: 0;
 }
 
 .material-preview {

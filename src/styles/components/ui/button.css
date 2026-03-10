@@ -57,9 +57,9 @@
 }
 
 .btn-outline:hover {
-  background-color: var(--color-accent);
-  color: var(--color-accent-foreground);
-  border-color: var(--color-accent);
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border-color: var(--color-primary);
 }
 
 .btn-secondary {
@@ -77,8 +77,8 @@
 }
 
 .btn-ghost:hover {
-  background-color: var(--color-accent);
-  color: var(--color-accent-foreground);
+  background-color: var(--color-secondary);
+  color: var(--color-secondary-foreground);
 }
 
 .btn-link {

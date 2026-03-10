@@ -60,7 +60,7 @@ export default function PromptAnalysisSection({ questions, learningObjectives }:
               <div key={lo._id} className="lo-prompt-group">
                 <div className="lo-header">
                   <span className="lo-title">
-                    LO {idx + 1}: {lo.text.substring(0, 50)}{lo.text.length > 50 ? '...' : ''}
+                    LO {idx + 1}: {(lo.text || '').substring(0, 50)}{(lo.text || '').length > 50 ? '...' : ''}
                   </span>
                   <span className="lo-count">{loQuestions.length} questions</span>
                 </div>

@@ -218,13 +218,13 @@
 
 .search-result-card:hover,
 .search-result-card.selected {
-    background-color: var(--color-accent);
+    background-color: var(--color-primary);
     border-color: var(--color-primary);
 }
 
 .search-result-card:hover .search-result-title,
 .search-result-card.selected .search-result-title {
-    color: white;
+    color: var(--color-primary-foreground);
 }
 
 .search-result-card:hover .search-result-snippet,

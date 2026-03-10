@@ -144,9 +144,9 @@ button, .btn {
 }
 
 .dark-element:hover {
-  background-color: var(--color-accent) !important;
-  color: var(--color-accent-foreground) !important;
-  border-color: var(--color-accent) !important;
+  background-color: var(--color-primary) !important;
+  color: var(--color-primary-foreground) !important;
+  border-color: var(--color-primary) !important;
 }
 
 /* Utility Classes */

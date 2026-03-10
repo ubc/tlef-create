@@ -80,7 +80,16 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   // Listen for quiz deletion events
   useEffect(() => {
     subscribe<{ quizId: string; courseId: string }>('quiz-deleted', () => {
-      // Reload folders to get updated quiz list
+      loadFolders();
+    });
+  }, [subscribe]);
+
+  // Listen for question changes (generation completed, questions deleted)
+  useEffect(() => {
+    subscribe('QUESTION_GENERATION_COMPLETED', () => {
+      loadFolders();
+    });
+    subscribe('QUESTIONS_DELETED', () => {
       loadFolders();
     });
   }, [subscribe]);

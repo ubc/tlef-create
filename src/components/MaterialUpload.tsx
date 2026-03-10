@@ -406,7 +406,7 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                       <div key={material.id} className="material-card">
                         <div className="material-info">
                           {getFileIcon(material.type)}
-                          <div>
+                          <div className="material-details">
                             <div className="material-name">{material.name}</div>
                             <div className="material-meta">
                               {material.type.toUpperCase()} • {material.uploadDate}
