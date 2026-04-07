@@ -734,6 +734,44 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                 </>
               )}
 
+              {/* Generic editor for new question types */}
+              {['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
+                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(newQuestion.type) && (
+                <div className="form-field">
+                  <label>
+                    {newQuestion.type === 'mark-the-words' ? 'Text (wrap correct words with *asterisks*)' :
+                     newQuestion.type === 'essay' ? 'Essay Task Description' :
+                     newQuestion.type === 'crossword' ? 'Crossword Clues & Words' :
+                     newQuestion.type === 'sort-paragraphs' ? 'Paragraphs (in correct order, one per line)' :
+                     newQuestion.type === 'dictation' ? 'Sentences (one per line)' :
+                     'Question'}
+                  </label>
+                  <textarea
+                    className="textarea"
+                    placeholder={
+                      newQuestion.type === 'mark-the-words' ? 'The process of *photosynthesis* converts *sunlight* into energy...' :
+                      newQuestion.type === 'essay' ? 'Describe the main factors that influence...' :
+                      newQuestion.type === 'sort-paragraphs' ? 'Enter each paragraph on a new line in the correct order' :
+                      newQuestion.type === 'crossword' ? 'WORD:Clue for the word (one per line)' :
+                      newQuestion.type === 'dictation' ? 'Enter sentences, one per line' :
+                      'Enter your question here...'
+                    }
+                    value={newQuestion.question}
+                    onChange={(e) => setNewQuestion({...newQuestion, question: e.target.value})}
+                    rows={6}
+                  />
+                  <p className="aq-hint">
+                    {newQuestion.type === 'mark-the-words' ? 'Wrap correct words in *asterisks*.' :
+                     newQuestion.type === 'essay' ? 'Students write a longer response.' :
+                     newQuestion.type === 'free-text' || newQuestion.type === 'open-ended' ? 'Open-ended, no single correct answer.' :
+                     newQuestion.type === 'sort-paragraphs' ? 'Students rearrange into correct order.' :
+                     newQuestion.type === 'crossword' ? 'Words arranged into a crossword automatically.' :
+                     newQuestion.type === 'dictation' ? 'Students type sentences from memory.' :
+                     ''}
+                  </p>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button className="btn btn-outline" onClick={handleClose}>
                   Cancel

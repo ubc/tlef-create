@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
-import { setActiveCourse, setActiveQuiz } from '../store/slices/appSlice';
+import { setActiveCourse, setActiveQuiz, setUser } from '../store/slices/appSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User, X } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
 import SearchModal from './SearchModal';
 import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
+import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Sidebar.css';
 
@@ -18,7 +19,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const { activeCourse, activeQuiz } = useAppSelector((state) => state.app);
+  const { activeCourse, activeQuiz, user: reduxUser } = useAppSelector((state) => state.app);
   const { subscribe, publish } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -29,6 +30,16 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
   useEffect(() => {
     loadFolders();
+    if (!reduxUser) {
+      fetch(`${API_URL}/api/create/auth/me`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(result => {
+          if (result.data?.authenticated && result.data.user) {
+            dispatch(setUser(result.data.user));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   // Automatically select course and quiz based on URL, and clear selection on dashboard
@@ -139,11 +150,11 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
-  const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = []) => {
+  const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = [], canvasCourseId?: string, canvasModuleId?: string) => {
     try {
       // Step 1: Create the folder/course (await this - it's fast)
-      console.log(`📁 Creating course: ${courseName}`);
-      const response = await foldersApi.createFolder(courseName, 1);
+      console.log(`📁 Creating course: ${courseName}`, canvasCourseId ? `(Canvas: ${canvasCourseId})` : '');
+      const response = await foldersApi.createFolder(courseName, 1, canvasCourseId, canvasModuleId);
       const courseId = response.folder._id;
 
       // Step 2: Immediately add the new folder to the sidebar state
@@ -365,7 +376,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                 onClick={handleUserAccountClick}
             >
               <User size={20} />
-              <span>Guest User</span>
+              <span>{reduxUser?.cwlId || 'User Account'}</span>
             </div>
           </div>
         </div>

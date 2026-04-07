@@ -5,6 +5,7 @@
 
 import sseService from './sseService.js';
 import llmService from './llmService.js';
+import { formatContentForDatabase } from './questionContentService.js';
 
 class QuestionStreamingService {
   /**
@@ -161,7 +162,7 @@ class QuestionStreamingService {
           questionText: result.questionData.questionText,
           correctAnswer: result.questionData.correctAnswer,
           explanation: result.questionData.explanation,
-          content: result.questionData.content || {},
+          content: formatContentForDatabase(result.questionData, result.questionData.type),
           difficulty: result.questionData.difficulty,
           learningObjective: learningObjective._id || learningObjective,
           order: existingQuestionsCount, // Proper ordering

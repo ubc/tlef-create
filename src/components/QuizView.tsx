@@ -248,8 +248,8 @@ const QuizView = () => {
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Delete Quiz?</h2>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
+              <h2 style={{ marginTop: 0 }}>Delete Quiz?</h2>
               <p>
                 Are you sure you want to delete <strong>{currentQuiz.name}</strong>?
                 This will permanently delete all questions and learning objectives associated with this quiz.

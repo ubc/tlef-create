@@ -1,11 +1,7 @@
 {
   "semantics": [
     {
-      "label": "Hình"
-    },
-    {
-      "label": "Decorative only",
-      "description": "Enable this option if the image is purely decorative and does not add any information to the content on the page. It will be ignored by screen readers and not given any alternative text."
+      "label": "Image"
     },
     {
       "label": "Alternative text",
@@ -17,15 +13,7 @@
     },
     {
       "label": "Image content name",
-      "default": "Hình"
-    },
-    {
-      "label": "Expand Image",
-      "default": "Expand Image"
-    },
-    {
-      "label": "Minimize Image",
-      "default": "Minimize Image"
+      "default": "Image"
     }
   ]
 }

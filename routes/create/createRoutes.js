@@ -16,6 +16,8 @@ import exportController from './controllers/exportController.js';
 import streamingController from './controllers/streamingController.js';
 import searchController from './controllers/searchController.js';
 import h5pPreviewController from './controllers/h5pPreviewController.js';
+import canvasController from './controllers/canvasController.js';
+import adminController from './controllers/adminController.js';
 
 const router = express.Router();
 
@@ -72,7 +74,7 @@ router.use('/auth/saml/login', authLimiter);
 router.use('/materials/upload', uploadLimiter);
 // Apply API rate limiting to all routes except config and streaming endpoints
 router.use((req, res, next) => {
-  if (req.path === '/auth/config' || req.path.startsWith('/streaming/') || req.path.startsWith('/h5p-preview/')) {
+  if (req.path === '/auth/config' || req.path === '/canvas/config' || req.path.startsWith('/streaming/') || req.path.startsWith('/h5p-preview/') || req.path.startsWith('/canvas/oauth/')) {
     return next(); // Skip rate limiting for config, streaming, and h5p-preview endpoints
   }
   return apiLimiter(req, res, next);
@@ -100,6 +102,89 @@ router.use('/export', exportController);
 router.use('/streaming', streamingController);
 router.use('/search', searchController);
 router.use('/h5p-preview', h5pPreviewController);
+router.use('/canvas', canvasController);
+router.use('/admin', adminController);
+
+// Disable CSP for H5P routes (H5P requires inline scripts)
+router.use('/h5p', (req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  next();
+});
+router.use('/debug/lumi-test', (req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  next();
+});
+
+// Lumi H5P file serving routes (content, libraries, core)
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __lumiFilename = fileURLToPath(import.meta.url);
+const __lumiDirname = path.dirname(__lumiFilename);
+
+// Serve H5P content files (images, videos, etc. inside H5P packages)
+router.use('/h5p/content', express.static(path.join(__lumiDirname, 'uploads', 'h5p-content')));
+
+// Serve H5P library files (JS, CSS for H5P content types)
+router.use('/h5p/libraries', express.static(path.join(__lumiDirname, 'h5p-libs')));
+
+// Serve H5P core files
+router.use('/h5p/core', express.static(path.join(__lumiDirname, 'h5p-core')));
+
+// Lumi download endpoint — serves content files by contentId
+router.get('/h5p/download/:contentId', async (req, res) => {
+  try {
+    const contentDir = path.join(__lumiDirname, 'uploads', 'h5p-content', req.params.contentId);
+    const contentJsonPath = path.join(contentDir, 'content', 'content.json');
+    const fs = await import('fs/promises');
+    const data = await fs.readFile(contentJsonPath, 'utf-8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.status(404).json({ error: 'Content not found' });
+  }
+});
+
+// DEBUG: Test Lumi H5P rendering
+router.get('/debug/lumi-test/:quizId', async (req, res) => {
+  try {
+    const { createH5PPackage } = await import('./services/h5pExportService.js');
+    const { importH5PContent, renderContent } = await import('./services/lumiService.js');
+    const Quiz = (await import('./models/Quiz.js')).default;
+    const path = (await import('path')).default;
+    const fs = (await import('fs/promises')).default;
+    const crypto = (await import('crypto')).default;
+
+    const quiz = await Quiz.findById(req.params.quizId)
+      .populate({ path: 'questions', options: { sort: { order: 1 } } })
+      .populate('learningObjectives');
+
+    if (!quiz) return res.status(404).send('Quiz not found');
+
+    // Generate H5P
+    const exportId = crypto.randomBytes(8).toString('hex');
+    const filename = `lumi_test_${exportId}.h5p`;
+    const filePath = path.join('./routes/create/uploads/', filename);
+    await fs.mkdir('./routes/create/uploads/', { recursive: true });
+    await createH5PPackage(quiz, filePath);
+    console.log('✅ H5P package created for Lumi test');
+
+    // Import into Lumi
+    const contentId = await importH5PContent(filePath);
+    console.log('✅ Lumi content ID:', contentId);
+
+    // Render via Lumi
+    const playerModel = await renderContent(contentId);
+    console.log('✅ Lumi render result type:', typeof playerModel);
+
+    // Return the rendered HTML page (disable CSP for H5P inline scripts)
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    return res.send(playerModel);
+  } catch (err) {
+    console.error('Lumi test error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
 
 // DEBUG: Route to log all chunks in Qdrant (for debugging purposes)
 router.get('/debug/qdrant-chunks', async (req, res) => {

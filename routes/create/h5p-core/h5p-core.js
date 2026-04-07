@@ -9,6 +9,55 @@
 var H5P = H5P || {};
 
 /**
+ * H5PIntegration — global config object expected by many H5P libraries.
+ */
+var H5PIntegration = window.H5PIntegration || {
+  baseUrl: window.location.origin,
+  url: '/api/create/h5p-preview/libs',
+  postUserStatistics: false,
+  ajaxPath: '/api/create/h5p/',
+  ajax: { setFinished: '', contentUserData: '' },
+  saveFreq: false,
+  l10n: {
+    H5P: {
+      fullscreen: 'Fullscreen',
+      disableFullscreen: 'Disable fullscreen',
+      download: 'Download',
+      copyrights: 'Rights of use',
+      embed: 'Embed',
+      size: 'Size',
+      showAdvanced: 'Show advanced',
+      hideAdvanced: 'Hide advanced',
+      advancedHelp: 'Include this script on your website if you want dynamic sizing of the embedded content:',
+      copyrightInformation: 'Rights of use',
+      close: 'Close',
+      title: 'Title',
+      author: 'Author',
+      year: 'Year',
+      source: 'Source',
+      license: 'License',
+      thumbnail: 'Thumbnail',
+      noCopyrights: 'No copyright information available for this content.',
+      reuse: 'Reuse',
+      reuseContent: 'Reuse Content',
+      reuseDescription: 'Reuse this content.',
+      downloadDescription: 'Download this content as a H5P file.',
+      copyrightsDescription: 'View copyright information for this content.',
+      embedDescription: 'View the embed code for this content.',
+      h5pDescription: 'Visit H5P.org to check out more cool content.',
+      contentChanged: 'This content has changed since you last used it.',
+      startingOver: "You'll be starting over.",
+      confirmDialogHeader: 'Confirm action',
+      confirmDialogBody: 'Please confirm that you wish to proceed. This action is not reversible.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Confirm'
+    }
+  },
+  contents: {}
+};
+window.H5PIntegration = H5PIntegration;
+
+/**
  * EventDispatcher — base class that all H5P content types extend.
  * Provides on/off/once/trigger event system.
  */
@@ -21,6 +70,7 @@ H5P.EventDispatcher = (function () {
   }
 
   EventDispatcher.prototype.on = function (type, listener, thisArg) {
+    if (!this.listeners) this.listeners = {};
     if (typeof listener === 'function') {
       if (!this.listeners[type]) {
         this.listeners[type] = [];
@@ -56,6 +106,7 @@ H5P.EventDispatcher = (function () {
   };
 
   EventDispatcher.prototype.trigger = function (event, extra, eventData) {
+    if (!this.listeners) this.listeners = {};
     if (typeof event === 'string') {
       event = new H5P.Event(event, extra, eventData);
     }
@@ -431,10 +482,63 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
   extras.metadata = metadata;
   extras.subContentId = subContentId;
 
+  // Don't set previousState — let each library use its own default.
+
+  // FreeTextQuestion expects extras.parent.$container
+  if (!extras.parent && $attachTo) {
+    extras.parent = { $container: H5P.jQuery($attachTo) };
+  }
+
+  // Register content in H5PIntegration.contents so libraries can find their config
+  if (typeof H5PIntegration !== 'undefined' && contentId) {
+    var contentKey = 'cid-' + contentId;
+    if (!H5PIntegration.contents[contentKey]) {
+      H5PIntegration.contents[contentKey] = {
+        library: (nameSplit + ' ' + versionSplit[0] + '.' + versionSplit[1]),
+        jsonContent: JSON.stringify(params),
+        fullScreen: false,
+        displayOptions: { frame: false, export: false, embed: false, copyright: false, icon: false },
+        metadata: {
+          title: (metadata && metadata.title) || 'Preview',
+          name: (metadata && metadata.title) || 'Preview',
+          license: (metadata && metadata.license) || 'U',
+          contentType: (metadata && metadata.contentType) || nameSplit
+        },
+        contentUrl: '/api/create/h5p-preview/libs',
+        url: '/api/create/h5p-preview/libs'
+      };
+    }
+  }
+
+  // Ensure the constructor inherits from EventDispatcher if it doesn't already.
+  // Many H5P libraries (e.g. ArithmeticQuiz) declare @augments H5P.EventDispatcher
+  // but don't set up the prototype chain themselves — the official H5P core does it.
+  if (constructor.prototype && !constructor.prototype.on && H5P.EventDispatcher.prototype.on) {
+    // Merge EventDispatcher methods into the constructor's prototype
+    var edProto = H5P.EventDispatcher.prototype;
+    for (var method in edProto) {
+      if (edProto.hasOwnProperty(method) && !constructor.prototype[method]) {
+        constructor.prototype[method] = edProto[method];
+      }
+    }
+  }
+
   var instance;
   try {
     instance = new constructor(params, contentId, extras);
-  } catch (e) {
+    if (instance && !instance.listeners) {
+      H5P.EventDispatcher.call(instance);
+    }
+  } catch (firstError) {
+    // Retry with a clean copy — don't mutate original params
+    try {
+      var retryParams = JSON.parse(JSON.stringify(params));
+      var retryExtras = JSON.parse(JSON.stringify(extras));
+      instance = new constructor(retryParams, contentId, retryExtras);
+      if (instance && !instance.listeners) {
+        H5P.EventDispatcher.call(instance);
+      }
+    } catch (e) {
     console.warn('H5P: Failed to create instance of', nameSplit, e, '- rendering placeholder');
     var fallback = new H5P.EventDispatcher();
     fallback.libraryInfo = { machineName: nameSplit, majorVersion: parseInt(versionSplit[0]), minorVersion: parseInt(versionSplit[1]) };
@@ -449,6 +553,7 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
     }
     return fallback;
   }
+  }
 
   if (instance) {
     instance.libraryInfo = {
@@ -458,6 +563,26 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
     };
     instance.contentId = contentId;
     instance.subContentId = subContentId;
+
+    // contentData — needed by libraries that call createXAPIEvent (e.g. SortParagraphs)
+    if (!instance.contentData) {
+      instance.contentData = {
+        metadata: {
+          title: (metadata && metadata.title) || 'Preview',
+          name: (metadata && metadata.title) || 'Preview',
+          license: (metadata && metadata.license) || 'U',
+          contentType: (metadata && metadata.contentType) || nameSplit
+        }
+      };
+    }
+
+    // getLibraryFilePath — required by SingleChoiceSet and other libs for loading assets
+    if (!instance.getLibraryFilePath) {
+      instance.getLibraryFilePath = function (filePath) {
+        var libDir = nameSplit + '-' + versionSplit[0] + '.' + versionSplit[1];
+        return '/api/create/h5p-preview/libs/' + libDir + '/' + filePath;
+      };
+    }
 
     if ($attachTo) {
       instance.attach(H5P.jQuery($attachTo));
@@ -564,6 +689,48 @@ H5P.Thumbnail = function (source, width, height) {
 };
 
 H5P.getCopyrights = function () { return ''; };
+
+/**
+ * Get the path to a library directory
+ */
+H5P.getLibraryPath = function (library) {
+  // library is like "H5P.SingleChoiceSet-1.11"
+  return '/api/create/h5p-preview/libs/' + library;
+};
+
+/**
+ * Get content path for a given content ID
+ */
+H5P.getContentPath = function (contentId) {
+  return '/api/create/h5p-preview/libs';
+};
+
+/**
+ * CKEditor stub — FreeTextQuestion depends on H5P.CKEditor for rich text editing.
+ * In preview mode, provide a simple textarea fallback.
+ */
+if (!H5P.CKEditor) {
+  H5P.CKEditor = function (textAreaID, language, $container, previousAnswer) {
+    var self = this;
+    H5P.EventDispatcher.call(self);
+    var value = previousAnswer || '';
+
+    self.appendTo = function ($wrapper) {
+      var $textarea = H5P.jQuery('<textarea id="' + textAreaID + '" style="width:100%;min-height:120px;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:inherit;font-size:14px;resize:vertical;">' + value + '</textarea>');
+      $textarea.on('input', function () {
+        value = this.value;
+      });
+      $wrapper.append($textarea);
+    };
+
+    self.getData = function () { return value; };
+    self.setData = function (data) { value = data; };
+    self.destroy = function () {};
+    self.status = { ready: true };
+  };
+  H5P.CKEditor.prototype = Object.create(H5P.EventDispatcher.prototype);
+  H5P.CKEditor.prototype.constructor = H5P.CKEditor;
+}
 
 /**
  * Tooltip stub

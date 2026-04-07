@@ -175,7 +175,16 @@ const quizSchema = new mongoose.Schema({
     format: { type: String, default: 'h5p' },
     exportedAt: { type: Date, default: Date.now },
     filePath: { type: String },
-    downloadCount: { type: Number, default: 0 }
+    downloadCount: { type: Number, default: 0 },
+    lumiContentId: { type: String },
+    canvasExport: {
+      courseId: { type: String },
+      moduleId: { type: String },
+      pageId: { type: String },
+      moduleItemId: { type: String },
+      resourceLinkId: { type: String },
+      exportedAt: { type: Date }
+    }
   }],
   
   // Access Control

@@ -9,6 +9,7 @@ import UserAccount from './components/UserAccount';
 import Login from './components/Login';
 import NotFound from "./pages/NotFound";
 import H5PPreview from "./pages/H5PPreview";
+import AdminDashboard from "./pages/AdminDashboard";
 import { useState, useEffect } from 'react';
 import { API_URL } from './config/api';
 
@@ -66,9 +67,13 @@ const App = () => {
           <Route path="/course/:courseId" element={isAuthenticated ? <Layout><CourseView /></Layout> : <Navigate to="/login" />} />
           <Route path="/course/:courseId/quiz/:quizId" element={isAuthenticated ? <Layout><QuizView /></Layout> : <Navigate to="/login" />} />
           <Route path="/account" element={isAuthenticated ? <Layout><UserAccount /></Layout> : <Navigate to="/login" />} />
+          <Route path="/admin" element={isAuthenticated ? <Layout><AdminDashboard /></Layout> : <Navigate to="/login" />} />
           
           {/* H5P Preview — no auth required (dev tool) */}
           <Route path="/h5p-preview" element={<H5PPreview />} />
+
+          {/* Canvas OAuth callback — closes popup window */}
+          <Route path="/canvas-callback" element={<CanvasCallback />} />
 
           {/* SAML callback route */}
           <Route path="/auth/callback" element={<AuthCallback onAuthChange={checkAuth} />} />
@@ -78,6 +83,26 @@ const App = () => {
         </Routes>
       </BrowserRouter>
     </Provider>
+  );
+};
+
+// Canvas OAuth callback — just closes the popup, parent window polls for it
+const CanvasCallback = () => {
+  useEffect(() => {
+    // Close the popup after a short delay so the parent can detect it
+    const timer = setTimeout(() => window.close(), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const params = new URLSearchParams(window.location.search);
+  const success = params.get('success');
+  const error = params.get('error');
+
+  return (
+    <div style={{ padding: '40px', textAlign: 'center' }}>
+      {success ? <p>Canvas connected successfully! This window will close...</p>
+               : <p>Canvas connection failed: {error || 'Unknown error'}. You can close this window.</p>}
+    </div>
   );
 };
 

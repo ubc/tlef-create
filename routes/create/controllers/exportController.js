@@ -150,7 +150,7 @@ router.get('/:exportId/download', authenticateToken, asyncHandler(async (req, re
 
     const filename = path.basename(exportRecord.filePath);
     const fileExtension = path.extname(filename).toLowerCase();
-    const contentType = fileExtension === '.pdf' ? 'application/pdf' : 'application/zip';
+    const contentType = fileExtension === '.pdf' ? 'application/pdf' : 'application/octet-stream';
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', contentType);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Edit, Plus, Play, Download } from 'lucide-react';
+import { Edit, Plus, Play, Download, Upload } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
@@ -10,6 +10,7 @@ import { fetchQuestions, deleteQuestion, updateQuestion as updateQuestionThunk }
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import RegeneratePromptModal from '../RegeneratePromptModal';
 import PdfExportModal from '../PdfExportModal';
+import CanvasExportModal from './CanvasExportModal';
 import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
@@ -20,10 +21,12 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [searchParams] = useSearchParams();
   const dispatch = useDispatch<AppDispatch>();
   const reduxQuestions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
+  const currentQuiz = useSelector((state: RootState) => state.quiz.currentQuiz);
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
   const [pdfExportModalOpen, setPdfExportModalOpen] = useState(false);
+  const [canvasExportModalOpen, setCanvasExportModalOpen] = useState(false);
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
@@ -389,6 +392,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               <button className="btn btn-outline" onClick={() => setPdfExportModalOpen(true)} disabled={exportLoading}>
                 <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to PDF'}
               </button>
+              <button className="btn btn-outline" onClick={() => setCanvasExportModalOpen(true)} disabled={exportLoading}>
+                <Upload size={16} /> Export to Canvas
+              </button>
             </div>
           </div>
         )}
@@ -419,6 +425,14 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         onClose={() => setPdfExportModalOpen(false)}
         onExport={handlePDFExport}
         isLoading={exportLoading}
+      />
+
+      <CanvasExportModal
+        isOpen={canvasExportModalOpen}
+        onClose={() => setCanvasExportModalOpen(false)}
+        quizId={quizId}
+        quizName={currentQuiz?.name || 'Quiz'}
+        showNotification={showNotification}
       />
     </div>
   );

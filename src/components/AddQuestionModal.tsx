@@ -97,7 +97,17 @@ const AddQuestionModal = ({
     { id: 'discussion', label: 'Discussion' },
     { id: 'matching', label: 'Matching' },
     { id: 'ordering', label: 'Ordering' },
-    { id: 'cloze', label: 'Cloze Test' }
+    { id: 'cloze', label: 'Cloze Test' },
+    { id: 'mark-the-words', label: 'Mark the Words' },
+    { id: 'single-choice-set', label: 'Single Choice Set' },
+    { id: 'essay', label: 'Essay' },
+    { id: 'free-text', label: 'Free Text' },
+    { id: 'open-ended', label: 'Open Ended' },
+    { id: 'simple-multi-choice', label: 'Simple Multi Choice' },
+    { id: 'sort-paragraphs', label: 'Sort Paragraphs' },
+    { id: 'crossword', label: 'Crossword' },
+    { id: 'dictation', label: 'Dictation' },
+    { id: 'arithmetic-quiz', label: 'Arithmetic Quiz' }
   ];
 
   const resetForm = () => {
@@ -204,6 +214,11 @@ const AddQuestionModal = ({
     }
     if (questionType === 'cloze') {
       return questionData.textWithBlanks.trim() && questionData.textWithBlanks.includes('$');
+    }
+    // New types that just need a question text
+    if (['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
+         'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(questionType)) {
+      return questionData.question.trim().length > 0;
     }
     return false;
   };
@@ -331,6 +346,48 @@ const AddQuestionModal = ({
                   data={questionData}
                   onChange={setQuestionData}
                 />
+              )}
+
+              {/* Generic text-based editor for new question types */}
+              {['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
+                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(questionType) && (
+                <div className="form-field">
+                  <label>
+                    {questionType === 'mark-the-words' ? 'Text (wrap correct words with *asterisks*)' :
+                     questionType === 'essay' ? 'Essay Task Description' :
+                     questionType === 'crossword' ? 'Crossword Clues & Words' :
+                     questionType === 'sort-paragraphs' ? 'Paragraphs (in correct order, one per line)' :
+                     questionType === 'dictation' ? 'Sentences (one per line)' :
+                     questionType === 'arithmetic-quiz' ? 'Quiz Description' :
+                     'Question'}
+                  </label>
+                  <textarea
+                    className="textarea"
+                    placeholder={
+                      questionType === 'mark-the-words' ? 'The process of *photosynthesis* converts *sunlight* into energy...' :
+                      questionType === 'essay' ? 'Describe the main factors that influence...' :
+                      questionType === 'sort-paragraphs' ? 'Enter each paragraph on a new line in the correct order' :
+                      questionType === 'crossword' ? 'Enter word:clue pairs, one per line (e.g., PHOTOSYNTHESIS:The process by which plants make food)' :
+                      questionType === 'dictation' ? 'Enter sentences to dictate, one per line' :
+                      'Enter your question here...'
+                    }
+                    value={questionData.question}
+                    onChange={(e) => setQuestionData({ ...questionData, question: e.target.value })}
+                    rows={6}
+                  />
+                  <p className="field-hint">
+                    {questionType === 'mark-the-words' ? 'Wrap correct words in *asterisks*. Students will click to select them.' :
+                     questionType === 'essay' ? 'Students will write a longer response. You can review it manually.' :
+                     questionType === 'free-text' || questionType === 'open-ended' ? 'Open-ended question with no single correct answer.' :
+                     questionType === 'sort-paragraphs' ? 'Students will rearrange these into the correct order.' :
+                     questionType === 'crossword' ? 'Words will be arranged into a crossword puzzle automatically.' :
+                     questionType === 'dictation' ? 'Students will type each sentence from memory.' :
+                     questionType === 'arithmetic-quiz' ? 'Arithmetic problems will be generated automatically.' :
+                     questionType === 'single-choice-set' ? 'A rapid-fire set of single-choice questions.' :
+                     questionType === 'simple-multi-choice' ? 'Students can select multiple correct answers.' :
+                     ''}
+                  </p>
+                </div>
               )}
             </div>
           ) : (

@@ -136,12 +136,15 @@ router.get('/me', asyncHandler(async (req, res) => {
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(req.user._id || req.user.id).select('-password');
     if (user) {
-      console.log('✅ /me - User authenticated:', user.cwlId);
+      const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
+      const isAdmin = adminCwls.includes(user.cwlId);
+      console.log('✅ /me - User authenticated:', user.cwlId, isAdmin ? '(admin)' : '');
       return successResponse(res, {
         authenticated: true,
         user: {
           id: user._id,
           cwlId: user.cwlId,
+          isAdmin,
           stats: user.stats,
           lastLogin: user.lastLogin
         }

@@ -597,7 +597,147 @@ IMPORTANT REQUIREMENTS FOR CLOZE QUESTIONS:
 
 EXAMPLE: If textWithBlanks has "In programming, $$ is used for $$ operations", then you need:
 - blankOptions: [["callbacks", "promises"], ["asynchronous", "synchronous"]]
-- correctAnswers: ["callbacks", "asynchronous"]`
+- correctAnswers: ["callbacks", "asynchronous"]`,
+
+      'mark-the-words': `{
+  "questionText": "Click on the correct words that match the definition/concept",
+  "text": "The process of *photosynthesis* converts *sunlight* into chemical energy in *chloroplasts* using *carbon dioxide* and water.",
+  "correctAnswer": "photosynthesis, sunlight, chloroplasts, carbon dioxide",
+  "explanation": "These are the key terms related to the process of photosynthesis"
+}
+
+IMPORTANT: Wrap correct words with asterisks (*word*) in the text field. Only the words between asterisks are considered correct. Include surrounding context words without asterisks.`,
+
+      'single-choice-set': `{
+  "questionText": "Quick quiz: Answer these rapid-fire questions",
+  "questions": [
+    {
+      "question": "What is the primary function of the mitochondria?",
+      "answers": ["Energy production", "Protein synthesis", "Cell division", "Waste removal"]
+    },
+    {
+      "question": "Which organelle contains DNA?",
+      "answers": ["Nucleus", "Ribosome", "Golgi apparatus", "Lysosome"]
+    }
+  ],
+  "correctAnswer": "Energy production; Nucleus",
+  "explanation": "The mitochondria produce ATP (energy), and the nucleus contains the cell's DNA."
+}
+
+IMPORTANT: Generate 2-4 sub-questions. The FIRST answer in each answers array is ALWAYS the correct one. Answers must be plain strings (NOT objects). Include 3-4 answer options per question.`,
+
+      'essay': `{
+  "questionText": "Write an essay about the topic below",
+  "taskDescription": "Explain the role of feedback loops in maintaining homeostasis. Include specific examples of negative and positive feedback mechanisms.",
+  "keywords": [
+    {"keyword": "homeostasis", "alternatives": ["equilibrium", "balance"], "points": 2},
+    {"keyword": "negative feedback", "alternatives": ["negative loop"], "points": 2},
+    {"keyword": "positive feedback", "alternatives": ["positive loop"], "points": 1},
+    {"keyword": "temperature regulation", "alternatives": ["thermoregulation"], "points": 1}
+  ],
+  "sampleAnswer": "Homeostasis is the process by which biological systems maintain stability. Negative feedback loops, such as temperature regulation, counteract changes to return to a set point. Positive feedback loops, such as blood clotting, amplify changes to reach a specific outcome.",
+  "correctAnswer": "See sample answer",
+  "explanation": "A good essay should cover both types of feedback with specific biological examples"
+}
+
+IMPORTANT: Include 3-6 keywords with optional alternatives. Each keyword has a point value. The sampleAnswer should be a model response.`,
+
+      'free-text': `{
+  "questionText": "Answer the following open-ended question",
+  "question": "In your own words, describe how neural networks learn from data.",
+  "placeholder": "Type your answer here...",
+  "correctAnswer": "Open-ended question - no single correct answer",
+  "explanation": "A good answer should mention training data, weights adjustment, loss functions, and backpropagation"
+}`,
+
+      'open-ended': `{
+  "questionText": "Reflect on the following topic",
+  "question": "How might artificial intelligence impact the field of healthcare in the next decade?",
+  "placeholderText": "Share your thoughts...",
+  "correctAnswer": "Open-ended question - no single correct answer",
+  "explanation": "Consider diagnostics, treatment planning, drug discovery, patient monitoring, and ethical implications"
+}`,
+
+      'simple-multi-choice': `{
+  "questionText": "Select the correct answer(s)",
+  "question": "Which of the following are renewable energy sources?",
+  "alternatives": [
+    {"text": "Solar power", "correct": true},
+    {"text": "Coal", "correct": false},
+    {"text": "Wind power", "correct": true},
+    {"text": "Natural gas", "correct": false}
+  ],
+  "correctAnswer": "Solar power, Wind power",
+  "explanation": "Solar and wind power are renewable because they come from naturally replenishing sources"
+}
+
+IMPORTANT: Mark correct alternatives with "correct": true. At least one alternative must be correct.`,
+
+      'sort-paragraphs': `{
+  "questionText": "Arrange the following paragraphs in the correct logical order",
+  "taskDescription": "Put these steps of the scientific method in the correct order",
+  "paragraphs": [
+    "Make an observation about a phenomenon in the natural world",
+    "Formulate a hypothesis that could explain the observation",
+    "Design and conduct an experiment to test the hypothesis",
+    "Analyze the data collected from the experiment",
+    "Draw conclusions and communicate the results"
+  ],
+  "correctAnswer": "Observation, Hypothesis, Experiment, Analysis, Conclusion",
+  "explanation": "The scientific method follows a logical sequence from observation through conclusion"
+}
+
+IMPORTANT: The paragraphs array must be in the CORRECT order. The system will shuffle them for display. Generate 3-6 paragraphs.`,
+
+      'crossword': `{
+  "questionText": "Complete the crossword puzzle using the clues provided",
+  "taskDescription": "Key terms from this chapter",
+  "words": [
+    {"answer": "Photosynthesis", "clue": "The process by which plants convert light energy into chemical energy"},
+    {"answer": "Chlorophyll", "clue": "The green pigment found in plant cells that captures light"},
+    {"answer": "Glucose", "clue": "The simple sugar produced as a result of carbon fixation"},
+    {"answer": "Oxygen", "clue": "The gas released as a byproduct of water splitting"},
+    {"answer": "Carbon", "clue": "The element fixed from CO2 during the Calvin cycle"}
+  ],
+  "correctAnswer": "Photosynthesis, Chlorophyll, Glucose, Oxygen, Carbon",
+  "explanation": "These are essential terms for understanding how plants produce energy"
+}
+
+IMPORTANT: Generate 4-8 words. Each word must be a single word (no spaces). Use standard capitalization (e.g., "Observer" not "OBSERVER"). Clues should be clear and educational.`,
+
+      'dictation': `{
+  "questionText": "Type each sentence correctly from memory",
+  "taskDescription": "Practice these key definitions by typing them accurately",
+  "sentences": [
+    {"text": "Photosynthesis is the process by which green plants convert sunlight into chemical energy."},
+    {"text": "The mitochondria are often called the powerhouse of the cell."},
+    {"text": "DNA replication occurs during the S phase of the cell cycle."}
+  ],
+  "correctAnswer": "Type each sentence accurately",
+  "explanation": "Typing key definitions helps reinforce understanding and memorization of important concepts"
+}
+
+IMPORTANT: Generate 2-5 sentences. Each sentence should be educational and contain key concepts. Keep sentences concise (under 120 characters each).`,
+
+      'arithmetic-quiz': `{
+  "questionText": "Practice your arithmetic skills",
+  "quizType": "addition",
+  "maxNumber": 20,
+  "numQuestions": 10,
+  "correctAnswer": "Complete all arithmetic problems correctly",
+  "explanation": "Practice with arithmetic operations to build fluency and speed"
+}
+
+IMPORTANT: quizType must be one of: "addition", "subtraction", "multiplication", "division". maxNumber sets the upper bound for generated numbers (5-100). numQuestions is how many problems to generate (5-20).`,
+
+      'branching-scenario': `{
+  "questionText": "Interactive branching scenario",
+  "content": {},
+  "correctAnswer": "Complete all branches of the scenario",
+  "explanation": "This branching scenario lets students explore different decision paths and their consequences"
+}
+
+NOTE: Branching scenarios are complex container types. Generate a simple placeholder. The instructor will customize the branching content manually.`
     };
 
     return formats[questionType] || formats['multiple-choice'];

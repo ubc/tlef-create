@@ -4,28 +4,6 @@ var H5PEditor = H5PEditor || {};
 H5PEditor.VerticalTabs = (function ($) {
 
   /**
-   * Utility for checking if any of the parent fields is using the VerticalTabs widget
-   * 
-   * @param {Object} field 
-   * @returns bool
-   */
-  const hasVerticalTabAsParent = function (field) {
-    if (!field) {
-      return false;
-    }
-
-    if (field.widget && field.widget instanceof H5PEditor.VerticalTabs) {
-      return true;
-    }
-
-    if (field.parent) {
-      return hasVerticalTabAsParent(field.parent);
-    }
-
-    return false;
-  }
-
-  /**
    * Draws the list.
    *
    * @class
@@ -33,78 +11,38 @@ H5PEditor.VerticalTabs = (function ($) {
    */
   function VerticalTabs(list) {
     var self = this;
+    var entity = list.getEntity();
 
-    if (hasVerticalTabAsParent(list.parent)) {
-      self.genericList = new H5PEditor.ListEditor(list);
-    }
-    else {
-      var entity = list.getEntity();
+    // Make first letter upper case.
+    entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
 
-      // Make first letter upper case.
-      entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
-      const innerId = H5P.createUUID();
-      // Create DOM elements
-      var $wrapper = $('<div/>', {
-        'class': 'h5p-vtab-wrapper'
-      });
-      var $inner = $('<div/>', {
-        id: innerId,
-        'class': 'h5p-vtabs'
-      }).appendTo($wrapper);
-      var $container = $('<div/>', {
-        'class': 'h5p-vtabs-container'
-      }).appendTo($inner);
-      var $header = $('<div/>', {
-        'class': 'h5p-vtabs-header'
-      }).appendTo($container);
-      var $tabs = $('<ol/>', {
-        id: list.getId(),
-        'aria-describedby': list.getDescriptionId(),
-        'role': 'tablist',
-        'class': 'h5p-ul'
-      }).appendTo($container);      
-      var $createBtn = $('<button />', {
-        text: H5PEditor.t('core', 'addEntity', {':entity': entity}),
-        class: 'add-entity'
-      }).on('click', (e) => {
-        e.preventDefault();
-        if (list.addItem()) {
-          $tabs.children(':last').trigger('open');
-          toggleOrderButtonsState();
-        }
-      }).appendTo($inner);
-      var $forms = $('<div/>', {
-        'class': 'h5p-vtab-forms'
-      }).appendTo($wrapper);
-
-      // Once all items have been added we toggle the state of the order buttons
-      list.once('changeWidget', function () {
+    // Create DOM elements
+    var $wrapper = $('<div/>', {
+      'class': 'h5p-vtab-wrapper'
+    });
+    var $inner = $('<div/>', {
+      'class': 'h5p-vtabs'
+    }).appendTo($wrapper);
+    var $tabs = $('<ol/>', {
+      id: list.getId(),
+      'aria-describedby': list.getDescriptionId(),
+      'role': 'tablist',
+      'class': 'h5p-ul'
+    }).appendTo($inner);
+    H5PEditor.createButton('add-entity', H5PEditor.t('core', 'addEntity', {':entity': entity}), function () {
+      if (list.addItem()) {
+        $tabs.children(':last').trigger('open');
         toggleOrderButtonsState();
-      });
+      }
+    }, true).appendTo($inner);
+    var $forms = $('<div/>', {
+      'class': 'h5p-vtab-forms'
+    }).appendTo($wrapper);
 
-      $header.html('<span>Collapse</span>');
-      var $expandCollapseBtn = $('<button />', {
-        'type': 'button',
-        'aria-label': 'Collapse',
-        'aria-expanded': 'true',
-        'aria-controls': innerId,
-        'class': 'h5p-vtabs-expand-collapse',
-      }).appendTo($header);
-      
-      $expandCollapseBtn.on('click', (e) => {
-        e.preventDefault();
-        $inner.toggleClass('is-collapsed');
-        if ($inner.hasClass('is-collapsed')) {
-          $expandCollapseBtn.attr('aria-expanded', 'false');
-          $createBtn.text('');
-          $createBtn.attr('aria-label', H5PEditor.t('core', 'addEntity', {':entity': entity}));
-        } else {
-          $expandCollapseBtn.attr('aria-expanded', 'true');
-          $createBtn.text(H5PEditor.t('core', 'addEntity', {':entity': entity}));
-          $createBtn.removeAttr('aria-label');
-        }
-      });
-    }
+    // Once all items have been added we toggle the state of the order buttons
+    list.once('changeWidget', function () {
+      toggleOrderButtonsState();
+    });
 
     // Used when dragging items around
     var adjustX, adjustY, marginTop, formOffset, $currentTab;
@@ -163,17 +101,6 @@ H5PEditor.VerticalTabs = (function ($) {
     };
 
     /**
-     * Decode HTML entities
-     * @param {String}
-     * @return {String} 
-     */
-    var decodeEntity = function(inputStr) {
-      var textarea = document.createElement("textarea");
-      textarea.innerHTML = inputStr;
-      return textarea.value;
-    }
-
-    /**
      * Always run after reordering, adding or removing to ensure correct
      * state of the order buttons.
      *
@@ -211,11 +138,6 @@ H5PEditor.VerticalTabs = (function ($) {
      * @param {Object} item
      */
     self.addItem = function (item) {
-
-      if (self.genericList) {
-        self.genericList.addItem(item);
-        return;
-      }
 
       var $placeholder;
       var $tab = $('<li/>', {
@@ -358,7 +280,7 @@ H5PEditor.VerticalTabs = (function ($) {
       // Add clickable label
       $('<div/>', {
         'class' : 'h5p-vtab-a',
-        html: '<span class="h5p-index-label">' + ($tab.index() + 1) + '</span><span>.</span> <span class="h5p-label" title="' + entity + '">' + entity + '</span>',
+        html: '<span class="h5p-index-label">' + ($tab.index() + 1) + '</span>. <span class="h5p-label" title="' + entity + '">' + entity + '</span>',
         role: 'tab',
         tabIndex: 0,
         on: {
@@ -402,6 +324,14 @@ H5PEditor.VerticalTabs = (function ($) {
         $tabLabel.text(label).attr('title', label);
       };
 
+      // Add buttons for ordering
+      var $orderWrapper = $('<div/>', {
+        'class': 'vtab-order-wrapper',
+        appendTo: $tab
+      });
+      H5PEditor.createButton('order-up', H5PEditor.t('core', 'orderItemUp'), moveItemUp).appendTo($orderWrapper);
+      H5PEditor.createButton('order-down', H5PEditor.t('core', 'orderItemDown'), moveItemDown).appendTo($orderWrapper);
+
       // Add remove button
       var $removeWrapper = $('<div/>', {
         'class': 'vtab-remove-wrapper',
@@ -410,14 +340,6 @@ H5PEditor.VerticalTabs = (function ($) {
       H5PEditor.createButton('remove', H5PEditor.t('core', 'removeItem'), function () {
         confirmRemovalDialog.show($(this).offset().top);
       }).appendTo($removeWrapper);
-
-      // Add buttons for ordering
-      var $orderWrapper = $('<div/>', {
-        'class': 'vtab-order-wrapper',
-        appendTo: $tab
-      });
-      H5PEditor.createButton('order-up', H5PEditor.t('core', 'orderItemUp'), moveItemUp).appendTo($orderWrapper);
-      H5PEditor.createButton('order-down', H5PEditor.t('core', 'orderItemDown'), moveItemDown).appendTo($orderWrapper);
 
       // Create confirmation dialog for removing list item
       var confirmRemovalDialog = new H5P.ConfirmationDialog({
@@ -484,7 +406,7 @@ H5PEditor.VerticalTabs = (function ($) {
         let summary = item.$select.children(':selected').text();
         if (item.params.metadata && item.params.metadata.title) {
           // The given title usually makes more sense than the type name
-          summary = decodeEntity(item.params.metadata.title) + (!item.libraries || (item.libraries.length > 1 && item.params.metadata.title.indexOf(summary) === -1) ? ' (' +  summary + ')' : '');
+          summary = item.params.metadata.title + (!item.libraries || (item.libraries.length > 1 && item.params.metadata.title.indexOf(summary) === -1) ? ' (' +  summary + ')' : '');
         }
         setTabLabel(summary);
 
@@ -497,7 +419,7 @@ H5PEditor.VerticalTabs = (function ($) {
         const setSummary = function () {
           if (item.params && item.params.metadata && item.params.metadata.title) {
             // The given title usually makes more sense than the type name
-            setTabLabel(decodeEntity(item.params.metadata.title) + (item.libraries.length > 1 && item.params.metadata.title.indexOf(lastLib.title) === -1 ? ' (' +  lastLib.title + ')' : ''));
+            setTabLabel(item.params.metadata.title + (item.libraries.length > 1 && item.params.metadata.title.indexOf(lastLib.title) === -1 ? ' (' +  lastLib.title + ')' : ''));
           }
           else {
             setTabLabel(lastLib ? lastLib.title : '');
@@ -542,10 +464,6 @@ H5PEditor.VerticalTabs = (function ($) {
      * @param {jQuery} $container
      */
     self.appendTo = function ($container) {
-      if (self.genericList) {
-        self.genericList.appendTo($container);
-        return;
-      }
       $wrapper.appendTo($container);
     };
 
@@ -555,10 +473,6 @@ H5PEditor.VerticalTabs = (function ($) {
      * @public
      */
     self.remove = function () {
-      if (self.genericList) {
-        self.genericList.remove();
-        return;
-      }
       $wrapper.remove();
     };
   }

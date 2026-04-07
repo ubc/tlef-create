@@ -48,7 +48,53 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     const questionTypes = new Set(quiz.questions.map(q => q.type));
     const neededLibNames = getNeededLibraries(questionTypes, { hasMixedContent, isFlashcardOnly });
 
-    // Build preloadedDependencies
+    // Recursively resolve ALL transitive dependencies by reading library.json files
+    const libraryPath = options.libraryPath || path.join('./routes/create/h5p-libs/');
+    const allLibs = new Map(); // key: "machineName-major.minor" → { machineName, majorVersion, minorVersion, dirName }
+    const queue = [];
+
+    // Seed with first-level libs
+    for (const libName of neededLibNames) {
+      const lib = LIBRARY_REGISTRY[libName];
+      if (lib) {
+        queue.push({ machineName: libName, majorVersion: lib.majorVersion, minorVersion: lib.minorVersion, dirName: lib.dirName });
+      }
+    }
+
+    // BFS to discover all transitive dependencies
+    while (queue.length > 0) {
+      const dep = queue.shift();
+      const key = `${dep.machineName}-${dep.majorVersion}.${dep.minorVersion}`;
+      if (allLibs.has(key)) continue;
+
+      // Find dirName — use dep.dirName if provided, otherwise construct from key.
+      // Don't use LIBRARY_REGISTRY here because it may have a different version
+      // (e.g., registry has Question 1.5 but this dep is Question 1.4).
+      const dirName = dep.dirName || key;
+      allLibs.set(key, { machineName: dep.machineName, majorVersion: dep.majorVersion, minorVersion: dep.minorVersion, dirName });
+
+      // Read library.json for sub-dependencies (both runtime and editor)
+      const libJsonPath = path.join(libraryPath, dirName, 'library.json');
+      try {
+        const libJson = JSON.parse(await fs.readFile(libJsonPath, 'utf-8'));
+        const allDeps = [
+          ...(libJson.preloadedDependencies || []),
+          ...(libJson.editorDependencies || [])
+        ];
+        for (const subDep of allDeps) {
+          const subKey = `${subDep.machineName}-${subDep.majorVersion}.${subDep.minorVersion}`;
+          if (!allLibs.has(subKey)) {
+            queue.push({ machineName: subDep.machineName, majorVersion: subDep.majorVersion, minorVersion: subDep.minorVersion });
+          }
+        }
+      } catch {
+        // library.json not found, skip sub-deps
+      }
+    }
+
+    // Build preloadedDependencies from first-level needed libs only.
+    // Transitive dependencies (discovered by BFS) are packaged as directories
+    // but NOT listed in preloadedDependencies — this matches official H5P behavior.
     const preloadedDependencies = [];
     for (const libName of neededLibNames) {
       const lib = LIBRARY_REGISTRY[libName];
@@ -60,10 +106,116 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
         });
       }
     }
+    // Also add any sub-version deps found by BFS (e.g. H5P.Question 1.4 when we already have 1.5)
+    for (const [key, lib] of allLibs) {
+      const alreadyListed = preloadedDependencies.some(d =>
+        d.machineName === lib.machineName && d.majorVersion === lib.majorVersion && d.minorVersion === lib.minorVersion
+      );
+      // Add editor deps to preloadedDependencies (they appear in real H5P files)
+      if (!alreadyListed && lib.machineName.startsWith('H5PEditor')) {
+        preloadedDependencies.push({
+          machineName: lib.machineName,
+          majorVersion: lib.majorVersion,
+          minorVersion: lib.minorVersion
+        });
+      }
+      // Add alternate versions of already-listed libs (e.g. Question 1.4 when 1.5 is listed)
+      if (!alreadyListed && !lib.machineName.startsWith('H5PEditor')) {
+        const hasOtherVersion = preloadedDependencies.some(d => d.machineName === lib.machineName);
+        if (hasOtherVersion) {
+          preloadedDependencies.push({
+            machineName: lib.machineName,
+            majorVersion: lib.majorVersion,
+            minorVersion: lib.minorVersion
+          });
+        }
+      }
+    }
 
-    // Create h5p.json
+    // Determine if we can export as a single standalone content type (no Column wrapper).
+    // This produces files identical to official H5P exports, maximizing compatibility.
+    const uniqueNonFlashcardTypes = new Set(nonFlashcardQuestions.map(q => q.type));
+    // Types that should be exported standalone (without Column wrapper)
+    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword']);
+    const singleType = uniqueNonFlashcardTypes.size === 1 ? [...uniqueNonFlashcardTypes][0] : null;
+    const isSingleType = !hasMixedContent && singleType && standaloneTypes.has(singleType) && flashcardQuestions.length === 0;
+
     let h5pJson;
-    if (hasMixedContent || !isFlashcardOnly) {
+    let contentJson;
+
+    if (isSingleType) {
+      // Single content type — export directly without Column wrapper
+      const singleQuestion = nonFlashcardQuestions[0];
+      const h5pContent = convertQuestionToH5P(singleQuestion, quiz);
+
+      if (h5pContent) {
+        const libString = h5pContent.library || '';
+        const libParts = libString.split(' ');
+        const mainLibName = libParts[0] || 'H5P.Column';
+
+        // For standalone export, build preloadedDependencies from ALL BFS-discovered libs
+        // (including transitive deps like Drop, Tether, AdvancedText, Question 1.4)
+        // but exclude platform libs (Column, jQuery.ui), editor libs, and duplicate Question versions
+        const skipMachineNames = new Set(['H5P.Column', 'jQuery.ui']);
+        // If multiple Question versions exist, skip the primary (registry) version
+        const qVersions = [...allLibs.keys()].filter(k => k.startsWith('H5P.Question-'));
+        if (qVersions.length > 1) {
+          const primaryQKey = `H5P.Question-${LIBRARY_REGISTRY['H5P.Question']?.majorVersion}.${LIBRARY_REGISTRY['H5P.Question']?.minorVersion}`;
+          skipMachineNames.add(primaryQKey);
+        }
+        const filteredDeps = [];
+        const seen = new Set();
+        for (const [key, lib] of allLibs) {
+          if (skipMachineNames.has(lib.machineName)) continue;
+          if (skipMachineNames.has(key)) continue;
+          if (lib.machineName.startsWith('H5PEditor')) continue;
+          const dedupKey = `${lib.machineName}-${lib.majorVersion}.${lib.minorVersion}`;
+          if (seen.has(dedupKey)) continue;
+          seen.add(dedupKey);
+          filteredDeps.push({
+            machineName: lib.machineName,
+            majorVersion: String(lib.majorVersion),
+            minorVersion: String(lib.minorVersion)
+          });
+        }
+
+        h5pJson = {
+          title: quiz.name || "Quiz Export",
+          language: "en",
+          mainLibrary: mainLibName,
+          embedTypes: ["div"],
+          license: "U",
+          defaultLanguage: "en",
+          preloadedDependencies: filteredDeps
+        };
+
+        // Content is the params directly (not wrapped in Column)
+        contentJson = h5pContent.params || {};
+      } else {
+        // Fallback to Column
+        h5pJson = {
+          title: quiz.name || "Quiz Export",
+          language: "en",
+          mainLibrary: "H5P.Column",
+          embedTypes: ["div"],
+          license: "U",
+          defaultLanguage: "en",
+          preloadedDependencies
+        };
+        contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
+      }
+    } else if (isFlashcardOnly) {
+      h5pJson = {
+        title: quiz.name || "Quiz Export",
+        language: "en",
+        mainLibrary: "H5P.Dialogcards",
+        embedTypes: ["iframe"],
+        license: "U",
+        preloadedDependencies
+      };
+      contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
+    } else {
+      // Multiple types or mixed — use Column wrapper
       h5pJson = {
         title: quiz.name || "Quiz Export",
         language: "en",
@@ -73,39 +225,49 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
         defaultLanguage: "en",
         preloadedDependencies
       };
-    } else {
-      h5pJson = {
-        title: quiz.name || "Quiz Export",
-        language: "en",
-        mainLibrary: "H5P.Dialogcards",
-        embedTypes: ["iframe"],
-        license: "U",
-        preloadedDependencies
-      };
+      contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
     }
-
-    // Generate content
-    const contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
 
     // Add files to archive
     archive.append(JSON.stringify(h5pJson), { name: 'h5p.json' });
     archive.append(JSON.stringify(contentJson), { name: 'content/content.json' });
 
-    // Add library directories
-    const libraryPath = options.libraryPath || path.join('./routes/create/h5p-libs/');
+    // Add library directories to archive.
+    // Standard H5P platform libraries (Column, jQuery.ui) are expected to already
+    // exist on the target platform, so we don't package their directories.
+    // Libraries listed in preloadedDependencies where the platform should already
+    // have that exact version are also skipped.
+    const skipDirLibs = new Set(['H5P.Column', 'jQuery.ui']);
+    // Also skip packaging the "primary" version of Question if a secondary version exists
+    // (e.g., skip Question 1.5 dir if Question 1.4 is also in allLibs as transitive dep)
+    const questionVersions = [...allLibs.keys()].filter(k => k.startsWith('H5P.Question-'));
+    if (questionVersions.length > 1) {
+      // Find the version that's in neededLibNames (primary) — skip its dir
+      const primaryKey = `H5P.Question-${LIBRARY_REGISTRY['H5P.Question']?.majorVersion}.${LIBRARY_REGISTRY['H5P.Question']?.minorVersion}`;
+      if (primaryKey) skipDirLibs.add(primaryKey);
+    }
+
     try {
       await fs.access(libraryPath);
-      for (const libName of neededLibNames) {
-        const lib = LIBRARY_REGISTRY[libName];
-        if (lib) {
-          const libDir = path.join(libraryPath, lib.dirName);
-          try {
-            await fs.access(libDir);
-            archive.directory(libDir, lib.dirName);
-          } catch {
-            // Library directory not found, skip
-          }
+      for (const [key, lib] of allLibs) {
+        if (skipDirLibs.has(lib.machineName) || skipDirLibs.has(key)) continue;
+        const libDir = path.join(libraryPath, lib.dirName);
+        try {
+          await fs.access(libDir);
+          // Use glob to add only files (no directory entries) — matches official H5P format
+          archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
+        } catch {
+          // Library directory not found, skip
         }
+      }
+      // Also package directory-only dependencies that aren't in allLibs
+      // but are needed by certain content types (e.g., AdvancedText for Crossword extraClue)
+      if (questionTypes.has('crossword')) {
+        const advTextDir = path.join(libraryPath, 'H5P.AdvancedText-1.1');
+        try {
+          await fs.access(advTextDir);
+          archive.glob('**/*', { cwd: advTextDir, nodir: true }, { prefix: 'H5P.AdvancedText-1.1' });
+        } catch { /* skip */ }
       }
     } catch (error) {
       console.warn('H5P library files not found, creating minimal export:', error.message);
@@ -968,6 +1130,424 @@ export function convertQuestionToH5P(question, quiz) {
         "contentType": "Text",
         "license": "U",
         "title": "Discussion question"
+      }
+    };
+  } else if (question.type === 'mark-the-words') {
+    const text = question.content?.text || question.questionText || '';
+    return {
+      "params": {
+        "taskDescription": `<p>${escapeHtml(question.questionText)}</p>`,
+        "textField": text,
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "enableCheckButton": true,
+          "showScorePoints": true
+        },
+        "checkAnswerButton": "Check",
+        "submitAnswerButton": "Submit",
+        "tryAgainButton": "Retry",
+        "showSolutionButton": "Show solution",
+        "correctAnswer": "Correct!",
+        "incorrectAnswer": "Incorrect!",
+        "missedAnswer": "Missed!",
+        "displaySolutionDescription": "Task is updated to contain the solution.",
+        "scoreBarLabel": "You got :num out of :total points",
+        "a11yCheck": "Check the answers. The responses will be marked as correct, incorrect, or unanswered.",
+        "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+        "a11yRetry": "Retry the task. Reset all responses and start the task over again."
+      },
+      "library": "H5P.MarkTheWords 1.11",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Mark the Words",
+        "license": "U",
+        "title": "Mark the Words"
+      }
+    };
+  } else if (question.type === 'single-choice-set') {
+    const questions = question.content?.questions || [];
+    const choices = questions.map(q => ({
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "question": escapeHtml(q.question || ''),
+      "answers": (q.answers || []).map(a => escapeHtml(typeof a === 'string' ? a : a.text || ''))
+    }));
+    return {
+      "params": {
+        "choices": choices,
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "behaviour": {
+          "autoContinue": true,
+          "timeoutCorrect": 2000,
+          "timeoutWrong": 3000,
+          "soundEffectsEnabled": true,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "passPercentage": 100
+        },
+        "l10n": {
+          "nextButtonLabel": "Next question",
+          "showSolutionButtonLabel": "Show solution",
+          "retryButtonLabel": "Retry",
+          "solutionViewTitle": "Solution list",
+          "correctText": "Correct!",
+          "incorrectText": "Incorrect!",
+          "shouldSelect": "Should have been selected",
+          "shouldNotSelect": "Should not have been selected",
+          "muteButtonLabel": "Mute feedback sound",
+          "closeButtonLabel": "Close",
+          "slideOfTotal": "Slide :num of :total",
+          "scoreBarLabel": "You got :num out of :total points",
+          "solutionListQuestionNumber": "Question :num",
+          "a11yShowSolution": "Show the solution. The task will be marked with its correct solution.",
+          "a11yRetry": "Retry the task. Reset all responses and start the task over again."
+        }
+      },
+      "library": "H5P.SingleChoiceSet 1.11",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Single Choice Set",
+        "license": "U",
+        "title": "Single Choice Set"
+      }
+    };
+  } else if (question.type === 'essay') {
+    const keywords = (question.content?.keywords || []).map(kw => ({
+      "keyword": kw.keyword || '',
+      "alternatives": kw.alternatives || [],
+      "options": {
+        "points": kw.points || 1,
+        "occurrences": 1,
+        "caseSensitive": false,
+        "forgiveMistakes": false
+      }
+    }));
+    return {
+      "params": {
+        "taskDescription": `<p>${escapeHtml(question.content?.taskDescription || question.questionText)}</p>`,
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "solution": {
+          "introduction": "Sample answer:",
+          "sample": question.content?.sampleAnswer || ''
+        },
+        "keywords": keywords,
+        "behaviour": {
+          "minimumLength": 0,
+          "maximumLength": 10000,
+          "inputFieldSize": 10,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "ignoreScoring": false,
+          "pointsHost": 1
+        },
+        "placeholderText": "Enter your essay here...",
+        "submitButtonLabel": "Submit",
+        "tryAgainButtonLabel": "Retry",
+        "showSolutionButtonLabel": "Show solution",
+        "feedbackHeader": "Feedback",
+        "notEnoughChars": "You must enter at least :min characters!",
+        "tooManyChars": "You have entered more than :max characters!",
+        "scoreBarLabel": "You got :num out of :total points",
+        "a11yCheck": "Check the answers.",
+        "a11yShowSolution": "Show the solution.",
+        "a11yRetry": "Retry the task."
+      },
+      "library": "H5P.Essay 1.5",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Essay",
+        "license": "U",
+        "title": "Essay"
+      }
+    };
+  } else if (question.type === 'free-text') {
+    const ftQuestion = typeof question.content?.question === 'string' ? question.content.question : question.questionText;
+    return {
+      "params": {
+        "question": `<p>${escapeHtml(ftQuestion)}</p>`,
+        "placeholder": (typeof question.content?.placeholder === 'string' ? question.content.placeholder : '') || 'Enter your answer here...'
+      },
+      "library": "H5P.FreeTextQuestion 1.0",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Free Text Question",
+        "license": "U",
+        "title": "Free Text Question"
+      }
+    };
+  } else if (question.type === 'open-ended') {
+    const oeQuestion = typeof question.content?.question === 'string' ? question.content.question : question.questionText;
+    return {
+      "params": {
+        "question": `<p>${escapeHtml(oeQuestion)}</p>`,
+        "placeholderText": (typeof question.content?.placeholderText === 'string' ? question.content.placeholderText : '') || 'Enter your response here...',
+        "inputRows": 5
+      },
+      "library": "H5P.OpenEndedQuestion 1.0",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Open Ended Question",
+        "license": "U",
+        "title": "Open Ended Question"
+      }
+    };
+  } else if (question.type === 'simple-multi-choice') {
+    const alternatives = (question.content?.alternatives || []).map((alt, idx) => ({
+      "text": `<p>${escapeHtml(alt.text || alt)}</p>`,
+      "correct": alt.correct !== undefined ? alt.correct : idx === 0
+    }));
+    return {
+      "params": {
+        "question": `<p>${escapeHtml(question.content?.question || question.questionText)}</p>`,
+        "inputType": "checkbox",
+        "alternatives": alternatives,
+        "behaviour": {
+          "enableRetry": true,
+          "enableSolutionsButton": true
+        },
+        "l10n": {
+          "checkAnswer": "Check",
+          "showSolution": "Show solution",
+          "retry": "Retry",
+          "resultMessage": "You got :correct out of :total correct"
+        }
+      },
+      "library": "H5P.SimpleMultiChoice 1.1",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Simple Multiple Choice",
+        "license": "U",
+        "title": "Simple Multiple Choice"
+      }
+    };
+  } else if (question.type === 'sort-paragraphs') {
+    const paragraphs = question.content?.paragraphs || [];
+    return {
+      "params": {
+        "taskDescription": `<p>${escapeHtml(question.content?.taskDescription || question.questionText)}</p>`,
+        "paragraphs": paragraphs.map(p => `<p>${escapeHtml(typeof p === 'string' ? p : p.text || '')}</p>\n`),
+        "media": { "disableImageZooming": false },
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "behaviour": {
+          "scoringMode": "transitions",
+          "applyPenalties": true,
+          "duplicatesInterchangeable": true,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "addButtonsForMovement": true
+        },
+        "l10n": {
+          "checkAnswer": "Check",
+          "tryAgain": "Retry",
+          "showSolution": "Show solution",
+          "up": "Up",
+          "down": "Down",
+          "disabled": "Disabled",
+          "submitAnswer": "Submit"
+        },
+        "a11y": {
+          "check": "Check the answers. The responses will be marked as correct or incorrect.",
+          "showSolution": "Show the solution. The correct solution will be displayed.",
+          "retry": "Retry the task. Reset all elements and start the task over again.",
+          "yourResult": "You got @score out of @total points",
+          "paragraph": "Paragraph",
+          "correct": "correct",
+          "wrong": "wrong",
+          "point": "@score point",
+          "sevenOfNine": "@current of @total",
+          "currentPosition": "Current position in list",
+          "instructionsSelected": "Press spacebar to reorder",
+          "instructionsGrabbed": "Press up and down arrow keys to change position, spacebar to drop, escape to cancel",
+          "grabbed": "Grabbed",
+          "moved": "Moved",
+          "dropped": "Dropped",
+          "reorderCancelled": "Reorder cancelled",
+          "finalPosition": "Final position",
+          "nextParagraph": "Next paragraph",
+          "correctParagraph": "Correct paragraph at position",
+          "listDescription": "Sortable list of paragraphs.",
+          "listDescriptionCheckAnswer": "List of paragraphs with results.",
+          "listDescriptionShowSolution": "List of paragraphs with solutions."
+        }
+      },
+      "library": "H5P.SortParagraphs 0.11",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Sort the Paragraphs",
+        "license": "U",
+        "title": "Sort the Paragraphs"
+      }
+    };
+  } else if (question.type === 'crossword') {
+    const words = (question.content?.words || []).map(w => ({
+      "answer": w.answer || w.word || '',
+      "clue": w.clue || w.hint || '',
+      "fixWord": false
+    }));
+    return {
+      "params": {
+        "words": words,
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "theme": {
+          "backgroundColor": "#173354",
+          "gridColor": "#000000",
+          "cellBackgroundColor": "#ffffff",
+          "cellColor": "#000000",
+          "clueIdColor": "#606060",
+          "cellBackgroundColorHighlight": "#3e8de8",
+          "cellColorHighlight": "#ffffff",
+          "clueIdColorHighlight": "#e0e0e0"
+        },
+        "taskDescription": `<p>${escapeHtml(question.content?.taskDescription || question.questionText)}</p>\n`,
+        "behaviour": {
+          "enableRetry": false,
+          "enableSolutionsButton": true,
+          "scoreWords": true,
+          "applyPenalties": false,
+          "enableInstantFeedback": false
+        },
+        "l10n": {
+          "across": "Across",
+          "down": "Down",
+          "checkAnswer": "Check",
+          "submitAnswer": "Submit",
+          "couldNotGenerateCrossword": "Could not generate a crossword with the given words. Please try again with fewer words or words that have more characters in common.",
+          "couldNotGenerateCrosswordTooFewWords": "Could not generate a crossword. You need at least two words.",
+          "problematicWords": "Some words could not be placed. If you are using fixed words, make sure that their position is correct.",
+          "showSolution": "Show solution",
+          "tryAgain": "Retry",
+          "extraClue": "Extra clue",
+          "closeWindow": "Close",
+          "submitYourAnswers": "Submit your answers to get a score.",
+          "scoreBarLabel": "You got :num out of :total points",
+          "a11yCheck": "Check the answers.",
+          "a11yShowSolution": "Show the solution.",
+          "a11yRetry": "Retry the task."
+        },
+        "a11y": {
+          "crosswordGrid": "Crossword grid. Use arrow keys to navigate and keyboard to enter characters.",
+          "column": "Column",
+          "row": "Row",
+          "across": "Across",
+          "down": "Down",
+          "empty": "Empty",
+          "resultFor": "Result for: @clue",
+          "correct": "Correct",
+          "wrong": "Wrong",
+          "point": "point",
+          "solutionFor": "For @clue the solution is: @solution",
+          "extraClueFor": "Open extra clue for @clue",
+          "letterSevenOfNine": "Letter @position of @length"
+        }
+      },
+      "library": "H5P.Crossword 0.4",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Crossword",
+        "license": "U",
+        "title": "Crossword"
+      }
+    };
+  } else if (question.type === 'dictation') {
+    const sentences = (question.content?.sentences || []).map(s => ({
+      "text": typeof s === 'string' ? s : s.text || '',
+      "sample": typeof s === 'string' ? undefined : s.sample || undefined
+    }));
+    return {
+      "params": {
+        "taskDescription": `<p>${escapeHtml(question.content?.taskDescription || question.questionText)}</p>`,
+        "sentences": sentences,
+        "overallFeedback": [{ "from": 0, "to": 100 }],
+        "behaviour": {
+          "tries": 3,
+          "triesAlternative": 3,
+          "showSolution": "Show solution",
+          "customTypoDisplay": false,
+          "enableRetry": true,
+          "enableSolutionsButton": true,
+          "ignorePunctuation": true,
+          "zeroMistakeMode": false,
+          "alternateSolution": "first"
+        },
+        "l10n": {
+          "checkAnswer": "Check",
+          "submitAnswer": "Submit",
+          "tryAgain": "Retry",
+          "showSolution": "Show solution",
+          "audioNotSupported": "Your browser does not support this audio.",
+          "correctAnswer": "Correct answer",
+          "wrongAnswer": "Wrong answer",
+          "scoreBarLabel": "You got :num out of :total points",
+          "a11yCheck": "Check the answers.",
+          "a11yShowSolution": "Show the solution.",
+          "a11yRetry": "Retry the task.",
+          "typoMessage": "Typo! You meant :correct, not :wrong",
+          "added": "Added :added",
+          "missing": "Missing :missing",
+          "wrong": "Wrong :wrong",
+          "period": "period",
+          "exclamationPoint": "exclamation point",
+          "questionMark": "question mark",
+          "comma": "comma",
+          "singleQuote": "single quote",
+          "doubleQuote": "double quote",
+          "colon": "colon",
+          "semicolon": "semicolon",
+          "plus": "plus",
+          "minus": "minus",
+          "asterisk": "asterisk",
+          "forwardSlash": "forward slash"
+        }
+      },
+      "library": "H5P.Dictation 1.4",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Dictation",
+        "license": "U",
+        "title": "Dictation"
+      }
+    };
+  } else if (question.type === 'arithmetic-quiz') {
+    const arithmeticType = question.content?.quizType || 'addition';
+    return {
+      "params": {
+        "quizType": "arithmetic",
+        "arithmeticType": arithmeticType,
+        "maxQuestions": question.content?.numQuestions || 10,
+        "useFractions": false,
+        "UI": {
+          "score": "Score: @score",
+          "time": "Time: @time",
+          "resultPageHeader": "Quiz finished!",
+          "go": "Go!",
+          "startButton": "Start",
+          "retryButton": "Retry",
+          "correctText": ":num correct",
+          "incorrectText": ":num wrong",
+          "durationLabel": "Duration:",
+          "humanizedLabelForTime": "@minutes minutes, @seconds seconds",
+          "scoreBarLabel": "You got :num out of :total points"
+        }
+      },
+      "library": "H5P.ArithmeticQuiz 1.1",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Arithmetic Quiz",
+        "license": "U",
+        "title": "Arithmetic Quiz"
+      }
+    };
+  } else if (question.type === 'branching-scenario') {
+    // Branching scenario is a container type — pass through content
+    return {
+      "params": question.content || {},
+      "library": "H5P.BranchingScenario 1.9",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": {
+        "contentType": "Branching Scenario",
+        "license": "U",
+        "title": "Branching Scenario"
       }
     };
   } else if (question.type === 'summary') {

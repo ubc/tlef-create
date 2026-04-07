@@ -21,6 +21,32 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
     const [matchingConnections, setMatchingConnections] = useState<{[key: string]: string}>({});
     const [draggedItem, setDraggedItem] = useState<string | null>(null);
 
+    // Mark the words state
+    const [selectedWords, setSelectedWords] = useState<Set<number>>(new Set());
+    const [mtwChecked, setMtwChecked] = useState(false);
+
+    // Single choice set state
+    const [currentSCSIndex, setCurrentSCSIndex] = useState(0);
+    const [selectedSCSAnswer, setSelectedSCSAnswer] = useState<number | null>(null);
+    const [scsShowResult, setScsShowResult] = useState(false);
+
+    // Essay state
+    const [essayText, setEssayText] = useState('');
+    const [essayChecked, setEssayChecked] = useState(false);
+
+    // Sort paragraphs state
+    const [sortedParagraphs, setSortedParagraphs] = useState<string[]>([]);
+    const [sortChecked, setSortChecked] = useState(false);
+    const [draggedParagraph, setDraggedParagraph] = useState<string | null>(null);
+
+    // Crossword state
+    const [crosswordAnswers, setCrosswordAnswers] = useState<{[idx: number]: string}>({});
+    const [crosswordChecked, setCrosswordChecked] = useState(false);
+
+    // Dictation state
+    const [dictationAnswers, setDictationAnswers] = useState<{[idx: number]: string}>({});
+    const [dictationChecked, setDictationChecked] = useState(false);
+
     useEffect(() => {
       if (question.type === 'ordering') {
         if (question.content?.items) {
@@ -35,6 +61,21 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
           ];
           setOrderingItems(fallbackItems);
         }
+      }
+    }, [question]);
+
+    useEffect(() => {
+      if (question.type === 'sort-paragraphs' && question.content?.paragraphs) {
+        const paragraphs = question.content.paragraphs.map((p: string | { text: string }) =>
+          typeof p === 'string' ? p : p.text || ''
+        );
+        // Shuffle for the user
+        const shuffled = [...paragraphs];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        setSortedParagraphs(shuffled);
       }
     }, [question]);
 
@@ -409,6 +450,377 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                   )}
                 </div>
               )}
+
+              {question.type === 'mark-the-words' && question.content?.text && (() => {
+                const rawText: string = question.content.text;
+                const words = rawText.split(/\s+/);
+                const correctIndices = new Set<number>();
+                const displayWords: string[] = [];
+                words.forEach((word: string, idx: number) => {
+                  if (word.startsWith('*') && word.endsWith('*') && word.length > 2) {
+                    correctIndices.add(idx);
+                    displayWords.push(word.slice(1, -1));
+                  } else {
+                    displayWords.push(word);
+                  }
+                });
+                return (
+                  <div className="mark-the-words-question">
+                    <div className="mtw-instructions">
+                      <p>Click on the correct words:</p>
+                    </div>
+                    <div className="mtw-text" style={{ lineHeight: '2.2', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {displayWords.map((word, idx) => {
+                        const isSelected = selectedWords.has(idx);
+                        const isCorrectWord = correctIndices.has(idx);
+                        let className = 'mtw-word';
+                        if (isSelected) className += ' selected';
+                        if (mtwChecked && isSelected && isCorrectWord) className += ' correct';
+                        if (mtwChecked && isSelected && !isCorrectWord) className += ' incorrect';
+                        if (mtwChecked && !isSelected && isCorrectWord) className += ' missed';
+                        return (
+                          <span
+                            key={idx}
+                            className={className}
+                            style={{
+                              cursor: mtwChecked ? 'default' : 'pointer',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              border: isSelected ? '2px solid #2563eb' : '2px solid transparent',
+                              backgroundColor: mtwChecked && isSelected && isCorrectWord ? '#dcfce7'
+                                : mtwChecked && isSelected && !isCorrectWord ? '#fecaca'
+                                : mtwChecked && !isSelected && isCorrectWord ? '#fef3c7'
+                                : isSelected ? '#dbeafe' : 'transparent'
+                            }}
+                            onClick={() => {
+                              if (mtwChecked) return;
+                              const next = new Set(selectedWords);
+                              if (next.has(idx)) next.delete(idx);
+                              else next.add(idx);
+                              setSelectedWords(next);
+                            }}
+                          >
+                            {word}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="mtw-actions" style={{ marginTop: '12px' }}>
+                      <button className="btn btn-primary" onClick={() => setMtwChecked(true)} disabled={mtwChecked}>
+                        Check
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {question.type === 'single-choice-set' && question.content?.questions && (() => {
+                const scsQuestions: Array<{ question: string; answers: Array<{ text: string } | string> }> = question.content.questions;
+                const current = scsQuestions[currentSCSIndex];
+                if (!current) return null;
+                const answers = current.answers || [];
+                return (
+                  <div className="single-choice-set-question">
+                    <div className="scs-progress" style={{ marginBottom: '8px', fontSize: '0.9em', color: '#666' }}>
+                      Question {currentSCSIndex + 1} of {scsQuestions.length}
+                    </div>
+                    <div className="scs-question-text" style={{ fontWeight: 600, marginBottom: '12px' }}>
+                      {current.question}
+                    </div>
+                    <div className="scs-answers">
+                      {answers.map((ans, idx) => {
+                        const ansText = typeof ans === 'string' ? ans : ans.text;
+                        const isSelected = selectedSCSAnswer === idx;
+                        const isCorrectAnswer = idx === 0; // first answer is always correct
+                        return (
+                          <button
+                            key={idx}
+                            className={`option-button ${isSelected ? 'selected' : ''} ${scsShowResult && isSelected ? (isCorrectAnswer ? 'correct' : 'incorrect') : ''}`}
+                            onClick={() => {
+                              if (scsShowResult) return;
+                              setSelectedSCSAnswer(idx);
+                              setScsShowResult(true);
+                            }}
+                            disabled={scsShowResult}
+                            style={{ display: 'block', width: '100%', marginBottom: '8px', textAlign: 'left' }}
+                          >
+                            <span className="option-label">{String.fromCharCode(65 + idx)}</span>
+                            <span className="option-text">{ansText}</span>
+                            {scsShowResult && isSelected && (
+                              <span className="option-result">{isCorrectAnswer ? '✓' : '✗'}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {scsShowResult && currentSCSIndex < scsQuestions.length - 1 && (
+                      <button
+                        className="btn btn-primary"
+                        style={{ marginTop: '8px' }}
+                        onClick={() => {
+                          setCurrentSCSIndex(currentSCSIndex + 1);
+                          setSelectedSCSAnswer(null);
+                          setScsShowResult(false);
+                        }}
+                      >
+                        Next
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {question.type === 'essay' && (
+                <div className="essay-question">
+                  <div className="essay-task" style={{ marginBottom: '12px' }}>
+                    <p>{question.content?.taskDescription || ''}</p>
+                  </div>
+                  <textarea
+                    className="essay-input"
+                    value={essayText}
+                    onChange={(e) => setEssayText(e.target.value)}
+                    placeholder="Enter your essay here..."
+                    rows={8}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #d1d5db' }}
+                    disabled={essayChecked}
+                  />
+                  <div className="essay-actions" style={{ marginTop: '8px' }}>
+                    <button className="btn btn-primary" onClick={() => setEssayChecked(true)} disabled={essayChecked || !essayText.trim()}>
+                      Check
+                    </button>
+                  </div>
+                  {essayChecked && (
+                    <div className="essay-results" style={{ marginTop: '12px' }}>
+                      {question.content?.keywords && question.content.keywords.length > 0 && (
+                        <div className="keyword-matches" style={{ marginBottom: '8px' }}>
+                          <strong>Keyword matches:</strong>
+                          <ul>
+                            {question.content.keywords.map((kw: { keyword: string; alternatives?: string[] }, idx: number) => {
+                              const found = essayText.toLowerCase().includes(kw.keyword.toLowerCase()) ||
+                                (kw.alternatives || []).some((alt: string) => essayText.toLowerCase().includes(alt.toLowerCase()));
+                              return (
+                                <li key={idx} style={{ color: found ? '#16a34a' : '#dc2626' }}>
+                                  {found ? '✓' : '✗'} {kw.keyword}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      {question.content?.sampleAnswer && (
+                        <div className="sample-answer" style={{ padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '4px' }}>
+                          <strong>Sample answer:</strong>
+                          <p>{question.content.sampleAnswer}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {question.type === 'free-text' && (
+                <div className="free-text-question">
+                  <textarea
+                    placeholder={question.content?.placeholder || 'Enter your answer here...'}
+                    rows={5}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #d1d5db' }}
+                  />
+                </div>
+              )}
+
+              {question.type === 'open-ended' && (
+                <div className="open-ended-question">
+                  <textarea
+                    placeholder={question.content?.placeholderText || 'Enter your response here...'}
+                    rows={5}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #d1d5db' }}
+                  />
+                </div>
+              )}
+
+              {question.type === 'simple-multi-choice' && question.content?.alternatives && (
+                <div className="simple-multi-choice-question">
+                  {question.content.alternatives.map((alt: { text: string; correct?: boolean } | string, idx: number) => {
+                    const altText = typeof alt === 'string' ? alt : alt.text;
+                    const altCorrect = typeof alt === 'string' ? idx === 0 : (alt.correct !== undefined ? alt.correct : idx === 0);
+                    const isSelected = selectedAnswer === altText;
+                    const showResult = showAnswer && isSelected;
+                    return (
+                      <button
+                        key={idx}
+                        className={`option-button ${isSelected ? 'selected' : ''} ${showResult ? (altCorrect ? 'correct' : 'incorrect') : ''}`}
+                        onClick={() => !showAnswer && handleAnswerSelect(altText)}
+                        disabled={showAnswer}
+                      >
+                        <span className="option-label">{String.fromCharCode(65 + idx)}</span>
+                        <span className="option-text">{altText}</span>
+                        {showResult && (
+                          <span className="option-result">{altCorrect ? '✓' : '✗'}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {question.type === 'sort-paragraphs' && sortedParagraphs.length > 0 && (
+                <div className="sort-paragraphs-question">
+                  <div className="sort-instructions">
+                    <p>{question.content?.taskDescription || 'Drag the paragraphs into the correct order:'}</p>
+                  </div>
+                  <div className="sort-container">
+                    {sortedParagraphs.map((paragraph, idx) => (
+                      <div
+                        key={idx}
+                        className="sort-paragraph-item"
+                        draggable={!sortChecked}
+                        onDragStart={() => setDraggedParagraph(paragraph)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (draggedParagraph && !sortChecked) {
+                            const fromIdx = sortedParagraphs.indexOf(draggedParagraph);
+                            const newItems = [...sortedParagraphs];
+                            const [moved] = newItems.splice(fromIdx, 1);
+                            newItems.splice(idx, 0, moved);
+                            setSortedParagraphs(newItems);
+                            setDraggedParagraph(null);
+                          }
+                        }}
+                        style={{
+                          padding: '12px', margin: '4px 0', border: '1px solid #d1d5db',
+                          borderRadius: '4px', cursor: sortChecked ? 'default' : 'grab',
+                          backgroundColor: sortChecked ? (
+                            sortedParagraphs[idx] === (question.content?.paragraphs || [])[idx]?.text || sortedParagraphs[idx] === (question.content?.paragraphs || [])[idx]
+                              ? '#dcfce7' : '#fecaca'
+                          ) : '#fff'
+                        }}
+                      >
+                        <span style={{ marginRight: '8px', fontWeight: 600 }}>{idx + 1}.</span>
+                        {paragraph}
+                        {!sortChecked && <span style={{ float: 'right', color: '#9ca3af' }}>⋮⋮</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '8px' }}>
+                    <button className="btn btn-primary" onClick={() => setSortChecked(true)} disabled={sortChecked}>
+                      Check Order
+                    </button>
+                  </div>
+                  {sortChecked && (
+                    <div style={{ marginTop: '12px' }}>
+                      <strong>Correct order:</strong>
+                      <ol style={{ paddingLeft: '20px' }}>
+                        {(question.content?.paragraphs || []).map((p: string | { text: string }, idx: number) => (
+                          <li key={idx}>{typeof p === 'string' ? p : p.text}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {question.type === 'crossword' && question.content?.words && (
+                <div className="crossword-question">
+                  <div style={{ marginBottom: '12px' }}>
+                    <p>{question.content?.taskDescription || 'Fill in the answers based on the clues:'}</p>
+                  </div>
+                  <div className="crossword-clues">
+                    {question.content.words.map((w: { answer?: string; word?: string; clue?: string; hint?: string }, idx: number) => {
+                      const answer = (w.answer || w.word || '').toUpperCase();
+                      const clue = w.clue || w.hint || '';
+                      const userAnswer = crosswordAnswers[idx] || '';
+                      const isCorrectAnswer = crosswordChecked && userAnswer.toUpperCase() === answer;
+                      return (
+                        <div key={idx} style={{ marginBottom: '8px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px',
+                          backgroundColor: crosswordChecked ? (isCorrectAnswer ? '#dcfce7' : '#fecaca') : '#fff' }}>
+                          <div style={{ fontWeight: 600, marginBottom: '4px' }}>{idx + 1}. {clue}</div>
+                          <input
+                            type="text"
+                            value={userAnswer}
+                            onChange={(e) => setCrosswordAnswers(prev => ({ ...prev, [idx]: e.target.value }))}
+                            placeholder={`${answer.length} letters`}
+                            maxLength={answer.length + 5}
+                            disabled={crosswordChecked}
+                            style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', width: `${Math.max(answer.length * 18, 100)}px`, letterSpacing: '4px', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                          />
+                          {crosswordChecked && !isCorrectAnswer && (
+                            <span style={{ marginLeft: '8px', color: '#16a34a' }}>{answer}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: '8px' }}>
+                    <button className="btn btn-primary" onClick={() => setCrosswordChecked(true)} disabled={crosswordChecked}>
+                      Check
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {question.type === 'dictation' && question.content?.sentences && (
+                <div className="dictation-question">
+                  <div style={{ marginBottom: '12px' }}>
+                    <p>{question.content?.taskDescription || 'Type what you hear (or read the sentence and type it from memory):'}</p>
+                  </div>
+                  {question.content.sentences.map((s: string | { text: string }, idx: number) => {
+                    const sentenceText = typeof s === 'string' ? s : s.text || '';
+                    const userAnswer = dictationAnswers[idx] || '';
+                    const isCorrectAnswer = dictationChecked && userAnswer.trim().toLowerCase() === sentenceText.trim().toLowerCase();
+                    return (
+                      <div key={idx} style={{ marginBottom: '12px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px',
+                        backgroundColor: dictationChecked ? (isCorrectAnswer ? '#dcfce7' : '#fecaca') : '#fff' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>Sentence {idx + 1}</div>
+                        <input
+                          type="text"
+                          value={userAnswer}
+                          onChange={(e) => setDictationAnswers(prev => ({ ...prev, [idx]: e.target.value }))}
+                          placeholder="Type the sentence..."
+                          disabled={dictationChecked}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                        />
+                        {dictationChecked && !isCorrectAnswer && (
+                          <div style={{ marginTop: '4px', color: '#16a34a', fontSize: '0.9em' }}>
+                            Correct: {sentenceText}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop: '8px' }}>
+                    <button className="btn btn-primary" onClick={() => setDictationChecked(true)} disabled={dictationChecked}>
+                      Check
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {question.type === 'arithmetic-quiz' && (
+                <div className="arithmetic-quiz-question">
+                  <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '1.1em' }}>
+                      Arithmetic Quiz: <strong>{question.content?.quizType || 'addition'}</strong>
+                    </p>
+                    <p style={{ color: '#6b7280' }}>
+                      {question.content?.numQuestions || 10} questions, max number: {question.content?.maxNumber || 10}
+                    </p>
+                    <p style={{ fontSize: '0.9em', color: '#9ca3af' }}>
+                      This quiz is interactive in H5P export. Preview not available here.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {question.type === 'branching-scenario' && (
+                <div className="branching-scenario-question">
+                  <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '1.1em' }}>Branching Scenario</p>
+                    <p style={{ color: '#6b7280' }}>
+                      This is an interactive branching experience. Preview available in H5P export.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {showAnswer && question.explanation && (
@@ -417,7 +829,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
               </div>
             )}
 
-            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && (
+            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>

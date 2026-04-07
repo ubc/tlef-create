@@ -45,7 +45,19 @@ export const QUESTION_TYPES = {
   DISCUSSION: 'discussion',
   MATCHING: 'matching',
   ORDERING: 'ordering',
-  CLOZE: 'cloze'
+  CLOZE: 'cloze',
+  MARK_THE_WORDS: 'mark-the-words',
+  SINGLE_CHOICE_SET: 'single-choice-set',
+  ESSAY: 'essay',
+  QUESTION_SET: 'question-set',
+  FREE_TEXT: 'free-text',
+  OPEN_ENDED: 'open-ended',
+  SIMPLE_MULTI_CHOICE: 'simple-multi-choice',
+  SORT_PARAGRAPHS: 'sort-paragraphs',
+  CROSSWORD: 'crossword',
+  DICTATION: 'dictation',
+  ARITHMETIC_QUIZ: 'arithmetic-quiz',
+  BRANCHING_SCENARIO: 'branching-scenario'
 };
 
 export const DIFFICULTY_LEVELS = {

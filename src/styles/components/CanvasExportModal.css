@@ -1,0 +1,145 @@
+/* Canvas Export Modal */
+.canvas-export-modal {
+  max-width: 550px;
+  width: 100%;
+}
+
+.canvas-export-modal .modal-body {
+  padding: var(--spacing-lg);
+}
+
+/* Connect step */
+.canvas-connect-step {
+  text-align: center;
+  padding: var(--spacing-xl) 0;
+}
+
+.canvas-connect-step p {
+  margin-bottom: var(--spacing-lg);
+  color: var(--color-muted-foreground);
+}
+
+/* Loading state */
+.canvas-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl) 0;
+  color: var(--color-muted-foreground);
+}
+
+.canvas-loading-sub {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted-foreground);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Item list (courses, modules) */
+.canvas-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.canvas-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--spacing-md);
+  background-color: var(--color-background);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.canvas-item-card:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-muted);
+}
+
+.canvas-item-name {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.canvas-item-meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted-foreground);
+}
+
+.canvas-selected-info {
+  margin: var(--spacing-sm) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted-foreground);
+}
+
+/* Confirm step */
+.canvas-confirm-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.canvas-confirm-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: var(--color-muted);
+  border-radius: var(--radius-md);
+}
+
+.canvas-confirm-row {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.canvas-confirm-label {
+  font-weight: 600;
+  min-width: 80px;
+  color: var(--color-muted-foreground);
+}
+
+.canvas-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+/* Success step */
+.canvas-success-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) 0;
+  text-align: center;
+}
+
+.canvas-success-icon {
+  color: var(--color-success, #22c55e);
+}
+
+.canvas-success-step h4 {
+  margin: 0;
+}
+
+.canvas-list-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}

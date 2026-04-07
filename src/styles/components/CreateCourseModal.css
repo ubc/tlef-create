@@ -158,3 +158,153 @@
     border-radius: var(--radius-full);
     transition: width 0.3s ease;
 }
+
+/* Step Indicator */
+.step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 0 auto var(--spacing-lg) auto;
+}
+
+.step-dot {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--color-muted);
+    color: var(--color-muted-foreground);
+}
+
+.step-dot.active {
+    background: var(--color-primary);
+    color: white;
+}
+
+.step-line {
+    width: 32px;
+    height: 2px;
+    background: var(--color-border);
+    margin: 0 4px;
+}
+
+/* Canvas Linked Card */
+.canvas-linked-info {
+    margin: var(--spacing-md) 0;
+}
+
+.canvas-linked-card {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-muted);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-primary);
+}
+
+.canvas-linked-card > svg {
+    color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.canvas-linked-card > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.canvas-linked-name {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--color-foreground);
+}
+
+.canvas-linked-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted-foreground);
+}
+
+.canvas-linked-module {
+    font-size: var(--font-size-xs);
+    color: var(--color-primary);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Reuse CanvasExportModal styles for course list */
+.canvas-connect-step {
+    text-align: center;
+    padding: var(--spacing-lg) 0;
+}
+
+.canvas-connect-step p {
+    margin-bottom: var(--spacing-md);
+    color: var(--color-muted-foreground);
+}
+
+.canvas-list-step {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.canvas-item-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.canvas-item-card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--spacing-md);
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.canvas-item-card:hover {
+    border-color: var(--color-primary);
+    background: var(--color-background);
+}
+
+.canvas-item-name {
+    font-weight: 500;
+    font-size: var(--font-size-sm);
+    color: var(--color-foreground);
+}
+
+.canvas-item-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted-foreground);
+    margin-top: 2px;
+}
+
+.canvas-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xl) 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

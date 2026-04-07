@@ -17,7 +17,8 @@ export const pubsubMiddleware: Middleware = (store) => (next) => (action: Payloa
 
     // Map Redux actions to PubSub events
     switch (action.type) {
-        case 'plan/setQuestionsGenerating': {
+        case 'plan/setQuestionsGenerating':
+        case 'question/setQuestionsGenerating': {
             const payload = action.payload as SetQuestionsGeneratingPayload;
             const quizId = payload.quizId || 'unknown';
             const timestamp = Date.now();

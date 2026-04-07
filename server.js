@@ -57,6 +57,29 @@ import('./routes/create/services/promptTemplateInitializer.js')
     console.error('💡 Prompt template features may not work properly');
   });
 
+// Initialize Lumi H5P server
+console.log('🔧 Initializing Lumi H5P server...');
+import('./routes/create/services/lumiService.js')
+  .then(module => module.initializeLumi())
+  .then(() => console.log('✅ Lumi H5P server ready'))
+  .catch(err => {
+    console.error('❌ Failed to initialize Lumi:', err.message);
+    console.error('💡 Canvas H5P export may not work properly');
+  });
+
+// Start LTI 1.3 server (separate port) — only if configured
+if (process.env.LTI_CLIENT_ID) {
+  console.log('🔧 Starting LTI 1.3 server...');
+  import('./routes/create/services/ltiService.js')
+    .then(module => module.startLtiServer())
+    .catch(err => {
+      console.error('❌ Failed to start LTI server:', err.message);
+      console.error('💡 Canvas LTI integration may not work properly');
+    });
+} else {
+  console.log('ℹ️  LTI_CLIENT_ID not set — LTI server skipped (Canvas grade passback unavailable)');
+}
+
 const app = express();
 const PORT = process.env.PORT || 7736;
 
@@ -72,7 +95,7 @@ if (process.env.NODE_ENV === 'production') {
     corsOrigin = true; // Allow same-origin
   }
 } else {
-  corsOrigin = ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:8081', 'http://localhost:8090', 'http://localhost:8092', 'http://localhost:8093'];
+  corsOrigin = ['http://localhost:3000', 'http://localhost:8080', 'http://localhost:8081', 'http://localhost:8090', 'http://localhost:8092', 'http://localhost:8093', 'http://tlef-create-dev.com:7737'];
 }
 
 app.use(cors({

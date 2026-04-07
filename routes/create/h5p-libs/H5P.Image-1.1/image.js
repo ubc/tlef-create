@@ -21,12 +21,10 @@ var H5P = H5P || {};
       this.height = params.file.height;
     }
 
-    this.alt = (!params.decorative && params.alt !== undefined) ?
-      this.stripHTML(this.htmlDecode(params.alt)) :
-      '';
+    this.alt = params.alt !== undefined ? params.alt : 'New image';
 
     if (params.title !== undefined) {
-      this.title = this.stripHTML(this.htmlDecode(params.title));
+      this.title = params.title;
     }
   };
 
@@ -73,29 +71,6 @@ var H5P = H5P || {};
     }
 
     $wrapper.addClass('h5p-image').html(self.$img);
-  };
-
-  /**
-   * Retrieve decoded HTML encoded string.
-   *
-   * @param {string} input HTML encoded string.
-   * @returns {string} Decoded string.
-   */
-  H5P.Image.prototype.htmlDecode = function (input) {
-    const dparser = new DOMParser().parseFromString(input, 'text/html');
-    return dparser.documentElement.textContent;
-  };
-
-  /**
-   * Retrieve string without HTML tags.
-   *
-   * @param {string} input Input string.
-   * @returns {string} Output string.
-   */
-  H5P.Image.prototype.stripHTML = function (html) {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    return div.textContent || div.innerText || '';
   };
 
   return H5P.Image;

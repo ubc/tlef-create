@@ -31,7 +31,7 @@
         ],
         "distractors": "*Has rings*"
       },
-      "subContentId": "matching-test-951e1e62",
+      "subContentId": "matching-test-02ac87ee",
       "metadata": {
         "contentType": "Drag Text",
         "license": "U",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "subContentId": "cloze-test-a66755cc",
+      "subContentId": "cloze-test-177c34a7",
       "metadata": {
         "contentType": "Fill in the Blanks",
         "license": "U",
@@ -82,7 +82,7 @@
               "Madrid"
             ],
             "question": "What is the capital of France?",
-            "subContentId": "0ae37a73"
+            "subContentId": "7c9096d2"
           }
         ],
         "behaviour": {
@@ -109,7 +109,7 @@
           }
         ]
       },
-      "subContentId": "single-choice-test-d23c4cfd",
+      "subContentId": "single-choice-test-30af5cb6",
       "metadata": {
         "contentType": "Single Choice Set",
         "license": "U",

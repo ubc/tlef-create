@@ -4,12 +4,8 @@
       "label": "Obrázek"
     },
     {
-      "label": "Pouze dekorační",
-      "description": "Tuto možnost zvolte, pokud má být obrázek čistě dekoračního charakteru a nedodává obsahu stránky nové informace. Obrázek bude odečítači obrazovky ignorován a nebude doplněn alternativním textem."
-    },
-    {
       "label": "Alternativní text",
-      "description": "Povinné. Pokud prohlížeč nemůže načíst obrázek, zobrazí se místo toho tento text. Také se používá \"text-to-speech\" čtečka."
+      "description": "Povinné. Pokud prohlížeč nemůže načíst obrázek, zobrazí se místo toho tento text. Také se používá \"text-to-speech\" readers."
     },
     {
       "label": "Najeďte kurzorem na text",
@@ -18,14 +14,6 @@
     {
       "label": "Název obsahu obrázku",
       "default": "Obrázek"
-    },
-    {
-      "label": "Rozbalit obrázek",
-      "default": "Rozbalit obrázek"
-    },
-    {
-      "label": "Minimalizovat obrázek",
-      "default": "Minimalizovat obrázek"
     }
   ]
 }

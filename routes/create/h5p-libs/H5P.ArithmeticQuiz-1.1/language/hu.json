@@ -1,0 +1,135 @@
+{
+  "semantics": [
+    {
+      "label": "Bevezető",
+      "description": "Bevezető szöveg (maximum 100 karakter)"
+    },
+    {
+      "label": "Kvíz típus",
+      "options": [
+        {
+          "label": "Alapműveletek kvíz"
+        },
+        {
+          "label": "Lineáris egyenletek kvíz"
+        }
+      ]
+    },
+    {
+      "label": "Művelet típusa",
+      "options": [
+        {
+          "label": "Összeadás"
+        },
+        {
+          "label": "Kivonás"
+        },
+        {
+          "label": "Szorzás"
+        },
+        {
+          "label": "Osztás"
+        }
+      ]
+    },
+    {
+      "label": "Egyenlet fajtája",
+      "options": [
+        {
+          "label": "Alapszint [ 3x = 12 ]"
+        },
+        {
+          "label": "Középszint [ 4x - 3 = 13 ]"
+        },
+        {
+          "label": "Haladó [ 5x + 3 = 3x + 15 ]"
+        }
+      ]
+    },
+    {
+      "label": "Törtek engedélyezése",
+      "description": "Lehetnek törtek az egyenletekben."
+    },
+    {
+      "label": "Kérdések maximális száma"
+    },
+    {
+      "label": "Felhasználói felület fordításai",
+      "fields": [
+        {
+          "label": "Pontozás a kvíz során",
+          "default": "Pontszám:"
+        },
+        {
+          "label": "Idő",
+          "default": "Idő: @time"
+        },
+        {
+          "label": "Eredménykijelzés felirata",
+          "default": "Vége!"
+        },
+        {
+          "label": "Rajt felirat",
+          "default": "RAJT!"
+        },
+        {
+          "label": "Start gomb felirata",
+          "default": "Start"
+        },
+        {
+          "label": "Újra gomb címkéje",
+          "default": "Újra próbálkozás"
+        },
+        {
+          "label": "Szövegfelolvasás helyes válasz esetén",
+          "default": "Helyes"
+        },
+        {
+          "label": "Szövegfelolvasás helytelen válasz esetén",
+          "default": "Helytelen. A helyes válasz a(z) :num lett volna"
+        },
+        {
+          "label": "Szövegfelolvasó cimke az időjelzőhöz",
+          "default": "Időtartam órákban, percekben és másodpercekben."
+        },
+        {
+          "label": "Szövegfelolvasó szöveg a kérdéshez",
+          "default": "Mennyi :arithmetic eredménye?"
+        },
+        {
+          "label": "Szövegfelolasó szöveg az egyenlet kérdéshez",
+          "default": ":equation egyenlet esetén mennyi a(z) :item eredménye?"
+        },
+        {
+          "label": "Szövegfelolvasó szöveg az egyenlet gyökéhez",
+          "default": "Mennyi a(z) :item eredménye?"
+        },
+        {
+          "label": "Összeadásjel szövege",
+          "default": "plusz"
+        },
+        {
+          "label": "Kivonásjel szövege",
+          "default": "minusz"
+        },
+        {
+          "label": "Szorzásjel szövege",
+          "default": "szorozva"
+        },
+        {
+          "label": "Osztásjel szövege",
+          "default": "osztva"
+        },
+        {
+          "label": "Egyenlőségjel szövege",
+          "default": "egyenlő"
+        },
+        {
+          "label": "Feladatszám szövege",
+          "description": "Bemondja az aktuális dia és az összes dia sorszámát, ahol a változók: :num (aktuális dia) és :total (összes dia)",
+          "default": "Aktuális dia :num Összes dia: :total"
+        }
+      ]
+    }
+  ]
+}

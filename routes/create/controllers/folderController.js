@@ -31,7 +31,7 @@ router.get('/', authenticateToken, attachUser, asyncHandler(async (req, res) => 
  * Create new folder with auto-generated quizzes
  */
 router.post('/', authenticateToken, validateCreateFolder, asyncHandler(async (req, res) => {
-  const { name, quizCount = 1 } = req.body;
+  const { name, quizCount = 1, canvasCourseId = null, canvasModuleId = null } = req.body;
   const userId = req.user.id;
   console.log('➕ POST /folders - Creating folder:', name, 'with', quizCount, 'quizzes for user:', userId);
 
@@ -63,7 +63,9 @@ router.post('/', authenticateToken, validateCreateFolder, asyncHandler(async (re
 
   const folder = new Folder({
     name: name.trim(),
-    instructor: userId
+    instructor: userId,
+    canvasCourseId,
+    canvasModuleId
   });
 
   await folder.save();

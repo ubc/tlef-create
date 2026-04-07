@@ -398,9 +398,9 @@ export const foldersApi = {
   },
 
   // POST /api/create/folders - Create new folder with quizzes
-  createFolder: async (name: string, quizCount: number = 1): Promise<{ folder: Folder }> => {
-    const response = await apiClient.post<{ success: boolean; data: { folder: Folder }; message: string }>('/folders', { name, quizCount });
-    return response.data; // Extract the data object which contains { folder: {...} }
+  createFolder: async (name: string, quizCount: number = 1, canvasCourseId?: string, canvasModuleId?: string): Promise<{ folder: Folder }> => {
+    const response = await apiClient.post<{ success: boolean; data: { folder: Folder }; message: string }>('/folders', { name, quizCount, canvasCourseId, canvasModuleId });
+    return response.data;
   },
 
   // GET /api/create/folders/:id - Get specific folder
@@ -944,6 +944,64 @@ export const exportApi = {
 
   downloadExport: async (exportId: string): Promise<Blob> => {
     return await apiClient.getBlob(`/export/${exportId}/download`);
+  }
+};
+
+// Canvas API
+export const canvasApi = {
+  getConfig: async (): Promise<ApiResponse<{ enabled: boolean; canvasBaseUrl: string | null; ltiConfigured: boolean }>> => {
+    return await apiClient.get('/canvas/config');
+  },
+
+  getAuthStatus: async (): Promise<ApiResponse<{ connected: boolean }>> => {
+    return await apiClient.get('/canvas/auth/status');
+  },
+
+  getConnectUrl: async (): Promise<ApiResponse<{ authUrl: string }>> => {
+    return await apiClient.get('/canvas/auth/connect');
+  },
+
+  disconnect: async (): Promise<ApiResponse> => {
+    return await apiClient.delete('/canvas/auth/disconnect');
+  },
+
+  getCourses: async (): Promise<ApiResponse<{ courses: Array<{ id: string; name: string; courseCode: string; term?: string }> }>> => {
+    return await apiClient.get('/canvas/courses');
+  },
+
+  getModules: async (courseId: string): Promise<ApiResponse<{ modules: Array<{ id: string; name: string; position: number; itemCount: number }> }>> => {
+    return await apiClient.get(`/canvas/courses/${courseId}/modules`);
+  },
+
+  exportToCanvas: async (quizId: string, courseId: string, moduleId: string): Promise<ApiResponse<{ moduleItemId: string; lumiContentId: string; quizName: string; canvasUrl: string }>> => {
+    return await apiClient.post(`/canvas/export/${quizId}`, { courseId, moduleId });
+  },
+
+  createModule: async (courseId: string, name: string): Promise<ApiResponse<{ module: { id: string; name: string; position: number; itemCount: number } }>> => {
+    return await apiClient.post(`/canvas/courses/${courseId}/modules`, { name });
+  }
+};
+
+// Admin API
+export const adminApi = {
+  submitReport: async (type: string, description: string, email?: string): Promise<ApiResponse> => {
+    return await apiClient.post('/admin/reports', { type, description, email });
+  },
+
+  getReports: async (status?: string): Promise<ApiResponse<{ reports: Array<{ _id: string; reporter: { cwlId: string }; type: string; description: string; email: string; status: string; adminNotes: string; createdAt: string }> }>> => {
+    const query = status ? `?status=${status}` : '';
+    return await apiClient.get(`/admin/reports${query}`);
+  },
+
+  updateReport: async (id: string, status?: string, adminNotes?: string): Promise<ApiResponse> => {
+    return await apiClient.put(`/admin/reports/${id}`, { status, adminNotes });
+  },
+
+  getStats: async (): Promise<ApiResponse<{
+    platform: { totalUsers: number; totalFolders: number; totalQuizzes: number; totalQuestions: number; openReports: number };
+    users: Array<{ cwlId: string; coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
+  }>> => {
+    return await apiClient.get('/admin/stats');
   }
 };
 

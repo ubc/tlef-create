@@ -187,11 +187,8 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
   };
 
   // Resolve CSS/JS dependencies in correct load order.
-  // Read directly from h5p-libs (no temp dir or symlinks needed).
   const { cssFiles, jsFiles } = await resolveLibraryDependencies(syntheticH5pJson);
 
-  // Serve library files through the existing /api route — works on all environments
-  // without needing extra nginx/proxy configuration.
   const libBasePath = '/api/create/h5p-preview/libs';
   const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${libBasePath}/${f}">`).join('\n');
   const jsTags = jsFiles.map(f => `  <script src="${libBasePath}/${f}" onerror="window.__h5pLoadErrors=(window.__h5pLoadErrors||[]);window.__h5pLoadErrors.push('${f.replace(/'/g, "\\'")}')"></script>`).join('\n');
@@ -266,12 +263,31 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
     }
     .h5p-question-container {
       padding: 8px;
+      position: relative;
     }
     .h5p-content { max-width: none; }
-
-    /* Ensure H5P buttons are visible */
     .h5p-question-buttons { margin-top: 1em; }
     .h5p-joubelui-button { cursor: pointer; }
+
+    /* Constrain ArithmeticQuiz so it doesn't overflow its container */
+    .question-block:has(.h5p-baq) .h5p-question-container {
+      height: 500px;
+      overflow: hidden;
+    }
+    .h5p-baq { overflow: hidden; }
+
+    /* Single Choice Set — ensure content is visible */
+    .h5p-sc-set { min-height: 300px !important; }
+    .h5p-sc-set .h5p-sc-slide { min-height: 250px !important; }
+    .h5p-sc-set-wrapper { min-height: 300px !important; }
+
+    /* Sort Paragraphs — ensure paragraphs are visible and interactive */
+    .h5p-sort-paragraphs { min-height: 200px; }
+    .h5p-sort-paragraphs .h5p-sort-paragraphs-paragraph {
+      padding: 12px;
+      margin: 4px 0;
+      cursor: grab;
+    }
   </style>
 ${cssTags}
 </head>
@@ -749,7 +765,19 @@ function formatQuestionType(type) {
     'ordering': 'Ordering',
     'cloze': 'Fill in the Blanks',
     'summary': 'Summary',
-    'discussion': 'Discussion'
+    'discussion': 'Discussion',
+    'mark-the-words': 'Mark the Words',
+    'single-choice-set': 'Single Choice Set',
+    'essay': 'Essay',
+    'question-set': 'Question Set',
+    'free-text': 'Free Text',
+    'open-ended': 'Open Ended',
+    'simple-multi-choice': 'Simple Multi Choice',
+    'sort-paragraphs': 'Sort Paragraphs',
+    'crossword': 'Crossword',
+    'dictation': 'Dictation',
+    'arithmetic-quiz': 'Arithmetic Quiz',
+    'branching-scenario': 'Branching Scenario'
   };
   return labels[type] || type;
 }

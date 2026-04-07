@@ -1,0 +1,135 @@
+{
+  "semantics": [
+    {
+      "label": "Introducere",
+      "description": "Textul introductiv (maximum 100 de caractere)"
+    },
+    {
+      "label": "Tip de test",
+      "options": [
+        {
+          "label": "Test de operații aritmetice"
+        },
+        {
+          "label": "Test de ecuații liniare"
+        }
+      ]
+    },
+    {
+      "label": "Tip de operație aritmetică",
+      "options": [
+        {
+          "label": "Adunare"
+        },
+        {
+          "label": "Scădere"
+        },
+        {
+          "label": "Înmulțire"
+        },
+        {
+          "label": "Împărțire"
+        }
+      ]
+    },
+    {
+      "label": "Tip de ecuație",
+      "options": [
+        {
+          "label": "De bază [ 3x = 12 ]"
+        },
+        {
+          "label": "Intermediar [ 4x - 3 = 13 ]"
+        },
+        {
+          "label": "Avansat [ 5x + 3 = 3x + 15 ]"
+        }
+      ]
+    },
+    {
+      "label": "Activează fracțiile",
+      "description": "Bifați pentru a permite fracții în ecuații."
+    },
+    {
+      "label": "Număr maxim de întrebări"
+    },
+    {
+      "label": "Traduceri pentru interfața utilizatorului",
+      "fields": [
+        {
+          "label": "Punctaj în timpul testului",
+          "default": "Scor:"
+        },
+        {
+          "label": "Timp",
+          "default": "Timp: @time"
+        },
+        {
+          "label": "Antet pagină de rezultate",
+          "default": "Finalizat!"
+        },
+        {
+          "label": "Etichetă Start rapid",
+          "default": "START!"
+        },
+        {
+          "label": "Etichetă buton Start",
+          "default": "Start"
+        },
+        {
+          "label": "Etichetă buton Reîncearcă",
+          "default": "Reîncearcă"
+        },
+        {
+          "label": "Text cititor de ecran pentru răspuns corect",
+          "default": "Corect"
+        },
+        {
+          "label": "Text cititor de ecran pentru răspuns incorect",
+          "default": "Incorect. Răspunsul corect era :num"
+        },
+        {
+          "label": "Etichetă cititor de ecran pentru cronometru",
+          "default": "Durata în ore, minute și secunde."
+        },
+        {
+          "label": "Text cititor de ecran pentru întrebare",
+          "default": "Cât fac :arithmetic?"
+        },
+        {
+          "label": "Text cititor de ecran pentru întrebare cu ecuație",
+          "default": "Pentru ecuația :equation, cu cât este egal :item?"
+        },
+        {
+          "label": "Text cititor de ecran pentru variabila ecuației",
+          "default": "Cu cât este egal :item?"
+        },
+        {
+          "label": "Text pentru operatorul plus",
+          "default": "plus"
+        },
+        {
+          "label": "Text pentru operatorul minus",
+          "default": "minus"
+        },
+        {
+          "label": "Text pentru operatorul de înmulțire",
+          "default": "ori"
+        },
+        {
+          "label": "Text pentru operatorul de împărțire",
+          "default": "împărțit la"
+        },
+        {
+          "label": "Text pentru semnul egal",
+          "default": "egal cu"
+        },
+        {
+          "label": "Text pentru numărul diapozitivului",
+          "description": "Anunță diapozitivul curent și numărul total de diapozitive, variabilele sunt :num și :total",
+          "default": "Diapozitivul :num din :total"
+        }
+      ]
+    }
+  ]
+}

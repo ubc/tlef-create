@@ -17,7 +17,19 @@ const QUESTION_TYPES = [
   { value: 'discussion', label: 'Discussion' },
   { value: 'matching', label: 'Matching' },
   { value: 'ordering', label: 'Ordering' },
-  { value: 'cloze', label: 'Fill in the Blank' }
+  { value: 'cloze', label: 'Fill in the Blank' },
+  { value: 'mark-the-words', label: 'Mark the Words' },
+  { value: 'single-choice-set', label: 'Single Choice Set' },
+  { value: 'essay', label: 'Essay' },
+  { value: 'question-set', label: 'Question Set' },
+  { value: 'free-text', label: 'Free Text' },
+  { value: 'open-ended', label: 'Open Ended' },
+  { value: 'simple-multi-choice', label: 'Simple Multi Choice' },
+  { value: 'sort-paragraphs', label: 'Sort Paragraphs' },
+  { value: 'crossword', label: 'Crossword' },
+  { value: 'dictation', label: 'Dictation' },
+  { value: 'arithmetic-quiz', label: 'Arithmetic Quiz' },
+  { value: 'branching-scenario', label: 'Branching Scenario' }
 ];
 
 export default function PlanEditor({

@@ -1,31 +1,19 @@
 {
   "semantics": [
     {
-      "label": "រូបភាព"
+      "label": "Image"
     },
     {
-      "label": "Decorative only",
-      "description": "Enable this option if the image is purely decorative and does not add any information to the content on the page. It will be ignored by screen readers and not given any alternative text."
+      "label": "Alternative text",
+      "description": "Required. If the browser can't load the image this text will be displayed instead. Also used by \"text-to-speech\" readers."
     },
     {
-      "label": "ពាក្យជំនួស",
-      "description": "ទាមទារ។ ប្រសិនបើកម្មវិធីបើកវិបសាយរបស់អ្នកមិនអាចដំណើរការរូបភាពនេះបាន វានឹងបង្ហាញពាក្យជំនួសនេះ។ ពាក្យនេះក៏ត្រូវបានប្រើក្នុងកម្មវិធីអានអត្ថបទជាសម្លេងផងដែរ។"
+      "label": "Hover text",
+      "description": "Optional. This text is displayed when the users hover their pointing device over the image."
     },
     {
-      "label": "ពាក្យពេលដាក់ម៉ៅស៍លើ",
-      "description": "មិនទាមទារ។ ពាក្យនេះនឹងបង្ហាញនៅពេលគេដាក់ម៉ៅស៍លើរូបភាពនេះ។"
-    },
-    {
-      "label": "ឈ្មោះសម្រាប់មាតិកា «រូបភាព»",
+      "label": "Image content name",
       "default": "រូបភាព"
-    },
-    {
-      "label": "Expand Image",
-      "default": "Expand Image"
-    },
-    {
-      "label": "Minimize Image",
-      "default": "Minimize Image"
     }
   ]
 }

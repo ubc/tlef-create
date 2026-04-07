@@ -80,7 +80,58 @@ const questionSchema = new mongoose.Schema({
     keyPoints: [{
       title: { type: String, required: true },
       explanation: { type: String, required: true }
-    }]
+    }],
+
+    // For Mark the Words
+    text: { type: String }, // Text with *correct* words marked
+
+    // For Single Choice Set
+    questions: [{
+      question: { type: String },
+      answers: [{ type: String }],
+      subContentId: { type: String }
+    }],
+
+    // For Essay
+    taskDescription: { type: String },
+    keywords: [{
+      keyword: { type: String },
+      alternatives: [{ type: String }],
+      points: { type: Number, default: 1 }
+    }],
+    sampleAnswer: { type: String },
+
+    // For Free Text / Open Ended
+    question: { type: String },
+    placeholder: { type: String },
+    placeholderText: { type: String },
+
+    // For Simple Multi Choice
+    alternatives: [{
+      text: { type: String },
+      correct: { type: Boolean, default: false }
+    }],
+
+    // For Sort Paragraphs
+    paragraphs: [{ type: String }],
+
+    // For Crossword
+    words: [{
+      answer: { type: String },
+      clue: { type: String },
+      fixWord: { type: Boolean, default: false }
+    }],
+
+    // For Dictation
+    sentences: [{
+      text: { type: String },
+      sample: { type: String }
+    }],
+
+    // For Arithmetic Quiz
+    quizType: { type: String },
+    maxNumber: { type: Number },
+    numQuestions: { type: Number }
   },
   
   // Simple correct answer for basic question types

@@ -29,6 +29,10 @@ const folderSchema = new mongoose.Schema({
     ref: 'Quiz'
   }],
   
+  // Canvas integration (optional — linked Canvas course and module)
+  canvasCourseId: { type: String, default: null },
+  canvasModuleId: { type: String, default: null },
+
   // Folder Statistics (for dashboard)
   stats: {
     totalQuizzes: { type: Number, default: 0 },
