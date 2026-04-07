@@ -29,7 +29,6 @@ const UserAccount = () => {
       if (response.ok) {
         const result = await response.json();
         const userData = result.data;
-        console.log('[Auth Debug] /me full response:', JSON.stringify(userData, null, 2));
         if (userData?.authenticated && userData.user) {
           setLocalUser(userData.user);
           dispatch(setUser(userData.user));

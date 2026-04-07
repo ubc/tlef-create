@@ -224,7 +224,6 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
             console.log('🔍 SAML Debug:', JSON.stringify(samlDebug, null, 2));
 
             return done(null, {
-              samlDebug,
               _id: user._id,
               cwlId: user.cwlId,
               stats: user.stats
@@ -252,23 +251,17 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
 
 // Serialize user to session
 passport.serializeUser((user, done) => {
-  // Store both _id and samlDebug in session
-  done(null, { _id: user._id, samlDebug: user.samlDebug || null });
+  done(null, user._id);
 });
 
 // Deserialize user from session
-passport.deserializeUser(async (sessionData, done) => {
+passport.deserializeUser(async (id, done) => {
   try {
-    // Handle both old format (just ID) and new format ({ _id, samlDebug })
-    const id = sessionData?._id || sessionData;
-    const samlDebug = sessionData?.samlDebug || null;
     const user = await User.findById(id).select('-password');
     if (!user) {
       console.warn('⚠️ User not found in database, clearing session:', id);
       return done(null, false);
     }
-    // Attach samlDebug to the user object (not saved to DB)
-    user.samlDebug = samlDebug;
     done(null, user);
   } catch (error) {
     // Database error - log it but don't crash the request

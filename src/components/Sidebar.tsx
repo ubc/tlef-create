@@ -34,7 +34,6 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       fetch(`${API_URL}/api/create/auth/me`, { credentials: 'include' })
         .then(r => r.json())
         .then(result => {
-          console.log('[Auth Debug] /me response:', JSON.stringify(result.data, null, 2));
           if (result.data?.authenticated && result.data.user) {
             dispatch(setUser(result.data.user));
           }
