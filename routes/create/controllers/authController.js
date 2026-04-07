@@ -72,16 +72,17 @@ router.post('/auto-login', asyncHandler(async (req, res) => {
   // Import User model dynamically to avoid circular dependency
   const { default: User } = await import('../models/User.js');
   
-  // Create or get a default staging user
-  let user = await User.findOne({ cwlId: 'staging-user' });
-  
+  // Use cwlId from request body, or default to 'student'
+  const cwlId = (req.body.cwlId || 'student').trim();
+
+  let user = await User.findOne({ cwlId });
+
   if (!user) {
-    // Create a default staging user
     const bcrypt = await import('bcryptjs');
     const hashedPassword = await bcrypt.default.hash('staging-password', 12);
-    
+
     user = new User({
-      cwlId: 'staging-user',
+      cwlId,
       password: hashedPassword,
       stats: {
         coursesCreated: 0,

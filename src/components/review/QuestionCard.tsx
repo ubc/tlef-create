@@ -355,6 +355,49 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           </div>
           {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
         </div>
+      ) : question.type === 'multiple-choice' && question.content?.options ? (
+        <div className="question-display">
+          <div className="question-text">{question.questionText}</div>
+          <div className="preview-options">
+            <strong>Answer Options:</strong>
+            <div className="preview-options-list">
+              {question.content.options.map((option: { text: string; isCorrect: boolean }, idx: number) => (
+                <div key={idx} className={`preview-option ${option.isCorrect ? 'preview-option-correct' : ''}`}>
+                  <span className="preview-option-indicator">{option.isCorrect ? '●' : '○'}</span>
+                  <span className="preview-option-text">{option.text}</span>
+                  {option.isCorrect && <span className="preview-correct-label">Correct Answer</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
+        </div>
+      ) : question.type === 'true-false' ? (
+        <div className="question-display">
+          <div className="question-text">{question.questionText}</div>
+          <div className="preview-options">
+            <strong>Answer:</strong>
+            <div className="preview-options-list">
+              <div className={`preview-option ${String(question.correctAnswer).toLowerCase() === 'true' ? 'preview-option-correct' : ''}`}>
+                <span className="preview-option-indicator">{String(question.correctAnswer).toLowerCase() === 'true' ? '●' : '○'}</span>
+                <span className="preview-option-text">True</span>
+                {String(question.correctAnswer).toLowerCase() === 'true' && <span className="preview-correct-label">Correct</span>}
+              </div>
+              <div className={`preview-option ${String(question.correctAnswer).toLowerCase() === 'false' ? 'preview-option-correct' : ''}`}>
+                <span className="preview-option-indicator">{String(question.correctAnswer).toLowerCase() === 'false' ? '●' : '○'}</span>
+                <span className="preview-option-text">False</span>
+                {String(question.correctAnswer).toLowerCase() === 'false' && <span className="preview-correct-label">Correct</span>}
+              </div>
+            </div>
+          </div>
+          {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
+        </div>
+      ) : question.type === 'flashcard' ? (
+        <div className="question-display">
+          <div className="question-text"><strong>Front:</strong> {question.content?.front || question.questionText}</div>
+          <div className="question-answer"><strong>Back:</strong> {question.content?.back || question.correctAnswer}</div>
+          {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
+        </div>
       ) : (
         <div className="question-display">
           <div className="question-text">{question.questionText}</div>
