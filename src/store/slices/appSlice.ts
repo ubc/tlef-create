@@ -3,6 +3,8 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 interface UserInfo {
   id: string;
   cwlId: string;
+  displayName: string;
+  email?: string;
   isAdmin: boolean;
   stats: {
     coursesCreated: number;

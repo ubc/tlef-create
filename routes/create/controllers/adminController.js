@@ -13,8 +13,15 @@ const router = express.Router();
 const ADMIN_CWLS = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 function requireAdmin(req, res, next) {
-  const cwlId = req.user?.fullUser?.cwlId || req.user?.cwlId;
-  if (!cwlId || !ADMIN_CWLS.includes(cwlId)) {
+  const user = req.user?.fullUser || req.user;
+  const userIdentifiers = [
+    user?.cwlId,
+    user?.displayName,
+    user?.email,
+    user?.email?.split('@')[0]
+  ].filter(Boolean).map(s => s.toLowerCase());
+  const isAdmin = ADMIN_CWLS.some(a => userIdentifiers.includes(a.toLowerCase()));
+  if (!isAdmin) {
     return errorResponse(res, 'Admin access required', 'FORBIDDEN', 403);
   }
   next();

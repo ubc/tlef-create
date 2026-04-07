@@ -137,21 +137,25 @@ router.get('/me', asyncHandler(async (req, res) => {
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(req.user._id || req.user.id).select('-password');
     if (user) {
-      const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
-      const isAdmin = adminCwls.includes(user.cwlId);
+      const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const userIdentifiers = [
+        user.cwlId,
+        user.displayName,
+        user.email,
+        user.email?.split('@')[0]
+      ].filter(Boolean).map(s => s.toLowerCase());
+      const isAdmin = adminCwls.some(a => userIdentifiers.includes(a));
       console.log('✅ /me - User authenticated:', user.cwlId, isAdmin ? '(admin)' : '');
       return successResponse(res, {
         authenticated: true,
         user: {
           id: user._id,
           cwlId: user.cwlId,
+          displayName: user.displayName || user.cwlId,
+          email: user.email,
           isAdmin,
           stats: user.stats,
           lastLogin: user.lastLogin
-        },
-        debug: {
-          sessionKeys: Object.keys(req.user || {}),
-          samlDebug: req.user?.samlDebug || null
         }
       }, 'User profile retrieved');
     }

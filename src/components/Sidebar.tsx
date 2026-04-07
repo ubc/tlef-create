@@ -377,7 +377,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                 onClick={handleUserAccountClick}
             >
               <User size={20} />
-              <span>{reduxUser?.cwlId || 'User Account'}</span>
+              <span>{reduxUser?.displayName || reduxUser?.cwlId || 'User Account'}</span>
             </div>
           </div>
         </div>

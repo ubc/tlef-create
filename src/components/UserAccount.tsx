@@ -76,8 +76,8 @@ const UserAccount = () => {
                 <User size={48} />
               </div>
               <div className="user-info">
-                <h2>{user?.cwlId || 'Loading...'}</h2>
-                <p className="user-email">{user?.cwlId ? `${user.cwlId}@ubc.ca` : ''}</p>
+                <h2>{user?.displayName || user?.cwlId || 'Loading...'}</h2>
+                <p className="user-email">{user?.email || (user?.cwlId ? `${user.cwlId}@ubc.ca` : '')}</p>
                 {user?.isAdmin && (
                   <span className="admin-badge"><Shield size={12} /> Admin</span>
                 )}

@@ -16,7 +16,13 @@ const userSchema = new mongoose.Schema({
     required: true
   },
   
-  // Authentication & Session Management  
+  // Display name (extracted from email, e.g., "haocheng.fan")
+  displayName: { type: String, default: null },
+
+  // Email from SAML profile
+  email: { type: String, default: null },
+
+  // Authentication & Session Management
   lastLogin: { type: Date, default: Date.now },
   
   // Usage Statistics (for dashboard)

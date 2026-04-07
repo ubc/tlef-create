@@ -170,13 +170,16 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
             console.log('🔍 profile.uid:', profile.uid);
             console.log('🔍 profile.nameID:', profile.nameID?.substring?.(0, 20) || profile.nameID);
 
-            // Prefer human-readable identifiers over encrypted nameID
-            const cwlId = profile.uid ||
-                         profile.attributes?.uid ||
-                         profile.attributes?.ubcEduCwlPuid ||
+            // Use PUID as stable unique identifier (UBC Shibboleth doesn't return CWL username)
+            const cwlId = profile.attributes?.ubcEduCwlPuid ||
                          profile['urn:mace:dir:attribute-def:ubcEduCwlPuid'] ||
-                         profile['urn:oid:1.3.6.1.4.1.60.6.1.6'] ||
+                         profile.uid ||
+                         profile.attributes?.uid ||
                          profile.nameID;
+
+            // Extract display name from email (e.g., "haocheng.fan@ubc.ca" → "haocheng.fan")
+            const email = profile.attributes?.mail || profile.mail || profile.email || null;
+            const displayName = email ? email.split('@')[0] : null;
 
             if (!cwlId) {
               console.error('❌ No CWL ID found in UBC Shibboleth profile');
@@ -191,26 +194,22 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
             let user = await User.findOne({ cwlId });
 
             if (!user) {
-              // Create new user
               user = new User({
                 cwlId,
-                password: 'saml-authenticated', // Placeholder - not used for SAML auth
-                stats: {
-                  coursesCreated: 0,
-                  quizzesGenerated: 0,
-                  questionsCreated: 0,
-                  totalUsageTime: 0,
-                  lastActivity: new Date()
-                }
+                displayName,
+                email,
+                password: 'saml-authenticated',
+                stats: { coursesCreated: 0, quizzesGenerated: 0, questionsCreated: 0, totalUsageTime: 0, lastActivity: new Date() }
               });
               await user.save();
-              console.log(`✅ Created new user: ${cwlId}`);
+              console.log(`✅ Created new user: ${cwlId} (${displayName || 'no display name'})`);
             } else {
-              // Update last login
               user.lastLogin = new Date();
               user.stats.lastActivity = new Date();
+              if (displayName && !user.displayName) user.displayName = displayName;
+              if (email && !user.email) user.email = email;
               await user.save();
-              console.log(`✅ Updated existing user: ${cwlId}`);
+              console.log(`✅ Updated existing user: ${cwlId} (${user.displayName || 'no display name'})`);
             }
 
             // Store SAML debug info in session for troubleshooting
