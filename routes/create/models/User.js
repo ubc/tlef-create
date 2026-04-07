@@ -43,11 +43,6 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ lastLogin: -1 });
 userSchema.index({ 'stats.lastActivity': -1 });
 
-// Virtual Properties (computed fields)
-userSchema.virtual('displayName').get(function() {
-  return this.cwlId; // Just show their CWL ID
-});
-
 // Instance Methods (functions you can call on a user)
 userSchema.methods.updateLastActivity = function() {
   this.stats.lastActivity = new Date();
