@@ -139,8 +139,6 @@ router.get('/me', asyncHandler(async (req, res) => {
     if (user) {
       const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
       const isAdmin = adminCwls.includes(user.cwlId);
-      // Include SAML session info for debugging
-      const samlProfile = req.user?.samlProfile || req.user || {};
       console.log('✅ /me - User authenticated:', user.cwlId, isAdmin ? '(admin)' : '');
       return successResponse(res, {
         authenticated: true,
@@ -152,12 +150,8 @@ router.get('/me', asyncHandler(async (req, res) => {
           lastLogin: user.lastLogin
         },
         debug: {
-          sessionCwlId: req.user?.cwlId,
           sessionKeys: Object.keys(req.user || {}),
-          samlEmail: samlProfile.email || samlProfile.mail || null,
-          samlUid: samlProfile.uid || null,
-          samlNameID: typeof samlProfile.nameID === 'string' ? samlProfile.nameID.substring(0, 30) + '...' : null,
-          samlAttributes: samlProfile.attributes ? Object.keys(samlProfile.attributes) : null
+          samlDebug: req.user?.samlDebug || null
         }
       }, 'User profile retrieved');
     }
