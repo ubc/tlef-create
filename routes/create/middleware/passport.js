@@ -164,13 +164,19 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
             console.log('🔍 UBC Shibboleth profile received:', JSON.stringify(profile, null, 2));
 
             // Extract cwlId from SAML profile
-            // Prefer uid (human-readable CWL username like "hfan05") over PUID (like "ESI5CZY7J307")
+            // Log all available attributes for debugging
+            console.log('🔍 Profile keys:', Object.keys(profile));
+            console.log('🔍 Profile attributes:', JSON.stringify(profile.attributes || {}, null, 2));
+            console.log('🔍 profile.uid:', profile.uid);
+            console.log('🔍 profile.nameID:', profile.nameID?.substring?.(0, 20) || profile.nameID);
+
+            // Prefer human-readable identifiers over encrypted nameID
             const cwlId = profile.uid ||
                          profile.attributes?.uid ||
-                         profile['urn:oid:0.9.2342.19200300.100.1.1'] ||
-                         profile.nameID ||
                          profile.attributes?.ubcEduCwlPuid ||
-                         profile['urn:mace:dir:attribute-def:ubcEduCwlPuid'];
+                         profile['urn:mace:dir:attribute-def:ubcEduCwlPuid'] ||
+                         profile['urn:oid:1.3.6.1.4.1.60.6.1.6'] ||
+                         profile.nameID;
 
             if (!cwlId) {
               console.error('❌ No CWL ID found in UBC Shibboleth profile');
