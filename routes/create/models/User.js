@@ -24,11 +24,19 @@ const userSchema = new mongoose.Schema({
 
   // TODO: role field — String enum ['admin', 'user'], default 'user'.
   //       Admins can manage other users' permissions.
+  role: {
+    type: String,
+    enum: ['admin', 'user'],
+    default: 'user'
+  },
 
   // TODO: canUseEnvKey field — Boolean, default false.
   //       When true, the backend will fall back to the .env API key
   //       instead of requiring the user to supply their own.
-
+  canUseEnvKey: {
+    type: Boolean,
+    default: false
+  },
   // Authentication & Session Management
   lastLogin: { type: Date, default: Date.now },
   
