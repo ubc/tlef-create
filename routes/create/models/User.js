@@ -22,6 +22,13 @@ const userSchema = new mongoose.Schema({
   // Email from SAML profile
   email: { type: String, default: null },
 
+  // TODO: role field — String enum ['admin', 'user'], default 'user'.
+  //       Admins can manage other users' permissions.
+
+  // TODO: canUseEnvKey field — Boolean, default false.
+  //       When true, the backend will fall back to the .env API key
+  //       instead of requiring the user to supply their own.
+
   // Authentication & Session Management
   lastLogin: { type: Date, default: Date.now },
   

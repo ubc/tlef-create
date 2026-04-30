@@ -165,7 +165,19 @@ class QuizRAGService {
   async initializeAsync() {
     try {
       console.log('🚀 Initializing QuizRAGService...');
-      
+
+      // fastembed skips download when the cache dir exists, even if the .onnx
+      // file is missing (e.g. after an interrupted download). Delete the dir so
+      // fastembed re-downloads the full archive on the next init call.
+      const modelCacheDir = path.join(process.cwd(), 'local_cache', 'fast-bge-small-en-v1.5');
+      const modelFile = path.join(modelCacheDir, 'model_optimized.onnx');
+      try {
+        await fs.access(modelFile);
+      } catch {
+        console.log('⚠️  FastEmbed model cache is incomplete — clearing and re-downloading...');
+        await fs.rm(modelCacheDir, { recursive: true, force: true });
+      }
+
       // Initialize embeddings module using the static create method
       console.log('📊 Initializing EmbeddingsModule...');
       this.embeddings = await EmbeddingsModule.create({
