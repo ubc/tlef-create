@@ -116,4 +116,33 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
   }, 'Admin stats retrieved');
 }));
 
+// ============================================================
+// User API Key Permission Management
+// ============================================================
+
+/**
+ * GET /api/admin/users
+ * List all users with their canUseEnvKey status (admin only)
+ */
+router.get('/users', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  const users = await User.find({}, 'cwlId displayName email role canUseEnvKey lastLogin createdAt').sort({ createdAt: -1 });
+  return successResponse(res, { users }, 'Users retrieved');
+}));
+
+/**
+ * PATCH /api/admin/users/:id/env-key-permission
+ * Grant or revoke a user's permission to use the .env API key (admin only)
+ */
+router.patch('/users/:id/env-key-permission', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  const { canUseEnvKey } = req.body;
+  if (typeof canUseEnvKey !== 'boolean') {
+    return errorResponse(res, 'canUseEnvKey must be a boolean', 'INVALID_INPUT', 400);
+  }
+  const user = await User.findByIdAndUpdate(req.params.id, { canUseEnvKey }, { new: true });
+  if (!user) {
+    return errorResponse(res, 'User not found', 'NOT_FOUND', 404);
+  }
+  return successResponse(res, { user: { _id: user._id, cwlId: user.cwlId, canUseEnvKey: user.canUseEnvKey } }, 'Permission updated');
+}));
+
 export default router;

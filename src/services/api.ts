@@ -239,6 +239,13 @@ class ApiClient {
     });
   }
 
+  async patch<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
@@ -1021,6 +1028,40 @@ export interface SearchResult {
 export const searchApi = {
   search: async (query: string): Promise<ApiResponse<{ results: SearchResult[]; counts: { materials: number; questions: number; objectives: number; total: number } }>> => {
     return await apiClient.get(`/search?q=${encodeURIComponent(query)}`);
+  }
+};
+
+// API Key API
+export interface ApiKey {
+  _id: string;
+  provider: string;
+  label?: string;
+  keyHint: string;
+  modelName: string;
+  isActive: boolean;
+  lastUsedAt?: string;
+  createdAt: string;
+}
+
+export const apiKeyApi = {
+  getKeys: async (): Promise<ApiResponse<{ apiKeys: ApiKey[]; envKey: { provider: string; modelName: string; isEnvKey: boolean } | null }>> => {
+    return await apiClient.get('/apiKey');
+  },
+
+  createKey: async (provider: string, key: string, modelName: string, label?: string): Promise<ApiResponse<{ apiKey: ApiKey }>> => {
+    return await apiClient.post('/apiKey', { provider, key, modelName, label });
+  },
+
+  updateKey: async (id: string, updates: { label?: string; isActive?: boolean }): Promise<ApiResponse<{ apiKey: ApiKey }>> => {
+    return await apiClient.patch(`/apiKey/${id}`, updates);
+  },
+
+  deleteKey: async (id: string): Promise<ApiResponse> => {
+    return await apiClient.delete(`/apiKey/${id}`);
+  },
+
+  fetchModels: async (key: string): Promise<ApiResponse<{ provider: string; models: string[] }>> => {
+    return await apiClient.post('/apiKey/models', { key });
   }
 };
 

@@ -256,7 +256,8 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       difficulty: 'moderate',
       courseContext: customPrompt ? `Question regeneration with custom instructions: ${customPrompt}` : `Question regeneration`,
       previousQuestions: [{ questionText: question.questionText }],
-      customPrompt: customPrompt || undefined
+      customPrompt: customPrompt || undefined,
+      userId: req.user?.id
     };
 
     const result = await llmService.generateQuestion(questionConfig);

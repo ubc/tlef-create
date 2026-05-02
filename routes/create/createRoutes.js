@@ -18,6 +18,7 @@ import searchController from './controllers/searchController.js';
 import h5pPreviewController from './controllers/h5pPreviewController.js';
 import canvasController from './controllers/canvasController.js';
 import adminController from './controllers/adminController.js';
+import apiKeyController from './controllers/apiKeyController.js'
 
 const router = express.Router();
 
@@ -104,6 +105,7 @@ router.use('/search', searchController);
 router.use('/h5p-preview', h5pPreviewController);
 router.use('/canvas', canvasController);
 router.use('/admin', adminController);
+router.use('/apiKey', apiKeyController);
 
 // Disable CSP for H5P routes (H5P requires inline scripts)
 router.use('/h5p', (req, res, next) => {

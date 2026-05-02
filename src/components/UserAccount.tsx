@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { API_URL } from '../config/api';
 import { adminApi } from '../services/api';
+import ApiKeySettings from './settings/ApiKeySettings';
 import { setUser } from '../store/slices/appSlice';
 import { Bug, User, ArrowLeft, Mail, Settings, HelpCircle, LogOut, Shield } from 'lucide-react';
 import '../styles/components/UserAccount.css';
@@ -12,6 +13,7 @@ const UserAccount = () => {
   const dispatch = useDispatch();
   const reduxUser = useSelector((state: any) => state.app.user);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false);
   const [showHelpSupport, setShowHelpSupport] = useState(false);
   const [user, setLocalUser] = useState<any>(reduxUser);
   const [reportData, setReportData] = useState({ type: 'bug', description: '', email: '' });
@@ -111,9 +113,14 @@ const UserAccount = () => {
               <p className="card-description">Manage your account preferences and settings</p>
             </div>
             <div className="settings-list">
-              <button className="setting-item" onClick={() => alert('General Settings coming soon!')}>
+              <button className="setting-item" onClick={() => setShowApiKeySettings(s => !s)}>
                 <Settings size={20} /> <span>General Settings</span>
               </button>
+              {showApiKeySettings && (
+                <div style={{ padding: '12px 0' }}>
+                  <ApiKeySettings />
+                </div>
+              )}
               <button className="setting-item" onClick={() => setShowHelpSupport(true)}>
                 <HelpCircle size={20} /> <span>Help & Support</span>
               </button>

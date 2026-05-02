@@ -371,7 +371,8 @@ if (process.env.NODE_ENV !== 'production') {
         relevantContent: [{
           content: 'Machine learning is a subset of AI that focuses on creating systems that learn from experience.',
           metadata: { source: 'test-material.pdf' }
-        }]
+        }],
+        userId: req.user?.id
       };
 
       sseService.notifyBatchStarted(sessionId, {
@@ -501,7 +502,8 @@ if (process.env.NODE_ENV !== 'production') {
           relevantContent: [{
             content: 'Machine learning is a subset of AI that focuses on creating systems that learn from experience.',
             metadata: { source: 'test-material.pdf' }
-          }]
+          }],
+          userId: req.user?.id
         };
 
         sseService.streamQuestionProgress(sessionId, questionId, {

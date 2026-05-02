@@ -7,6 +7,8 @@ import { LLMModule } from 'ubc-genai-toolkit-llm';
 import { ConsoleLogger } from 'ubc-genai-toolkit-core';
 import { generateTemplateQuestion } from './templateQuestionGenerator.js';
 import { QUESTION_TYPES } from '../config/constants.js';
+import UserApiKey from '../models/UserApiKey.js';
+import User from '../models/User.js';
 
 class QuizLLMService {
   constructor() {
@@ -56,6 +58,58 @@ class QuizLLMService {
     }
   }
 
+  // Returns { apiKey, model, provider, endpoint } from .env
+  getEnvLLMConfig() {
+    const provider = process.env.LLM_PROVIDER || 'openai';
+    return {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      provider,
+      endpoint: process.env.LLM_API_ENDPOINT || 'https://api.openai.com/v1'
+    };
+  }
+
+  // Returns { apiKey, model, provider, endpoint } for a given user.
+  // Priority: user's own key → canUseEnvKey fallback → error.
+  async resolveUserLLMConfig(userId) {
+    if (userId) {
+      try {
+        const userKey = await UserApiKey.findOne({ user: userId, isActive: true });
+        if (userKey) {
+          return {
+            apiKey: userKey.getDecryptedKey(),
+            model: userKey.modelName,
+            provider: userKey.provider,
+            endpoint: process.env.LLM_API_ENDPOINT || 'https://api.openai.com/v1'
+          };
+        }
+
+        const user = await User.findById(userId);
+        if (user && user.canUseEnvKey) {
+          return this.getEnvLLMConfig();
+        }
+
+        throw new Error('No API key configured. Please add an API key in Settings.');
+      } catch (error) {
+        if (error.message.includes('No API key')) throw error;
+        console.error('Error resolving user LLM config:', error.message);
+        return this.getEnvLLMConfig();
+      }
+    }
+    return this.getEnvLLMConfig();
+  }
+
+  // Creates a temporary LLMModule instance for a single request using the given config.
+  createLLMForConfig(config) {
+    return new LLMModule({
+      provider: config.provider,
+      apiKey: config.apiKey,
+      defaultModel: config.model,
+      logger: this.logger,
+      defaultOptions: { temperature: 0.7, max_completion_tokens: 2000 }
+    });
+  }
+
   /**
    * Get the correct options object for sendMessage based on provider and model from .env
    * @param {number} temperature - Temperature setting
@@ -103,7 +157,8 @@ class QuizLLMService {
       difficulty = 'moderate',
       courseContext = '',
       previousQuestions = [],
-      customPrompt = null
+      customPrompt = null,
+      userId = null
     } = questionConfig;
 
     console.log(`🎯 Generating ${questionType} question with streaming...`);
@@ -154,12 +209,34 @@ class QuizLLMService {
         console.log('Using direct OpenAI streaming API');
 
         try {
+          const llmConfig = await this.resolveUserLLMConfig(userId);
           const OpenAI = (await import('openai')).default;
           console.log('OpenAI package imported successfully');
 
-          const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-          });
+          const createClient = (baseURL) => new OpenAI({ apiKey: llmConfig.apiKey, baseURL });
+
+          // Try LiteLLM proxy first, fallback to direct OpenAI if unavailable
+          let openai;
+          const litellmUrl = process.env.LLM_API_ENDPOINT;
+          const directUrl = 'https://api.openai.com/v1';
+          const usingLiteLLM = litellmUrl && litellmUrl !== directUrl;
+
+          if (usingLiteLLM) {
+            try {
+              const testRes = await fetch(`${litellmUrl}/models`, { signal: AbortSignal.timeout(2000) });
+              if (testRes.ok) {
+                console.log('✅ LiteLLM proxy reachable — using', litellmUrl);
+                openai = createClient(litellmUrl);
+              } else {
+                throw new Error('LiteLLM returned non-OK');
+              }
+            } catch {
+              console.warn('⚠️ LiteLLM proxy not reachable — falling back to direct OpenAI');
+              openai = createClient(directUrl);
+            }
+          } else {
+            openai = createClient(litellmUrl || directUrl);
+          }
           console.log('OpenAI client created');
 
           console.log(`Sending request to OpenAI: model=${model}, temp=${temperature}, maxTokens=${maxTokens}`);
@@ -343,7 +420,8 @@ class QuizLLMService {
       difficulty = 'moderate',
       courseContext = '',
       previousQuestions = [],
-      customPrompt = null
+      customPrompt = null,
+      userId = null
     } = questionConfig;
 
     console.log(`🤖 Generating ${questionType} question with LLM...`);
@@ -354,16 +432,16 @@ class QuizLLMService {
       throw new Error('LLM service not initialized. Please check Ollama/OpenAI configuration.');
     }
 
-    const provider = process.env.LLM_PROVIDER || 'ollama';
-    const model = provider === 'openai' ? (process.env.OPENAI_MODEL || 'gpt-4o-mini') : (process.env.OLLAMA_MODEL || 'llama3.1:8b');
-    console.log(`🤖 Using ${provider} model: ${model}`);
+    const llmConfig = await this.resolveUserLLMConfig(userId);
+    const llm = this.createLLMForConfig(llmConfig);
+    console.log(`🤖 Using ${llmConfig.provider} model: ${llmConfig.model}`);
 
     try {
       // Build expert-level prompt
       const prompt = this.buildExpertPrompt(
-        learningObjective, 
-        questionType, 
-        relevantContent, 
+        learningObjective,
+        questionType,
+        relevantContent,
         difficulty,
         courseContext,
         previousQuestions,
@@ -376,9 +454,9 @@ class QuizLLMService {
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
       const maxTokens = 2000;
-      
+
       const options = this.getSendMessageOptions(temperature, maxTokens);
-      const response = await this.llm.sendMessage(prompt, options);
+      const response = await llm.sendMessage(prompt, options);
 
       const processingTime = Date.now() - startTime;
       console.log(`⏱️ LLM response received in ${processingTime}ms`);

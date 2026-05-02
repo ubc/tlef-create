@@ -10,15 +10,17 @@ import Login from './components/Login';
 import NotFound from "./pages/NotFound";
 import H5PPreview from "./pages/H5PPreview";
 import AdminDashboard from "./pages/AdminDashboard";
+import FirstUseApiKeyModal from './components/FirstUseApiKeyModal';
 import { useState, useEffect } from 'react';
 import { API_URL } from './config/api';
+import { apiKeyApi } from './services/api';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
+  const [showFirstUseModal, setShowFirstUseModal] = useState(false);
 
   useEffect(() => {
-    // Check authentication status on mount
     checkAuth();
   }, []);
 
@@ -38,6 +40,7 @@ const App = () => {
         if (data.data?.authenticated) {
           setIsAuthenticated(true);
           setUser(data.data.user);
+          checkFirstUse(data.data.user);
         } else {
           setIsAuthenticated(false);
         }
@@ -50,7 +53,20 @@ const App = () => {
     }
   };
 
-  // Loading state while checking authentication
+  // Show first-use modal if user has no API key and no env key permission
+  const checkFirstUse = async (userData: any) => {
+    if (userData?.canUseEnvKey || userData?.isAdmin) return;
+    try {
+      const res = await apiKeyApi.getKeys();
+      const keys = res.data?.apiKeys || [];
+      if (keys.length === 0) {
+        setShowFirstUseModal(true);
+      }
+    } catch {
+      // Silently fail — don't block the user if this check errors
+    }
+  };
+
   if (isAuthenticated === null) {
     return <div>Loading...</div>;
   }
@@ -58,17 +74,20 @@ const App = () => {
   return (
     <Provider store={store}>
       <BrowserRouter>
+        {isAuthenticated && showFirstUseModal && (
+          <FirstUseApiKeyModal onDismiss={() => setShowFirstUseModal(false)} />
+        )}
         <Routes>
           {/* Public route */}
           <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login onAuthChange={checkAuth} />} />
-          
+
           {/* Protected routes */}
           <Route path="/" element={isAuthenticated ? <Layout><Dashboard /></Layout> : <Navigate to="/login" />} />
           <Route path="/course/:courseId" element={isAuthenticated ? <Layout><CourseView /></Layout> : <Navigate to="/login" />} />
           <Route path="/course/:courseId/quiz/:quizId" element={isAuthenticated ? <Layout><QuizView /></Layout> : <Navigate to="/login" />} />
           <Route path="/account" element={isAuthenticated ? <Layout><UserAccount /></Layout> : <Navigate to="/login" />} />
           <Route path="/admin" element={isAuthenticated ? <Layout><AdminDashboard /></Layout> : <Navigate to="/login" />} />
-          
+
           {/* H5P Preview — no auth required (dev tool) */}
           <Route path="/h5p-preview" element={<H5PPreview />} />
 
@@ -77,7 +96,7 @@ const App = () => {
 
           {/* SAML callback route */}
           <Route path="/auth/callback" element={<AuthCallback onAuthChange={checkAuth} />} />
-          
+
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
@@ -89,7 +108,6 @@ const App = () => {
 // Canvas OAuth callback — just closes the popup, parent window polls for it
 const CanvasCallback = () => {
   useEffect(() => {
-    // Close the popup after a short delay so the parent can detect it
     const timer = setTimeout(() => window.close(), 500);
     return () => clearTimeout(timer);
   }, []);
@@ -112,7 +130,7 @@ const AuthCallback = ({ onAuthChange }: { onAuthChange: () => void }) => {
     onAuthChange();
     window.location.href = '/';
   }, [onAuthChange]);
-  
+
   return <div>Authenticating...</div>;
 };
 

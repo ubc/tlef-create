@@ -22,6 +22,11 @@ const userApiKeySchema = new mongoose.Schema({
     enum: SUPPORTED_PROVIDERS,
     required: true
   },
+  modelName: {
+    type: String,
+    required: true,
+    trim: true
+  },
   // TODO: encryptedKey field — String, required.
   //       Use Mongoose setter to encrypt on save, getter to decrypt on read.
   //       Mirror the pattern in CanvasToken.js accessToken field.
