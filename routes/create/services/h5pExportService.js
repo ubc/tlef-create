@@ -136,7 +136,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // This produces files identical to official H5P exports, maximizing compatibility.
     const uniqueNonFlashcardTypes = new Set(nonFlashcardQuestions.map(q => q.type));
     // Types that should be exported standalone (without Column wrapper)
-    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword', 'branching-scenario']);
+    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword', 'branching-scenario', 'documentation-tool']);
     const singleType = uniqueNonFlashcardTypes.size === 1 ? [...uniqueNonFlashcardTypes][0] : null;
     const isSingleType = !hasMixedContent && singleType && standaloneTypes.has(singleType) && flashcardQuestions.length === 0;
 
@@ -1624,6 +1624,73 @@ export function convertQuestionToH5P(question, quiz) {
       "library": "H5P.BranchingScenario 1.10",
       "subContentId": crypto.randomBytes(16).toString('hex'),
       "metadata": { "contentType": "Branching Scenario", "license": "U", "title": "Branching Scenario" }
+    };
+  } else if (question.type === 'documentation-tool') {
+    const title = question.content?.title || 'Documentation Tool';
+    const pages = question.content?.pages || [];
+
+    const pagesList = pages.map(page => {
+      const id = () => crypto.randomBytes(16).toString('hex');
+
+      if (page.type === 'goals') {
+        return {
+          "params": { "description": "<p>Add goals for your project work by pressing the button below. You should describe each goal in your own words.</p>\n", "defineGoalText": "Add goal", "definedGoalLabel": "Goal", "defineGoalPlaceholder": "Write here...", "goalsAddedText": "Goals added:", "specifyGoalText": "Specify", "removeGoalText": "Remove", "helpTextLabel": "Read more", "helpText": "<p>Define the goals for your project work.</p>\n", "goalDeletionConfirmation": { "header": "Confirm deletion", "message": "Are you sure you want to delete this goal?", "cancelLabel": "Cancel", "confirmLabel": "Confirm" } },
+          "library": "H5P.GoalsPage 1.5",
+          "subContentId": id(),
+          "metadata": { "contentType": "Goals Page", "license": "U", "title": "Goals" }
+        };
+      }
+
+      if (page.type === 'assessment') {
+        return {
+          "params": { "description": "<p>Assess how well you achieved the goals you defined for the project.</p>\n", "lowRating": "Did not achieve", "midRating": "Achieved partially", "highRating": "Achieved completely", "noGoalsText": "You have not chosen any goals yet.", "helpTextLabel": "Read more", "helpText": "<p>Rate each goal you defined.</p>\n", "legendHeader": "Possible ratings:", "goalHeader": "Goals", "ratingHeader": "Rating" },
+          "library": "H5P.GoalsAssessmentPage 1.4",
+          "subContentId": id(),
+          "metadata": { "contentType": "Goals Assessment Page", "license": "U", "title": "Assessment" }
+        };
+      }
+
+      if (page.type === 'export') {
+        return {
+          "params": { "description": "<p>Export all your submitted text, goals, and goal assessments as a Word document.</p>\n", "createDocumentLabel": "Create document", "selectAllTextLabel": "Select all text", "exportTextLabel": "Export text", "helpTextLabel": "Read more", "requiresInputErrorMessage": "One or more required input fields need to be filled.", "helpText": "<p>Press the Create document button to download a Word document of your work.</p>\n", "submitTextLabel": "Submit", "submitSuccessTextLabel": "Your report was submitted successfully!" },
+          "library": "H5P.DocumentExportPage 1.5",
+          "subContentId": id(),
+          "metadata": { "contentType": "Document Export Page", "license": "U", "title": "Export" }
+        };
+      }
+
+      // intro or task — both use H5P.StandardPage with TextInputFields
+      const elementList = [];
+      if (page.introText) {
+        elementList.push({
+          "params": { "text": `<p>${escapeHtml(page.introText)}</p>` },
+          "library": "H5P.Text 1.1",
+          "subContentId": id(),
+          "metadata": { "contentType": "Text", "license": "U", "title": "Introduction" }
+        });
+      }
+      (page.fields || []).forEach(field => {
+        elementList.push({
+          "params": { "inputLabel": escapeHtml(field.label || ''), "inputPlaceholder": "Write here...", "requiredField": false },
+          "library": "H5P.TextInputField 1.2",
+          "subContentId": id(),
+          "metadata": { "contentType": "Text Input Field", "license": "U", "title": escapeHtml(field.label || 'Field') }
+        });
+      });
+
+      return {
+        "params": { "elementList": elementList, "helpTextLabel": "Read more", "helpText": "" },
+        "library": "H5P.StandardPage 1.5",
+        "subContentId": id(),
+        "metadata": { "contentType": "Standard Page", "license": "U", "title": escapeHtml(page.title || title) }
+      };
+    });
+
+    return {
+      "params": { "pagesList": pagesList },
+      "library": "H5P.DocumentationTool 1.8",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": { "contentType": "Documentation Tool", "license": "U", "title": escapeHtml(title) }
     };
   } else if (question.type === 'summary') {
     const panels = [];

@@ -827,6 +827,28 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                   )}
                 </div>
               )}
+
+              {question.type === 'documentation-tool' && (
+                <div style={{ marginTop: 8 }}>
+                  <p style={{ fontWeight: 600, marginBottom: 8 }}>{question.content?.title || 'Documentation Tool'}</p>
+                  {question.content?.pages?.map((page: { type: string; title?: string; introText?: string; fields?: { label: string }[] }, idx: number) => (
+                    <div key={idx} style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--color-muted)', borderLeft: '3px solid var(--color-primary)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                        {page.type === 'goals' ? 'Goals Page' :
+                         page.type === 'assessment' ? 'Goals Assessment' :
+                         page.type === 'export' ? 'Document Export' :
+                         page.title || `Page ${idx + 1}`}
+                      </div>
+                      {page.introText && <div style={{ fontSize: '0.8rem', marginTop: 2, opacity: 0.8 }}>{page.introText}</div>}
+                      {page.fields && page.fields.length > 0 && (
+                        <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: '0.8rem' }}>
+                          {page.fields.map((f, fi) => <li key={fi}>{f.label}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {showAnswer && question.explanation && (
@@ -835,7 +857,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
               </div>
             )}
 
-            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && (
+            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && question.type !== 'documentation-tool' && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>

@@ -29,7 +29,8 @@ const QUESTION_TYPES = [
   { value: 'crossword', label: 'Crossword' },
   { value: 'dictation', label: 'Dictation' },
   { value: 'arithmetic-quiz', label: 'Arithmetic Quiz' },
-  { value: 'branching-scenario', label: 'Branching Scenario' }
+  { value: 'branching-scenario', label: 'Branching Scenario' },
+  { value: 'documentation-tool', label: 'Documentation Tool' }
 ];
 
 export default function PlanEditor({
@@ -73,6 +74,9 @@ export default function PlanEditor({
       updates.branchingLayers = undefined;
       updates.branchingChoices = undefined;
     }
+    if (newType === 'documentation-tool') {
+      updates.count = 1;
+    }
     handleUpdateItem(id, updates);
   };
 
@@ -99,10 +103,8 @@ export default function PlanEditor({
 
   const loDistribution = planItems.reduce((acc, item) => {
     const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
-    if (lo) {
-      const loLabel = `LO ${lo.order + 1}`;
-      acc[loLabel] = (acc[loLabel] || 0) + item.count;
-    }
+    const loLabel = lo ? `LO ${lo.order + 1}` : 'No LO (custom prompt)';
+    acc[loLabel] = (acc[loLabel] || 0) + item.count;
     return acc;
   }, {} as Record<string, number>);
 
@@ -111,14 +113,6 @@ export default function PlanEditor({
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
-
-  if (learningObjectives.length === 0) {
-    return (
-      <div className="plan-editor-empty">
-        <p>No learning objectives available. Please add learning objectives first.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="plan-editor">
@@ -140,10 +134,12 @@ export default function PlanEditor({
         <div className="plan-editor-rows">
           {planItems.map((item) => {
             const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
-            const loLabel = lo ? `LO ${lo.order + 1}: ${truncateText(lo.text, 50)}` : 'Unknown';
+            const showCustomPrompt = !item.learningObjectiveId || item.type === 'documentation-tool';
+            const customPromptRequired = !item.learningObjectiveId;
+            const customPromptError = customPromptRequired && !item.customPrompt?.trim();
 
             return (
-              <div key={item.id} className="plan-editor-row">
+              <div key={item.id} className="plan-editor-row" style={{ flexWrap: 'wrap' }}>
                 <div className="plan-col-type">
                   <select
                     value={item.type}
@@ -167,6 +163,7 @@ export default function PlanEditor({
                     className="plan-select"
                     title={lo?.text}
                   >
+                    <option value="">— No Learning Objective —</option>
                     {learningObjectives.map(lo => (
                       <option key={lo._id} value={lo._id}>
                         LO {lo.order + 1}: {truncateText(lo.text, 50)}
@@ -251,6 +248,30 @@ export default function PlanEditor({
                     <X size={18} />
                   </button>
                 </div>
+
+                {showCustomPrompt && (
+                  <div style={{ width: '100%', padding: '4px 0 6px 4px' }}>
+                    <textarea
+                      className="plan-select"
+                      style={{ width: '100%', minHeight: 56, resize: 'vertical', fontSize: '0.82rem', padding: '4px 6px', boxSizing: 'border-box', borderColor: customPromptError ? 'var(--color-destructive)' : undefined }}
+                      value={item.customPrompt || ''}
+                      onChange={(e) => handleUpdateItem(item.id, { customPrompt: e.target.value })}
+                      disabled={readOnly}
+                      placeholder={
+                        item.type === 'documentation-tool'
+                          ? 'Describe the documentation tool topic and purpose (e.g. "Reflective journal for a clinical ethics case study")…'
+                          : customPromptRequired
+                            ? 'Required: describe what to generate (used as primary context instead of a learning objective)…'
+                            : 'Optional: additional context or instructions for the AI…'
+                      }
+                    />
+                    {customPromptError && (
+                      <small style={{ color: 'var(--color-destructive)', fontSize: '0.75rem' }}>
+                        Custom prompt is required when no learning objective is selected.
+                      </small>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

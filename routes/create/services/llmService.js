@@ -171,7 +171,7 @@ class QuizLLMService {
     } = questionConfig;
 
     console.log(`🎯 Generating ${questionType} question with streaming...`);
-    console.log(`📝 Learning Objective: ${learningObjective.substring(0, 100)}...`);
+    console.log(`📝 Learning Objective: ${learningObjective ? learningObjective.substring(0, 100) + '...' : '(none — using custom prompt)'}`);
     console.log(`📚 Using ${relevantContent.length} content chunks`);
 
     if (!this.llm) {
@@ -201,7 +201,7 @@ class QuizLLMService {
       // Call LLM with streaming support
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
-      const maxTokens = questionType === 'branching-scenario' ? 4000 : 2000;
+      const maxTokens = ['branching-scenario', 'documentation-tool'].includes(questionType) ? 4000 : 2000;
       
       let accumulatedContent = '';
       let responseModel = model;
@@ -468,7 +468,7 @@ class QuizLLMService {
       // Call LLM with default settings from .env
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
-      const maxTokens = questionType === 'branching-scenario' ? 4000 : 2000;
+      const maxTokens = ['branching-scenario', 'documentation-tool'].includes(questionType) ? 4000 : 2000;
 
       const options = this.getSendMessageOptions(temperature, maxTokens);
       const response = await llm.sendMessage(prompt, options);
@@ -543,10 +543,24 @@ class QuizLLMService {
       ? `\n\nPREVIOUS QUESTIONS TO AVOID DUPLICATION:\n${previousQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join('\n')}`
       : '';
 
+    // Delegate to type-specific builders for complex standalone types
+    if (questionType === 'branching-scenario') {
+      const { buildBranchingPrompt } = await import('../utils/branchingScenarioBuilder.js');
+      return buildBranchingPrompt(branchingLayers, branchingChoices, learningObjective || customPrompt || '');
+    }
+    if (questionType === 'documentation-tool') {
+      const { buildDocumentationPrompt } = await import('../utils/documentationToolBuilder.js');
+      return buildDocumentationPrompt(customPrompt, learningObjective);
+    }
+
+    // Build context section: LO takes priority, customPrompt used when no LO
+    const contextSection = learningObjective
+      ? `LEARNING OBJECTIVE:\n${learningObjective}`
+      : `TASK CONTEXT (provided by instructor):\n${customPrompt}`;
+
     const basePrompt = `You are an expert educational assessment designer specializing in creating high-quality, pedagogically sound quiz questions. Your task is to generate a ${questionType} question that effectively assesses student understanding.
 
-LEARNING OBJECTIVE:
-${learningObjective}
+${contextSection}
 
 COURSE CONTEXT:
 ${courseContext || 'General academic course'}
@@ -559,23 +573,18 @@ DIFFICULTY LEVEL: ${difficulty}
 QUESTION TYPE: ${questionType}
 ${previousQuestionsText}
 
-INSTRUCTIONS:${customPrompt ? '\n⚠️ CRITICAL USER REQUIREMENTS (MUST FOLLOW): ' + customPrompt + '\n' : ''}
-1. Create a question that directly assesses the learning objective
+INSTRUCTIONS:${customPrompt && learningObjective ? '\n⚠️ ADDITIONAL USER REQUIREMENTS (MUST FOLLOW): ' + customPrompt + '\n' : ''}
+1. Create a question that directly assesses the ${learningObjective ? 'learning objective' : 'task context'} above
 2. Use the provided course materials to create realistic, contextual content
 3. Ensure the question tests meaningful understanding, not just memorization
 4. Make the question engaging and relevant to real-world applications
 5. Follow educational best practices for ${questionType} questions
 6. Avoid duplicating previous questions - create unique content and scenarios
 
-${customPrompt ? 'IMPORTANT: The user requirements above are MANDATORY and must be implemented exactly as specified.' : ''}
+${customPrompt && learningObjective ? 'IMPORTANT: The additional user requirements above are MANDATORY and must be implemented exactly as specified.' : ''}
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (all strings must be on single lines - no line breaks within strings):`;
-
-    if (questionType === 'branching-scenario') {
-      const { buildBranchingPrompt } = await import('../utils/branchingScenarioBuilder.js');
-      return buildBranchingPrompt(branchingLayers, branchingChoices, learningObjective);
-    }
 
     const formatInstructions = this.getFormatInstructions(questionType);
 
@@ -1043,8 +1052,23 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
         };
       }
 
+      if (questionType === 'documentation-tool') {
+        if (!parsed.title || !Array.isArray(parsed.pages)) {
+          throw new Error('Documentation tool response missing title or pages array');
+        }
+        return {
+          questionText: 'Documentation Tool',
+          content: {
+            title: parsed.title,
+            pages: parsed.pages
+          },
+          correctAnswer: null,
+          explanation: null
+        };
+      }
+
       const requiresCorrectAnswer = !['discussion', 'summary'].includes(questionType);
-      
+
       // Special handling for Cloze questions - accept answerKey as explanation
       if (questionType === 'cloze' && parsed.answerKey && !parsed.explanation) {
         parsed.explanation = parsed.answerKey;

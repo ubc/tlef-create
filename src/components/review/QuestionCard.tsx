@@ -412,6 +412,30 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           <div className="question-answer"><strong>Back:</strong> {question.content?.back || question.correctAnswer}</div>
           {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
         </div>
+      ) : question.type === 'documentation-tool' ? (
+        <div className="question-display">
+          <div className="question-text"><strong>{question.content?.title || question.questionText}</strong></div>
+          {question.content?.pages?.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {question.content.pages.map((page: { type: string; title?: string; introText?: string; fields?: { label: string }[] }, idx: number) => (
+                <div key={idx} style={{ marginBottom: 6, paddingLeft: 8, borderLeft: '2px solid var(--color-border)' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                    {page.type === 'goals' ? 'Goals Page' :
+                     page.type === 'assessment' ? 'Goals Assessment' :
+                     page.type === 'export' ? 'Document Export' :
+                     page.title || `Page ${idx + 1}`}
+                  </div>
+                  {page.introText && <div style={{ fontSize: '0.8rem', opacity: 0.75, marginTop: 2 }}>{page.introText}</div>}
+                  {page.fields && page.fields.length > 0 && (
+                    <ul style={{ margin: '4px 0 0', paddingLeft: 16, fontSize: '0.8rem' }}>
+                      {page.fields.map((f, fi) => <li key={fi}>{f.label}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="question-display">
           <div className="question-text">{question.questionText}</div>

@@ -19,10 +19,12 @@ export interface QuestionGenerationProps {
 export interface PlanItem {
   id: string;                    // UUID for React keys
   type: string;                  // question type
-  learningObjectiveId: string;   // LO._id
+  learningObjectiveId: string;   // LO._id (empty string = no LO)
   count: number;
   branchingLayers?: number;      // branching-scenario only, default 2
   branchingChoices?: number;     // branching-scenario only, default 2
+  customPrompt?: string;         // used when LO is absent or as supplemental context
+  useCustomPromptOnly?: boolean; // true when learningObjectiveId is empty
 }
 
 // NEW: AI configuration

@@ -16,7 +16,14 @@ const router = express.Router();
  * Maps text or index-based LO references to actual Mongoose documents.
  */
 function enrichQuestionConfigsWithObjectives(questionConfigs, quiz) {
+  const hasLOs = quiz.learningObjectives && quiz.learningObjectives.length > 0;
+
   return questionConfigs.map((config, index) => {
+    // If the config has no LO reference and uses a custom prompt, allow null LO
+    if (!hasLOs || config.useCustomPromptOnly) {
+      return { ...config, learningObjective: null };
+    }
+
     let learningObjective;
 
     if (config.learningObjectiveIndex !== undefined) {

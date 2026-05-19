@@ -112,6 +112,9 @@ export function formatContentForDatabase(generatedQuestion, questionType) {
     case 'branching-scenario':
       return generatedQuestion.content || {};
 
+    case 'documentation-tool':
+      return generatedQuestion.content || {};
+
     default:
       return generatedQuestion.content || {};
   }

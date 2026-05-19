@@ -13,7 +13,7 @@ const questionSchema = new mongoose.Schema({
   learningObjective: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'LearningObjective',
-    required: true,
+    required: false,
     index: true
   },
   
@@ -135,7 +135,11 @@ const questionSchema = new mongoose.Schema({
 
     // For Branching Scenario
     introText: { type: String },
-    nodes: [{ type: mongoose.Schema.Types.Mixed }]
+    nodes: [{ type: mongoose.Schema.Types.Mixed }],
+
+    // For Documentation Tool
+    title: { type: String },
+    pages: [{ type: mongoose.Schema.Types.Mixed }]
   },
   
   // Simple correct answer for basic question types

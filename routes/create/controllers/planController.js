@@ -40,12 +40,8 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
     return notFoundResponse(res, 'Quiz');
   }
 
-  if (!quiz.learningObjectives || quiz.learningObjectives.length === 0) {
-    return errorResponse(res, 'Quiz must have learning objectives', 'NO_OBJECTIVES', HTTP_STATUS.BAD_REQUEST);
-  }
-
-  // Validate totalQuestions based on number of LOs
-  const minQuestions = quiz.learningObjectives.length; // At least 1 per LO
+  // Validate totalQuestions
+  const minQuestions = 1;
   const maxQuestions = 100;
 
   if (totalQuestions < minQuestions || totalQuestions > maxQuestions) {

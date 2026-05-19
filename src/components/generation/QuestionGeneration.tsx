@@ -313,11 +313,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     // Convert planItems to questionConfigs
     const questionConfigs = planItems.flatMap(item => {
       const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
+      const hasLO = !!item.learningObjectiveId && !!lo;
       return Array(item.count).fill(null).map(() => ({
         questionType: item.type,
         difficulty: 'moderate',
         learningObjective: lo?.text || '',
-        learningObjectiveId: item.learningObjectiveId,
+        learningObjectiveId: item.learningObjectiveId || undefined,
+        ...(!hasLO && { useCustomPromptOnly: true }),
+        ...(item.customPrompt?.trim() && { customPrompt: item.customPrompt.trim() }),
         ...(item.type === 'branching-scenario' && {
           branchingLayers: item.branchingLayers ?? 2,
           branchingChoices: item.branchingChoices ?? 2

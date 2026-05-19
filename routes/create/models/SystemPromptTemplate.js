@@ -34,7 +34,7 @@ const systemPromptTemplateSchema = new mongoose.Schema({
   questionTypeRules: {
     allowedTypes: [{
       type: String,
-      enum: ['multiple-choice', 'true-false', 'flashcard', 'summary', 'discussion', 'matching', 'ordering', 'cloze', 'mark-the-words', 'single-choice-set', 'essay', 'question-set', 'free-text', 'open-ended', 'simple-multi-choice', 'sort-paragraphs', 'crossword', 'dictation', 'arithmetic-quiz', 'branching-scenario']
+      enum: ['multiple-choice', 'true-false', 'flashcard', 'summary', 'discussion', 'matching', 'ordering', 'cloze', 'mark-the-words', 'single-choice-set', 'essay', 'question-set', 'free-text', 'open-ended', 'simple-multi-choice', 'sort-paragraphs', 'crossword', 'dictation', 'arithmetic-quiz', 'branching-scenario', 'documentation-tool']
     }],
 
     // 建议的分布比例

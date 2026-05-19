@@ -35,10 +35,11 @@ class QuestionStreamingService {
       });
 
       // Notify start of question generation
+      const loText = learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null);
       sseService.streamQuestionProgress(sessionId, questionId, {
         status: 'started',
         type: questionConfig.questionType,
-        learningObjective: learningObjective.text || learningObjective
+        learningObjective: loText || questionConfig.customPrompt || 'custom prompt'
       });
 
       // Create streaming callback
@@ -75,7 +76,7 @@ class QuestionStreamingService {
       });
       
       const result = await llmService.generateQuestionStreaming({
-        learningObjective: learningObjective.text || learningObjective,
+        learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
         questionType: questionConfig.questionType,
         relevantContent: relevantContent || [],
         difficulty: questionConfig.difficulty || 'moderate',
@@ -166,7 +167,7 @@ class QuestionStreamingService {
           explanation: result.questionData.explanation,
           content: formatContentForDatabase(result.questionData, result.questionData.type),
           difficulty: result.questionData.difficulty,
-          learningObjective: learningObjective._id || learningObjective,
+          ...(learningObjective && { learningObjective: learningObjective._id || learningObjective }),
           order: existingQuestionsCount, // Proper ordering
           reviewStatus: 'pending',
           createdBy: userId, // Add the required createdBy field

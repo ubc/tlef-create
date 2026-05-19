@@ -57,7 +57,8 @@ export const QUESTION_TYPES = {
   CROSSWORD: 'crossword',
   DICTATION: 'dictation',
   ARITHMETIC_QUIZ: 'arithmetic-quiz',
-  BRANCHING_SCENARIO: 'branching-scenario'
+  BRANCHING_SCENARIO: 'branching-scenario',
+  DOCUMENTATION_TOOL: 'documentation-tool'
 };
 
 export const DIFFICULTY_LEVELS = {

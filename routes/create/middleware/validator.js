@@ -241,8 +241,9 @@ export const validateCreateQuestion = [
     .withMessage('Valid quiz ID is required'),
   
   body('learningObjectiveId')
+    .optional({ nullable: true, checkFalsy: true })
     .isMongoId()
-    .withMessage('Valid learning objective ID is required'),
+    .withMessage('learningObjectiveId must be a valid MongoDB ID if provided'),
   
   body('type')
     .isIn(Object.values(QUESTION_TYPES))

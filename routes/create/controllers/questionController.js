@@ -75,13 +75,13 @@ router.post('/', authenticateToken, validateCreateQuestion, asyncHandler(async (
     return notFoundResponse(res, 'Quiz');
   }
 
-  // Verify learning objective exists and belongs to quiz
-  const objective = await LearningObjective.findOne({
-    _id: learningObjectiveId,
-    quiz: quizId
-  });
-  if (!objective) {
-    return notFoundResponse(res, 'Learning objective');
+  // Verify learning objective exists and belongs to quiz (optional)
+  let objective = null;
+  if (learningObjectiveId) {
+    objective = await LearningObjective.findOne({ _id: learningObjectiveId, quiz: quizId });
+    if (!objective) {
+      return notFoundResponse(res, 'Learning objective');
+    }
   }
 
   // Get next order number
@@ -90,7 +90,7 @@ router.post('/', authenticateToken, validateCreateQuestion, asyncHandler(async (
 
   const question = new Question({
     quiz: quizId,
-    learningObjective: learningObjectiveId,
+    ...(learningObjectiveId && { learningObjective: learningObjectiveId }),
     type,
     difficulty,
     questionText,
