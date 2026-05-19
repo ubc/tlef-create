@@ -20,8 +20,40 @@
 .quiz-header h1 {
     font-size: var(--font-size-3xl);
     font-weight: 700;
-    margin: 0 0 var(--spacing-sm) 0;
+    margin: 0;
     color: var(--color-foreground);
+}
+
+.quiz-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin: 0 0 var(--spacing-sm) 0;
+}
+
+.quiz-edit-name-btn {
+    padding: 4px 6px;
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
+}
+
+.quiz-edit-name-btn:hover {
+    opacity: 1;
+}
+
+.quiz-title-input {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    color: var(--color-foreground);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid var(--color-primary);
+    outline: none;
+    width: 100%;
+    padding: 0;
+    line-height: 1.2;
+    font-family: inherit;
 }
 
 .quiz-description {

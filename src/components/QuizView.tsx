@@ -1,13 +1,13 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2, Pencil } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
 import QuestionGeneration from './generation';
 import ReviewEdit from './review';
 import { RootState, AppDispatch } from '../store';
-import { fetchQuizById, setCurrentQuiz, assignMaterials } from '../store/slices/quizSlice';
+import { fetchQuizById, setCurrentQuiz, assignMaterials, updateQuiz } from '../store/slices/quizSlice';
 import { fetchMaterials } from '../store/slices/materialSlice';
 import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
@@ -40,6 +40,8 @@ const QuizView = () => {
   const [assignedMaterials, setAssignedMaterials] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
 
   // Update active tab when URL params change
   useEffect(() => {
@@ -91,7 +93,7 @@ const QuizView = () => {
   if (loading) {
     return (
       <div className="quiz-loading">
-        <div>Loading quiz...</div>
+        <div>Loading learning object...</div>
       </div>
     );
   }
@@ -99,7 +101,7 @@ const QuizView = () => {
   if (error || !currentQuiz) {
     return (
         <div className="quiz-not-found">
-          <h2>{error || 'Quiz not found'}</h2>
+          <h2>{error || 'Learning object not found'}</h2>
           <button className="btn btn-primary" onClick={() => navigate('/')}>
             Go to Dashboard
           </button>
@@ -116,7 +118,7 @@ const QuizView = () => {
       const { quizApi } = await import('../services/api');
       await quizApi.deleteQuiz(quizId);
 
-      showNotification('Quiz deleted successfully', 'success');
+      showNotification('Learning object deleted successfully', 'success');
       setShowDeleteConfirm(false);
 
       // Notify CourseView to refresh its data
@@ -130,6 +132,21 @@ const QuizView = () => {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = editedName.trim();
+    if (!trimmed || trimmed === currentQuiz?.name) {
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      await dispatch(updateQuiz({ id: quizId!, updates: { name: trimmed } })).unwrap();
+      publish('quiz-renamed', { quizId, name: trimmed });
+    } catch (err) {
+      showNotification('Failed to rename learning object', 'error');
+    }
+    setIsEditingName(false);
   };
 
   const tabs = [
@@ -166,10 +183,35 @@ const QuizView = () => {
               disabled={isDeleting}
             >
               <Trash2 size={16} />
-              {isDeleting ? 'Deleting...' : 'Delete Quiz'}
+              {isDeleting ? 'Deleting...' : 'Delete Learning Object'}
             </button>
           </div>
-          <h1>{currentQuiz.name}</h1>
+          <div className="quiz-title-row">
+            {isEditingName ? (
+              <input
+                className="quiz-title-input"
+                value={editedName}
+                onChange={e => setEditedName(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') { setIsEditingName(false); setEditedName(currentQuiz.name); }
+                }}
+                autoFocus
+              />
+            ) : (
+              <>
+                <h1>{currentQuiz.name}</h1>
+                <button
+                  className="btn btn-ghost quiz-edit-name-btn"
+                  onClick={() => { setIsEditingName(true); setEditedName(currentQuiz.name); }}
+                  title="Rename"
+                >
+                  <Pencil size={15} />
+                </button>
+              </>
+            )}
+          </div>
           <p className="quiz-description">
             {currentQuiz.folder?.name || 'Course'} • {currentQuiz.questions?.length || 0} questions
           </p>
@@ -249,10 +291,10 @@ const QuizView = () => {
         {showDeleteConfirm && (
           <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
-              <h2 style={{ marginTop: 0 }}>Delete Quiz?</h2>
+              <h2 style={{ marginTop: 0 }}>Delete Learning Object?</h2>
               <p>
                 Are you sure you want to delete <strong>{currentQuiz.name}</strong>?
-                This will permanently delete all questions and learning objectives associated with this quiz.
+                This will permanently delete all questions and learning objectives associated with this learning object.
               </p>
               <div className="modal-actions">
                 <button
@@ -267,7 +309,7 @@ const QuizView = () => {
                   onClick={handleDeleteQuiz}
                   disabled={isDeleting}
                 >
-                  {isDeleting ? 'Deleting...' : 'Delete Quiz'}
+                  {isDeleting ? 'Deleting...' : 'Delete Learning Object'}
                 </button>
               </div>
             </div>

@@ -142,8 +142,8 @@ const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsCh
                 {assignedMaterials.length > 0 && (
                     <div className="assignment-summary">
                       <div className="summary-card">
-                        <h4>Quiz Materials Summary</h4>
-                        <p>{assignedMaterials.length} material(s) assigned to this quiz</p>
+                        <h4>Learning Object Materials Summary</h4>
+                        <p>{assignedMaterials.length} material(s) assigned to this learning object</p>
                         <div className="assigned-materials-list">
                           {assignedMaterials.map(materialId => {
                             const material = courseMaterials.find(m => m.id === materialId);

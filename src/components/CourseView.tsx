@@ -325,7 +325,7 @@ const CourseView = () => {
         </div>
         <h1>{course.name}</h1>
         <p className="course-description">
-          Manage materials and quizzes for {course.name}
+          Manage materials and learning objects for {course.name}
         </p>
       </div>
 
@@ -348,9 +348,9 @@ const CourseView = () => {
         <div className="course-section">
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Quizzes ({course.quizzes.length})</h3>
+              <h3 className="card-title">Learning Objects ({course.quizzes.length})</h3>
               <p className="card-description">
-                Click on a quiz to start generating questions
+                Click on a learning object to start generating questions
               </p>
             </div>
 

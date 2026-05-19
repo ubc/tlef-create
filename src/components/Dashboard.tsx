@@ -81,7 +81,7 @@ const Dashboard = () => {
           <div className="card stat-card">
             <FileText size={24} style={{ margin: '0 auto var(--spacing-sm)', color: 'var(--color-primary)' }} />
             <div className="stat-number">{totalQuizzes}</div>
-            <div className="stat-label">Total Quizzes</div>
+            <div className="stat-label">Total Learning Objects</div>
           </div>
 
           <div className="card stat-card">
@@ -102,7 +102,7 @@ const Dashboard = () => {
             <div className="card-header">
               <h2 className="card-title">Getting Started with CREATE</h2>
               <p className="card-description">
-                Follow these steps to create your first AI-powered quiz
+                Follow these steps to create your first AI-powered learning object
               </p>
             </div>
 
@@ -110,7 +110,7 @@ const Dashboard = () => {
               <li className="step-item">
                 <div className="step-content">
                   <h3>Create a Course Folder</h3>
-                  <p>Start by creating a folder for your course (e.g., "EOSC 533"). Specify how many quizzes you'll need.</p>
+                  <p>Start by creating a folder for your course (e.g., "EOSC 533"). Specify how many learning objects you'll need.</p>
                 </div>
               </li>
 
@@ -124,7 +124,7 @@ const Dashboard = () => {
               <li className="step-item">
                 <div className="step-content">
                   <h3>Set Learning Objectives</h3>
-                  <p>Define learning objectives for your quiz, or let AI generate them from your materials.</p>
+                  <p>Define learning objectives for your learning object, or let AI generate them from your materials.</p>
                 </div>
               </li>
 

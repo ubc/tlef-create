@@ -95,6 +95,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     });
   }, [subscribe]);
 
+  // Listen for quiz rename events
+  useEffect(() => {
+    subscribe<{ quizId: string; name: string }>('quiz-renamed', () => {
+      loadFolders();
+    });
+  }, [subscribe]);
+
   // Listen for question changes (generation completed, questions deleted)
   useEffect(() => {
     subscribe('QUESTION_GENERATION_COMPLETED', () => {
