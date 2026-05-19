@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ArrowLeft, ArrowRight, ExternalLink, Loader2, Link2, Link2Off } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight, ExternalLink, Loader2, Link2, Link2Off, LogOut } from 'lucide-react';
 import MaterialUpload from './MaterialUpload';
 import { usePubSub } from '../hooks/usePubSub';
 import { canvasApi } from '../services/api';
@@ -45,6 +45,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   const [selectedCourse, setSelectedCourse] = useState<CanvasCourse | null>(null);
   const [canvasModuleId, setCanvasModuleId] = useState<string | null>(null);
   const [linkToCanvas, setLinkToCanvas] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Check Canvas availability on mount
   useEffect(() => {
@@ -159,6 +160,22 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     setSelectedCourse(null);
     setCanvasModuleId(null);
     setLinkToCanvas(false);
+  };
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    try {
+      await canvasApi.disconnect();
+      setCanvasConnected(false);
+      setCanvasCourses([]);
+      setSelectedCourse(null);
+      setCanvasModuleId(null);
+      setLinkToCanvas(false);
+    } catch {
+      // ignore
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   const handleCreateCourse = async () => {
@@ -337,7 +354,16 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
                     Connect to Canvas
                   </button>
                 </div>
-              ) : selectedCourse ? (
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.875rem', opacity: 0.7 }}>Connected to Canvas</span>
+                  <button className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={isDisconnecting}>
+                    {isDisconnecting ? <Loader2 size={14} className="spinner" /> : <LogOut size={14} />}
+                    Disconnect
+                  </button>
+                </div>
+              )}
+              {canvasConnected && (selectedCourse ? (
                 <div className="canvas-linked-info">
                   <div className="canvas-linked-card">
                     <Link2 size={20} />
@@ -376,7 +402,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
                     </div>
                   )}
                 </div>
-              )}
+              ))}
 
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={handlePreviousStep} disabled={isCreating}>

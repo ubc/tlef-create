@@ -203,7 +203,11 @@ class ApiClient {
       if (!response.ok) {
         // Backend returns structured error responses
         if (data && typeof data === 'object' && data.error) {
-          throw new ApiError(data.error.message, response.status, data.error.code, data.error.details);
+          const apiError = new ApiError(data.error.message, response.status, data.error.code, data.error.details);
+          if (data.error.code === 'NO_API_KEY') {
+            window.dispatchEvent(new CustomEvent('tlef:no-api-key'));
+          }
+          throw apiError;
         } else {
           throw new ApiError(`HTTP ${response.status}: ${response.statusText}`, response.status);
         }
@@ -1009,6 +1013,18 @@ export const adminApi = {
     users: Array<{ cwlId: string; coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
   }>> => {
     return await apiClient.get('/admin/stats');
+  },
+
+  getUsers: async (): Promise<ApiResponse<{ users: Array<{ _id: string; cwlId: string; displayName: string; email: string; canUseEnvKey: boolean; lastLogin: string; createdAt: string }> }>> => {
+    return await apiClient.get('/admin/users');
+  },
+
+  updateEnvKeyPermission: async (userId: string, canUseEnvKey: boolean): Promise<ApiResponse> => {
+    return await apiClient.patch(`/admin/users/${userId}/env-key-permission`, { canUseEnvKey });
+  },
+
+  updateAllEnvKeyPermission: async (canUseEnvKey: boolean): Promise<ApiResponse> => {
+    return await apiClient.patch('/admin/users/env-key-permission/all', { canUseEnvKey });
   }
 };
 

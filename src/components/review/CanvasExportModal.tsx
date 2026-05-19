@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, Check, Loader2 } from 'lucide-react';
+import { X, ExternalLink, Check, Loader2, Plus, LogOut } from 'lucide-react';
 import { canvasApi } from '../../services/api';
 import '../../styles/components/CanvasExportModal.css';
 
@@ -41,6 +41,9 @@ const CanvasExportModal = ({
   const [selectedModule, setSelectedModule] = useState<CanvasModule | null>(null);
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [newModuleName, setNewModuleName] = useState('');
+  const [creatingModule, setCreatingModule] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Check Canvas connection on open
   useEffect(() => {
@@ -142,6 +145,42 @@ const CanvasExportModal = ({
     setStep('confirm');
   }
 
+  async function handleCreateModule() {
+    if (!selectedCourse || !newModuleName.trim()) return;
+    setCreatingModule(true);
+    try {
+      const res = await canvasApi.createModule(selectedCourse.id, newModuleName.trim());
+      const created = res.data?.module;
+      if (created) {
+        setModules(prev => [...prev, created]);
+        setSelectedModule(created);
+        setNewModuleName('');
+        setStep('confirm');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create module';
+      showNotification('error', 'Error', message);
+    } finally {
+      setCreatingModule(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setIsDisconnecting(true);
+    try {
+      await canvasApi.disconnect();
+      setStep('connect');
+      setCourses([]);
+      setModules([]);
+      setSelectedCourse(null);
+      setSelectedModule(null);
+    } catch {
+      // ignore
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }
+
   async function handleExport() {
     if (!selectedCourse || !selectedModule) return;
 
@@ -218,6 +257,12 @@ const CanvasExportModal = ({
           {/* Step: Select Course */}
           {step === 'select-course' && (
             <div className="canvas-list-step">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                <button className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={isDisconnecting || loading}>
+                  {isDisconnecting ? <Loader2 size={14} className="spinner" /> : <LogOut size={14} />}
+                  Disconnect
+                </button>
+              </div>
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading courses...</div>
               ) : courses.length === 0 ? (
@@ -242,27 +287,51 @@ const CanvasExportModal = ({
           {/* Step: Select Module */}
           {step === 'select-module' && (
             <div className="canvas-list-step">
-              <button className="btn btn-ghost btn-sm" onClick={() => { setStep('select-course'); setSelectedCourse(null); }}>
+              <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => { setStep('select-course'); setSelectedCourse(null); }}>
                 Back to courses
               </button>
               <p className="canvas-selected-info">Course: <strong>{selectedCourse?.name}</strong></p>
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading modules...</div>
-              ) : modules.length === 0 ? (
-                <p>No modules found in this course. Create a module in Canvas first.</p>
               ) : (
-                <div className="canvas-item-list">
-                  {modules.map(mod => (
-                    <button
-                      key={mod.id}
-                      className="canvas-item-card"
-                      onClick={() => handleModuleSelect(mod)}
-                    >
-                      <div className="canvas-item-name">{mod.name}</div>
-                      <div className="canvas-item-meta">{mod.itemCount} items</div>
-                    </button>
-                  ))}
-                </div>
+                <>
+                  {modules.length > 0 && (
+                    <div className="canvas-item-list">
+                      {modules.map(mod => (
+                        <button
+                          key={mod.id}
+                          className="canvas-item-card"
+                          onClick={() => handleModuleSelect(mod)}
+                        >
+                          <div className="canvas-item-name">{mod.name}</div>
+                          <div className="canvas-item-meta">{mod.itemCount} items</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 16, borderTop: modules.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: modules.length > 0 ? 16 : 0 }}>
+                    {modules.length === 0 && <p style={{ marginBottom: 12, opacity: 0.7 }}>No modules found. Create one below.</p>}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        className="input"
+                        style={{ flex: 1, minWidth: 0, borderWidth: '1px' }}
+                        placeholder="New module name..."
+                        value={newModuleName}
+                        onChange={e => setNewModuleName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleCreateModule(); }}
+                        disabled={creatingModule}
+                      />
+                      <button
+                        className="btn btn-outline"
+                        onClick={handleCreateModule}
+                        disabled={!newModuleName.trim() || creatingModule}
+                      >
+                        {creatingModule ? <Loader2 size={14} className="spinner" /> : <Plus size={14} />}
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

@@ -130,6 +130,19 @@ router.get('/users', authenticateToken, requireAdmin, asyncHandler(async (req, r
 }));
 
 /**
+ * PATCH /api/admin/users/env-key-permission/all
+ * Grant or revoke env key permission for all users at once (admin only)
+ */
+router.patch('/users/env-key-permission/all', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  const { canUseEnvKey } = req.body;
+  if (typeof canUseEnvKey !== 'boolean') {
+    return errorResponse(res, 'canUseEnvKey must be a boolean', 'INVALID_INPUT', 400);
+  }
+  await User.updateMany({}, { canUseEnvKey });
+  return successResponse(res, { canUseEnvKey }, 'Permission updated for all users');
+}));
+
+/**
  * PATCH /api/admin/users/:id/env-key-permission
  * Grant or revoke a user's permission to use the .env API key (admin only)
  */

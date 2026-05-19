@@ -29,7 +29,7 @@ const LIBRARY_REGISTRY = {
   'H5P.OpenEndedQuestion': { majorVersion: 1, minorVersion: 0, dirName: 'H5P.OpenEndedQuestion-1.0' },
   'H5P.SimpleMultiChoice': { majorVersion: 1, minorVersion: 1, dirName: 'H5P.SimpleMultiChoice-1.1' },
   'H5P.CKEditor':       { majorVersion: 1, minorVersion: 0, dirName: 'H5P.CKEditor-1.0' },
-  'H5P.Crossword':      { majorVersion: 0, minorVersion: 4, dirName: 'H5P.Crossword-0.4' },
+  'H5P.Crossword':      { majorVersion: 0, minorVersion: 5, dirName: 'H5P.Crossword-0.5' },
   'H5P.Components':     { majorVersion: 1, minorVersion: 0, dirName: 'H5P.Components-1.0' },
   'H5P.Dictation':      { majorVersion: 1, minorVersion: 4, dirName: 'H5P.Dictation-1.4' },
   'H5P.ArithmeticQuiz': { majorVersion: 1, minorVersion: 1, dirName: 'H5P.ArithmeticQuiz-1.1' },

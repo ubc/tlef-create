@@ -9,6 +9,7 @@ import { generateTemplateQuestion } from './templateQuestionGenerator.js';
 import { QUESTION_TYPES } from '../config/constants.js';
 import UserApiKey from '../models/UserApiKey.js';
 import User from '../models/User.js';
+const ADMIN_CWLS = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 class QuizLLMService {
   constructor() {
@@ -85,13 +86,19 @@ class QuizLLMService {
         }
 
         const user = await User.findById(userId);
-        if (user && user.canUseEnvKey) {
-          return this.getEnvLLMConfig();
-        }
+        if (!user) throw new Error('No user found');
 
-        throw new Error('No API key configured. Please add an API key in Settings.');
+        const userIdentifiers = [user.cwlId, user.email, user.email?.split('@')[0]]
+          .filter(Boolean).map(s => s.toLowerCase());
+        const isAdmin = ADMIN_CWLS.some(a => userIdentifiers.includes(a.toLowerCase()));
+
+        if (user.canUseEnvKey || isAdmin) return this.getEnvLLMConfig();
+
+        const noKeyErr = new Error('No API key configured. Please add an API key in Settings.');
+        noKeyErr.code = 'NO_API_KEY';
+        throw noKeyErr;
       } catch (error) {
-        if (error.message.includes('No API key')) throw error;
+        if (error.code === 'NO_API_KEY') throw error;
         console.error('Error resolving user LLM config:', error.message);
         return this.getEnvLLMConfig();
       }

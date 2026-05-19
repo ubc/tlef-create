@@ -1441,7 +1441,7 @@ export function convertQuestionToH5P(question, quiz) {
           "letterSevenOfNine": "Letter @position of @length"
         }
       },
-      "library": "H5P.Crossword 0.4",
+      "library": "H5P.Crossword 0.5",
       "subContentId": crypto.randomBytes(16).toString('hex'),
       "metadata": {
         "contentType": "Crossword",

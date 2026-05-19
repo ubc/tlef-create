@@ -358,6 +358,11 @@ router.use((error, req, res, next) => {
   }
 
 
+  // No API key configured
+  if (error.code === 'NO_API_KEY') {
+    return errorResponse(res, error.message, 'NO_API_KEY', 402);
+  }
+
   // Default server error
   return errorResponse(
     res,

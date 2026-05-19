@@ -22,6 +22,9 @@ const App = () => {
 
   useEffect(() => {
     checkAuth();
+    const handleNoApiKey = () => setShowFirstUseModal(true);
+    window.addEventListener('tlef:no-api-key', handleNoApiKey);
+    return () => window.removeEventListener('tlef:no-api-key', handleNoApiKey);
   }, []);
 
   const checkAuth = async () => {

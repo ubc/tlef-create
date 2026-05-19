@@ -22,7 +22,7 @@ export function getAuthorizationUrl(state) {
     response_type: 'code',
     redirect_uri: CANVAS_REDIRECT_URI,
     state,
-    scope: 'url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/pages url:POST|/api/v1/courses/:course_id/modules/:module_id/items'
+    scope: 'url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/pages url:POST|/api/v1/courses/:course_id/modules/:module_id/items url:GET|/api/v1/courses/:course_id/external_tools url:GET|/api/v1/accounts/:account_id/external_tools'
   });
   return `${CANVAS_BASE_URL}/login/oauth2/auth?${params.toString()}`;
 }
@@ -233,6 +233,7 @@ export async function ensureLtiToolInstalled(userId, courseId) {
   // Also check account-level tools (visible to all courses)
   try {
     const accountTools = await canvasRequest(userId, `/accounts/self/external_tools?per_page=100`);
+    console.log('🔍 Account-level tools found:', JSON.stringify(accountTools.map(t => ({ id: t.id, name: t.name, developer_key_id: t.developer_key_id })), null, 2));
     const accountTool = accountTools.find(t =>
       String(t.developer_key_id) === String(ltiClientId) ||
       t.name === 'TLEF-CREATE' ||
@@ -241,11 +242,23 @@ export async function ensureLtiToolInstalled(userId, courseId) {
     if (accountTool) {
       return accountTool.id;
     }
-  } catch {
-    // Account-level access may not be available
+  } catch (err) {
+    console.log('⚠️ Account-level tools check failed:', err.message);
   }
 
-  throw new Error('LTI tool not found. Please install the TLEF-CREATE LTI tool in Canvas first (Settings → Apps → +App → By Client ID).');
+  // Tool not found — try to auto-install it via client_id
+  console.log('🔧 LTI tool not found, attempting auto-install via client_id...');
+  try {
+    const installed = await canvasRequest(userId, `/courses/${courseId}/external_tools`, {
+      method: 'POST',
+      body: JSON.stringify({ client_id: ltiClientId })
+    });
+    console.log('✅ LTI tool auto-installed:', installed.id, installed.name);
+    return installed.id;
+  } catch (installErr) {
+    console.log('❌ Auto-install failed:', installErr.message);
+    throw new Error('LTI tool not found. Please install the TLEF-CREATE LTI tool in Canvas first (Settings → Apps → +App → By Client ID).');
+  }
 }
 
 /**
