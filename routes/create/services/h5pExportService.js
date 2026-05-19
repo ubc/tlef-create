@@ -1671,7 +1671,7 @@ export function convertQuestionToH5P(question, quiz) {
       }
       (page.fields || []).forEach(field => {
         elementList.push({
-          "params": { "inputLabel": escapeHtml(field.label || ''), "inputPlaceholder": "Write here...", "requiredField": false },
+          "params": { "taskDescription": escapeHtml(field.label || ''), "placeholderText": "Write here...", "requiredField": false, "inputFieldSize": 3 },
           "library": "H5P.TextInputField 1.2",
           "subContentId": id(),
           "metadata": { "contentType": "Text Input Field", "license": "U", "title": escapeHtml(field.label || 'Field') }
@@ -1687,7 +1687,15 @@ export function convertQuestionToH5P(question, quiz) {
     });
 
     return {
-      "params": { "pagesList": pagesList },
+      "params": {
+        "pagesList": pagesList,
+        "taskDescription": escapeHtml(title),
+        "i10n": {
+          "previousLabel": "Previous",
+          "nextLabel": "Next",
+          "closeLabel": "Close"
+        }
+      },
       "library": "H5P.DocumentationTool 1.8",
       "subContentId": crypto.randomBytes(16).toString('hex'),
       "metadata": { "contentType": "Documentation Tool", "license": "U", "title": escapeHtml(title) }

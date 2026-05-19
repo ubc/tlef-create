@@ -36,6 +36,12 @@ const LIBRARY_REGISTRY = {
   'H5P.BranchingScenario': { majorVersion: 1, minorVersion: 10, dirName: 'H5P.BranchingScenario-1.10' },
   'H5P.BranchingQuestion': { majorVersion: 1, minorVersion: 0, dirName: 'H5P.BranchingQuestion-1.0' },
   'H5P.DocumentationTool': { majorVersion: 1, minorVersion: 8, dirName: 'H5P.DocumentationTool-1.8' },
+  'H5P.StandardPage':      { majorVersion: 1, minorVersion: 5, dirName: 'H5P.StandardPage-1.5' },
+  'H5P.GoalsPage':         { majorVersion: 1, minorVersion: 5, dirName: 'H5P.GoalsPage-1.5' },
+  'H5P.GoalsAssessmentPage': { majorVersion: 1, minorVersion: 4, dirName: 'H5P.GoalsAssessmentPage-1.4' },
+  'H5P.DocumentExportPage': { majorVersion: 1, minorVersion: 5, dirName: 'H5P.DocumentExportPage-1.5' },
+  'H5P.TextInputField':    { majorVersion: 1, minorVersion: 2, dirName: 'H5P.TextInputField-1.2' },
+  'H5P.Text':              { majorVersion: 1, minorVersion: 1, dirName: 'H5P.Text-1.1' },
   'H5P.Image':          { majorVersion: 1, minorVersion: 1, dirName: 'H5P.Image-1.1' },
   'Drop':               { majorVersion: 1, minorVersion: 0, dirName: 'Drop-1.0' },
   'Tether':             { majorVersion: 1, minorVersion: 0, dirName: 'Tether-1.0' },
@@ -142,6 +148,13 @@ export function getNeededLibraries(questionTypes, flags = {}) {
   }
   if (questionTypes.has('documentation-tool')) {
     needed.add('H5P.DocumentationTool');
+    needed.add('H5P.StandardPage');
+    needed.add('H5P.GoalsPage');
+    needed.add('H5P.GoalsAssessmentPage');
+    needed.add('H5P.DocumentExportPage');
+    needed.add('H5P.TextInputField');
+    needed.add('H5P.Text');
+    needed.add('H5P.Components');
   }
 
   return needed;

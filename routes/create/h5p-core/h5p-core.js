@@ -274,12 +274,11 @@ H5P.XAPIEvent.prototype.getVerb = function (full) {
 };
 
 H5P.XAPIEvent.prototype.setObject = function (instance) {
-  if (instance && instance.contentId) {
-    this.data.statement.object = {
-      id: 'h5p-content-' + instance.contentId,
-      objectType: 'Activity'
-    };
-  }
+  this.data.statement.object = {
+    id: instance && instance.contentId ? 'h5p-content-' + instance.contentId : 'h5p-content-preview',
+    objectType: 'Activity',
+    definition: { extensions: {} }
+  };
 };
 
 H5P.XAPIEvent.prototype.setContext = function (instance) {

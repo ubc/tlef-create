@@ -31,13 +31,7 @@
       "path": "documentation-tool.js"
     }
   ],
-  "editorDependencies": [
-    {
-      "machineName": "H5PEditor.VerticalTabs",
-      "majorVersion": 1,
-      "minorVersion": 3
-    }
-  ],
+  "editorDependencies": [],
   "preloadedDependencies": [
     {
       "machineName": "FontAwesome",
@@ -48,6 +42,31 @@
       "machineName": "H5P.JoubelUI",
       "majorVersion": 1,
       "minorVersion": 3
+    },
+    {
+      "machineName": "H5P.StandardPage",
+      "majorVersion": 1,
+      "minorVersion": 5
+    },
+    {
+      "machineName": "H5P.GoalsPage",
+      "majorVersion": 1,
+      "minorVersion": 5
+    },
+    {
+      "machineName": "H5P.GoalsAssessmentPage",
+      "majorVersion": 1,
+      "minorVersion": 4
+    },
+    {
+      "machineName": "H5P.DocumentExportPage",
+      "majorVersion": 1,
+      "minorVersion": 5
+    },
+    {
+      "machineName": "H5P.TextInputField",
+      "majorVersion": 1,
+      "minorVersion": 2
     }
   ]
 }

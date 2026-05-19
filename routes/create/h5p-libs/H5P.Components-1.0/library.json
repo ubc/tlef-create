@@ -10,7 +10,7 @@
     "machineName": "H5P.Components",
     "coreApi": {
         "majorVersion": 1,
-        "minorVersion": 28
+        "minorVersion": 27
     },
     "preloadedJs": [
         {

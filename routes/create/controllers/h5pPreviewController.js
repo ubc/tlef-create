@@ -230,6 +230,50 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(quiz.name || 'Quiz Preview')}</title>
   <style>
+    /* H5P Components theme variables — required by H5P.Components button/navigation CSS */
+    :root {
+      --h5p-theme-main-cta-base: #2374e3;
+      --h5p-theme-main-cta-dark: #1a5bbf;
+      --h5p-theme-main-cta-light: #5a9af0;
+      --h5p-theme-secondary-cta-base: #4a4a4a;
+      --h5p-theme-secondary-cta-dark: #2a2a2a;
+      --h5p-theme-secondary-cta-light: #6a6a6a;
+      --h5p-theme-contrast-cta: #ffffff;
+      --h5p-theme-contrast-cta-light: #f0f4ff;
+      --h5p-theme-contrast-cta-white: #ffffff;
+      --h5p-theme-secondary-contrast-cta: #ffffff;
+      --h5p-theme-secondary-contrast-cta-hover: #f5f5f5;
+      --h5p-theme-alternative-base: #ffffff;
+      --h5p-theme-alternative-dark: #f3f4f6;
+      --h5p-theme-alternative-darker: #e5e7eb;
+      --h5p-theme-alternative-light: #f9fafb;
+      --h5p-theme-ui-base: #f9fafb;
+      --h5p-theme-text-primary: #111827;
+      --h5p-theme-text-secondary: #374151;
+      --h5p-theme-text-third: #6b7280;
+      --h5p-theme-stroke-1: #e5e7eb;
+      --h5p-theme-font-name: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --h5p-theme-font-size-s: 12px;
+      --h5p-theme-font-size-m: 16px;
+      --h5p-theme-font-size-l: 20px;
+      --h5p-theme-font-size-xl: 24px;
+      --h5p-theme-font-size-xxl: 32px;
+      --h5p-theme-spacing-xxs: 4px;
+      --h5p-theme-spacing-xs: 8px;
+      --h5p-theme-spacing-s: 12px;
+      --h5p-theme-spacing-m: 16px;
+      --h5p-theme-spacing-l: 24px;
+      --h5p-theme-border-radius-small: 4px;
+      --h5p-theme-border-radius-medium: 6px;
+      --h5p-theme-border-radius-large: 12px;
+      --h5p-theme-feedback-correct-main: #166534;
+      --h5p-theme-feedback-correct-secondary: #dcfce7;
+      --h5p-theme-feedback-correct-third: #86efac;
+      --h5p-theme-feedback-incorrect-main: #991b1b;
+      --h5p-theme-feedback-incorrect-secondary: #fee2e2;
+      --h5p-theme-feedback-incorrect-third: #fca5a5;
+    }
+
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 16px;
@@ -268,6 +312,23 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
     .h5p-content { max-width: none; }
     .h5p-question-buttons { margin-top: 1em; }
     .h5p-joubelui-button { cursor: pointer; }
+
+    /* documentation-tool.css resets all buttons inside main-content with
+       background:none/border:0/padding:0 — override for H5P.Components buttons */
+    .h5p-documentation-tool-main-content .h5p-theme-button {
+      background: var(--h5p-theme-main-cta-base) !important;
+      border: 3px solid var(--h5p-theme-main-cta-base) !important;
+      padding: var(--h5p-theme-spacing-xs) var(--h5p-theme-spacing-s) !important;
+      font-size: var(--h5p-theme-font-size-m) !important;
+    }
+    .h5p-documentation-tool-main-content .h5p-theme-primary-cta {
+      color: var(--h5p-theme-contrast-cta) !important;
+    }
+    .h5p-documentation-tool-main-content .h5p-theme-nav-button {
+      background: transparent !important;
+      border: none !important;
+      color: var(--h5p-theme-text-secondary) !important;
+    }
 
     /* Constrain ArithmeticQuiz so it doesn't overflow its container */
     .question-block:has(.h5p-baq) .h5p-question-container {
@@ -368,13 +429,53 @@ router.get('/:id/render', asyncHandler(async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(h5pJson.title || 'H5P Preview')}</title>
   <style>
+    :root {
+      --h5p-theme-main-cta-base: #2374e3;
+      --h5p-theme-main-cta-dark: #1a5bbf;
+      --h5p-theme-main-cta-light: #5a9af0;
+      --h5p-theme-secondary-cta-base: #4a4a4a;
+      --h5p-theme-secondary-cta-dark: #2a2a2a;
+      --h5p-theme-secondary-cta-light: #6a6a6a;
+      --h5p-theme-contrast-cta: #ffffff;
+      --h5p-theme-contrast-cta-light: #f0f4ff;
+      --h5p-theme-contrast-cta-white: #ffffff;
+      --h5p-theme-secondary-contrast-cta: #ffffff;
+      --h5p-theme-secondary-contrast-cta-hover: #f5f5f5;
+      --h5p-theme-alternative-base: #ffffff;
+      --h5p-theme-alternative-dark: #f3f4f6;
+      --h5p-theme-alternative-darker: #e5e7eb;
+      --h5p-theme-alternative-light: #f9fafb;
+      --h5p-theme-ui-base: #f9fafb;
+      --h5p-theme-text-primary: #111827;
+      --h5p-theme-text-secondary: #374151;
+      --h5p-theme-text-third: #6b7280;
+      --h5p-theme-stroke-1: #e5e7eb;
+      --h5p-theme-font-name: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --h5p-theme-font-size-s: 12px;
+      --h5p-theme-font-size-m: 16px;
+      --h5p-theme-font-size-l: 20px;
+      --h5p-theme-font-size-xl: 24px;
+      --h5p-theme-font-size-xxl: 32px;
+      --h5p-theme-spacing-xxs: 4px;
+      --h5p-theme-spacing-xs: 8px;
+      --h5p-theme-spacing-s: 12px;
+      --h5p-theme-spacing-m: 16px;
+      --h5p-theme-spacing-l: 24px;
+      --h5p-theme-border-radius-small: 4px;
+      --h5p-theme-border-radius-medium: 6px;
+      --h5p-theme-border-radius-large: 12px;
+      --h5p-theme-feedback-correct-main: #166534;
+      --h5p-theme-feedback-correct-secondary: #dcfce7;
+      --h5p-theme-feedback-correct-third: #86efac;
+      --h5p-theme-feedback-incorrect-main: #991b1b;
+      --h5p-theme-feedback-incorrect-secondary: #fee2e2;
+      --h5p-theme-feedback-incorrect-third: #fca5a5;
+    }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; }
     .h5p-content { max-width: 960px; margin: 0 auto; }
     .h5p-question-content { font-size: 16px; line-height: 1.5; }
     .h5p-question-introduction { margin-bottom: 1em; }
-
-    /* Ensure buttons are visible */
     .h5p-question-buttons { margin-top: 1em; }
     .h5p-joubelui-button { cursor: pointer; }
   </style>
