@@ -33,7 +33,8 @@ const LIBRARY_REGISTRY = {
   'H5P.Components':     { majorVersion: 1, minorVersion: 0, dirName: 'H5P.Components-1.0' },
   'H5P.Dictation':      { majorVersion: 1, minorVersion: 4, dirName: 'H5P.Dictation-1.4' },
   'H5P.ArithmeticQuiz': { majorVersion: 1, minorVersion: 1, dirName: 'H5P.ArithmeticQuiz-1.1' },
-  'H5P.BranchingScenario': { majorVersion: 1, minorVersion: 9, dirName: 'H5P.BranchingScenario-1.9' },
+  'H5P.BranchingScenario': { majorVersion: 1, minorVersion: 10, dirName: 'H5P.BranchingScenario-1.10' },
+  'H5P.BranchingQuestion': { majorVersion: 1, minorVersion: 0, dirName: 'H5P.BranchingQuestion-1.0' },
   'H5P.Image':          { majorVersion: 1, minorVersion: 1, dirName: 'H5P.Image-1.1' },
   'Drop':               { majorVersion: 1, minorVersion: 0, dirName: 'Drop-1.0' },
   'Tether':             { majorVersion: 1, minorVersion: 0, dirName: 'Tether-1.0' },
@@ -135,6 +136,8 @@ export function getNeededLibraries(questionTypes, flags = {}) {
   }
   if (questionTypes.has('branching-scenario')) {
     needed.add('H5P.BranchingScenario');
+    needed.add('H5P.BranchingQuestion');
+    needed.add('H5P.AdvancedText');
   }
 
   return needed;

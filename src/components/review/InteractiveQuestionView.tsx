@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ExtendedQuestion } from './reviewTypes';
 import { LearningObjectiveData } from '../generation/generationTypes';
+import BranchingScenarioTreeView from './BranchingScenarioTreeView';
 import '../../styles/components/InteractiveQuestions.css';
 
 interface InteractiveQuestionViewProps {
@@ -813,12 +814,17 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
 
               {question.type === 'branching-scenario' && (
                 <div className="branching-scenario-question">
-                  <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
-                    <p style={{ fontSize: '1.1em' }}>Branching Scenario</p>
-                    <p style={{ color: '#6b7280' }}>
-                      This is an interactive branching experience. Preview available in H5P export.
-                    </p>
-                  </div>
+                  {question.content?.nodes?.length > 0 ? (
+                    <BranchingScenarioTreeView
+                      introText={question.content.introText || 'Introduction'}
+                      nodes={question.content.nodes}
+                    />
+                  ) : (
+                    <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+                      <p style={{ fontSize: '1.1em' }}>Branching Scenario</p>
+                      <p style={{ color: '#6b7280' }}>No structure data available. Try regenerating.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -136,7 +136,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // This produces files identical to official H5P exports, maximizing compatibility.
     const uniqueNonFlashcardTypes = new Set(nonFlashcardQuestions.map(q => q.type));
     // Types that should be exported standalone (without Column wrapper)
-    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword']);
+    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword', 'branching-scenario']);
     const singleType = uniqueNonFlashcardTypes.size === 1 ? [...uniqueNonFlashcardTypes][0] : null;
     const isSingleType = !hasMixedContent && singleType && standaloneTypes.has(singleType) && flashcardQuestions.length === 0;
 
@@ -1539,16 +1539,91 @@ export function convertQuestionToH5P(question, quiz) {
       }
     };
   } else if (question.type === 'branching-scenario') {
-    // Branching scenario is a container type — pass through content
-    return {
-      "params": question.content || {},
-      "library": "H5P.BranchingScenario 1.9",
-      "subContentId": crypto.randomBytes(16).toString('hex'),
-      "metadata": {
-        "contentType": "Branching Scenario",
-        "license": "U",
-        "title": "Branching Scenario"
+    const introText = question.content?.introText || 'Introduction';
+
+    // Sort by node.index so h5pContent[i] matches nextContentId references
+    const nodes = (question.content?.nodes || [])
+      .slice()
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+
+    const h5pContent = nodes.map(node => {
+      // Only node at index 0 is the intro text — never trust question===null for others
+      if (node.index === 0) {
+        const nextId = 1;
+        return {
+          "type": {
+            "library": "H5P.AdvancedText 1.1",
+            "params": { "text": `<p>${escapeHtml(introText)}</p>` },
+            "subContentId": crypto.randomBytes(16).toString('hex'),
+            "metadata": { "contentType": "Text", "license": "U", "title": "Introduction" }
+          },
+          "showContentTitle": false,
+          "proceedButtonText": "Proceed",
+          "forceContentFinished": "useBehavioural",
+          "feedback": { "title": "", "subtitle": "" },
+          "contentBehaviour": "useBehavioural",
+          "nextContentId": nextId
+        };
       }
+
+      // Branching Question node
+      let alternatives = (node.alternatives || []).map(alt => ({
+        "text": alt.text || '',
+        "nextContentId": alt.nextContentId ?? -1,
+        "feedback": {
+          "title": alt.feedback ? `<p>${escapeHtml(alt.feedback)}</p>` : '',
+          "subtitle": ""
+        }
+      }));
+
+      // If the LLM left alternatives empty, add a fallback "End" option so the user isn't stuck
+      if (alternatives.length === 0) {
+        alternatives = [{ "text": "Continue", "nextContentId": -1, "feedback": { "title": "", "subtitle": "" } }];
+      }
+
+      const questionText = node.question || 'What would you do next?';
+
+      return {
+        "type": {
+          "library": "H5P.BranchingQuestion 1.0",
+          "params": {
+            "branchingQuestion": {
+              "question": `<p>${escapeHtml(questionText)}</p>`,
+              "alternatives": alternatives
+            }
+          },
+          "subContentId": crypto.randomBytes(16).toString('hex'),
+          "metadata": { "contentType": "Branching Question", "license": "U", "title": "Branching Question" }
+        },
+        "showContentTitle": false,
+        "proceedButtonText": "Proceed",
+        "forceContentFinished": "useBehavioural",
+        "feedback": { "title": "", "subtitle": "" },
+        "contentBehaviour": "useBehavioural"
+      };
+    });
+
+    return {
+      "params": {
+        "branchingScenario": {
+          "content": h5pContent,
+          "endScreens": [{ "endScreenTitle": "", "endScreenSubtitle": "", "contentId": -1, "endScreenScore": 0 }],
+          "scoringOptionGroup": { "scoringOption": "no-score", "includeInteractionsScores": true },
+          "startScreen": { "startScreenTitle": "", "startScreenSubtitle": "" },
+          "behaviour": { "enableBackwardsNavigation": false, "forceContentFinished": false, "randomizeBranchingQuestions": false },
+          "l10n": {
+            "startScreenButtonText": "Start the course",
+            "endScreenButtonText": "Restart the course",
+            "backButtonText": "Back",
+            "disableProceedButtonText": "Require to complete the current module",
+            "replayButtonText": "Replay the video",
+            "scoreText": "Your score:"
+          }
+        }
+      },
+      "library": "H5P.BranchingScenario 1.10",
+      "subContentId": crypto.randomBytes(16).toString('hex'),
+      "metadata": { "contentType": "Branching Scenario", "license": "U", "title": "Branching Scenario" }
     };
   } else if (question.type === 'summary') {
     const panels = [];

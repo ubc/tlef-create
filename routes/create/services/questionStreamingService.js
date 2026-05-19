@@ -81,7 +81,9 @@ class QuestionStreamingService {
         difficulty: questionConfig.difficulty || 'moderate',
         courseContext: questionConfig.courseContext || '',
         previousQuestions: questionConfig.previousQuestions || [],
-        customPrompt: questionConfig.customPrompt
+        customPrompt: questionConfig.customPrompt,
+        branchingLayers: questionConfig.branchingLayers ?? 2,
+        branchingChoices: questionConfig.branchingChoices ?? 2
       }, onStreamChunk);
       
       console.log(`[${questionId}] LLM returned, success=${result.success}`);

@@ -131,7 +131,11 @@ const questionSchema = new mongoose.Schema({
     // For Arithmetic Quiz
     quizType: { type: String },
     maxNumber: { type: Number },
-    numQuestions: { type: Number }
+    numQuestions: { type: Number },
+
+    // For Branching Scenario
+    introText: { type: String },
+    nodes: [{ type: mongoose.Schema.Types.Mixed }]
   },
   
   // Simple correct answer for basic question types

@@ -165,7 +165,9 @@ class QuizLLMService {
       courseContext = '',
       previousQuestions = [],
       customPrompt = null,
-      userId = null
+      userId = null,
+      branchingLayers = 2,
+      branchingChoices = 2
     } = questionConfig;
 
     console.log(`🎯 Generating ${questionType} question with streaming...`);
@@ -182,14 +184,16 @@ class QuizLLMService {
 
     try {
       // Build expert-level prompt
-      const prompt = this.buildExpertPrompt(
-        learningObjective, 
-        questionType, 
-        relevantContent, 
+      const prompt = await this.buildExpertPrompt(
+        learningObjective,
+        questionType,
+        relevantContent,
         difficulty,
         courseContext,
         previousQuestions,
-        customPrompt
+        customPrompt,
+        branchingLayers,
+        branchingChoices
       );
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
@@ -197,7 +201,7 @@ class QuizLLMService {
       // Call LLM with streaming support
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
-      const maxTokens = 2000;
+      const maxTokens = questionType === 'branching-scenario' ? 4000 : 2000;
       
       let accumulatedContent = '';
       let responseModel = model;
@@ -428,7 +432,9 @@ class QuizLLMService {
       courseContext = '',
       previousQuestions = [],
       customPrompt = null,
-      userId = null
+      userId = null,
+      branchingLayers = 2,
+      branchingChoices = 2
     } = questionConfig;
 
     console.log(`🤖 Generating ${questionType} question with LLM...`);
@@ -445,14 +451,16 @@ class QuizLLMService {
 
     try {
       // Build expert-level prompt
-      const prompt = this.buildExpertPrompt(
+      const prompt = await this.buildExpertPrompt(
         learningObjective,
         questionType,
         relevantContent,
         difficulty,
         courseContext,
         previousQuestions,
-        customPrompt
+        customPrompt,
+        branchingLayers,
+        branchingChoices
       );
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
@@ -460,7 +468,7 @@ class QuizLLMService {
       // Call LLM with default settings from .env
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
-      const maxTokens = 2000;
+      const maxTokens = questionType === 'branching-scenario' ? 4000 : 2000;
 
       const options = this.getSendMessageOptions(temperature, maxTokens);
       const response = await llm.sendMessage(prompt, options);
@@ -521,7 +529,7 @@ class QuizLLMService {
   /**
    * Build expert-level prompt for question generation
    */
-  buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt) {
+  async buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt, branchingLayers = 2, branchingChoices = 2) {
     // Handle different relevantContent formats
     const contentArray = Array.isArray(relevantContent) 
       ? relevantContent 
@@ -564,8 +572,13 @@ ${customPrompt ? 'IMPORTANT: The user requirements above are MANDATORY and must 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (all strings must be on single lines - no line breaks within strings):`;
 
+    if (questionType === 'branching-scenario') {
+      const { buildBranchingPrompt } = await import('../utils/branchingScenarioBuilder.js');
+      return buildBranchingPrompt(branchingLayers, branchingChoices, learningObjective);
+    }
+
     const formatInstructions = this.getFormatInstructions(questionType);
-    
+
     return basePrompt + '\n' + formatInstructions;
   }
 
@@ -992,6 +1005,44 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
       }
       
       // Validate required fields - correctAnswer is optional for discussion and summary questions
+      // Branching scenario has its own structure — skip standard field validation
+      if (questionType === 'branching-scenario') {
+        if (!parsed.introText || !Array.isArray(parsed.nodes)) {
+          throw new Error('Branching scenario response missing introText or nodes array');
+        }
+
+        // Post-process: remove invalid leaf nodes the LLM sometimes generates.
+        // A node is considered invalid if it has no question (and is not the intro).
+        // Any alternative pointing to such a node — or back to the intro (index 0) —
+        // is redirected to -1 (end screen) so the scenario terminates properly.
+        const invalidIndices = new Set(
+          parsed.nodes
+            .filter(n => n.index !== 0 && !n.question)
+            .map(n => n.index)
+        );
+
+        const cleanedNodes = parsed.nodes
+          .filter(n => !invalidIndices.has(n.index))
+          .map(n => ({
+            ...n,
+            alternatives: (n.alternatives || []).map(alt =>
+              invalidIndices.has(alt.nextContentId) || alt.nextContentId === 0
+                ? { ...alt, nextContentId: -1 }
+                : alt
+            )
+          }));
+
+        return {
+          questionText: 'Branching Scenario',
+          content: {
+            introText: parsed.introText,
+            nodes: cleanedNodes
+          },
+          correctAnswer: null,
+          explanation: null
+        };
+      }
+
       const requiresCorrectAnswer = !['discussion', 'summary'].includes(questionType);
       
       // Special handling for Cloze questions - accept answerKey as explanation

@@ -1,6 +1,7 @@
 import { Edit, Trash2, Plus, EyeOff, Save, RotateCcw } from 'lucide-react';
 import { ExtendedQuestion } from './reviewTypes';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
+import BranchingScenarioTreeView from './BranchingScenarioTreeView';
 
 interface QuestionCardProps {
   question: ExtendedQuestion;
@@ -391,6 +392,19 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
             </div>
           </div>
           {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
+        </div>
+      ) : question.type === 'branching-scenario' ? (
+        <div className="question-display">
+          {question.content?.nodes?.length > 0 ? (
+            <BranchingScenarioTreeView
+              introText={question.content.introText || 'Introduction'}
+              nodes={question.content.nodes}
+            />
+          ) : (
+            <div style={{ color: '#6b7280', fontSize: 13, padding: '8px 0' }}>
+              No branching structure yet. Try regenerating.
+            </div>
+          )}
         </div>
       ) : question.type === 'flashcard' ? (
         <div className="question-display">

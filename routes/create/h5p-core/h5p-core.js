@@ -215,6 +215,9 @@ H5P.Event = function (type, data, extras) {
     var val = this.data.statement;
     for (var i = 0; i < keys.length; i++) {
       if (val === undefined || val === null) return null;
+      if (val[keys[i]] === undefined) {
+        val[keys[i]] = {};
+      }
       val = val[keys[i]];
     }
     return val;

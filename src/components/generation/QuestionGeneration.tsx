@@ -153,7 +153,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             id: crypto.randomUUID(),
             type: item.type,
             learningObjectiveId: item.learningObjective,
-            count: item.count
+            count: item.count,
+            ...(item.type === 'branching-scenario' && {
+              branchingLayers: item.branchingLayers ?? 2,
+              branchingChoices: item.branchingChoices ?? 2
+            })
           }));
           setPlanItems(items);
         } else {
@@ -234,7 +238,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           planItems: planItems.map(item => ({
             type: item.type,
             learningObjective: item.learningObjectiveId,
-            count: item.count
+            count: item.count,
+            ...(item.type === 'branching-scenario' && {
+              branchingLayers: item.branchingLayers ?? 2,
+              branchingChoices: item.branchingChoices ?? 2
+            })
           })),
           aiConfig: cleanedAiConfig
         }
@@ -309,7 +317,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         questionType: item.type,
         difficulty: 'moderate',
         learningObjective: lo?.text || '',
-        learningObjectiveId: item.learningObjectiveId
+        learningObjectiveId: item.learningObjectiveId,
+        ...(item.type === 'branching-scenario' && {
+          branchingLayers: item.branchingLayers ?? 2,
+          branchingChoices: item.branchingChoices ?? 2
+        })
       }));
     });
 

@@ -63,6 +63,19 @@ export default function PlanEditor({
     );
   };
 
+  const handleTypeChange = (id: string, newType: string) => {
+    const updates: Partial<PlanItem> = { type: newType };
+    if (newType === 'branching-scenario') {
+      updates.count = 1;
+      updates.branchingLayers = 2;
+      updates.branchingChoices = 2;
+    } else {
+      updates.branchingLayers = undefined;
+      updates.branchingChoices = undefined;
+    }
+    handleUpdateItem(id, updates);
+  };
+
   const handleCountChange = (id: string, delta: number) => {
     onPlanItemsChange(
       planItems.map(item => {
@@ -134,7 +147,7 @@ export default function PlanEditor({
                 <div className="plan-col-type">
                   <select
                     value={item.type}
-                    onChange={(e) => handleUpdateItem(item.id, { type: e.target.value })}
+                    onChange={(e) => handleTypeChange(item.id, e.target.value)}
                     disabled={readOnly}
                     className="plan-select"
                   >
@@ -163,39 +176,68 @@ export default function PlanEditor({
                 </div>
 
                 <div className="plan-col-count">
-                  <div className="count-stepper">
-                    <button
-                      onClick={() => handleCountChange(item.id, -1)}
-                      disabled={readOnly || item.count <= 1 || (planItems.length === 1 && item.count <= 1)}
-                      className="count-btn"
-                      aria-label="Decrease count"
-                      title={planItems.length === 1 && item.count <= 1 ? "Cannot reduce below 1 when only one item" : "Decrease count"}
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.count}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        if (!isNaN(val) && val >= 1) {
-                          handleUpdateItem(item.id, { count: val });
-                        }
-                      }}
-                      disabled={readOnly}
-                      className="count-input"
-                      style={{ width: '50px', textAlign: 'center', border: 'none', background: 'transparent' }}
-                    />
-                    <button
-                      onClick={() => handleCountChange(item.id, 1)}
-                      disabled={readOnly}
-                      className="count-btn"
-                      aria-label="Increase count"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
+                  {item.type === 'branching-scenario' ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Layers</span>
+                        <select
+                          className="plan-select"
+                          style={{ width: 56 }}
+                          value={item.branchingLayers ?? 2}
+                          onChange={(e) => handleUpdateItem(item.id, { branchingLayers: Number(e.target.value) })}
+                          disabled={readOnly}
+                        >
+                          {[2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Choices</span>
+                        <select
+                          className="plan-select"
+                          style={{ width: 56 }}
+                          value={item.branchingChoices ?? 2}
+                          onChange={(e) => handleUpdateItem(item.id, { branchingChoices: Number(e.target.value) })}
+                          disabled={readOnly}
+                        >
+                          {[2, 3].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="count-stepper">
+                      <button
+                        onClick={() => handleCountChange(item.id, -1)}
+                        disabled={readOnly || item.count <= 1 || (planItems.length === 1 && item.count <= 1)}
+                        className="count-btn"
+                        aria-label="Decrease count"
+                        title={planItems.length === 1 && item.count <= 1 ? "Cannot reduce below 1 when only one item" : "Decrease count"}
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.count}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (!isNaN(val) && val >= 1) {
+                            handleUpdateItem(item.id, { count: val });
+                          }
+                        }}
+                        disabled={readOnly}
+                        className="count-input"
+                        style={{ width: '50px', textAlign: 'center', border: 'none', background: 'transparent' }}
+                      />
+                      <button
+                        onClick={() => handleCountChange(item.id, 1)}
+                        disabled={readOnly}
+                        className="count-btn"
+                        aria-label="Increase count"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="plan-col-actions">

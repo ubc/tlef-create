@@ -21,6 +21,8 @@ export interface PlanItem {
   type: string;                  // question type
   learningObjectiveId: string;   // LO._id
   count: number;
+  branchingLayers?: number;      // branching-scenario only, default 2
+  branchingChoices?: number;     // branching-scenario only, default 2
 }
 
 // NEW: AI configuration
