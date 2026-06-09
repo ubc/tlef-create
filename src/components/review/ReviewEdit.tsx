@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Edit, Plus, Play, Download, Upload } from 'lucide-react';
+import { Edit, Plus, Play, Download, Upload, BookMarked } from 'lucide-react';
 import { questionsApi, Question, exportApi } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
@@ -9,6 +9,7 @@ import { RootState, AppDispatch } from '../../store';
 import { fetchQuestions, deleteQuestion, updateQuestion as updateQuestionThunk } from '../../store/slices/questionSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import RegeneratePromptModal from '../RegeneratePromptModal';
+import ChapterEditorPanel from './ChapterEditorPanel';
 import PdfExportModal from '../PdfExportModal';
 import CanvasExportModal from './CanvasExportModal';
 import ManualQuestionForm from './ManualQuestionForm';
@@ -35,6 +36,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLO, setFilterByLO] = useState<number | null>(null);
+  const [containerMode, setContainerMode] = useState<'column' | 'question-set' | 'interactive-book'>('column');
+  const [showChapterEditor, setShowChapterEditor] = useState(false);
+
+  // Sync containerMode from Redux once currentQuiz loads
+  useEffect(() => {
+    if (currentQuiz?.containerMode) {
+      setContainerMode(currentQuiz.containerMode as 'column' | 'question-set' | 'interactive-book');
+    }
+  }, [currentQuiz?.containerMode]);
 
   const handlers = useQuestionEditHandlers(questions, setQuestions);
 
@@ -186,6 +196,16 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
+  const handleContainerModeChange = async (mode: 'column' | 'question-set' | 'interactive-book') => {
+    setContainerMode(mode);
+    try {
+      const { quizApi } = await import('../../services/api');
+      await quizApi.updateQuiz(quizId, { containerMode: mode });
+    } catch (err) {
+      console.error('Failed to save container mode:', err);
+    }
+  };
+
   const handleH5PExport = async () => {
     if (questions.length === 0) {
       showNotification('warning', 'No Questions', 'Add some questions before exporting to H5P');
@@ -280,6 +300,29 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </p>
             </div>
             <div className="review-actions">
+              {/* Format selector */}
+              <div className="format-selector">
+                <select
+                  className="format-select"
+                  value={containerMode}
+                  onChange={e => handleContainerModeChange(e.target.value as 'column' | 'question-set' | 'interactive-book')}
+                  title="H5P output format"
+                >
+                  <option value="column">Column</option>
+                  <option value="question-set">Question Set</option>
+                  <option value="interactive-book">Interactive Book</option>
+                </select>
+                {containerMode === 'interactive-book' && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowChapterEditor(true)}
+                    title="Edit chapters"
+                  >
+                    <BookMarked size={14} />
+                  </button>
+                )}
+              </div>
+
               <button
                 className={`btn ${viewMode === 'interact' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setViewMode(viewMode === 'edit' ? 'interact' : 'edit')}
@@ -333,8 +376,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           ) : viewMode === 'interact' ? (
             <div className="questions-interactive">
               <iframe
-                key={`h5p-preview-${quizId}-${filterByLO ?? 'all'}`}
-                src={`/api/create/h5p-preview/quiz/${quizId}/render${filterByLO !== null ? `?lo=${filterByLO}` : ''}`}
+                key={`h5p-preview-${quizId}-${filterByLO ?? 'all'}-${containerMode}`}
+                src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${containerMode}${filterByLO !== null ? `&lo=${filterByLO}` : ''}`}
                 style={{
                   width: '100%',
                   height: `${Math.max(800, filteredQuestions.length * 350)}px`,
@@ -382,9 +425,17 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         {filteredQuestions.length > 0 && (
           <div className="export-section">
             <div className="export-header">
-              <h4>Export Quiz</h4>
-              <p>Export your completed quiz for use in other platforms</p>
+              <h4>Export Learning Object</h4>
+              <p>Export your completed learning object for use in other platforms</p>
             </div>
+
+            {/* Standalone-type warning */}
+            {containerMode !== 'column' && questions.some(q => q.type === 'branching-scenario' || q.type === 'documentation-tool') && (
+              <div className="standalone-warning">
+                <strong>Note:</strong> Branching Scenario and Documentation Tool questions cannot be embedded in {containerMode === 'question-set' ? 'Question Set' : 'Interactive Book'} format and will be skipped in this export.
+              </div>
+            )}
+
             <div className="export-actions">
               <button className="btn btn-primary" onClick={handleH5PExport} disabled={exportLoading}>
                 <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to H5P'}
@@ -431,9 +482,24 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         isOpen={canvasExportModalOpen}
         onClose={() => setCanvasExportModalOpen(false)}
         quizId={quizId}
-        quizName={currentQuiz?.name || 'Quiz'}
+        quizName={currentQuiz?.name || 'Learning Object'}
         showNotification={showNotification}
       />
+
+      {showChapterEditor && (
+        <ChapterEditorPanel
+          quizId={quizId}
+          questions={questions}
+          learningObjectives={learningObjectives}
+          initialChapters={currentQuiz?.chapters || []}
+          onClose={() => setShowChapterEditor(false)}
+          onSaved={(chapters) => {
+            setShowChapterEditor(false);
+            showNotification('success', 'Chapters Saved', 'Chapter structure updated successfully');
+          }}
+          showNotification={showNotification}
+        />
+      )}
     </div>
   );
 };

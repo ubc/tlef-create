@@ -403,6 +403,17 @@ H5P.trim = function (value) {
 };
 
 /**
+ * Check if a value is empty (null, undefined, empty string, empty array, empty object)
+ */
+H5P.isEmpty = function (value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+};
+
+/**
  * JSON deep clone
  */
 H5P.cloneObject = function (object, recursive) {
@@ -691,6 +702,10 @@ H5P.Thumbnail = function (source, width, height) {
 };
 
 H5P.getCopyrights = function () { return ''; };
+
+H5P.findCopyrights = function () { return null; };
+
+H5P.error = function (err) { console.error('H5P error:', err); };
 
 /**
  * Get the path to a library directory

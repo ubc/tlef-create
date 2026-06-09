@@ -10,7 +10,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import { authenticateToken } from '../middleware/auth.js';
 import Quiz from '../models/Quiz.js';
-import { convertQuestionToH5P } from '../services/h5pExportService.js';
+import { convertQuestionToH5P, generateH5PQuestionSet, buildInteractiveBookContent, STANDALONE_TYPES } from '../services/h5pExportService.js';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -114,6 +114,7 @@ router.get('/libs/*', (req, res) => {
 router.get('/quiz/:quizId/render', authenticateToken, asyncHandler(async (req, res) => {
   const { quizId } = req.params;
   const loFilter = req.query.lo || null;
+  const containerMode = req.query.containerMode || 'column';
 
   // Fetch quiz with populated questions and learning objectives
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id })
@@ -150,6 +151,111 @@ router.get('/quiz/:quizId/render', authenticateToken, asyncHandler(async (req, r
 body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#666; text-align:center; }
 </style></head><body><p>No questions to display.</p></body></html>`);
   }
+
+  // ── Container mode: Question Set or Interactive Book ────────────────────────
+  if (containerMode === 'question-set' || containerMode === 'interactive-book') {
+    const embeddable = questions.filter(q => !STANDALONE_TYPES.has(q.type));
+    const questionTypes = new Set(questions.map(q => q.type));
+    const neededLibNames = getNeededLibraries(questionTypes, { hasMixedContent: false, isFlashcardOnly: false });
+
+    let mainLibrary, contentParams, containerId;
+
+    if (containerMode === 'question-set') {
+      mainLibrary = 'H5P.QuestionSet';
+      contentParams = generateH5PQuestionSet(embeddable);
+      containerId = 'h5p-qs-container';
+      neededLibNames.add('H5P.QuestionSet');
+      neededLibNames.add('H5P.Column');
+    } else {
+      mainLibrary = 'H5P.InteractiveBook';
+      const chapters = quiz.chapters && quiz.chapters.length > 0
+        ? quiz.chapters
+        : [{ title: 'Chapter 1', questionIds: embeddable.map(q => q._id), containerType: 'column', passPercentage: 50 }];
+      contentParams = buildInteractiveBookContent(chapters, questions, quiz);
+      containerId = 'h5p-ib-container';
+      neededLibNames.add('H5P.InteractiveBook');
+      neededLibNames.add('H5P.QuestionSet');
+      neededLibNames.add('H5P.Column');
+    }
+
+    const reg = LIBRARY_REGISTRY[mainLibrary];
+    const libVersionString = reg ? `${mainLibrary} ${reg.majorVersion}.${reg.minorVersion}` : mainLibrary;
+
+    const preloadedDependencies = [];
+    for (const libName of neededLibNames) {
+      const lib = LIBRARY_REGISTRY[libName];
+      if (lib) preloadedDependencies.push({ machineName: libName, majorVersion: lib.majorVersion, minorVersion: lib.minorVersion });
+    }
+
+    const syntheticH5pJson = { title: quiz.name || 'Preview', mainLibrary, preloadedDependencies };
+    const { cssFiles, jsFiles } = await resolveLibraryDependencies(syntheticH5pJson);
+
+    const libBasePath = '/api/create/h5p-preview/libs';
+    const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${libBasePath}/${f}">`).join('\n');
+    const jsTags = jsFiles.map(f => `  <script src="${libBasePath}/${f}"></script>`).join('\n');
+
+    const h5pLibrary = {
+      library: libVersionString,
+      params: contentParams,
+      subContentId: 'preview-container',
+      metadata: { contentType: mainLibrary, license: 'U', title: quiz.name || 'Preview' }
+    };
+
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    return res.type('text/html').send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(quiz.name || 'Preview')}</title>
+  <style>
+    :root {
+      --h5p-theme-main-cta-base: #2374e3; --h5p-theme-main-cta-dark: #1a5bbf;
+      --h5p-theme-contrast-cta: #ffffff; --h5p-theme-font-size-m: 16px;
+      --h5p-theme-spacing-xs: 8px; --h5p-theme-spacing-s: 12px;
+      --h5p-theme-spacing-m: 16px; --h5p-theme-spacing-l: 24px;
+      --h5p-theme-text-primary: #111827; --h5p-theme-text-secondary: #6b7280;
+      --h5p-theme-background: #ffffff; --h5p-theme-border: #e5e7eb;
+      --h5p-theme-border-radius: 8px;
+    }
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; }
+    #${containerId} { width: 100%; min-height: 500px; }
+    #${containerId}.h5p-content { width: 100% !important; }
+  </style>
+${cssTags}
+</head>
+<body>
+  <div id="${containerId}" class="h5p-content"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script>
+    H5PIntegration = {
+      baseUrl: '', url: '/api/create/h5p-preview', postUserStatistics: false,
+      saveFreq: false, user: { name: 'Preview', mail: '' },
+      siteUrl: window.location.origin, l10n: { H5P: { fullscreen: 'Fullscreen', disableFullscreen: 'Disable fullscreen', download: 'Download', copyrights: 'Rights of use', embed: 'Embed', size: 'Size', showAdvanced: 'Show advanced', hideAdvanced: 'Hide advanced', advancedHelp: '', copyrightInformation: 'Rights of use', close: 'Close', title: 'Title', author: 'Author', year: 'Year', source: 'Source', license: 'License', thumbnail: 'Thumbnail', noCopyrights: 'No copyright information available for this content.', reuse: 'Reuse', reuseContent: 'Reuse Content', reuseDescription: 'Reuse the content from this H5P for free.', downloadDescription: 'Download this content as a H5P file.', copyrightsDescription: 'View copyright information for this H5P.', embedDescription: 'View the embed code for this H5P.', h5pDescription: 'Visit H5P.org to check out more cool content.', contentChanged: 'This content has changed since you last used it.', startingOver: "You'll be starting over.", by: 'by', showMore: 'Show more', showLess: 'Show less', subLevel: 'Sublevel', confirmDialogHeader: 'Confirm action', confirmDialogBody: 'Please confirm that you wish to proceed. This action is not reversible.', cancelLabel: 'Cancel', confirmLabel: 'Confirm', licenseU: 'Undisclosed', licenseCCBY: 'Attribution', licenseCCBYSA: 'Attribution-ShareAlike', licenseCCBYND: 'Attribution-NoDerivs', licenseCCBYNC: 'Attribution-NonCommercial', licenseCCBYNCSA: 'Attribution-NonCommercial-ShareAlike', licenseCCBYNCND: 'Attribution-NonCommercial-NoDerivs', licenseCC40: 'Creative Commons 4.0', licenseCC30: 'Creative Commons 3.0', licenseCC25: 'Creative Commons 2.5', licenseCC20: 'Creative Commons 2.0', licenseCC10: 'Creative Commons 1.0', licenseGPL: 'General Public License', licenseV3: 'Version 3', licenseV2: 'Version 2', licenseV1: 'Version 1', licensePD: 'Public Domain', licenseCC010: 'CC0 1.0 Universal (CC0 1.0) Public Domain Dedication', licenseCC010RegularLicense: 'CC0 1.0 Universal (CC0 1.0) Public Domain Dedication', licenseCC010Desc: 'CC0 enables scientists, educators, artists and other creators and owners of copyright- or database-protected content to waive those interests in their works and thereby place them as completely as possible in the public domain, so that others may freely build upon, enhance and reuse the works for any purposes without restriction under copyright or database law.', by: 'by', commentsForAuthor: 'Comments for the author of H5P', question: 'Question' } },
+      loadedJs: [], loadedCss: [],
+      core: { scripts: [], styles: [] },
+      contents: {}
+    };
+  </script>
+  <script src="/api/create/h5p-preview/core/h5p-core.js"></script>
+  <script>
+    H5P.jQuery = jQuery;
+    H5P.$body = jQuery('body');
+    H5P.$window = jQuery(window);
+  </script>
+${jsTags}
+  <script>
+    jQuery(document).ready(function() {
+      var library = ${JSON.stringify(h5pLibrary)};
+      var $container = jQuery('#${containerId}');
+      H5P.newRunnable(library, 'preview-container', $container, false, { metadata: library.metadata || {} });
+    });
+  </script>
+</body>
+</html>`);
+  }
+  // ── End container mode branch ────────────────────────────────────────────────
 
   // Convert each question to H5P format
   const h5pQuestions = [];

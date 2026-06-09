@@ -170,6 +170,22 @@ const quizSchema = new mongoose.Schema({
     reviewCompleted: { type: Boolean, default: false }
   },
   
+  // Container / output format
+  containerMode: {
+    type: String,
+    enum: ['column', 'question-set', 'interactive-book'],
+    default: 'column'
+  },
+
+  chapters: [{
+    title: { type: String, default: '' },
+    questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question' }],
+    containerType: { type: String, enum: ['column', 'question-set'], default: 'column' },
+    passPercentage: { type: Number, default: 50, min: 0, max: 100 },
+    disableBackwardsNavigation: { type: Boolean, default: false },
+    randomizeQuestions: { type: Boolean, default: false }
+  }],
+
   // H5P Export Information
   exports: [{
     format: { type: String, default: 'h5p' },

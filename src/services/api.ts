@@ -98,6 +98,16 @@ export interface Quiz {
     questionsGenerated: boolean;
     reviewCompleted: boolean;
   };
+  containerMode?: 'column' | 'question-set' | 'interactive-book';
+  chapters?: Array<{
+    _id?: string;
+    title: string;
+    questionIds: string[];
+    containerType: 'column' | 'question-set';
+    passPercentage: number;
+    disableBackwardsNavigation: boolean;
+    randomizeQuestions: boolean;
+  }>;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -523,7 +533,7 @@ export const quizApi = {
   },
 
   // PUT /api/create/quizzes/:id - Update quiz basic info
-  updateQuiz: async (id: string, updates: { name?: string; settings?: Partial<Quiz['settings']> }): Promise<{ quiz: Quiz }> => {
+  updateQuiz: async (id: string, updates: { name?: string; settings?: Partial<Quiz['settings']>; containerMode?: Quiz['containerMode']; chapters?: Quiz['chapters'] }): Promise<{ quiz: Quiz }> => {
     const response = await apiClient.put<{ success: boolean; data: { quiz: Quiz }; message: string }>(`/quizzes/${id}`, updates);
     return response.data;
   },

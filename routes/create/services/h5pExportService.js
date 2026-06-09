@@ -39,6 +39,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     archive.pipe(output);
 
     // Classify questions
+    const containerMode = quiz.containerMode || 'column';
     const flashcardQuestions = quiz.questions.filter(q => q.type === 'flashcard');
     const nonFlashcardQuestions = quiz.questions.filter(q => q.type !== 'flashcard');
     const hasMixedContent = flashcardQuestions.length > 0 && nonFlashcardQuestions.length > 0;
@@ -47,6 +48,16 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // Determine needed libraries
     const questionTypes = new Set(quiz.questions.map(q => q.type));
     const neededLibNames = getNeededLibraries(questionTypes, { hasMixedContent, isFlashcardOnly });
+
+    // Add container-specific libs to the seed set
+    if (containerMode === 'question-set') {
+      neededLibNames.add('H5P.QuestionSet');
+      neededLibNames.add('H5P.Column');
+    } else if (containerMode === 'interactive-book') {
+      neededLibNames.add('H5P.InteractiveBook');
+      neededLibNames.add('H5P.QuestionSet');
+      neededLibNames.add('H5P.Column');
+    }
 
     // Recursively resolve ALL transitive dependencies by reading library.json files
     const libraryPath = options.libraryPath || path.join('./routes/create/h5p-libs/');
@@ -143,7 +154,50 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     let h5pJson;
     let contentJson;
 
-    if (isSingleType) {
+    if (containerMode === 'question-set') {
+      // ── Question Set export ──────────────────────────────────────────────────
+      const embeddableQuestions = quiz.questions.filter(q => !STANDALONE_TYPES.has(q.type));
+      const standaloneQuestions = quiz.questions.filter(q => STANDALONE_TYPES.has(q.type));
+      if (standaloneQuestions.length > 0) {
+        console.warn(`[QS export] Skipping ${standaloneQuestions.length} standalone question(s) (branching-scenario, documentation-tool)`);
+      }
+      contentJson = generateH5PQuestionSet(embeddableQuestions);
+      h5pJson = {
+        title: quiz.name || 'Quiz Export',
+        language: 'en',
+        mainLibrary: 'H5P.QuestionSet',
+        embedTypes: ['iframe'],
+        license: 'U',
+        defaultLanguage: 'en',
+        preloadedDependencies
+      };
+
+    } else if (containerMode === 'interactive-book') {
+      // ── Interactive Book export ──────────────────────────────────────────────
+      const standaloneInIB = quiz.questions.filter(q => STANDALONE_TYPES.has(q.type));
+      if (standaloneInIB.length > 0) {
+        console.warn(`[IB export] ${standaloneInIB.length} standalone question(s) cannot be embedded in Interactive Book and will be skipped.`);
+      }
+
+      // Use saved chapter structure, or auto-generate one chapter with all embeddable questions
+      let chapters = quiz.chapters && quiz.chapters.length > 0 ? quiz.chapters : [];
+      if (chapters.length === 0) {
+        const allEmbeddable = quiz.questions.filter(q => !STANDALONE_TYPES.has(q.type));
+        chapters = [{ title: 'Chapter 1', questionIds: allEmbeddable.map(q => q._id), containerType: 'column', passPercentage: 50 }];
+      }
+
+      contentJson = buildInteractiveBookContent(chapters, quiz.questions, quiz);
+      h5pJson = {
+        title: quiz.name || 'Interactive Book',
+        language: 'en',
+        mainLibrary: 'H5P.InteractiveBook',
+        embedTypes: ['div'],
+        license: 'U',
+        defaultLanguage: 'en',
+        preloadedDependencies
+      };
+
+    } else if (isSingleType) {
       // Single content type — export directly without Column wrapper
       const singleQuestion = nonFlashcardQuestions[0];
       const h5pContent = convertQuestionToH5P(singleQuestion, quiz);
@@ -237,7 +291,8 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // exist on the target platform, so we don't package their directories.
     // Libraries listed in preloadedDependencies where the platform should already
     // have that exact version are also skipped.
-    const skipDirLibs = new Set(['H5P.Column', 'jQuery.ui']);
+    // In IB/QS mode, Column must be bundled since it's content-level, not platform-level
+    const skipDirLibs = new Set(containerMode === 'column' ? ['H5P.Column', 'jQuery.ui'] : ['jQuery.ui']);
     // Also skip packaging the "primary" version of Question if a secondary version exists
     // (e.g., skip Question 1.5 dir if Question 1.4 is also in allLibs as transitive dep)
     const questionVersions = [...allLibs.keys()].filter(k => k.startsWith('H5P.Question-'));
@@ -578,7 +633,7 @@ export function generateH5PQuestionSet(questions) {
         textField += `*${correctPosition}*. ${escapeHtml(item)}\\n`;
       });
 
-      const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1).join(" ");
+      const distractorNumbers = Array.from({length: items.length}, (_, i) => i + 1);
 
       h5pQuestion = {
         "params": {
@@ -1787,4 +1842,104 @@ export function convertQuestionToH5P(question, quiz) {
   }
 
   return null;
+}
+
+// Question types that cannot be embedded inside Column/QuestionSet containers
+export const STANDALONE_TYPES = new Set(['branching-scenario', 'documentation-tool']);
+
+/**
+ * Build a single Interactive Book chapter node.
+ * @param {Object} chapter - { title, questionIds, containerType, passPercentage, disableBackwardsNavigation, randomizeQuestions }
+ * @param {Object[]} questions - All question documents (will be filtered by questionIds)
+ * @param {Object} quiz - Quiz document (passed to convertQuestionToH5P)
+ * @returns {Object} IB chapter node
+ */
+export function buildIBChapter(chapter, questions, quiz) {
+  const idSet = new Set((chapter.questionIds || []).map(id => String(id)));
+  const chapterQuestions = questions.filter(q => idSet.has(String(q._id)));
+  const embeddable = chapterQuestions.filter(q => !STANDALONE_TYPES.has(q.type));
+
+  let columnContent;
+
+  if (chapter.containerType === 'question-set') {
+    const qsParams = generateH5PQuestionSet(embeddable);
+    qsParams.passPercentage = chapter.passPercentage ?? 50;
+    qsParams.disableBackwardsNavigation = chapter.disableBackwardsNavigation ?? false;
+    qsParams.randomQuestions = chapter.randomizeQuestions ?? false;
+
+    columnContent = [{
+      content: {
+        library: 'H5P.QuestionSet 1.21',
+        params: qsParams,
+        subContentId: crypto.randomBytes(16).toString('hex'),
+        metadata: { contentType: 'Question Set', license: 'U', title: chapter.title || 'Quiz' }
+      },
+      useSeparator: 'auto'
+    }];
+  } else {
+    // column mode — each question is its own item
+    columnContent = embeddable
+      .map(q => convertQuestionToH5P(q, quiz))
+      .filter(Boolean)
+      .map(h5pObj => ({ content: h5pObj, useSeparator: 'auto' }));
+  }
+
+  return {
+    library: 'H5P.Column 1.20',
+    params: { content: columnContent },
+    subContentId: crypto.randomBytes(16).toString('hex'),
+    metadata: { title: chapter.title || 'Chapter', license: 'U' }
+  };
+}
+
+/**
+ * Build Interactive Book content.json from chapter structure.
+ * @param {Object[]} chapters - Chapter definitions from quiz.chapters
+ * @param {Object[]} questions - All question documents
+ * @param {Object} quiz - Quiz document
+ * @returns {Object} IB content.json object
+ */
+export function buildInteractiveBookContent(chapters, questions, quiz) {
+  const chapterNodes = chapters.map(ch => buildIBChapter(ch, questions, quiz));
+
+  return {
+    showCoverPage: false,
+    bookCover: { coverDescription: '' },
+    chapters: chapterNodes,
+    behaviour: { defaultTableOfContents: true },
+    read: 'Read',
+    displayTOC: 'Display table of contents',
+    hideTOC: 'Hide table of contents',
+    page: 'Page',
+    next: 'Next page',
+    nextPage: 'Next page',
+    previous: 'Previous page',
+    previousPage: 'Previous page',
+    chapterCompleted: 'Page @page is complete!',
+    partCompleted: '@page is now complete',
+    incompleteChapter: 'Incomplete page',
+    navigateToTop: 'Navigate to the top',
+    markAsFinished: 'I am done',
+    fullscreen: 'Fullscreen',
+    exitFullscreen: 'Exit fullscreen',
+    bookProgressSubtext: '@count of @total pages',
+    interactionsProgressSubtext: '@count of @total interactions',
+    submitReport: 'Submit Report',
+    restartLabel: 'Restart',
+    summaryHeader: 'Summary',
+    allInteractions: 'All interactions',
+    unansweredInteractions: 'Unanswered interactions',
+    scoreText: '@score / @maxscore',
+    leftOutOfTotalCompleted: '@left of @max interactins completed',
+    noInteractions: 'No interactions',
+    score: 'Score',
+    summaryAndSubmit: 'Summary & submit',
+    noChapterInteractionBoldText: 'You have not interacted with any pages.',
+    noChapterInteractionText: 'Please interact with all pages before submitting.',
+    yourAnswersAreSubmittedForReview: 'Your answers are submitted for review.',
+    bookProgress: 'Book progress',
+    interactionsProgress: 'Interactions progress',
+    totalScoreLabel: 'Total score',
+    a11y: { progress: 'Page @page of @total' }
+  };
 }
