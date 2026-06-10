@@ -1,44 +1,34 @@
 import { useState } from 'react';
 import { Plus, Minus, X } from 'lucide-react';
 import { PlanItem, LearningObjectiveData } from './generationTypes';
+import {
+  TargetFormat,
+  getFallbackQuestionType,
+  getQuestionTypesForTarget
+} from '../../constants/questionTypeCapabilities';
 
 interface PlanEditorProps {
   planItems: PlanItem[];
   learningObjectives: LearningObjectiveData[];
   onPlanItemsChange: (items: PlanItem[]) => void;
+  targetFormat: TargetFormat;
   readOnly?: boolean;
 }
-
-const QUESTION_TYPES = [
-  { value: 'multiple-choice', label: 'Multiple Choice' },
-  { value: 'true-false', label: 'True/False' },
-  { value: 'flashcard', label: 'Flashcard' },
-  { value: 'summary', label: 'Summary' },
-  { value: 'discussion', label: 'Discussion' },
-  { value: 'matching', label: 'Matching' },
-  { value: 'ordering', label: 'Ordering' },
-  { value: 'cloze', label: 'Fill in the Blank' },
-  { value: 'mark-the-words', label: 'Mark the Words' },
-  { value: 'single-choice-set', label: 'Single Choice Set' },
-  { value: 'essay', label: 'Essay' },
-  { value: 'sort-paragraphs', label: 'Sort Paragraphs' },
-  { value: 'crossword', label: 'Crossword' },
-  { value: 'branching-scenario', label: 'Branching Scenario' },
-  { value: 'documentation-tool', label: 'Documentation Tool' }
-];
 
 export default function PlanEditor({
   planItems,
   learningObjectives,
   onPlanItemsChange,
+  targetFormat,
   readOnly = false
 }: PlanEditorProps) {
   const [expandedSummary, setExpandedSummary] = useState(false);
+  const questionTypes = getQuestionTypesForTarget(targetFormat);
 
   const handleAddRow = () => {
     const newItem: PlanItem = {
       id: crypto.randomUUID(),
-      type: QUESTION_TYPES[0].value,
+      type: getFallbackQuestionType(targetFormat),
       learningObjectiveId: learningObjectives[0]?._id || '',
       count: 1
     };
@@ -90,7 +80,7 @@ export default function PlanEditor({
   const totalQuestions = planItems.reduce((sum, item) => sum + item.count, 0);
 
   const typeDistribution = planItems.reduce((acc, item) => {
-    const typeName = QUESTION_TYPES.find(t => t.value === item.type)?.label || item.type;
+    const typeName = questionTypes.find(t => t.value === item.type)?.label || item.type;
     acc[typeName] = (acc[typeName] || 0) + item.count;
     return acc;
   }, {} as Record<string, number>);
@@ -141,7 +131,7 @@ export default function PlanEditor({
                     disabled={readOnly}
                     className="plan-select"
                   >
-                    {QUESTION_TYPES.map(type => (
+                    {questionTypes.map(type => (
                       <option key={type.value} value={type.value}>
                         {type.label}
                       </option>

@@ -37,6 +37,12 @@ They were hidden because their current generation/export/rendering behavior is n
 
 Question Set is a container export format rather than a normal single question type. It should be selected as a target container, not generated as one question inside a quiz.
 
+## Target Format Selection
+
+Target H5P Format is selected on the Generate Questions page before users configure the question plan. Manual Mode filters the Question Type dropdown based on the selected target format.
+
+Review & Edit displays the selected target format as read-only metadata. Users should not switch containers at export time because some question types are only valid for specific H5P containers.
+
 ## Interactive Book Export Notes
 
 Interactive Book 1.11 stores each page as `H5P.Column 1.18`. That means the practical child-content support is inherited from Column, not defined directly by Interactive Book.

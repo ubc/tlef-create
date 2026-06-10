@@ -16,6 +16,7 @@ import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
+import { TARGET_FORMATS, TargetFormat } from '../../constants/questionTypeCapabilities';
 import '../../styles/components/ReviewEdit.css';
 
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
@@ -37,14 +38,20 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLO, setFilterByLO] = useState<number | null>(null);
   const [containerMode, setContainerMode] = useState<'column' | 'question-set' | 'interactive-book'>('column');
+  const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [showChapterEditor, setShowChapterEditor] = useState(false);
 
   // Sync containerMode from Redux once currentQuiz loads
   useEffect(() => {
+    if (currentQuiz?.settings?.targetFormat) {
+      setTargetFormat(currentQuiz.settings.targetFormat);
+    } else if (currentQuiz?.containerMode) {
+      setTargetFormat(currentQuiz.containerMode as TargetFormat);
+    }
     if (currentQuiz?.containerMode) {
       setContainerMode(currentQuiz.containerMode as 'column' | 'question-set' | 'interactive-book');
     }
-  }, [currentQuiz?.containerMode]);
+  }, [currentQuiz?.containerMode, currentQuiz?.settings?.targetFormat]);
 
   const handlers = useQuestionEditHandlers(questions, setQuestions);
 
@@ -196,16 +203,6 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
-  const handleContainerModeChange = async (mode: 'column' | 'question-set' | 'interactive-book') => {
-    setContainerMode(mode);
-    try {
-      const { quizApi } = await import('../../services/api');
-      await quizApi.updateQuiz(quizId, { containerMode: mode });
-    } catch (err) {
-      console.error('Failed to save container mode:', err);
-    }
-  };
-
   const handleH5PExport = async () => {
     if (questions.length === 0) {
       showNotification('warning', 'No Questions', 'Add some questions before exporting to H5P');
@@ -288,6 +285,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     );
   }
 
+  const targetFormatLabel = TARGET_FORMATS.find(format => format.value === targetFormat)?.label || targetFormat;
+
   return (
     <div className="review-edit">
       <div className="card">
@@ -300,18 +299,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </p>
             </div>
             <div className="review-actions">
-              {/* Format selector */}
-              <div className="format-selector">
-                <select
-                  className="format-select"
-                  value={containerMode}
-                  onChange={e => handleContainerModeChange(e.target.value as 'column' | 'question-set' | 'interactive-book')}
-                  title="H5P output format"
-                >
-                  <option value="column">Column</option>
-                  <option value="question-set">Question Set</option>
-                  <option value="interactive-book">Interactive Book</option>
-                </select>
+              <div className="format-selector" title="Target format is selected in Generate Questions">
+                <span className="format-readonly-label">Target Format</span>
+                <span className="format-readonly-value">{targetFormatLabel}</span>
                 {containerMode === 'interactive-book' && (
                   <button
                     className="btn btn-ghost btn-sm"
@@ -430,9 +420,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </div>
 
             {/* Standalone-type warning */}
-            {containerMode !== 'column' && questions.some(q => q.type === 'branching-scenario' || q.type === 'documentation-tool') && (
+            {containerMode !== 'column' && questions.some(q => q.type === 'branching-scenario' || (containerMode === 'question-set' && q.type === 'documentation-tool')) && (
               <div className="standalone-warning">
-                <strong>Note:</strong> Branching Scenario and Documentation Tool questions cannot be embedded in {containerMode === 'question-set' ? 'Question Set' : 'Interactive Book'} format and will be skipped in this export.
+                <strong>Note:</strong> Some questions cannot be embedded in {containerMode === 'question-set' ? 'Question Set' : 'Interactive Book'} format and will be skipped in this export.
               </div>
             )}
 

@@ -21,7 +21,7 @@ import { ExtendedQuestion } from './reviewTypes';
 import { LearningObjectiveData } from '../generation/generationTypes';
 import '../../styles/components/ChapterEditorPanel.css';
 
-const STANDALONE_TYPES = new Set(['branching-scenario', 'documentation-tool']);
+const STANDALONE_TYPES = new Set(['branching-scenario']);
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   'multiple-choice': 'Multiple Choice',
@@ -405,7 +405,7 @@ export default function ChapterEditorPanel({
         {/* Standalone warning */}
         {questions.some(q => STANDALONE_TYPES.has(q.type)) && (
           <div className="standalone-warning" style={{ margin: '0 0 12px' }}>
-            <strong>Note:</strong> Branching Scenario and Documentation Tool questions cannot be placed in chapters and will be exported separately.
+            <strong>Note:</strong> Branching Scenario questions cannot be placed in chapters and will be exported separately.
           </div>
         )}
 

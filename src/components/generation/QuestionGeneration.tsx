@@ -9,6 +9,13 @@ import { API_URL } from '../../config/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { useSSE } from '../../hooks/useSSE';
 import { QuestionGenerationProps, PlanItem, AIConfig, StreamingState } from './generationTypes';
+import {
+  TargetFormat,
+  TARGET_FORMATS,
+  getFallbackQuestionType,
+  isQuestionTypeAllowedForTarget,
+  normalizeQuestionTypeForTarget
+} from '../../constants/questionTypeCapabilities';
 import ModeToggle from './ModeToggle';
 import PlanEditor from './PlanEditor';
 import AIConfigPanel from './AIConfigPanel';
@@ -24,6 +31,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   // Plan mode state
   const [planMode, setPlanMode] = useState<'manual' | 'ai-auto'>('manual');
+  const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [aiConfig, setAIConfig] = useState<AIConfig>({
     totalQuestions: Math.max(30, learningObjectives.length), // At least 1 per LO
@@ -148,10 +156,13 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     const restoreSettings = async () => {
       try {
         const { quiz } = await quizApi.getQuiz(quizId);
+        const restoredTargetFormat = (quiz.settings?.targetFormat as TargetFormat | undefined) || quiz.containerMode || 'column';
+        setTargetFormat(restoredTargetFormat);
+
         if (quiz.settings?.planItems && quiz.settings.planItems.length > 0) {
           const items: PlanItem[] = quiz.settings.planItems.map(item => ({
             id: crypto.randomUUID(),
-            type: item.type,
+            type: normalizeQuestionTypeForTarget(item.type, restoredTargetFormat),
             learningObjectiveId: item.learningObjective,
             count: item.count,
             ...(item.type === 'branching-scenario' && {
@@ -162,7 +173,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           setPlanItems(items);
         } else {
           // Initialize with default plan
-          initializeDefaultPlan();
+          initializeDefaultPlan(restoredTargetFormat);
         }
 
         if (quiz.settings?.planMode) {
@@ -186,11 +197,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     restoreSettings();
   }, [quizId]);
 
-  const initializeDefaultPlan = () => {
+  const initializeDefaultPlan = (format: TargetFormat = targetFormat) => {
     if (learningObjectives.length > 0) {
       const defaultItems: PlanItem[] = learningObjectives.map(lo => ({
         id: crypto.randomUUID(),
-        type: 'multiple-choice',
+        type: getFallbackQuestionType(format),
         learningObjectiveId: lo._id,
         count: 3
       }));
@@ -232,9 +243,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       }
 
       await quizApi.updateQuiz(quizId, {
+        containerMode: targetFormat === 'standalone' ? 'column' : targetFormat,
         settings: {
           ...quiz.settings, // Keep existing settings
           planMode,
+          targetFormat,
           planItems: planItems.map(item => ({
             type: item.type,
             learningObjective: item.learningObjectiveId,
@@ -289,7 +302,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
       const items: PlanItem[] = result.planItems.map(item => ({
         id: crypto.randomUUID(),
-        type: item.type,
+        type: normalizeQuestionTypeForTarget(item.type, targetFormat),
         learningObjectiveId: learningObjectives[item.learningObjectiveIndex]._id,
         count: item.count
       }));
@@ -410,6 +423,29 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     setHasUnsavedChanges(true);
   };
 
+  const handleTargetFormatChange = (format: TargetFormat) => {
+    setTargetFormat(format);
+    setPlanItems(prevItems => {
+      if (prevItems.length === 0) {
+        return prevItems;
+      }
+
+      return prevItems.map(item => {
+        if (isQuestionTypeAllowedForTarget(item.type, format)) {
+          return item;
+        }
+
+        return {
+          ...item,
+          type: getFallbackQuestionType(format),
+          branchingLayers: undefined,
+          branchingChoices: undefined
+        };
+      });
+    });
+    setHasUnsavedChanges(true);
+  };
+
   // Render
   const hasQuestions = questions.length > 0;
   const totalPlannedQuestions = planItems.reduce((sum, item) => sum + item.count, 0);
@@ -523,6 +559,28 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             disabled={streamingState.isStreaming}
           />
 
+          <section className="target-format-section" aria-labelledby="target-format-heading">
+            <div className="target-format-header">
+              <h3 id="target-format-heading">Target H5P Format</h3>
+              <p>Choose the output format first so CREATE only offers compatible question types.</p>
+            </div>
+            <div className="target-format-options" role="radiogroup" aria-label="Target H5P format">
+              {TARGET_FORMATS.map(format => (
+                <button
+                  key={format.value}
+                  type="button"
+                  className={`target-format-option ${targetFormat === format.value ? 'active' : ''}`}
+                  onClick={() => handleTargetFormatChange(format.value)}
+                  disabled={streamingState.isStreaming}
+                  aria-pressed={targetFormat === format.value}
+                >
+                  <span className="target-format-label">{format.label}</span>
+                  <span className="target-format-description">{format.description}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {planMode === 'ai-auto' && (
             <>
               <AIConfigPanel
@@ -549,6 +607,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
               planItems={planItems}
               learningObjectives={learningObjectives}
               onPlanItemsChange={handlePlanItemsChange}
+              targetFormat={targetFormat}
               readOnly={streamingState.isStreaming}
             />
           )}

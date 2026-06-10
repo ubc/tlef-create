@@ -10,7 +10,13 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import { authenticateToken } from '../middleware/auth.js';
 import Quiz from '../models/Quiz.js';
-import { convertQuestionToH5P, generateH5PQuestionSet, buildInteractiveBookContent, STANDALONE_TYPES } from '../services/h5pExportService.js';
+import {
+  convertQuestionToH5P,
+  generateH5PQuestionSet,
+  buildInteractiveBookContent,
+  INTERACTIVE_BOOK_UNSUPPORTED_TYPES,
+  QUESTION_SET_UNSUPPORTED_TYPES
+} from '../services/h5pExportService.js';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -154,7 +160,10 @@ body { margin:0; padding:40px; font-family:-apple-system,BlinkMacSystemFont,"Seg
 
   // ── Container mode: Question Set or Interactive Book ────────────────────────
   if (containerMode === 'question-set' || containerMode === 'interactive-book') {
-    const embeddable = questions.filter(q => !STANDALONE_TYPES.has(q.type));
+    const unsupportedTypes = containerMode === 'question-set'
+      ? QUESTION_SET_UNSUPPORTED_TYPES
+      : INTERACTIVE_BOOK_UNSUPPORTED_TYPES;
+    const embeddable = questions.filter(q => !unsupportedTypes.has(q.type));
     const questionTypes = new Set(questions.map(q => q.type));
     const neededLibNames = getNeededLibraries(questionTypes, { hasMixedContent: false, isFlashcardOnly: false });
 

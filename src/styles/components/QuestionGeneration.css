@@ -2272,6 +2272,73 @@
     background: var(--color-background);
 }
 
+/* Target Format */
+.target-format-section {
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.target-format-header h3 {
+    margin: 0 0 0.35rem 0;
+    font-size: 1.15rem;
+    font-weight: 650;
+}
+
+.target-format-header p {
+    margin: 0 0 1rem 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
+.target-format-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.target-format-option {
+    min-height: 92px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+    color: var(--color-foreground);
+    padding: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.target-format-option.active {
+    border-color: var(--color-primary);
+    background: rgba(37, 99, 235, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.target-format-option:hover:not(:disabled) {
+    border-color: var(--color-primary);
+}
+
+.target-format-option:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.target-format-label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.target-format-description {
+    display: block;
+    color: var(--color-muted-foreground);
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
 /* AI Config Panel */
 .ai-config-panel {
     background: var(--color-background);
@@ -2856,6 +2923,10 @@
 }
 
 @media (max-width: 768px) {
+    .target-format-options {
+        grid-template-columns: 1fr;
+    }
+
     .summary-cards-compact {
         grid-template-columns: 1fr;
     }

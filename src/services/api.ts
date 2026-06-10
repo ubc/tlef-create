@@ -78,6 +78,7 @@ export interface Quiz {
     difficulty: 'easy' | 'moderate' | 'hard';
     // NEW: Plan-based system
     planMode?: 'manual' | 'ai-auto';
+    targetFormat?: 'column' | 'interactive-book' | 'question-set' | 'standalone';
     planItems?: Array<{
       type: string;
       learningObjective: string;
