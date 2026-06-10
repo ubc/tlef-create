@@ -21,7 +21,6 @@ const QUESTION_TYPES = [
   { value: 'mark-the-words', label: 'Mark the Words' },
   { value: 'single-choice-set', label: 'Single Choice Set' },
   { value: 'essay', label: 'Essay' },
-  { value: 'question-set', label: 'Question Set' },
   { value: 'sort-paragraphs', label: 'Sort Paragraphs' },
   { value: 'crossword', label: 'Crossword' },
   { value: 'branching-scenario', label: 'Branching Scenario' },

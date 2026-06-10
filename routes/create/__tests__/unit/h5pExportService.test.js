@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import {
+  buildIBChapter,
   convertQuestionToH5P,
   generateH5PColumn,
   generateH5PDialogCards,
@@ -317,6 +318,46 @@ describe('h5pExportService', () => {
     test('should return empty questions for empty input', () => {
       const result = generateH5PQuestionSet([]);
       expect(result.questions).toHaveLength(0);
+    });
+  });
+
+  describe('buildIBChapter', () => {
+    test('embeds Documentation Tool but skips Branching Scenario in Interactive Book columns', () => {
+      const documentationQuestion = {
+        _id: 'doc-1',
+        type: 'documentation-tool',
+        questionText: 'Document your learning process',
+        content: {
+          title: 'Learning Documentation',
+          description: 'Document your work.',
+          pages: [
+            {
+              title: 'Reflection',
+              fields: [{ label: 'What did you learn?' }]
+            }
+          ]
+        }
+      };
+      const branchingQuestion = {
+        _id: 'branch-1',
+        type: 'branching-scenario',
+        questionText: 'Choose your path',
+        content: {}
+      };
+
+      const result = buildIBChapter(
+        {
+          title: 'Chapter',
+          questionIds: ['doc-1', 'branch-1'],
+          containerType: 'column'
+        },
+        [documentationQuestion, branchingQuestion],
+        {}
+      );
+
+      expect(result.library).toBe('H5P.Column 1.18');
+      expect(result.params.content).toHaveLength(1);
+      expect(result.params.content[0].content.library).toBe('H5P.DocumentationTool 1.8');
     });
   });
 });

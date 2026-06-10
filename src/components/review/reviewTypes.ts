@@ -22,7 +22,6 @@ export const questionTypes = [
   { id: 'mark-the-words', label: 'Mark the Words' },
   { id: 'single-choice-set', label: 'Single Choice Set' },
   { id: 'essay', label: 'Essay' },
-  { id: 'question-set', label: 'Question Set' },
   { id: 'sort-paragraphs', label: 'Sort Paragraphs' },
   { id: 'crossword', label: 'Crossword' },
   { id: 'branching-scenario', label: 'Branching Scenario' },

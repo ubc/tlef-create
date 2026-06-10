@@ -156,10 +156,10 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
 
     if (containerMode === 'question-set') {
       // ── Question Set export ──────────────────────────────────────────────────
-      const embeddableQuestions = quiz.questions.filter(q => !STANDALONE_TYPES.has(q.type));
-      const standaloneQuestions = quiz.questions.filter(q => STANDALONE_TYPES.has(q.type));
-      if (standaloneQuestions.length > 0) {
-        console.warn(`[QS export] Skipping ${standaloneQuestions.length} standalone question(s) (branching-scenario, documentation-tool)`);
+      const embeddableQuestions = quiz.questions.filter(q => !QUESTION_SET_UNSUPPORTED_TYPES.has(q.type));
+      const unsupportedQuestions = quiz.questions.filter(q => QUESTION_SET_UNSUPPORTED_TYPES.has(q.type));
+      if (unsupportedQuestions.length > 0) {
+        console.warn(`[QS export] Skipping ${unsupportedQuestions.length} unsupported question(s) (branching-scenario, documentation-tool)`);
       }
       contentJson = generateH5PQuestionSet(embeddableQuestions);
       h5pJson = {
@@ -174,7 +174,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
 
     } else if (containerMode === 'interactive-book') {
       // ── Interactive Book export ──────────────────────────────────────────────
-      const standaloneInIB = quiz.questions.filter(q => STANDALONE_TYPES.has(q.type));
+      const standaloneInIB = quiz.questions.filter(q => INTERACTIVE_BOOK_UNSUPPORTED_TYPES.has(q.type));
       if (standaloneInIB.length > 0) {
         console.warn(`[IB export] ${standaloneInIB.length} standalone question(s) cannot be embedded in Interactive Book and will be skipped.`);
       }
@@ -182,7 +182,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
       // Use saved chapter structure, or auto-generate one chapter with all embeddable questions
       let chapters = quiz.chapters && quiz.chapters.length > 0 ? quiz.chapters : [];
       if (chapters.length === 0) {
-        const allEmbeddable = quiz.questions.filter(q => !STANDALONE_TYPES.has(q.type));
+        const allEmbeddable = quiz.questions.filter(q => !INTERACTIVE_BOOK_UNSUPPORTED_TYPES.has(q.type));
         chapters = [{ title: 'Chapter 1', questionIds: allEmbeddable.map(q => q._id), containerType: 'column', passPercentage: 50 }];
       }
 
@@ -1857,8 +1857,15 @@ export function convertQuestionToH5P(question, quiz) {
   return null;
 }
 
-// Question types that cannot be embedded inside Column/QuestionSet containers
-export const STANDALONE_TYPES = new Set(['branching-scenario', 'documentation-tool']);
+// Question Set is a quiz container with a narrow child library list.
+export const QUESTION_SET_UNSUPPORTED_TYPES = new Set(['branching-scenario', 'documentation-tool']);
+
+// Interactive Book pages are Column children. Documentation Tool is valid there,
+// but Branching Scenario should remain standalone.
+export const INTERACTIVE_BOOK_UNSUPPORTED_TYPES = new Set(['branching-scenario']);
+
+// Backwards-compatible alias for callers that need standalone-only content.
+export const STANDALONE_TYPES = INTERACTIVE_BOOK_UNSUPPORTED_TYPES;
 
 /**
  * Build a single Interactive Book chapter node.
@@ -1870,7 +1877,7 @@ export const STANDALONE_TYPES = new Set(['branching-scenario', 'documentation-to
 export function buildIBChapter(chapter, questions, quiz) {
   const idSet = new Set((chapter.questionIds || []).map(id => String(id)));
   const chapterQuestions = questions.filter(q => idSet.has(String(q._id)));
-  const embeddable = chapterQuestions.filter(q => !STANDALONE_TYPES.has(q.type));
+  const embeddable = chapterQuestions.filter(q => !INTERACTIVE_BOOK_UNSUPPORTED_TYPES.has(q.type));
 
   let columnContent;
 
