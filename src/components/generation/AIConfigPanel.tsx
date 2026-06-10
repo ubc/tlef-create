@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, Target, Trophy } from 'lucide-react';
 import { AIConfig, LearningObjectiveData } from './generationTypes';
+import { getQuestionTypesForApproach } from '../../constants/questionTypeCapabilities';
 
 interface AIConfigPanelProps {
   aiConfig: AIConfig;
@@ -145,6 +146,13 @@ export default function AIConfigPanel({
                 <div className="approach-card-content">
                   <h4 className="approach-card-title">{card.label}</h4>
                   <p className="approach-card-description">{card.description}</p>
+                  <div className="approach-card-types">
+                    {getQuestionTypesForApproach(card.value).map(type => (
+                      <span key={type.value} className="approach-type-badge">
+                        {type.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </button>
             );

@@ -78,7 +78,8 @@ export interface Quiz {
     difficulty: 'easy' | 'moderate' | 'hard';
     // NEW: Plan-based system
     planMode?: 'manual' | 'ai-auto';
-    targetFormat?: 'column' | 'interactive-book' | 'question-set' | 'standalone';
+    deliveryTarget?: 'h5p-package' | 'canvas-lti';
+    targetFormat?: 'column' | 'interactive-book' | 'question-set' | 'standalone' | 'mixed-activity';
     planItems?: Array<{
       type: string;
       learningObjective: string;

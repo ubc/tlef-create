@@ -10,9 +10,13 @@ import { usePubSub } from '../../hooks/usePubSub';
 import { useSSE } from '../../hooks/useSSE';
 import { QuestionGenerationProps, PlanItem, AIConfig, StreamingState } from './generationTypes';
 import {
+  DeliveryTarget,
   TargetFormat,
-  TARGET_FORMATS,
+  DELIVERY_TARGETS,
+  getDefaultFormatForDeliveryTarget,
+  getDeliveryTargetForFormat,
   getFallbackQuestionType,
+  getFormatsForDeliveryTarget,
   isQuestionTypeAllowedForTarget,
   normalizeQuestionTypeForTarget
 } from '../../constants/questionTypeCapabilities';
@@ -31,6 +35,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
   // Plan mode state
   const [planMode, setPlanMode] = useState<'manual' | 'ai-auto'>('manual');
+  const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget>('h5p-package');
   const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [aiConfig, setAIConfig] = useState<AIConfig>({
@@ -157,12 +162,20 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       try {
         const { quiz } = await quizApi.getQuiz(quizId);
         const restoredTargetFormat = (quiz.settings?.targetFormat as TargetFormat | undefined) || quiz.containerMode || 'column';
-        setTargetFormat(restoredTargetFormat);
+        const restoredDeliveryTarget = (quiz.settings?.deliveryTarget as DeliveryTarget | undefined)
+          || getDeliveryTargetForFormat(restoredTargetFormat);
+        const validFormats = getFormatsForDeliveryTarget(restoredDeliveryTarget).map(format => format.value);
+        const normalizedTargetFormat = validFormats.includes(restoredTargetFormat)
+          ? restoredTargetFormat
+          : getDefaultFormatForDeliveryTarget(restoredDeliveryTarget);
+
+        setDeliveryTarget(restoredDeliveryTarget);
+        setTargetFormat(normalizedTargetFormat);
 
         if (quiz.settings?.planItems && quiz.settings.planItems.length > 0) {
           const items: PlanItem[] = quiz.settings.planItems.map(item => ({
             id: crypto.randomUUID(),
-            type: normalizeQuestionTypeForTarget(item.type, restoredTargetFormat),
+            type: normalizeQuestionTypeForTarget(item.type, normalizedTargetFormat),
             learningObjectiveId: item.learningObjective,
             count: item.count,
             ...(item.type === 'branching-scenario' && {
@@ -173,7 +186,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           setPlanItems(items);
         } else {
           // Initialize with default plan
-          initializeDefaultPlan(restoredTargetFormat);
+          initializeDefaultPlan(normalizedTargetFormat);
         }
 
         if (quiz.settings?.planMode) {
@@ -243,10 +256,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       }
 
       await quizApi.updateQuiz(quizId, {
-        containerMode: targetFormat === 'standalone' ? 'column' : targetFormat,
+        containerMode: targetFormat === 'standalone' || targetFormat === 'mixed-activity' ? 'column' : targetFormat,
         settings: {
           ...quiz.settings, // Keep existing settings
           planMode,
+          deliveryTarget,
           targetFormat,
           planItems: planItems.map(item => ({
             type: item.type,
@@ -423,8 +437,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     setHasUnsavedChanges(true);
   };
 
-  const handleTargetFormatChange = (format: TargetFormat) => {
-    setTargetFormat(format);
+  const normalizePlanItemsForFormat = (format: TargetFormat) => {
     setPlanItems(prevItems => {
       if (prevItems.length === 0) {
         return prevItems;
@@ -443,6 +456,19 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         };
       });
     });
+  };
+
+  const handleDeliveryTargetChange = (target: DeliveryTarget) => {
+    const nextFormat = getDefaultFormatForDeliveryTarget(target);
+    setDeliveryTarget(target);
+    setTargetFormat(nextFormat);
+    normalizePlanItemsForFormat(nextFormat);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleTargetFormatChange = (format: TargetFormat) => {
+    setTargetFormat(format);
+    normalizePlanItemsForFormat(format);
     setHasUnsavedChanges(true);
   };
 
@@ -559,25 +585,51 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             disabled={streamingState.isStreaming}
           />
 
-          <section className="target-format-section" aria-labelledby="target-format-heading">
+          <section className="target-format-section" aria-labelledby="delivery-target-heading">
             <div className="target-format-header">
-              <h3 id="target-format-heading">Target H5P Format</h3>
-              <p>Choose the output format first so CREATE only offers compatible question types.</p>
+              <h3 id="delivery-target-heading">Delivery Target</h3>
+              <p>Choose where this learning object will be delivered so CREATE can offer compatible question types.</p>
             </div>
-            <div className="target-format-options" role="radiogroup" aria-label="Target H5P format">
-              {TARGET_FORMATS.map(format => (
+            <div className="target-format-options" role="radiogroup" aria-label="Delivery target">
+              {DELIVERY_TARGETS.map(target => (
                 <button
-                  key={format.value}
+                  key={target.value}
                   type="button"
-                  className={`target-format-option ${targetFormat === format.value ? 'active' : ''}`}
-                  onClick={() => handleTargetFormatChange(format.value)}
+                  className={`target-format-option ${deliveryTarget === target.value ? 'active' : ''}`}
+                  onClick={() => handleDeliveryTargetChange(target.value)}
                   disabled={streamingState.isStreaming}
-                  aria-pressed={targetFormat === format.value}
+                  aria-pressed={deliveryTarget === target.value}
                 >
-                  <span className="target-format-label">{format.label}</span>
-                  <span className="target-format-description">{format.description}</span>
+                  <span className="target-format-label">{target.label}</span>
+                  <span className="target-format-description">{target.description}</span>
                 </button>
               ))}
+            </div>
+
+            <div className="target-format-subsection">
+              <div className="target-format-header compact">
+                <h4>{deliveryTarget === 'canvas-lti' ? 'Canvas LTI Format' : 'H5P Package Format'}</h4>
+                <p>
+                  {deliveryTarget === 'canvas-lti'
+                    ? 'Canvas LTI uses CREATE’s player, so it can render a broader mixed activity.'
+                    : 'H5P package formats follow official H5P container compatibility.'}
+                </p>
+              </div>
+              <div className="target-format-options" role="radiogroup" aria-label="Target format">
+                {getFormatsForDeliveryTarget(deliveryTarget).map(format => (
+                  <button
+                    key={format.value}
+                    type="button"
+                    className={`target-format-option ${targetFormat === format.value ? 'active' : ''}`}
+                    onClick={() => handleTargetFormatChange(format.value)}
+                    disabled={streamingState.isStreaming || getFormatsForDeliveryTarget(deliveryTarget).length === 1}
+                    aria-pressed={targetFormat === format.value}
+                  >
+                    <span className="target-format-label">{format.label}</span>
+                    <span className="target-format-description">{format.description}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

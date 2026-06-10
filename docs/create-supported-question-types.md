@@ -37,11 +37,25 @@ They were hidden because their current generation/export/rendering behavior is n
 
 Question Set is a container export format rather than a normal single question type. It should be selected as a target container, not generated as one question inside a quiz.
 
-## Target Format Selection
+## Delivery Target and Format Selection
 
-Target H5P Format is selected on the Generate Questions page before users configure the question plan. Manual Mode filters the Question Type dropdown based on the selected target format.
+The Generate Questions page now separates delivery/runtime from H5P package structure:
 
-Review & Edit displays the selected target format as read-only metadata. Users should not switch containers at export time because some question types are only valid for specific H5P containers.
+1. H5P Package
+   - Column
+   - Interactive Book
+   - Question Set
+   - Standalone
+2. Canvas LTI
+   - Mixed Activity
+
+Manual Mode filters the Question Type dropdown based on the selected delivery target and format.
+
+H5P Package formats follow official H5P container compatibility. These packages are intended for Lumi, h5p.org, WordPress H5P, Moodle H5P, and similar official H5P players.
+
+Canvas LTI / Mixed Activity is different: Canvas launches CREATE's LTI/player runtime, so it can render mixed CREATE-supported question types that may not be valid inside an official downloadable H5P container.
+
+Review & Edit displays the selected delivery target and format as read-only metadata. If users export a Canvas LTI / Mixed Activity learning object as a downloadable H5P package, CREATE should warn that some question types may fail in official H5P players.
 
 ## Interactive Book Export Notes
 
@@ -138,8 +152,38 @@ Essay is explicitly supported by `H5P.QuestionSet 1.20` via `H5P.Essay 1.5` and 
 
 Drag the Words is supported by H5P Question Set through `H5P.DragText 1.10`, but CREATE does not currently expose it as a dedicated user-facing question type. The current `ordering` and `matching` exports also use `H5P.DragText` internally, but they should be validated separately before being documented as stable Question Set support.
 
+## Canvas LTI / Mixed Activity Notes
+
+Canvas LTI / Mixed Activity is not an official H5P container. It is a CREATE delivery mode for Canvas that relies on the CREATE LTI/player runtime.
+
+Because of that, the compatibility rule is different:
+
+- H5P Package compatibility asks: "Can this question type be embedded in the selected official H5P container and opened by Lumi or another official H5P player?"
+- Canvas LTI compatibility asks: "Can CREATE generate the question and can the CREATE player render it in Canvas?"
+
+Canvas LTI / Mixed Activity currently exposes all CREATE-supported user-facing types:
+
+1. Multiple Choice (`multiple-choice`)
+2. True/False (`true-false`)
+3. Flashcard (`flashcard`)
+4. Summary (`summary`)
+5. Discussion (`discussion`)
+6. Matching (`matching`)
+7. Ordering (`ordering`)
+8. Fill in the Blank / Cloze (`cloze`)
+9. Mark the Words (`mark-the-words`)
+10. Single Choice Set (`single-choice-set`)
+11. Essay (`essay`)
+12. Sort Paragraphs (`sort-paragraphs`)
+13. Crossword (`crossword`)
+14. Branching Scenario (`branching-scenario`)
+15. Documentation Tool (`documentation-tool`)
+
+For example, Sort Paragraphs may not be valid inside a standard H5P Column package opened in Lumi, but it can still render in Canvas when delivered through CREATE's LTI player.
+
 ## Implementation Notes
 
+- The delivery target and format matrix is defined in `src/constants/questionTypeCapabilities.ts`.
 - The Generate Questions dropdown is defined in `src/components/generation/PlanEditor.tsx`.
 - The Review & Edit Add Question modal dropdown is defined in `src/components/AddQuestionModal.tsx`.
 - Default system prompt templates are initialized from:

@@ -106,6 +106,18 @@ const quizSchema = new mongoose.Schema({
       default: 'manual'
     },
 
+    deliveryTarget: {
+      type: String,
+      enum: ['h5p-package', 'canvas-lti'],
+      default: 'h5p-package'
+    },
+
+    targetFormat: {
+      type: String,
+      enum: ['column', 'interactive-book', 'question-set', 'standalone', 'mixed-activity'],
+      default: 'column'
+    },
+
     planItems: [{
       type: {
         type: String,
@@ -121,6 +133,16 @@ const quizSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 1
+      },
+      branchingLayers: {
+        type: Number,
+        min: 2,
+        max: 4
+      },
+      branchingChoices: {
+        type: Number,
+        min: 2,
+        max: 3
       }
     }],
 

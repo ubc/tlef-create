@@ -16,7 +16,14 @@ import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
-import { TARGET_FORMATS, TargetFormat } from '../../constants/questionTypeCapabilities';
+import {
+  DELIVERY_TARGETS,
+  DeliveryTarget,
+  TARGET_FORMATS,
+  TargetFormat,
+  getDeliveryTargetForFormat,
+  getUnsupportedQuestionTypesForTarget
+} from '../../constants/questionTypeCapabilities';
 import '../../styles/components/ReviewEdit.css';
 
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
@@ -38,20 +45,31 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLO, setFilterByLO] = useState<number | null>(null);
   const [containerMode, setContainerMode] = useState<'column' | 'question-set' | 'interactive-book'>('column');
+  const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget>('h5p-package');
   const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [showChapterEditor, setShowChapterEditor] = useState(false);
 
   // Sync containerMode from Redux once currentQuiz loads
   useEffect(() => {
+    const nextTargetFormat = (currentQuiz?.settings?.targetFormat as TargetFormat | undefined)
+      || (currentQuiz?.containerMode as TargetFormat | undefined)
+      || 'column';
+    const nextDeliveryTarget = (currentQuiz?.settings?.deliveryTarget as DeliveryTarget | undefined)
+      || getDeliveryTargetForFormat(nextTargetFormat);
+
+    setDeliveryTarget(nextDeliveryTarget);
+    setTargetFormat(nextTargetFormat);
+
     if (currentQuiz?.settings?.targetFormat) {
-      setTargetFormat(currentQuiz.settings.targetFormat);
+      if (currentQuiz.settings.targetFormat === 'mixed-activity') {
+        setContainerMode('column');
+      } else if (currentQuiz.settings.targetFormat !== 'standalone') {
+        setContainerMode(currentQuiz.settings.targetFormat as 'column' | 'question-set' | 'interactive-book');
+      }
     } else if (currentQuiz?.containerMode) {
-      setTargetFormat(currentQuiz.containerMode as TargetFormat);
-    }
-    if (currentQuiz?.containerMode) {
       setContainerMode(currentQuiz.containerMode as 'column' | 'question-set' | 'interactive-book');
     }
-  }, [currentQuiz?.containerMode, currentQuiz?.settings?.targetFormat]);
+  }, [currentQuiz?.containerMode, currentQuiz?.settings?.deliveryTarget, currentQuiz?.settings?.targetFormat]);
 
   const handlers = useQuestionEditHandlers(questions, setQuestions);
 
@@ -208,6 +226,30 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       showNotification('warning', 'No Questions', 'Add some questions before exporting to H5P');
       return;
     }
+
+    const h5pCheckFormat: TargetFormat = deliveryTarget === 'canvas-lti'
+      ? 'column'
+      : targetFormat;
+    const unsupported = getUnsupportedQuestionTypesForTarget(
+      questions.map(question => question.type),
+      h5pCheckFormat
+    );
+
+    if (deliveryTarget === 'canvas-lti' || unsupported.length > 0) {
+      const unsupportedText = unsupported.length > 0
+        ? `\n\nUnsupported in ${h5pCheckFormat}: ${unsupported.map(type => type.label).join(', ')}`
+        : '';
+      const shouldContinue = window.confirm(
+        `This learning object is configured for ${deliveryTarget === 'canvas-lti' ? 'Canvas LTI / Mixed Activity' : targetFormatLabel}. ` +
+        `A downloaded H5P package must follow official H5P container rules.${unsupportedText}\n\n` +
+        'Continue exporting to H5P anyway?'
+      );
+
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
     setExportLoading(true);
     try {
       showNotification('info', 'Generating Export', 'Creating H5P package...');
@@ -285,7 +327,12 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     );
   }
 
+  const deliveryTargetLabel = DELIVERY_TARGETS.find(target => target.value === deliveryTarget)?.label || deliveryTarget;
   const targetFormatLabel = TARGET_FORMATS.find(format => format.value === targetFormat)?.label || targetFormat;
+  const h5pUnsupportedTypes = getUnsupportedQuestionTypesForTarget(
+    questions.map(question => question.type),
+    deliveryTarget === 'canvas-lti' ? 'column' : targetFormat
+  );
 
   return (
     <div className="review-edit">
@@ -300,7 +347,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </div>
             <div className="review-actions">
               <div className="format-selector" title="Target format is selected in Generate Questions">
-                <span className="format-readonly-label">Target Format</span>
+                <span className="format-readonly-label">Delivery</span>
+                <span className="format-readonly-value">{deliveryTargetLabel}</span>
+                <span className="format-readonly-separator">/</span>
                 <span className="format-readonly-value">{targetFormatLabel}</span>
                 {containerMode === 'interactive-book' && (
                   <button
@@ -420,9 +469,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </div>
 
             {/* Standalone-type warning */}
-            {containerMode !== 'column' && questions.some(q => q.type === 'branching-scenario' || (containerMode === 'question-set' && q.type === 'documentation-tool')) && (
+            {deliveryTarget === 'canvas-lti' && (
               <div className="standalone-warning">
-                <strong>Note:</strong> Some questions cannot be embedded in {containerMode === 'question-set' ? 'Question Set' : 'Interactive Book'} format and will be skipped in this export.
+                <strong>Canvas LTI:</strong> This uses CREATE's LTI player and can render mixed activity types that may not be valid inside a downloadable H5P package.
+              </div>
+            )}
+
+            {deliveryTarget === 'h5p-package' && h5pUnsupportedTypes.length > 0 && (
+              <div className="standalone-warning">
+                <strong>H5P compatibility:</strong> {h5pUnsupportedTypes.map(type => type.label).join(', ')} cannot be embedded in {targetFormatLabel} format and may be skipped or fail in official H5P players.
               </div>
             )}
 

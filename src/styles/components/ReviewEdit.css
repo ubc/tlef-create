@@ -47,6 +47,11 @@
     font-weight: 700;
 }
 
+.format-readonly-separator {
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+}
+
 .review-filters {
     display: flex;
     justify-content: space-between;
