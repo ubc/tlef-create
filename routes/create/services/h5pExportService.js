@@ -693,7 +693,8 @@ export function generateH5PQuestionSet(questions) {
   return {
     "introPage": {
       "showIntroPage": false,
-      "startButtonText": "Start Quiz"
+      "startButtonText": "Start Quiz",
+      "introduction": ""
     },
     "progressType": "dots",
     "passPercentage": 50,
@@ -705,8 +706,10 @@ export function generateH5PQuestionSet(questions) {
       "showSolutionButton": true,
       "showRetryButton": true,
       "noResultMessage": "Finished",
-      "message": "Your result:",
+      "message": "Results",
+      "amountCorrect": "@finals of @totals correct",
       "scoreBarLabel": "You got @finals out of @totals points",
+      "scoreHeader": "Score",
       "overallFeedback": [{ "from": 0, "to": 100 }],
       "solutionButtonText": "Show solution",
       "retryButtonText": "Retry",
@@ -718,7 +721,9 @@ export function generateH5PQuestionSet(questions) {
     },
     "texts": {
       "prevButton": "Previous question",
+      "previous": "Previous",
       "nextButton": "Next question",
+      "next": "Next",
       "finishButton": "Finish",
       "submitButton": "Submit",
       "textualProgress": "Question: @current of @total questions",
@@ -1875,7 +1880,7 @@ export function buildIBChapter(chapter, questions, quiz) {
 
     columnContent = [{
       content: {
-        library: 'H5P.QuestionSet 1.21',
+        library: 'H5P.QuestionSet 1.20',
         params: qsParams,
         subContentId: crypto.randomBytes(16).toString('hex'),
         metadata: { contentType: 'Question Set', license: 'U', title: chapter.title || 'Quiz' }

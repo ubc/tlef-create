@@ -21,7 +21,7 @@ const LIBRARY_REGISTRY = {
   'H5P.AdvancedText':   { majorVersion: 1, minorVersion: 1, dirName: 'H5P.AdvancedText-1.1' },
   'H5P.SortParagraphs': { majorVersion: 0, minorVersion: 11, dirName: 'H5P.SortParagraphs-0.11' },
   'H5P.SingleChoiceSet':{ majorVersion: 1, minorVersion: 11, dirName: 'H5P.SingleChoiceSet-1.11' },
-  'H5P.QuestionSet':    { majorVersion: 1, minorVersion: 21, dirName: 'H5P.QuestionSet-1.21' },
+  'H5P.QuestionSet':    { majorVersion: 1, minorVersion: 20, dirName: 'H5P.QuestionSet-1.20' },
   'H5P.InteractiveBook': { majorVersion: 1, minorVersion: 11, dirName: 'H5P.InteractiveBook-1.11' },
   'H5P.TextUtilities':  { majorVersion: 1, minorVersion: 3, dirName: 'H5P.TextUtilities-1.3' },
   'H5P.MarkTheWords':   { majorVersion: 1, minorVersion: 11, dirName: 'H5P.MarkTheWords-1.11' },
