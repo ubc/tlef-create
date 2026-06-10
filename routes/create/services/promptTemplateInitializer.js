@@ -32,23 +32,19 @@ const TEMPLATES = [
 This approach emphasizes helping students memorize and understand key concepts through flashcards, summaries, and reinforcement activities.
 
 Question Type Rules:
-- ONLY use these types: flashcard, summary, mark-the-words, dictation, free-text
+- ONLY use these types: flashcard, summary, mark-the-words
 - Flashcards should be the MAJORITY (approximately 60-70%)
-- Summaries should be a MINORITY (approximately 10-15%)
-- Mark-the-words for key term identification (approximately 10-15%)
-- Dictation for reinforcing definitions (approximately 5-10%)
-- Free-text for reflection (approximately 5%)
+- Summaries should be a MINORITY (approximately 15-20%)
+- Mark-the-words for key term identification (approximately 15-20%)
 - Each learning objective should have AT MOST 1 summary question
 
 Design Guidelines:
 - Flashcards for key terms, definitions, and concepts
 - Summaries for broader understanding and synthesis
-- Mark-the-words to help students identify important terms in context
-- Dictation to reinforce accurate recall of definitions
-- Free-text for personal reflection and connection`,
+- Mark-the-words to help students identify important terms in context`,
     questionTypeRules: {
-      allowedTypes: ['flashcard', 'summary', 'mark-the-words', 'dictation', 'free-text'],
-      distribution: new Map([['flashcard', 0.65], ['summary', 0.12], ['mark-the-words', 0.12], ['dictation', 0.06], ['free-text', 0.05]]),
+      allowedTypes: ['flashcard', 'summary', 'mark-the-words'],
+      distribution: new Map([['flashcard', 0.65], ['summary', 0.17], ['mark-the-words', 0.18]]),
       maxPerLO: new Map([['summary', 1]])
     },
     description: 'Support Learning: Focus on memorization and understanding through flashcards and summaries',
@@ -62,11 +58,10 @@ Design Guidelines:
 This approach emphasizes evaluating student comprehension through varied assessment question types.
 
 Question Type Rules:
-- ONLY use these types: multiple-choice, true-false, single-choice-set, simple-multi-choice, essay
+- ONLY use these types: multiple-choice, true-false, single-choice-set, essay
 - Multiple-choice should be the MAJORITY (approximately 40-50%)
-- True/false for quick checks (approximately 15-20%)
-- Single-choice-set for rapid-fire assessment (approximately 15-20%)
-- Simple-multi-choice for multi-select questions (approximately 10-15%)
+- True/false for quick checks (approximately 20-25%)
+- Single-choice-set for rapid-fire assessment (approximately 20-25%)
 - Essay for deeper analysis (approximately 5-10%)
 - Each learning objective should have AT MOST 1 essay question
 - Distribute types across all learning objectives
@@ -75,12 +70,11 @@ Design Guidelines:
 - Multiple-choice for complex understanding and application
 - True/false for fundamental concepts and quick checks
 - Single-choice-set for timed quizzes and quick recall
-- Simple-multi-choice when multiple answers are correct
 - Essay for in-depth comprehension evaluation
 - Mix question types within each learning objective for variety`,
     questionTypeRules: {
-      allowedTypes: ['multiple-choice', 'true-false', 'single-choice-set', 'simple-multi-choice', 'essay'],
-      distribution: new Map([['multiple-choice', 0.45], ['true-false', 0.18], ['single-choice-set', 0.17], ['simple-multi-choice', 0.12], ['essay', 0.08]]),
+      allowedTypes: ['multiple-choice', 'true-false', 'single-choice-set', 'essay'],
+      distribution: new Map([['multiple-choice', 0.45], ['true-false', 0.24], ['single-choice-set', 0.23], ['essay', 0.08]]),
       maxPerLO: new Map([['essay', 1]])
     },
     description: 'Assess Understanding: Evaluate comprehension with multiple-choice and true/false questions',

@@ -736,7 +736,8 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
 
               {/* Generic editor for new question types */}
               {['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
-                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(newQuestion.type) && (
+                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice',
+                'question-set', 'branching-scenario', 'documentation-tool'].includes(newQuestion.type) && (
                 <div className="form-field">
                   <label>
                     {newQuestion.type === 'mark-the-words' ? 'Text (wrap correct words with *asterisks*)' :
@@ -744,6 +745,9 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                      newQuestion.type === 'crossword' ? 'Crossword Clues & Words' :
                      newQuestion.type === 'sort-paragraphs' ? 'Paragraphs (in correct order, one per line)' :
                      newQuestion.type === 'dictation' ? 'Sentences (one per line)' :
+                     newQuestion.type === 'question-set' ? 'Question Set Description' :
+                     newQuestion.type === 'branching-scenario' ? 'Branching Scenario Description' :
+                     newQuestion.type === 'documentation-tool' ? 'Documentation Task Description' :
                      'Question'}
                   </label>
                   <textarea
@@ -754,6 +758,9 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                       newQuestion.type === 'sort-paragraphs' ? 'Enter each paragraph on a new line in the correct order' :
                       newQuestion.type === 'crossword' ? 'WORD:Clue for the word (one per line)' :
                       newQuestion.type === 'dictation' ? 'Enter sentences, one per line' :
+                      newQuestion.type === 'question-set' ? 'Describe the question set you want to add...' :
+                      newQuestion.type === 'branching-scenario' ? 'Describe the branching scenario prompt and choices...' :
+                      newQuestion.type === 'documentation-tool' ? 'Describe the documentation activity...' :
                       'Enter your question here...'
                     }
                     value={newQuestion.question}
@@ -767,6 +774,9 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                      newQuestion.type === 'sort-paragraphs' ? 'Students rearrange into correct order.' :
                      newQuestion.type === 'crossword' ? 'Words arranged into a crossword automatically.' :
                      newQuestion.type === 'dictation' ? 'Students type sentences from memory.' :
+                     newQuestion.type === 'question-set' ? 'A grouped set of questions.' :
+                     newQuestion.type === 'branching-scenario' ? 'Students choose paths through a scenario.' :
+                     newQuestion.type === 'documentation-tool' ? 'Students document goals, progress, or reflections.' :
                      ''}
                   </p>
                 </div>

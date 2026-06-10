@@ -22,13 +22,8 @@ const QUESTION_TYPES = [
   { value: 'single-choice-set', label: 'Single Choice Set' },
   { value: 'essay', label: 'Essay' },
   { value: 'question-set', label: 'Question Set' },
-  { value: 'free-text', label: 'Free Text' },
-  { value: 'open-ended', label: 'Open Ended' },
-  { value: 'simple-multi-choice', label: 'Simple Multi Choice' },
   { value: 'sort-paragraphs', label: 'Sort Paragraphs' },
   { value: 'crossword', label: 'Crossword' },
-  { value: 'dictation', label: 'Dictation' },
-  { value: 'arithmetic-quiz', label: 'Arithmetic Quiz' },
   { value: 'branching-scenario', label: 'Branching Scenario' },
   { value: 'documentation-tool', label: 'Documentation Tool' }
 ];

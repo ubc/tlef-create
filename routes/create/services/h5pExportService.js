@@ -623,6 +623,8 @@ export function generateH5PQuestionSet(questions) {
         },
         "subContentId": crypto.randomBytes(16).toString('hex')
       };
+    } else if (question.type === 'mark-the-words' || question.type === 'essay') {
+      h5pQuestion = convertQuestionToH5P(question);
     } else if (question.type === 'ordering') {
       const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
       const correctOrder = question.content?.correctOrder || items;

@@ -101,13 +101,11 @@ const AddQuestionModal = ({
     { id: 'mark-the-words', label: 'Mark the Words' },
     { id: 'single-choice-set', label: 'Single Choice Set' },
     { id: 'essay', label: 'Essay' },
-    { id: 'free-text', label: 'Free Text' },
-    { id: 'open-ended', label: 'Open Ended' },
-    { id: 'simple-multi-choice', label: 'Simple Multi Choice' },
+    { id: 'question-set', label: 'Question Set' },
     { id: 'sort-paragraphs', label: 'Sort Paragraphs' },
     { id: 'crossword', label: 'Crossword' },
-    { id: 'dictation', label: 'Dictation' },
-    { id: 'arithmetic-quiz', label: 'Arithmetic Quiz' }
+    { id: 'branching-scenario', label: 'Branching Scenario' },
+    { id: 'documentation-tool', label: 'Documentation Tool' }
   ];
 
   const resetForm = () => {
@@ -217,7 +215,8 @@ const AddQuestionModal = ({
     }
     // New types that just need a question text
     if (['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
-         'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(questionType)) {
+         'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice',
+         'question-set', 'branching-scenario', 'documentation-tool'].includes(questionType)) {
       return questionData.question.trim().length > 0;
     }
     return false;
@@ -350,7 +349,8 @@ const AddQuestionModal = ({
 
               {/* Generic text-based editor for new question types */}
               {['mark-the-words', 'essay', 'free-text', 'open-ended', 'sort-paragraphs',
-                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice'].includes(questionType) && (
+                'crossword', 'dictation', 'arithmetic-quiz', 'single-choice-set', 'simple-multi-choice',
+                'question-set', 'branching-scenario', 'documentation-tool'].includes(questionType) && (
                 <div className="form-field">
                   <label>
                     {questionType === 'mark-the-words' ? 'Text (wrap correct words with *asterisks*)' :
@@ -359,6 +359,9 @@ const AddQuestionModal = ({
                      questionType === 'sort-paragraphs' ? 'Paragraphs (in correct order, one per line)' :
                      questionType === 'dictation' ? 'Sentences (one per line)' :
                      questionType === 'arithmetic-quiz' ? 'Quiz Description' :
+                     questionType === 'question-set' ? 'Question Set Description' :
+                     questionType === 'branching-scenario' ? 'Branching Scenario Description' :
+                     questionType === 'documentation-tool' ? 'Documentation Task Description' :
                      'Question'}
                   </label>
                   <textarea
@@ -369,6 +372,9 @@ const AddQuestionModal = ({
                       questionType === 'sort-paragraphs' ? 'Enter each paragraph on a new line in the correct order' :
                       questionType === 'crossword' ? 'Enter word:clue pairs, one per line (e.g., PHOTOSYNTHESIS:The process by which plants make food)' :
                       questionType === 'dictation' ? 'Enter sentences to dictate, one per line' :
+                      questionType === 'question-set' ? 'Describe the question set you want to add...' :
+                      questionType === 'branching-scenario' ? 'Describe the branching scenario prompt and choices...' :
+                      questionType === 'documentation-tool' ? 'Describe the documentation activity...' :
                       'Enter your question here...'
                     }
                     value={questionData.question}
@@ -385,6 +391,9 @@ const AddQuestionModal = ({
                      questionType === 'arithmetic-quiz' ? 'Arithmetic problems will be generated automatically.' :
                      questionType === 'single-choice-set' ? 'A rapid-fire set of single-choice questions.' :
                      questionType === 'simple-multi-choice' ? 'Students can select multiple correct answers.' :
+                     questionType === 'question-set' ? 'A grouped set of questions.' :
+                     questionType === 'branching-scenario' ? 'Students choose paths through a scenario.' :
+                     questionType === 'documentation-tool' ? 'Students document goals, progress, or reflections.' :
                      ''}
                   </p>
                 </div>

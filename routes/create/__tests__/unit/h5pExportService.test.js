@@ -286,6 +286,34 @@ describe('h5pExportService', () => {
       expect(result.questions).toHaveLength(1);
     });
 
+    test('should include Mark the Words and Essay question set children', () => {
+      const questions = [
+        {
+          type: 'mark-the-words',
+          questionText: 'Click the macroeconomic indicators.',
+          content: {
+            text: 'Click *GDP* and *inflation*.'
+          }
+        },
+        {
+          type: 'essay',
+          questionText: 'Explain long-run economic growth.',
+          content: {
+            taskDescription: 'Explain long-run economic growth.',
+            sampleAnswer: 'Growth depends on productivity, capital, and labor.'
+          }
+        }
+      ];
+
+      const result = generateH5PQuestionSet(questions);
+
+      expect(result.questions).toHaveLength(2);
+      expect(result.questions[0].library).toBe('H5P.MarkTheWords 1.11');
+      expect(result.questions[0].params.textField).toContain('*GDP*');
+      expect(result.questions[1].library).toBe('H5P.Essay 1.5');
+      expect(result.questions[1].params.taskDescription).toContain('Explain long-run economic growth');
+    });
+
     test('should return empty questions for empty input', () => {
       const result = generateH5PQuestionSet([]);
       expect(result.questions).toHaveLength(0);
