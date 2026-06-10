@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Save, Wand2 } from 'lucide-react';
 import { RootState, AppDispatch } from '../../store';
 import { fetchQuestions, setQuestionsGenerating, setQuestionsForQuiz } from '../../store/slices/questionSlice';
+import { updateQuizLocally } from '../../store/slices/quizSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import { questionsApi, quizApi, plansApi, Question } from '../../services/api';
 import { API_URL } from '../../config/api';
@@ -255,7 +256,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         cleanedAiConfig.additionalInstructions = aiConfig.additionalInstructions.trim();
       }
 
-      await quizApi.updateQuiz(quizId, {
+      const { quiz: updatedQuiz } = await quizApi.updateQuiz(quizId, {
         containerMode: targetFormat === 'standalone' || targetFormat === 'mixed-activity' ? 'column' : targetFormat,
         settings: {
           ...quiz.settings, // Keep existing settings
@@ -274,6 +275,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           aiConfig: cleanedAiConfig
         }
       });
+      dispatch(updateQuizLocally(updatedQuiz));
       setHasUnsavedChanges(false);
       showNotification('success', 'Plan Saved', 'Your plan has been saved successfully');
     } catch (error) {

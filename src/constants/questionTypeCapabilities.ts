@@ -124,7 +124,9 @@ export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
     'essay'
   ],
   standalone: [
-    'branching-scenario'
+    'branching-scenario',
+    'crossword',
+    'sort-paragraphs'
   ],
   'mixed-activity': [
     'multiple-choice',
