@@ -21,11 +21,6 @@ H5P.Column = (function (EventDispatcher) {
       params.useSeparators = true;
     }
 
-    // Fallback if column is empty
-    if (params.content === undefined) {
-      params.content = [];
-    }
-
     this.contentData = data;
 
     // Column wrapper element
@@ -128,35 +123,11 @@ H5P.Column = (function (EventDispatcher) {
       // Bubble resize events
       bubbleUp(instance, 'resize', self);
 
-      // Keep track of all instances that are tasks
-      const taskInstances = [];
-
       // Check if instance is a task
       if (Column.isTask(instance)) {
         // Tasks requires completion
-        taskInstances.push(instance);
-      }
 
-      // For H5P.Row, we'll retrieve the actual task instances
-      if (library === 'H5P.Row') {
-        const rowColumns = instance.getInstances();
-
-        // A row can have several columns
-        for (const rowColumn of rowColumns) {
-
-          // And each row column can have several content types,
-          // some of which might be tasks
-          const rowColumnInstances = rowColumn.getInstances();
-          for (const rowColumnInstance of rowColumnInstances) {
-            if (Column.isTask(rowColumnInstance)) {
-              taskInstances.push(rowColumnInstance);
-            }
-          }
-        }
-      }
-
-      for (const task of taskInstances) {
-        task.on('xAPI', trackScoring(numTasks));
+        instance.on('xAPI', trackScoring(numTasks));
         numTasks++;
       }
 
@@ -206,41 +177,16 @@ H5P.Column = (function (EventDispatcher) {
      * @param {string} libraryName Name of the next content type
      * @param {string} useSeparator
      */
-    var addSeparator = function (libraryName, useSeparator, content) {
+    var addSeparator = function (libraryName, useSeparator) {
       // Determine separator spacing
       var thisHasMargin = (hasMargins.indexOf(libraryName) !== -1);
-
-      if (libraryName === 'H5P.Row') {
-        let lastContent = null;
-        let contentCount = content.params?.columns?.reduce((count, column) => {
-          const contents = column.content?.params?.content;
-          count += contents?.length ?? 0;
-          if (contents?.length > 0) {
-            lastContent = column.content.params.content[contents.length-1];
-          }
-          return count;
-        }, 0);
-
-        // To avoid messy margin computation, separator setting should be disabled when there is more
-        // than a single content inside a row. We also don't want a separator if we don't have any content
-        if (useSeparator === 'auto' && (contentCount > 1 || contentCount === 0)) {
-          useSeparator = 'disabled';
-        } else if (contentCount > 0) {
-          // If we only have one content, we want to follow the same procedure as if that content was
-          // not wrapped on Row and RowColumn. 
-          addSeparator(lastContent.library.split(' ')[0], useSeparator ?? 'auto');
-          return;
-        } else {
-          // No separator.
-          return;
-        }
-      }
 
       // Only add if previous content exists
       if (previousHasMargin !== undefined) {
 
         // Create separator element
-        let separator = document.createElement('div');
+        var separator = document.createElement('div');
+        //separator.classList.add('h5p-column-ruler');
 
         // If no margins, check for top margin only
         if (!thisHasMargin && (hasTopMargins.indexOf(libraryName) === -1)) {
@@ -325,7 +271,7 @@ H5P.Column = (function (EventDispatcher) {
         if (params.useSeparators) { // (check for global override)
 
           // Add separator between contents
-          addSeparator(content.content.library.split(' ')[0], content.useSeparator, content.content);
+          addSeparator(content.content.library.split(' ')[0], content.useSeparator);
         }
 
         // Add content
@@ -525,18 +471,11 @@ H5P.Column = (function (EventDispatcher) {
      * @returns {Array} of xAPI data objects used to build a report
      */
     var getXAPIDataFromChildren = function (children) {
-      let childData = [];
-
-      children.forEach(child => {
-        if (child.libraryInfo.machineName === 'H5P.Row') {
-          childData.push(...child.getXAPIDataFromChildren());
+      return children.map(function (child) {
+        if (typeof child.getXAPIData == 'function') {
+          return child.getXAPIData();
         }
-        else if (typeof child.getXAPIData == 'function') {
-          childData.push(child.getXAPIData());
-        }
-      });
-
-      return childData.filter(function (data) {
+      }).filter(function (data) {
         return !!data;
       });
     };

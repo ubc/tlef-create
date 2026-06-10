@@ -191,10 +191,16 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
         title: quiz.name || 'Interactive Book',
         language: 'en',
         mainLibrary: 'H5P.InteractiveBook',
-        embedTypes: ['div'],
+        embedTypes: ['iframe'],
         license: 'U',
         defaultLanguage: 'en',
-        preloadedDependencies
+        preloadedDependencies: [...allLibs.values()]
+          .filter(lib => !lib.machineName.startsWith('H5PEditor'))
+          .map(lib => ({
+            machineName: lib.machineName,
+            majorVersion: lib.majorVersion,
+            minorVersion: lib.minorVersion
+          }))
       };
 
     } else if (isSingleType) {
@@ -291,12 +297,12 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // exist on the target platform, so we don't package their directories.
     // Libraries listed in preloadedDependencies where the platform should already
     // have that exact version are also skipped.
-    // In IB/QS mode, Column must be bundled since it's content-level, not platform-level
-    const skipDirLibs = new Set(containerMode === 'column' ? ['H5P.Column', 'jQuery.ui'] : ['jQuery.ui']);
+    // Interactive Book exports must be self-contained for players like Lumi.
+    const skipDirLibs = new Set(containerMode === 'column' ? ['H5P.Column', 'jQuery.ui'] : []);
     // Also skip packaging the "primary" version of Question if a secondary version exists
     // (e.g., skip Question 1.5 dir if Question 1.4 is also in allLibs as transitive dep)
     const questionVersions = [...allLibs.keys()].filter(k => k.startsWith('H5P.Question-'));
-    if (questionVersions.length > 1) {
+    if (containerMode === 'column' && questionVersions.length > 1) {
       // Find the version that's in neededLibNames (primary) — skip its dir
       const primaryKey = `H5P.Question-${LIBRARY_REGISTRY['H5P.Question']?.majorVersion}.${LIBRARY_REGISTRY['H5P.Question']?.minorVersion}`;
       if (primaryKey) skipDirLibs.add(primaryKey);
@@ -1885,7 +1891,7 @@ export function buildIBChapter(chapter, questions, quiz) {
   }
 
   return {
-    library: 'H5P.Column 1.20',
+    library: 'H5P.Column 1.18',
     params: { content: columnContent },
     subContentId: crypto.randomBytes(16).toString('hex'),
     metadata: { title: chapter.title || 'Chapter', license: 'U' }
