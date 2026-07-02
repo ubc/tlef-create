@@ -1,5 +1,10 @@
 # TLEF-CREATE: AI-Powered Quiz Generator
 
+> **AI Coding Assistants (Claude Code, Cursor, Copilot, etc.):**
+> Read [`docs/ai-environment-setup.md`](docs/ai-environment-setup.md) for step-by-step
+> automated environment setup instructions. Follow that file to clone all required repos,
+> create `.env` files, install dependencies, and generate the start scripts.
+
 **Next-generation quiz generator for modern education powered by UBC GenAI Toolkit**
 
 This is the main application combining both frontend (React + TypeScript) and backend (Node.js + Express) for TLEF-CREATE, an intelligent quiz generation platform that uses AI, RAG (Retrieval-Augmented Generation), and SAML authentication.
