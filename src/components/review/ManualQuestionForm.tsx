@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, X, Wand2 } from 'lucide-react';
 import { questionsApi, Question } from '../../services/api';
-import { ExtendedQuestion, questionTypes } from './reviewTypes';
+import { ExtendedQuestion } from './reviewTypes';
+import { QuestionTypeOption } from '../../constants/questionTypeCapabilities';
 
 interface MCOption {
   text: string;
   isCorrect: boolean;
   order?: number;
+  tip?: string;
+  chosenFeedback?: string;
+  notChosenFeedback?: string;
 }
 
 interface KeyPoint {
@@ -19,6 +23,7 @@ interface ManualQuestionFormState {
   question: string;
   loIndex: number;
   options: MCOption[];
+  selectionMode: 'single' | 'multiple';
   correctAnswer: string;
   front: string;
   back: string;
@@ -39,21 +44,23 @@ interface ManualQuestionFormProps {
   onClose: () => void;
   quizId: string;
   learningObjectives: LearningObjectiveData[];
+  availableQuestionTypes: QuestionTypeOption[];
   onQuestionAdded: (question: ExtendedQuestion) => void;
   onGenerateAI?: (loIndex: number, prompt: string, questionType: string) => Promise<void>;
   showNotification: (type: string, title: string, message: string) => void;
 }
 
-const defaultFormState: ManualQuestionFormState = {
-  type: 'multiple-choice',
+const createDefaultFormState = (defaultType: string): ManualQuestionFormState => ({
+  type: defaultType,
   question: '',
   loIndex: 0,
   options: [
-    { text: '', isCorrect: false },
-    { text: '', isCorrect: false },
-    { text: '', isCorrect: false },
-    { text: '', isCorrect: false }
+    { text: '', isCorrect: false, tip: '', chosenFeedback: '', notChosenFeedback: '' },
+    { text: '', isCorrect: false, tip: '', chosenFeedback: '', notChosenFeedback: '' },
+    { text: '', isCorrect: false, tip: '', chosenFeedback: '', notChosenFeedback: '' },
+    { text: '', isCorrect: false, tip: '', chosenFeedback: '', notChosenFeedback: '' }
   ],
+  selectionMode: 'single',
   correctAnswer: 'true',
   front: '',
   back: '',
@@ -62,31 +69,46 @@ const defaultFormState: ManualQuestionFormState = {
   rightItems: ['', ''],
   items: ['', '', ''],
   textWithBlanks: ''
-};
+});
 
-const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQuestionAdded, onGenerateAI, showNotification }: ManualQuestionFormProps) => {
+const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, availableQuestionTypes, onQuestionAdded, onGenerateAI, showNotification }: ManualQuestionFormProps) => {
+  const defaultQuestionType = useMemo(
+    () => availableQuestionTypes[0]?.value || 'multiple-choice',
+    [availableQuestionTypes]
+  );
   const [mode, setMode] = useState<'manual' | 'ai'>('manual');
-  const [newQuestion, setNewQuestion] = useState<ManualQuestionFormState>({ ...defaultFormState });
+  const [newQuestion, setNewQuestion] = useState<ManualQuestionFormState>(() => createDefaultFormState(defaultQuestionType));
 
   // AI mode state
   const [aiLoIndex, setAiLoIndex] = useState(-1);
   const [aiPrompt, setAiPrompt] = useState('');
-  const [aiQuestionType, setAiQuestionType] = useState('multiple-choice');
+  const [aiQuestionType, setAiQuestionType] = useState(defaultQuestionType);
   const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!availableQuestionTypes.some(type => type.value === newQuestion.type)) {
+      setNewQuestion(createDefaultFormState(defaultQuestionType));
+    }
+
+    if (!availableQuestionTypes.some(type => type.value === aiQuestionType)) {
+      setAiQuestionType(defaultQuestionType);
+    }
+  }, [availableQuestionTypes, aiQuestionType, defaultQuestionType, newQuestion.type]);
 
   const resetForm = () => {
     setMode('manual');
+    const nextDefaultState = createDefaultFormState(defaultQuestionType);
     setNewQuestion({
-      ...defaultFormState,
-      options: defaultFormState.options.map(o => ({ ...o })),
-      keyPoints: defaultFormState.keyPoints.map(k => ({ ...k })),
-      leftItems: [...defaultFormState.leftItems],
-      rightItems: [...defaultFormState.rightItems],
-      items: [...defaultFormState.items],
+      ...nextDefaultState,
+      options: nextDefaultState.options.map(o => ({ ...o })),
+      keyPoints: nextDefaultState.keyPoints.map(k => ({ ...k })),
+      leftItems: [...nextDefaultState.leftItems],
+      rightItems: [...nextDefaultState.rightItems],
+      items: [...nextDefaultState.items],
     });
     setAiLoIndex(-1);
     setAiPrompt('');
-    setAiQuestionType('multiple-choice');
+    setAiQuestionType(defaultQuestionType);
   };
 
   const handleClose = () => {
@@ -106,14 +128,27 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
       switch (newQuestion.type) {
         case 'multiple-choice':
           questionText = newQuestion.question;
+          {
+            const correctOptions = newQuestion.options.filter((opt: MCOption) => opt.isCorrect && opt.text.trim());
+            const normalizedSelectionMode = newQuestion.selectionMode === 'multiple' || correctOptions.length > 1
+              ? 'multiple'
+              : 'single';
           content = {
             options: newQuestion.options.map((opt: MCOption, index: number) => ({
               text: opt.text,
               isCorrect: opt.isCorrect,
-              order: index
+              order: index,
+              tip: opt.tip || '',
+              chosenFeedback: opt.chosenFeedback || '',
+              notChosenFeedback: opt.notChosenFeedback || ''
             }))
+              .filter((opt: MCOption) => opt.text.trim()),
+            selectionMode: normalizedSelectionMode
           };
-          correctAnswer = newQuestion.options.find((opt: MCOption) => opt.isCorrect)?.text || '';
+          correctAnswer = normalizedSelectionMode === 'multiple'
+            ? correctOptions.map((opt: MCOption) => opt.text)
+            : (correctOptions[0]?.text || '');
+          }
           break;
         case 'true-false':
           questionText = newQuestion.question;
@@ -217,7 +252,13 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
 
   const isManualFormValid = () => {
     if (newQuestion.type === 'multiple-choice') {
-      return newQuestion.question.trim() && newQuestion.options.some((opt: MCOption) => opt.isCorrect && opt.text.trim());
+      const validOptions = newQuestion.options.filter((opt: MCOption) => opt.text.trim());
+      const validCorrectOptions = validOptions.filter((opt: MCOption) => opt.isCorrect);
+      return newQuestion.question.trim()
+        && validOptions.length >= 2
+        && (newQuestion.selectionMode === 'multiple'
+          ? validCorrectOptions.length >= 1
+          : validCorrectOptions.length === 1);
     }
     if (newQuestion.type === 'true-false') return newQuestion.question.trim();
     if (newQuestion.type === 'flashcard') return newQuestion.front.trim() && newQuestion.back.trim();
@@ -284,20 +325,21 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                   value={newQuestion.type}
                   onChange={(e) => {
                     const type = e.target.value;
+                    const nextDefaultState = createDefaultFormState(type);
                     setNewQuestion({
-                      ...defaultFormState,
+                      ...nextDefaultState,
                       type,
                       loIndex: newQuestion.loIndex,
-                      options: defaultFormState.options.map(o => ({ ...o })),
-                      keyPoints: defaultFormState.keyPoints.map(k => ({ ...k })),
-                      leftItems: [...defaultFormState.leftItems],
-                      rightItems: [...defaultFormState.rightItems],
-                      items: [...defaultFormState.items],
+                      options: nextDefaultState.options.map(o => ({ ...o })),
+                      keyPoints: nextDefaultState.keyPoints.map(k => ({ ...k })),
+                      leftItems: [...nextDefaultState.leftItems],
+                      rightItems: [...nextDefaultState.rightItems],
+                      items: [...nextDefaultState.items],
                     });
                   }}
                 >
-                  {questionTypes.map(type => (
-                    <option key={type.id} value={type.id}>{type.label}</option>
+                  {availableQuestionTypes.map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
               </div>
@@ -336,43 +378,120 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                     />
                   </div>
                   <div className="form-field">
+                    <label>Answer Mode</label>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="radio"
+                          name="manual-mc-selection-mode"
+                          checked={newQuestion.selectionMode === 'single'}
+                          onChange={() => {
+                            const firstCorrectIndex = newQuestion.options.findIndex((option: MCOption) => option.isCorrect);
+                            const updatedOptions = newQuestion.options.map((option: MCOption, index: number) => ({
+                              ...option,
+                              isCorrect: firstCorrectIndex === -1 ? false : index === firstCorrectIndex
+                            }));
+                            setNewQuestion({ ...newQuestion, selectionMode: 'single', options: updatedOptions });
+                          }}
+                        />
+                        Single answer
+                      </label>
+                      <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="radio"
+                          name="manual-mc-selection-mode"
+                          checked={newQuestion.selectionMode === 'multiple'}
+                          onChange={() => setNewQuestion({ ...newQuestion, selectionMode: 'multiple' })}
+                        />
+                        Multiple answers
+                      </label>
+                    </div>
+                  </div>
+                  <div className="form-field">
                     <label>Answer Options</label>
                     <div className="aq-options-list">
                       {newQuestion.options.map((option: MCOption, index: number) => (
-                        <div key={index} className="aq-option-row">
-                          <input
-                            type="checkbox"
-                            checked={option.isCorrect}
-                            onChange={(e) => {
-                              const updatedOptions = [...newQuestion.options];
-                              updatedOptions[index] = { ...updatedOptions[index], isCorrect: e.target.checked };
-                              setNewQuestion({...newQuestion, options: updatedOptions});
-                            }}
-                            className="aq-option-checkbox"
-                          />
-                          <input
-                            type="text"
-                            value={option.text}
-                            onChange={(e) => {
-                              const updatedOptions = [...newQuestion.options];
-                              updatedOptions[index] = { ...updatedOptions[index], text: e.target.value };
-                              setNewQuestion({...newQuestion, options: updatedOptions});
-                            }}
-                            placeholder={`Option ${index + 1}`}
-                            className="input aq-option-input"
-                          />
-                          {newQuestion.options.length > 2 && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm aq-remove-btn"
-                              onClick={() => {
-                                const updatedOptions = newQuestion.options.filter((_: MCOption, i: number) => i !== index);
-                                setNewQuestion({...newQuestion, options: updatedOptions});
+                        <div key={index} className="aq-option-row" style={{ display: 'block' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                            <input
+                              type={newQuestion.selectionMode === 'multiple' ? 'checkbox' : 'radio'}
+                              name={newQuestion.selectionMode === 'multiple' ? undefined : 'manual-mc-correct-answer'}
+                              checked={option.isCorrect}
+                              onChange={(e) => {
+                                const updatedOptions = [...newQuestion.options];
+                                if (newQuestion.selectionMode === 'multiple') {
+                                  updatedOptions[index] = { ...updatedOptions[index], isCorrect: e.target.checked };
+                                } else {
+                                  updatedOptions.forEach((existingOption, optionIndex) => {
+                                    updatedOptions[optionIndex] = {
+                                      ...existingOption,
+                                      isCorrect: optionIndex === index
+                                    };
+                                  });
+                                }
+                                setNewQuestion({ ...newQuestion, options: updatedOptions });
                               }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                              className="aq-option-checkbox"
+                            />
+                            <input
+                              type="text"
+                              value={option.text}
+                              onChange={(e) => {
+                                const updatedOptions = [...newQuestion.options];
+                                updatedOptions[index] = { ...updatedOptions[index], text: e.target.value };
+                                setNewQuestion({ ...newQuestion, options: updatedOptions });
+                              }}
+                              placeholder={`Option ${index + 1}`}
+                              className="input aq-option-input"
+                            />
+                            {newQuestion.options.length > 2 && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm aq-remove-btn"
+                                onClick={() => {
+                                  const updatedOptions = newQuestion.options.filter((_: MCOption, i: number) => i !== index);
+                                  setNewQuestion({ ...newQuestion, options: updatedOptions });
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ marginTop: '8px', marginLeft: '32px', display: 'grid', gap: '8px' }}>
+                            <input
+                              type="text"
+                              value={option.tip || ''}
+                              onChange={(e) => {
+                                const updatedOptions = [...newQuestion.options];
+                                updatedOptions[index] = { ...updatedOptions[index], tip: e.target.value };
+                                setNewQuestion({ ...newQuestion, options: updatedOptions });
+                              }}
+                              placeholder="Tip shown before checking answers"
+                              className="input aq-option-input"
+                            />
+                            <input
+                              type="text"
+                              value={option.chosenFeedback || ''}
+                              onChange={(e) => {
+                                const updatedOptions = [...newQuestion.options];
+                                updatedOptions[index] = { ...updatedOptions[index], chosenFeedback: e.target.value };
+                                setNewQuestion({ ...newQuestion, options: updatedOptions });
+                              }}
+                              placeholder="Feedback shown if this option is selected"
+                              className="input aq-option-input"
+                            />
+                            <input
+                              type="text"
+                              value={option.notChosenFeedback || ''}
+                              onChange={(e) => {
+                                const updatedOptions = [...newQuestion.options];
+                                updatedOptions[index] = { ...updatedOptions[index], notChosenFeedback: e.target.value };
+                                setNewQuestion({ ...newQuestion, options: updatedOptions });
+                              }}
+                              placeholder="Feedback shown if this option is not selected"
+                              className="input aq-option-input"
+                            />
+                          </div>
                         </div>
                       ))}
                       <button
@@ -381,7 +500,13 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                         onClick={() => {
                           setNewQuestion({
                             ...newQuestion,
-                            options: [...newQuestion.options, { text: '', isCorrect: false }]
+                            options: [...newQuestion.options, {
+                              text: '',
+                              isCorrect: false,
+                              tip: '',
+                              chosenFeedback: '',
+                              notChosenFeedback: ''
+                            }]
                           });
                         }}
                       >
@@ -829,8 +954,8 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, onQue
                   value={aiQuestionType}
                   onChange={(e) => setAiQuestionType(e.target.value)}
                 >
-                  {questionTypes.map(type => (
-                    <option key={type.id} value={type.id}>{type.label}</option>
+                  {availableQuestionTypes.map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
               </div>

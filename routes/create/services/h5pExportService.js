@@ -11,6 +11,27 @@ import { createWriteStream } from 'fs';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
 
+function getMultipleChoiceSelectionMode(question) {
+  if (question.content?.selectionMode === 'multiple') {
+    return 'multiple';
+  }
+
+  const correctCount = (question.content?.options || []).filter(option => option.isCorrect).length;
+  return correctCount > 1 ? 'multiple' : 'single';
+}
+
+function mapMultipleChoiceAnswers(options = []) {
+  return options.map(option => ({
+    correct: option.isCorrect || false,
+    text: `<div>${escapeHtml(option.text)}</div>`,
+    tipsAndFeedback: {
+      tip: option.tip ? `<p>${escapeHtml(option.tip)}</p>` : '',
+      chosenFeedback: option.chosenFeedback ? `<div>${escapeHtml(option.chosenFeedback)}</div>` : '',
+      notChosenFeedback: option.notChosenFeedback ? `<div>${escapeHtml(option.notChosenFeedback)}</div>` : ''
+    }
+  }));
+}
+
 /**
  * Create an H5P ZIP package from a quiz.
  * @param {Object} quiz - Populated quiz document
@@ -440,20 +461,17 @@ export function generateH5PQuestionSet(questions) {
     let h5pQuestion;
 
     if (question.type === 'multiple-choice') {
+      const selectionMode = getMultipleChoiceSelectionMode(question);
       h5pQuestion = {
         "params": {
           "media": { "disableImageZooming": false },
-          "answers": question.content?.options?.map(option => ({
-            "correct": option.isCorrect || false,
-            "text": `<div>${escapeHtml(option.text)}</div>`,
-            "tipsAndFeedback": {}
-          })) || [],
+          "answers": mapMultipleChoiceAnswers(question.content?.options || []),
           "overallFeedback": [{ "from": 0, "to": 100 }],
           "behaviour": {
             "enableRetry": true,
             "enableSolutionsButton": true,
             "enableCheckButton": true,
-            "type": "auto",
+            "type": selectionMode === 'multiple' ? 'multi' : 'single',
             "singlePoint": false,
             "randomAnswers": true,
             "showSolutionsRequiresInput": true,
@@ -818,24 +836,20 @@ export function generateH5PDialogCards(flashcardQuestions) {
  */
 export function convertQuestionToH5P(question, quiz) {
   if (question.type === 'multiple-choice') {
+    const selectionMode = getMultipleChoiceSelectionMode(question);
     return {
       "library": "H5P.MultiChoice 1.16",
       "params": {
         "question": `<p>${escapeHtml(question.questionText)}</p>`,
-        "answers": question.content?.options?.map(option => ({
-          "correct": option.isCorrect || false,
-          "text": `<div>${escapeHtml(option.text)}</div>\n`,
-          "tipsAndFeedback": {
-            "tip": "",
-            "chosenFeedback": option.isCorrect ? "Correct!" : "Try again",
-            "notChosenFeedback": ""
-          }
-        })) || [],
+        "answers": mapMultipleChoiceAnswers(question.content?.options || []).map(answer => ({
+          ...answer,
+          text: `${answer.text}\n`
+        })),
         "behaviour": {
           "enableRetry": true,
           "enableSolutionsButton": true,
           "enableCheckButton": true,
-          "type": "auto",
+          "type": selectionMode === 'multiple' ? 'multi' : 'single',
           "singlePoint": true,
           "randomAnswers": false,
           "showSolutionsRequiresInput": true,
@@ -1246,7 +1260,7 @@ export function convertQuestionToH5P(question, quiz) {
         "choices": choices,
         "overallFeedback": [{ "from": 0, "to": 100 }],
         "behaviour": {
-          "autoContinue": true,
+          "autoContinue": false,
           "timeoutCorrect": 2000,
           "timeoutWrong": 3000,
           "soundEffectsEnabled": true,

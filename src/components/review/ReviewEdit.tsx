@@ -22,6 +22,7 @@ import {
   TARGET_FORMATS,
   TargetFormat,
   getDeliveryTargetForFormat,
+  getQuestionTypesForTarget,
   getUnsupportedQuestionTypesForTarget
 } from '../../constants/questionTypeCapabilities';
 import '../../styles/components/ReviewEdit.css';
@@ -35,6 +36,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
   const [pdfExportModalOpen, setPdfExportModalOpen] = useState(false);
+  const [markdownExportModalOpen, setMarkdownExportModalOpen] = useState(false);
   const [canvasExportModalOpen, setCanvasExportModalOpen] = useState(false);
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
@@ -221,6 +223,50 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
+  const handleGenerateAIQuestion = async (loIndex: number, prompt: string, questionType: string) => {
+    const initialQuestionCount = questions.length;
+    const selectedLO = loIndex >= 0 ? learningObjectives[loIndex] : null;
+    const questionConfig = {
+      questionType,
+      difficulty: 'moderate',
+      learningObjective: selectedLO?.text || '',
+      learningObjectiveId: selectedLO?._id,
+      ...(loIndex < 0 && { useCustomPromptOnly: true }),
+      ...(prompt.trim() && { customPrompt: prompt.trim() })
+    };
+
+    showNotification('info', 'AI Generation Started', 'Generating a new question...');
+
+    const response = await fetch('/api/create/streaming/generate-questions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        quizId,
+        sessionId: `review-add-${Date.now()}`,
+        questionConfigs: [questionConfig]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to start AI question generation');
+    }
+
+    const maxAttempts = 20;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const result = await dispatch(fetchQuestions(quizId)).unwrap();
+      if (result.questions.length > initialQuestionCount) {
+        showNotification('success', 'Question Added', 'AI generated a new question successfully');
+        return;
+      }
+    }
+
+    throw new Error('AI generation started, but the new question did not appear in time');
+  };
+
   const handleH5PExport = async () => {
     if (questions.length === 0) {
       showNotification('warning', 'No Questions', 'Add some questions before exporting to H5P');
@@ -311,6 +357,40 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
+  const handleMarkdownExport = async (type: 'questions' | 'answers' | 'combined') => {
+    if (questions.length === 0) {
+      showNotification('warning', 'No Questions', 'Add some questions before exporting to Markdown');
+      return;
+    }
+    setExportLoading(true);
+    setMarkdownExportModalOpen(false);
+    try {
+      const typeLabels = { questions: 'Questions', answers: 'Answers', combined: 'Questions and Answers' };
+      showNotification('info', 'Generating Markdown', `Creating ${typeLabels[type]} Markdown export...`);
+      const result = await exportApi.exportToMarkdown(quizId, type);
+      if (result.success && result.data) {
+        const blob = await exportApi.downloadExport(result.data.exportId);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = result.data.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        showNotification('success', 'Markdown Export Complete', `Downloaded ${result.data.filename} successfully`);
+      } else {
+        const errorMessage = result.error?.message || 'Failed to generate Markdown export';
+        throw new Error(errorMessage);
+      }
+    } catch (error: unknown) {
+      console.error('Markdown export failed:', error);
+      showNotification('error', 'Markdown Export Failed', error instanceof Error ? error.message : 'Failed to export quiz to Markdown format');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="review-edit">
@@ -333,6 +413,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     questions.map(question => question.type),
     deliveryTarget === 'canvas-lti' ? 'column' : targetFormat
   );
+  const availableQuestionTypes = getQuestionTypesForTarget(targetFormat);
 
   return (
     <div className="review-edit">
@@ -488,6 +569,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               <button className="btn btn-outline" onClick={() => setPdfExportModalOpen(true)} disabled={exportLoading}>
                 <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to PDF'}
               </button>
+              <button className="btn btn-outline" onClick={() => setMarkdownExportModalOpen(true)} disabled={exportLoading}>
+                <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to Markdown'}
+              </button>
               <button className="btn btn-outline" onClick={() => setCanvasExportModalOpen(true)} disabled={exportLoading}>
                 <Upload size={16} /> Export to Canvas
               </button>
@@ -500,7 +584,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           onClose={() => setShowManualAdd(false)}
           quizId={quizId}
           learningObjectives={learningObjectives}
+          availableQuestionTypes={availableQuestionTypes}
           onQuestionAdded={(q) => setQuestions([...questions, q])}
+          onGenerateAI={handleGenerateAIQuestion}
           showNotification={showNotification}
         />
       </div>
@@ -521,6 +607,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         onClose={() => setPdfExportModalOpen(false)}
         onExport={handlePDFExport}
         isLoading={exportLoading}
+      />
+
+      <PdfExportModal
+        isOpen={markdownExportModalOpen}
+        onClose={() => setMarkdownExportModalOpen(false)}
+        onExport={handleMarkdownExport}
+        isLoading={exportLoading}
+        title="Export to Markdown"
+        subtitle="Choose what to include in your Markdown export"
       />
 
       <CanvasExportModal

@@ -53,8 +53,16 @@ const questionSchema = new mongoose.Schema({
     options: [{
       text: { type: String, required: true },
       isCorrect: { type: Boolean, default: false },
-      order: { type: Number }
+      order: { type: Number },
+      tip: { type: String, default: '' },
+      chosenFeedback: { type: String, default: '' },
+      notChosenFeedback: { type: String, default: '' }
     }],
+    selectionMode: {
+      type: String,
+      enum: ['single', 'multiple'],
+      default: 'single'
+    },
     
     // For Flashcard
     front: { type: String }, // Question side

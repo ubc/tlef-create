@@ -7,6 +7,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import sseService from '../services/sseService.js';
+import { planLOSlices } from '../services/loSlicePlanner.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
@@ -39,6 +40,74 @@ function enrichQuestionConfigsWithObjectives(questionConfigs, quiz) {
       learningObjective: learningObjective || quiz.learningObjectives[0]
     };
   });
+}
+
+function getLearningObjectiveText(config) {
+  if (typeof config.learningObjective === 'string') {
+    return config.learningObjective;
+  }
+
+  return config.learningObjective?.text || '';
+}
+
+function buildPlanningGroupKey(config) {
+  const loText = getLearningObjectiveText(config);
+  return [
+    config.learningObjective?._id?.toString?.() || config.learningObjectiveId || loText,
+    config.questionType,
+    config.selectionMode || 'single',
+    config.customPrompt || ''
+  ].join('::');
+}
+
+/**
+ * Assign a distinct LO slice to each repeated config before parallel generation.
+ * This prevents parallel LLM calls from independently choosing the same narrow focus.
+ */
+function attachPlannedTasksToQuestionConfigs(questionConfigs) {
+  const groups = new Map();
+
+  questionConfigs.forEach((config, index) => {
+    const loText = getLearningObjectiveText(config);
+    if (!loText || !config.questionType) {
+      return;
+    }
+
+    const groupKey = buildPlanningGroupKey(config);
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, []);
+    }
+    groups.get(groupKey).push({ config, index, loText });
+  });
+
+  const plannedConfigs = questionConfigs.map(config => ({ ...config }));
+
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    const slicePlan = planLOSlices({
+      learningObjective: group[0].loText,
+      questionType: group[0].config.questionType,
+      requestedCount: group.length
+    });
+
+    console.log(
+      `🧩 Streaming slice plan for ${group[0].config.questionType}:`,
+      slicePlan.recommendedTasks.map(task => task.sliceLabel).join(' | ')
+    );
+
+    group.forEach(({ index }, taskIndex) => {
+      plannedConfigs[index] = {
+        ...plannedConfigs[index],
+        plannedTask: slicePlan.recommendedTasks[taskIndex] || null,
+        slicePlanBreadth: slicePlan.breadth
+      };
+    });
+  }
+
+  return plannedConfigs;
 }
 
 // ============================================================
@@ -90,7 +159,9 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
       return res.status(404).json({ error: 'Quiz not found' });
     }
 
-    const enrichedConfigs = enrichQuestionConfigsWithObjectives(questionConfigs, quiz);
+    const enrichedConfigs = attachPlannedTasksToQuestionConfigs(
+      enrichQuestionConfigsWithObjectives(questionConfigs, quiz)
+    );
 
     // Get processed material IDs for RAG retrieval
     const processedMaterialIds = (quiz.materials || [])

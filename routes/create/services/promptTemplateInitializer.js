@@ -15,7 +15,10 @@ CRITICAL REQUIREMENTS:
 1. The sum of ALL counts MUST equal EXACTLY {{totalQuestions}}
 2. Distribute across ALL learning objectives proportionally
 3. Each item must have count >= 1
-4. Return ONLY the JSON object below (no text, no markdown, no explanations)
+4. If a learning objective is broad or contains multiple assessable components, distribute repeated questions so different components can be covered across the set
+5. Avoid creating a plan that would force multiple near-duplicate questions for the same narrow concept unless the instructor explicitly asked for that
+6. Prefer conceptual diversity within each learning objective when multiple questions are assigned to it
+7. Return ONLY the JSON object below (no text, no markdown, no explanations)
 
 {
   "planItems": [
@@ -41,7 +44,8 @@ Question Type Rules:
 Design Guidelines:
 - Flashcards for key terms, definitions, and concepts
 - Summaries for broader understanding and synthesis
-- Mark-the-words to help students identify important terms in context`,
+- Mark-the-words to help students identify important terms in context
+- If one learning objective covers multiple concepts, distribute cards so different concepts can be reinforced instead of repeating the same fact pattern`,
     questionTypeRules: {
       allowedTypes: ['flashcard', 'summary', 'mark-the-words'],
       distribution: new Map([['flashcard', 0.65], ['summary', 0.17], ['mark-the-words', 0.18]]),
@@ -71,7 +75,8 @@ Design Guidelines:
 - True/false for fundamental concepts and quick checks
 - Single-choice-set for timed quizzes and quick recall
 - Essay for in-depth comprehension evaluation
-- Mix question types within each learning objective for variety`,
+- Mix question types within each learning objective for variety
+- If a learning objective contains several assessable parts, allocate questions so different parts can be assessed instead of repeating the same broad prompt`,
     questionTypeRules: {
       allowedTypes: ['multiple-choice', 'true-false', 'single-choice-set', 'essay'],
       distribution: new Map([['multiple-choice', 0.45], ['true-false', 0.24], ['single-choice-set', 0.23], ['essay', 0.08]]),
@@ -102,7 +107,8 @@ Design Guidelines:
 - Sort-paragraphs for logical sequencing of ideas
 - Mark-the-words for identifying key terms in context
 - Aim for visual variety and engagement
-- Distribute question types so no single type dominates`,
+- Distribute question types so no single type dominates
+- If one learning objective is broad, use the diversity of question types to cover different slices of that objective rather than repeating the same challenge`,
     questionTypeRules: {
       allowedTypes: ['matching', 'ordering', 'cloze', 'discussion', 'crossword', 'sort-paragraphs', 'mark-the-words'],
       distribution: new Map([

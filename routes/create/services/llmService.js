@@ -6,6 +6,7 @@
 import { LLMModule } from 'ubc-genai-toolkit-llm';
 import { ConsoleLogger } from 'ubc-genai-toolkit-core';
 import { generateTemplateQuestion } from './templateQuestionGenerator.js';
+import { planLOSlices } from './loSlicePlanner.js';
 import { QUESTION_TYPES } from '../config/constants.js';
 import UserApiKey from '../models/UserApiKey.js';
 import User from '../models/User.js';
@@ -166,6 +167,7 @@ class QuizLLMService {
       previousQuestions = [],
       customPrompt = null,
       userId = null,
+      selectionMode = 'single',
       branchingLayers = 2,
       branchingChoices = 2
     } = questionConfig;
@@ -192,6 +194,7 @@ class QuizLLMService {
         courseContext,
         previousQuestions,
         customPrompt,
+        selectionMode,
         branchingLayers,
         branchingChoices
       );
@@ -368,7 +371,7 @@ class QuizLLMService {
       }
 
       // Parse and validate response
-      const questionData = this.parseAndValidateResponse(finalContent, questionType);
+      const questionData = this.parseAndValidateResponse(finalContent, questionType, selectionMode);
       
       // Log generated Summary questions for debugging
       if (questionType === 'summary') {
@@ -433,6 +436,7 @@ class QuizLLMService {
       previousQuestions = [],
       customPrompt = null,
       userId = null,
+      selectionMode = 'single',
       branchingLayers = 2,
       branchingChoices = 2
     } = questionConfig;
@@ -459,6 +463,7 @@ class QuizLLMService {
         courseContext,
         previousQuestions,
         customPrompt,
+        selectionMode,
         branchingLayers,
         branchingChoices
       );
@@ -478,7 +483,7 @@ class QuizLLMService {
       console.log(`🔍 Raw LLM response:`, response.content.substring(0, 500) + '...');
 
       // Parse and validate response
-      const questionData = this.parseAndValidateResponse(response.content, questionType);
+      const questionData = this.parseAndValidateResponse(response.content, questionType, selectionMode);
       
       // Log generated Summary questions for debugging
       if (questionType === 'summary') {
@@ -529,7 +534,7 @@ class QuizLLMService {
   /**
    * Build expert-level prompt for question generation
    */
-  async buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt, branchingLayers = 2, branchingChoices = 2) {
+  async buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt, selectionMode = 'single', branchingLayers = 2, branchingChoices = 2) {
     // Handle different relevantContent formats
     const contentArray = Array.isArray(relevantContent) 
       ? relevantContent 
@@ -539,8 +544,13 @@ class QuizLLMService {
       .map((chunk, index) => `[Content ${index + 1}] (from ${chunk.metadata?.source || chunk.source || 'unknown'}, relevance: ${chunk.score?.toFixed(2) || 'N/A'})\n${chunk.content}`)
       .join('\n\n');
 
-    const previousQuestionsText = previousQuestions.length > 0 
-      ? `\n\nPREVIOUS QUESTIONS TO AVOID DUPLICATION:\n${previousQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join('\n')}`
+    const previousQuestionsText = previousQuestions.length > 0
+      ? `\n\nPREVIOUS QUESTIONS TO AVOID DUPLICATION:\n${previousQuestions.map((q, i) => {
+          const questionStem = q.questionText || 'Unknown question text';
+          const questionTypeLabel = q.type || 'unknown';
+          const explanation = q.explanation ? ` | Explanation: ${q.explanation}` : '';
+          return `${i + 1}. [${questionTypeLabel}] ${questionStem}${explanation}`;
+        }).join('\n')}`
       : '';
 
     // Delegate to type-specific builders for complex standalone types
@@ -579,14 +589,31 @@ INSTRUCTIONS:${customPrompt && learningObjective ? '\n⚠️ ADDITIONAL USER REQ
 3. Ensure the question tests meaningful understanding, not just memorization
 4. Make the question engaging and relevant to real-world applications
 5. Follow educational best practices for ${questionType} questions
-6. Avoid duplicating previous questions - create unique content and scenarios
+6. Avoid duplicating previous questions - create unique content, scenarios, concept focus, and reasoning patterns
+7. If the learning objective contains multiple components, select ONE clear assessable slice unless synthesis is explicitly necessary
+8. Prefer a narrow and concrete target over a broad catch-all question
+9. Use the course materials to ground the chosen slice in specific ideas, examples, terminology, or evidence
+
+NOVELTY AND COVERAGE REQUIREMENTS:
+- First identify the specific sub-skill, sub-topic, misconception, comparison, process step, or application case that this question will assess
+- Do NOT reuse the same assessed slice, scenario, comparison, or conceptual contrast used by previous questions
+- Rewording a previous question is NOT enough; the assessed thinking task must be meaningfully different
+- When the learning objective is broad, distribute coverage by targeting a different slice than previous questions
+- Avoid broad survey-style stems if a more focused question can assess the objective better
+
+MULTIPLE-CHOICE QUALITY REQUIREMENTS:
+- The correct answer must be clearly best according to the materials and learning objective
+- Each distractor must reflect a different plausible misunderstanding, partial truth, or reasoning error
+- Do not create distractors that are trivially wrong, redundant with each other, or only differ cosmetically
+- Prefer distractors that help an instructor diagnose what a student misunderstood
+- Respect the requested answer mode for multiple-choice questions: ${selectionMode === 'multiple' ? 'multiple answers allowed; at least two options must be correct' : 'single answer only; exactly one option must be correct'}
 
 ${customPrompt && learningObjective ? 'IMPORTANT: The additional user requirements above are MANDATORY and must be implemented exactly as specified.' : ''}
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (all strings must be on single lines - no line breaks within strings):`;
 
-    const formatInstructions = this.getFormatInstructions(questionType);
+    const formatInstructions = this.getFormatInstructions(questionType, selectionMode);
 
     return basePrompt + '\n' + formatInstructions;
   }
@@ -594,19 +621,48 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
   /**
    * Get format instructions for each question type
    */
-  getFormatInstructions(questionType) {
+  getFormatInstructions(questionType, selectionMode = 'single') {
     const formats = {
-      'multiple-choice': `{
-  "questionText": "Your question here (should be clear, specific, and test understanding)",
+      'multiple-choice': selectionMode === 'multiple' ? `{
+  "questionText": "Your question here (make it clear learners should select all that apply when more than one answer is correct)",
   "options": [
-    {"text": "Correct answer (substantive and detailed)", "isCorrect": true},
-    {"text": "Plausible distractor 1 (common misconception)", "isCorrect": false},
-    {"text": "Plausible distractor 2 (partially correct but incomplete)", "isCorrect": false},
-    {"text": "Plausible distractor 3 (logical but incorrect)", "isCorrect": false}
+    {"text": "Correct answer 1 (substantive and detailed)", "isCorrect": true, "tip": "Short hint before checking", "chosenFeedback": "Why selecting this option is appropriate", "notChosenFeedback": "Why this correct option matters if missed"},
+    {"text": "Correct answer 2 (also genuinely correct and non-overlapping)", "isCorrect": true, "tip": "Short hint before checking", "chosenFeedback": "Why selecting this option is appropriate", "notChosenFeedback": "Why this correct option matters if missed"},
+    {"text": "Plausible distractor 1 (misconception type 1)", "isCorrect": false, "tip": "Short hint before checking", "chosenFeedback": "Why this selected option is not correct", "notChosenFeedback": "Why skipping this distractor was a good choice"},
+    {"text": "Plausible distractor 2 (reasoning error type 2)", "isCorrect": false, "tip": "Short hint before checking", "chosenFeedback": "Why this selected option is not correct", "notChosenFeedback": "Why skipping this distractor was a good choice"}
+  ],
+  "correctAnswer": ["Correct answer 1 (substantive and detailed)", "Correct answer 2 (also genuinely correct and non-overlapping)"],
+  "explanation": "Detailed explanation of why each correct option is right and why each distractor is wrong, referencing course materials"
+}
+
+IMPORTANT REQUIREMENTS FOR MULTIPLE-ANSWER QUESTIONS:
+1. The stem must clearly signal that more than one answer can be selected.
+2. You MUST mark at least 2 options as correct.
+3. Each correct option should contribute a distinct valid idea, not a paraphrase of another correct option.
+4. Each distractor must represent a DIFFERENT plausible error pattern.
+5. The explanation must briefly clarify each correct choice and each distractor.
+6. Every option MUST include tip, chosenFeedback, and notChosenFeedback fields.
+7. Keep tip concise and actionable. Keep feedback specific to that option.` : `{
+  "questionText": "Your question here (should be clear, specific, narrow in scope when appropriate, and test understanding)",
+  "options": [
+    {"text": "Correct answer (substantive and detailed)", "isCorrect": true, "tip": "Short hint before checking", "chosenFeedback": "Why selecting this option is appropriate", "notChosenFeedback": "Why this correct option matters if missed"},
+    {"text": "Plausible distractor 1 (misconception type 1)", "isCorrect": false, "tip": "Short hint before checking", "chosenFeedback": "Why this selected option is not correct", "notChosenFeedback": "Why skipping this distractor was a good choice"},
+    {"text": "Plausible distractor 2 (partial-truth error type 2)", "isCorrect": false, "tip": "Short hint before checking", "chosenFeedback": "Why this selected option is not correct", "notChosenFeedback": "Why skipping this distractor was a good choice"},
+    {"text": "Plausible distractor 3 (reasoning error type 3)", "isCorrect": false, "tip": "Short hint before checking", "chosenFeedback": "Why this selected option is not correct", "notChosenFeedback": "Why skipping this distractor was a good choice"}
   ],
   "correctAnswer": "Correct answer text (exact match)",
   "explanation": "Detailed explanation of why the correct answer is right and why distractors are wrong, referencing course materials"
-}`,
+}
+
+IMPORTANT REQUIREMENTS FOR MULTIPLE-CHOICE QUESTIONS:
+1. If the learning objective is broad, target one specific assessable slice instead of trying to assess everything at once.
+2. Do not repeat the same concept focus or scenario used in previous questions.
+3. Each distractor must represent a DIFFERENT plausible error pattern.
+4. Avoid distractors that are synonyms of each other or obviously wrong on sight.
+5. The explanation must briefly clarify why each distractor is wrong, not only why the correct answer is right.
+6. You MUST mark exactly 1 option as correct.
+7. Every option MUST include tip, chosenFeedback, and notChosenFeedback fields.
+8. Keep tip concise and actionable. Keep feedback specific to that option.`,
 
       'true-false': `{
   "questionText": "Your true/false statement here (should be clear and test nuanced understanding)",
@@ -616,7 +672,12 @@ Return ONLY a valid JSON object with this exact structure (all strings must be o
   ],
   "correctAnswer": "True",
   "explanation": "Detailed explanation of why the statement is true/false, with specific references to course concepts"
-}`,
+}
+
+IMPORTANT REQUIREMENTS FOR TRUE/FALSE QUESTIONS:
+1. Prefer a narrow claim that tests one meaningful idea.
+2. Avoid statements that are so broad they collapse multiple concepts into one judgment.
+3. Do not restate the same conceptual claim used in previous questions.`,
 
       'flashcard': `{
   "questionText": "Review this concept",
@@ -731,7 +792,7 @@ IMPORTANT: Wrap correct words with asterisks (*word*) in the text field. Only th
   "explanation": "The mitochondria produce ATP (energy), and the nucleus contains the cell's DNA."
 }
 
-IMPORTANT: Generate 2-4 sub-questions. The FIRST answer in each answers array is ALWAYS the correct one. Answers must be plain strings (NOT objects). Include 3-4 answer options per question.`,
+IMPORTANT: Generate 2-4 sub-questions. The FIRST answer in each answers array is ALWAYS the correct one. Answers must be plain strings (NOT objects). Include 3-4 answer options per question. Make the sub-questions cover different slices of the learning objective instead of repeating the same fact pattern.`,
 
       'essay': `{
   "questionText": "Write an essay about the topic below",
@@ -893,10 +954,29 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
     return result;
   }
 
+  extractCorrectAnswerCandidates(correctAnswer, allowCommaSeparatedList = false) {
+    if (Array.isArray(correctAnswer)) {
+      return correctAnswer.map(answer => String(answer).trim()).filter(Boolean);
+    }
+
+    if (typeof correctAnswer === 'string') {
+      if (allowCommaSeparatedList) {
+        return correctAnswer
+          .split(',')
+          .map(answer => answer.trim())
+          .filter(Boolean);
+      }
+
+      return [correctAnswer.trim()].filter(Boolean);
+    }
+
+    return [];
+  }
+
   /**
    * Parse and validate LLM response
    */
-  parseAndValidateResponse(responseContent, questionType) {
+  parseAndValidateResponse(responseContent, questionType, selectionMode = 'single') {
     try {
       console.log(`🔍 Parsing LLM response for ${questionType}:`, responseContent.substring(0, 200) + '...');
       
@@ -1130,29 +1210,53 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
           if (option.isCorrect === undefined || option.isCorrect === null) {
             option.isCorrect = false;
           }
+
+          option.tip = typeof option.tip === 'string' ? option.tip.trim() : '';
+          option.chosenFeedback = typeof option.chosenFeedback === 'string' ? option.chosenFeedback.trim() : '';
+          option.notChosenFeedback = typeof option.notChosenFeedback === 'string' ? option.notChosenFeedback.trim() : '';
         });
 
-        // Check if exactly one option is marked correct
+        const resolvedSelectionMode = questionType === QUESTION_TYPES.TRUE_FALSE
+          ? 'single'
+          : (selectionMode === 'multiple' ? 'multiple' : 'single');
+
+        parsed.content.selectionMode = resolvedSelectionMode;
+
         const correctOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
 
-        // If no options are marked correct, try to find the correct one from correctAnswer
+        // If no options are marked correct, try to find them from correctAnswer
         if (correctOptions.length === 0 && parsed.correctAnswer) {
-          const correctAnswerText = parsed.correctAnswer.toLowerCase().trim();
-          const matchingOption = parsed.content.options.find(opt =>
-            opt.text.toLowerCase().trim().includes(correctAnswerText) ||
-            correctAnswerText.includes(opt.text.toLowerCase().trim())
-          );
+          const correctAnswerCandidates = this.extractCorrectAnswerCandidates(
+            parsed.correctAnswer,
+            resolvedSelectionMode === 'multiple'
+          )
+            .map(answer => answer.toLowerCase());
 
-          if (matchingOption) {
-            matchingOption.isCorrect = true;
-            console.log(`🔧 Auto-corrected missing isCorrect flag for option: "${matchingOption.text}"`);
-          }
+          parsed.content.options.forEach(option => {
+            const normalizedOptionText = option.text.toLowerCase().trim();
+            const matches = correctAnswerCandidates.some(candidate =>
+              normalizedOptionText.includes(candidate) || candidate.includes(normalizedOptionText)
+            );
+
+            if (matches) {
+              option.isCorrect = true;
+              console.log(`🔧 Auto-corrected missing isCorrect flag for option: "${option.text}"`);
+            }
+          });
         }
 
         // Final validation
         const finalCorrectOptions = parsed.content.options.filter(opt => opt.isCorrect === true);
-        if (finalCorrectOptions.length !== 1) {
-          throw new Error(`Exactly one option must be marked as correct, found ${finalCorrectOptions.length}`);
+        if (resolvedSelectionMode === 'multiple') {
+          if (finalCorrectOptions.length < 2) {
+            throw new Error(`Multiple-answer question must have at least 2 correct options, found ${finalCorrectOptions.length}`);
+          }
+          parsed.correctAnswer = finalCorrectOptions.map(option => option.text);
+        } else {
+          if (finalCorrectOptions.length !== 1) {
+            throw new Error(`Exactly one option must be marked as correct, found ${finalCorrectOptions.length}`);
+          }
+          parsed.correctAnswer = finalCorrectOptions[0].text;
         }
 
         console.log(`✅ Multiple-choice/True-false question validated: ${parsed.content.options.length} options`);
@@ -1368,6 +1472,105 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
     return Math.min(score, 1.0);
   }
 
+  normalizeTextForValidation(text = '') {
+    return String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  extractValidationKeywords(plannedTask) {
+    if (!plannedTask?.sliceLabel) return [];
+
+    const base = plannedTask.sliceLabel
+      .replace(/^Compare\s+/i, '')
+      .replace(/^Distinguish\s+/i, '');
+
+    const normalized = this.normalizeTextForValidation(base);
+    const tokens = normalized.split(' ').filter(Boolean);
+    const keywords = [];
+
+    const preferredTerms = [
+      'co2',
+      'ch4',
+      'n2o',
+      'carbon dioxide',
+      'methane',
+      'nitrous oxide',
+      'anthropogenic',
+      'natural',
+      'sources',
+      'source'
+    ];
+
+    for (const term of preferredTerms) {
+      if (normalized.includes(term)) {
+        keywords.push(term);
+      }
+    }
+
+    if (keywords.length === 0) {
+      return tokens.slice(0, 4);
+    }
+
+    return [...new Set(keywords)];
+  }
+
+  questionMatchesPlannedTask(questionData, plannedTask) {
+    if (!plannedTask?.sliceLabel || !questionData) {
+      return { valid: true, reason: 'No planned task provided' };
+    }
+
+    const searchableText = this.normalizeTextForValidation([
+      questionData.questionText,
+      questionData.explanation,
+      questionData.correctAnswer
+    ].filter(Boolean).join(' '));
+
+    const keywords = this.extractValidationKeywords(plannedTask);
+    const matchedKeywords = keywords.filter(keyword => searchableText.includes(this.normalizeTextForValidation(keyword)));
+
+    if (plannedTask.sliceKind === 'component') {
+      const requiredComponentTerms = keywords.filter(keyword =>
+        ['co2', 'ch4', 'n2o', 'carbon dioxide', 'methane', 'nitrous oxide'].includes(keyword)
+      );
+      const componentMatched = requiredComponentTerms.filter(keyword =>
+        searchableText.includes(this.normalizeTextForValidation(keyword))
+      );
+
+      if (requiredComponentTerms.length > 0 && componentMatched.length === 0) {
+        return {
+          valid: false,
+          reason: `Generated question did not stay on planned component slice "${plannedTask.sliceLabel}"`
+        };
+      }
+    }
+
+    if (plannedTask.sliceKind === 'comparison') {
+      const componentTerms = keywords.filter(keyword =>
+        ['co2', 'ch4', 'n2o', 'carbon dioxide', 'methane', 'nitrous oxide'].includes(keyword)
+      );
+      const uniqueMatches = componentTerms.filter(keyword =>
+        searchableText.includes(this.normalizeTextForValidation(keyword))
+      );
+
+      if (uniqueMatches.length < 2) {
+        return {
+          valid: false,
+          reason: `Comparison slice "${plannedTask.sliceLabel}" was not reflected in the generated question`
+        };
+      }
+    }
+
+    if (plannedTask.sliceKind === 'misconception') {
+      if (matchedKeywords.length === 0) {
+        return {
+          valid: false,
+          reason: `Misconception slice "${plannedTask.sliceLabel}" was not reflected in the generated question`
+        };
+      }
+    }
+
+    return { valid: true, reason: 'Question matches planned slice' };
+  }
+
   /**
    * Generate multiple questions in batch
    */
@@ -1388,46 +1591,77 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
     const provider = process.env.LLM_PROVIDER || 'ollama';
 
     for (const config of questionConfigs) {
+      const slicePlan = planLOSlices({
+        learningObjective,
+        questionType: config.questionType,
+        requestedCount: config.count
+      });
+
+      console.log(`🧩 Slice plan for ${config.questionType}:`, slicePlan.recommendedTasks.map(task => task.sliceLabel).join(' | '));
+
       for (let i = 0; i < config.count; i++) {
         try {
-          let result;
+          const plannedTask = slicePlan.recommendedTasks[i];
+          let result = null;
+          let finalValidation = { valid: true, reason: 'Not validated' };
+          const maxAttempts = plannedTask ? 3 : 1;
 
-          // Use streaming for Ollama only
-          if (provider === 'ollama' && onStreamChunk) {
-            console.log(`🌊 Using streaming generation for ${config.questionType} (Ollama)`);
-            result = await this.generateQuestionStreaming({
-              learningObjective,
-              questionType: config.questionType,
-              relevantContent,
-              difficulty,
-              courseContext,
-              previousQuestions: questions
-            }, (chunk, metadata) => {
-              // Forward streaming chunks to the callback
-              onStreamChunk({
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const taskPrompt = plannedTask
+              ? `The slice has already been selected for you. You MUST generate a question only about "${plannedTask.sliceLabel}" using the intent "${plannedTask.questionIntent}". You are NOT allowed to switch to another gas, another concept slice, or a broad all-in-one version of the learning objective. If the planned slice is a component such as CO2, CH4, or N2O, the question must stay on that component. If the planned slice is a comparison, the question must explicitly compare the named components. If the planned slice is a misconception task, the question must explicitly test that misconception target. Do not assess a slice already used by previous questions if other planned slices remain available.${attempt > 1 ? ` This is retry attempt ${attempt} because a previous attempt drifted away from the assigned slice.` : ''}`
+              : null;
+
+            // Use streaming for Ollama only
+            if (provider === 'ollama' && onStreamChunk) {
+              console.log(`🌊 Using streaming generation for ${config.questionType} (Ollama), attempt ${attempt}`);
+              result = await this.generateQuestionStreaming({
+                learningObjective,
                 questionType: config.questionType,
-                questionIndex: i + 1,
-                chunk,
-                metadata
+                relevantContent,
+                difficulty,
+                courseContext,
+                previousQuestions: questions,
+                customPrompt: taskPrompt
+              }, (chunk, metadata) => {
+                onStreamChunk({
+                  questionType: config.questionType,
+                  questionIndex: i + 1,
+                  chunk,
+                  metadata
+                });
               });
-            });
-          } else {
-            // Use non-streaming for OpenAI or when no callback provided
-            result = await this.generateQuestion({
-              learningObjective,
-              questionType: config.questionType,
-              relevantContent,
-              difficulty,
-              courseContext,
-              previousQuestions: questions
-            });
+            } else {
+              result = await this.generateQuestion({
+                learningObjective,
+                questionType: config.questionType,
+                relevantContent,
+                difficulty,
+                courseContext,
+                previousQuestions: questions,
+                customPrompt: taskPrompt
+              });
+            }
+
+            if (!result?.success) {
+              continue;
+            }
+
+            finalValidation = this.questionMatchesPlannedTask(result.questionData, plannedTask);
+            if (finalValidation.valid) {
+              break;
+            }
+
+            console.warn(`⚠️ Generated question drifted from planned slice on attempt ${attempt}: ${finalValidation.reason}`);
+            result = null;
           }
           
-          if (result.success) {
+          if (result?.success) {
             const questionWithMetadata = {
               ...result.questionData,
               type: config.questionType,
-              order: questions.length
+              order: questions.length,
+              plannedSlice: plannedTask?.sliceLabel || null,
+              plannedIntent: plannedTask?.questionIntent || null
             };
             
             // Additional logging for Summary questions in batch
@@ -1437,6 +1671,8 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
             }
             
             questions.push(questionWithMetadata);
+          } else if (plannedTask && !finalValidation.valid) {
+            throw new Error(`Failed to generate a question that matches the planned slice "${plannedTask.sliceLabel}": ${finalValidation.reason}`);
           }
           
           // Small delay to avoid overwhelming the LLM

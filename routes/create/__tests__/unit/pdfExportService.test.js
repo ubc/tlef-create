@@ -160,6 +160,48 @@ describe('pdfExportService', () => {
       expect(texts.some(t => t.includes('B. Right'))).toBe(true);
     });
 
+    test('multiple-choice: includes option feedback and explanation', () => {
+      const question = {
+        type: 'multiple-choice',
+        explanation: 'Because this aligns with the learning objective.',
+        content: {
+          options: [
+            { text: 'Wrong', isCorrect: false, chosenFeedback: 'This reflects a common misconception.' },
+            { text: 'Right', isCorrect: true, notChosenFeedback: 'You should have selected this option.' }
+          ]
+        }
+      };
+
+      addAnswerContent(doc, question);
+      const texts = getTextCalls(doc);
+
+      expect(texts).toContain('Option Feedback:');
+      expect(texts.some(t => t.includes('A. If selected: This reflects a common misconception.'))).toBe(true);
+      expect(texts.some(t => t.includes('B. If not selected: You should have selected this option.'))).toBe(true);
+      expect(texts).toContain('Explanation:');
+      expect(texts).toContain('Because this aligns with the learning objective.');
+    });
+
+    test('multiple-choice: supports multiple correct answers', () => {
+      const question = {
+        type: 'multiple-choice',
+        content: {
+          selectionMode: 'multiple',
+          options: [
+            { text: 'Alpha', isCorrect: true },
+            { text: 'Beta', isCorrect: false },
+            { text: 'Gamma', isCorrect: true }
+          ]
+        }
+      };
+
+      addAnswerContent(doc, question);
+      const texts = getTextCalls(doc);
+
+      expect(texts.some(t => t.includes('A. Alpha'))).toBe(true);
+      expect(texts.some(t => t.includes('C. Gamma'))).toBe(true);
+    });
+
     test('multiple-choice: falls back to correctAnswer when no isCorrect', () => {
       const question = {
         type: 'multiple-choice',

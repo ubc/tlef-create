@@ -42,6 +42,9 @@ H5P.SingleChoiceSet.SolutionView = (function ($, EventDispatcher) {
     self.populate();
   }
 
+  SolutionView.prototype = Object.create(EventDispatcher.prototype);
+  SolutionView.prototype.constructor = SolutionView;
+
   /**
    * Will append the solution view to a container DOM
    * @param  {jQuery} $container The DOM object to append to

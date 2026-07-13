@@ -5,6 +5,22 @@
 import PDFDocument from 'pdfkit';
 import { createWriteStream } from 'fs';
 
+function getMultipleChoiceMode(question) {
+  if (question.content?.selectionMode === 'multiple') {
+    return 'multiple';
+  }
+
+  const correctCount = (question.content?.options || []).filter(option => option.isCorrect).length;
+  return correctCount > 1 ? 'multiple' : 'single';
+}
+
+function addIndentedLines(doc, lines, indent = 20, fontSize = 9) {
+  lines.filter(Boolean).forEach((line) => {
+    doc.fontSize(fontSize).font('Helvetica').text(line, { indent });
+    doc.moveDown(0.2);
+  });
+}
+
 /**
  * Create a PDF export of quiz questions.
  * @param {Object} quiz - Quiz document with populated questions
@@ -141,6 +157,17 @@ export function addQuestionContent(doc, question) {
       doc.fontSize(10).font('Helvetica').text(`${letter}. ${option.text}`, { indent: 20 });
       doc.moveDown(0.2);
     });
+
+    const tips = options
+      .map((option, idx) => option.tip ? `${String.fromCharCode(65 + idx)}. ${option.tip}` : null)
+      .filter(Boolean);
+
+    if (tips.length > 0) {
+      doc.moveDown(0.3);
+      doc.fontSize(9).font('Helvetica-Bold').text('Tips:', { indent: 20 });
+      doc.moveDown(0.2);
+      addIndentedLines(doc, tips, 30, 9);
+    }
   } else if (question.type === 'true-false') {
     doc.fontSize(10).font('Helvetica').text('Options:', { underline: true });
     doc.moveDown(0.3);
@@ -202,13 +229,38 @@ export function addQuestionContent(doc, question) {
 export function addAnswerContent(doc, question) {
   if (question.type === 'multiple-choice') {
     const options = question.content?.options || [];
-    const correctOption = options.find(opt => opt.isCorrect);
-    if (correctOption) {
-      const correctIndex = options.indexOf(correctOption);
-      const letter = String.fromCharCode(65 + correctIndex);
-      doc.fontSize(10).text(`${letter}. ${correctOption.text}`, { indent: 20 });
+    const correctOptions = options.filter(opt => opt.isCorrect);
+    if (correctOptions.length > 0) {
+      const answerMode = getMultipleChoiceMode(question);
+      if (answerMode === 'multiple') {
+        correctOptions.forEach((correctOption) => {
+          const correctIndex = options.indexOf(correctOption);
+          const letter = String.fromCharCode(65 + correctIndex);
+          doc.fontSize(10).text(`${letter}. ${correctOption.text}`, { indent: 20 });
+        });
+      } else {
+        const correctOption = correctOptions[0];
+        const correctIndex = options.indexOf(correctOption);
+        const letter = String.fromCharCode(65 + correctIndex);
+        doc.fontSize(10).text(`${letter}. ${correctOption.text}`, { indent: 20 });
+      }
     } else {
       doc.fontSize(10).text(question.correctAnswer || 'N/A', { indent: 20 });
+    }
+
+    const feedbackLines = options.flatMap((option, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      return [
+        option.chosenFeedback ? `${letter}. If selected: ${option.chosenFeedback}` : null,
+        option.notChosenFeedback ? `${letter}. If not selected: ${option.notChosenFeedback}` : null
+      ].filter(Boolean);
+    });
+
+    if (feedbackLines.length > 0) {
+      doc.moveDown(0.3);
+      doc.fontSize(9).font('Helvetica-Bold').text('Option Feedback:', { indent: 20 });
+      doc.moveDown(0.2);
+      addIndentedLines(doc, feedbackLines, 30, 9);
     }
   } else if (question.type === 'true-false') {
     const answer = String(question.correctAnswer).toLowerCase() === 'true' ? 'True' : 'False';
@@ -241,5 +293,12 @@ export function addAnswerContent(doc, question) {
     doc.fontSize(10).text(back, { indent: 20 });
   } else {
     doc.fontSize(10).text(question.correctAnswer || question.explanation || 'N/A', { indent: 20 });
+  }
+
+  if (question.explanation) {
+    doc.moveDown(0.3);
+    doc.fontSize(9).font('Helvetica-Bold').text('Explanation:', { indent: 20 });
+    doc.moveDown(0.2);
+    doc.fontSize(9).font('Helvetica').text(question.explanation, { indent: 30, width: 470 });
   }
 }
