@@ -6,9 +6,18 @@ interface PdfExportModalProps {
   onClose: () => void;
   onExport: (type: 'questions' | 'answers' | 'combined') => void;
   isLoading: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
-const PdfExportModal = ({ isOpen, onClose, onExport, isLoading }: PdfExportModalProps) => {
+const PdfExportModal = ({
+  isOpen,
+  onClose,
+  onExport,
+  isLoading,
+  title = 'Export to PDF',
+  subtitle = 'Choose what to include in your PDF export'
+}: PdfExportModalProps) => {
   if (!isOpen) return null;
 
   const exportOptions = [
@@ -37,8 +46,8 @@ const PdfExportModal = ({ isOpen, onClose, onExport, isLoading }: PdfExportModal
       <div className="modal-content pdf-export-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <h3 className="modal-title">Export to PDF</h3>
-            <p className="modal-subtitle">Choose what to include in your PDF export</p>
+            <h3 className="modal-title">{title}</h3>
+            <p className="modal-subtitle">{subtitle}</p>
           </div>
           <button
             className="btn btn-ghost modal-close"

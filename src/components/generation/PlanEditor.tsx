@@ -26,11 +26,13 @@ export default function PlanEditor({
   const questionTypes = getQuestionTypesForTarget(targetFormat);
 
   const handleAddRow = () => {
+    const fallbackType = getFallbackQuestionType(targetFormat);
     const newItem: PlanItem = {
       id: crypto.randomUUID(),
-      type: getFallbackQuestionType(targetFormat),
+      type: fallbackType,
       learningObjectiveId: learningObjectives[0]?._id || '',
-      count: 1
+      count: 1,
+      ...(fallbackType === 'multiple-choice' && { selectionMode: 'single' as const })
     };
     onPlanItemsChange([...planItems, newItem]);
   };
@@ -50,6 +52,11 @@ export default function PlanEditor({
 
   const handleTypeChange = (id: string, newType: string) => {
     const updates: Partial<PlanItem> = { type: newType };
+    if (newType === 'multiple-choice') {
+      updates.selectionMode = 'single';
+    } else {
+      updates.selectionMode = undefined;
+    }
     if (newType === 'branching-scenario') {
       updates.count = 1;
       updates.branchingLayers = 2;
@@ -98,6 +105,13 @@ export default function PlanEditor({
     return text.substring(0, maxLength) + '...';
   };
 
+  const getLearningObjectiveLabel = (lo: LearningObjectiveData) => {
+    const trimmedText = lo.text?.trim();
+    return trimmedText
+      ? `LO ${lo.order + 1}: ${truncateText(trimmedText, 50)}`
+      : `LO ${lo.order + 1}: (loading objective text...)`;
+  };
+
   return (
     <div className="plan-editor">
       <div className="plan-editor-header">
@@ -137,6 +151,22 @@ export default function PlanEditor({
                       </option>
                     ))}
                   </select>
+                  {item.type === 'multiple-choice' && (
+                    <div style={{ marginTop: 8 }}>
+                      <label style={{ display: 'block', fontSize: '0.75rem', opacity: 0.7, marginBottom: 4 }}>
+                        Answer Mode
+                      </label>
+                      <select
+                        value={item.selectionMode || 'single'}
+                        onChange={(e) => handleUpdateItem(item.id, { selectionMode: e.target.value as 'single' | 'multiple' })}
+                        disabled={readOnly}
+                        className="plan-select"
+                      >
+                        <option value="single">Single answer</option>
+                        <option value="multiple">Multiple answers</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="plan-col-lo">
@@ -150,7 +180,7 @@ export default function PlanEditor({
                     <option value="">— No Learning Objective —</option>
                     {learningObjectives.map(lo => (
                       <option key={lo._id} value={lo._id}>
-                        LO {lo.order + 1}: {truncateText(lo.text, 50)}
+                        {getLearningObjectiveLabel(lo)}
                       </option>
                     ))}
                   </select>

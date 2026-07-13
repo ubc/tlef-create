@@ -16,6 +16,7 @@ interface QuestionCardProps {
 const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelete, onRegenerate }: QuestionCardProps) => {
   const {
     updateQuestion, updateMultipleChoiceOption, updateMultipleChoiceCorrect,
+    toggleMultipleChoiceCorrect, updateMultipleChoiceSelectionMode, updateMultipleChoiceFeedback,
     addMultipleChoiceOption, removeMultipleChoiceOption, updateTrueFalseAnswer,
     updateMatchingLeftItem, updateMatchingRightItem, addMatchingLeftItem,
     addMatchingRightItem, removeMatchingLeftItem, removeMatchingRightItem,
@@ -25,6 +26,11 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
     addClozeBlankOption, removeClozeBlankOption, updateClozeCorrectAnswer,
     updateKeyPoint, addKeyPoint, removeKeyPoint,
   } = handlers;
+
+  const multipleChoiceSelectionMode = question.content?.selectionMode === 'multiple'
+    || (question.content?.options?.filter(option => option.isCorrect).length || 0) > 1
+    ? 'multiple'
+    : 'single';
 
   return (
     <div id={`question-${question._id}`} className="question-item">
@@ -70,17 +76,87 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           {question.type === 'multiple-choice' && question.content?.options ? (
             <div className="edit-field">
               <label>Answer Options:</label>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '12px' }}>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="radio"
+                    name={`selection-mode-${question._id}`}
+                    checked={multipleChoiceSelectionMode === 'single'}
+                    onChange={() => updateMultipleChoiceSelectionMode(question._id, 'single')}
+                  />
+                  Single answer
+                </label>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="radio"
+                    name={`selection-mode-${question._id}`}
+                    checked={multipleChoiceSelectionMode === 'multiple'}
+                    onChange={() => updateMultipleChoiceSelectionMode(question._id, 'multiple')}
+                  />
+                  Multiple answers
+                </label>
+              </div>
               <div className="multiple-choice-editor">
-                {question.content.options.map((option: { text: string; isCorrect: boolean; order?: number }, idx: number) => (
+                {question.content.options.map((option: { text: string; isCorrect: boolean; order?: number; tip?: string; chosenFeedback?: string; notChosenFeedback?: string }, idx: number) => (
                   <div key={idx} className="option-editor">
                     <div className="option-input-group">
-                      <input type="radio" name={`correct-${question._id}`} checked={option.isCorrect} onChange={() => updateMultipleChoiceCorrect(question._id, idx)} className="option-radio" />
+                      <input
+                        type={multipleChoiceSelectionMode === 'multiple' ? 'checkbox' : 'radio'}
+                        name={multipleChoiceSelectionMode === 'multiple' ? undefined : `correct-${question._id}`}
+                        checked={option.isCorrect}
+                        onChange={(event) => {
+                          if (multipleChoiceSelectionMode === 'multiple') {
+                            toggleMultipleChoiceCorrect(question._id, idx, event.target.checked);
+                          } else {
+                            updateMultipleChoiceCorrect(question._id, idx);
+                          }
+                        }}
+                        className="option-radio"
+                      />
                       <textarea className="option-text-input" value={option.text} onChange={(e) => updateMultipleChoiceOption(question._id, idx, e.target.value)} placeholder={`Option ${String.fromCharCode(65 + idx)}`} rows={2} />
                       <button type="button" className="btn btn-ghost btn-sm remove-option" onClick={() => removeMultipleChoiceOption(question._id, idx)} disabled={question.content.options.length <= 2} title="Remove option">
                         <Trash2 size={14} />
                       </button>
                     </div>
                     <small className="option-hint">{option.isCorrect ? 'Correct Answer' : `Option ${String.fromCharCode(65 + idx)}`}</small>
+                    <div style={{ marginTop: '8px', marginLeft: '32px', display: 'grid', gap: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px' }}>
+                          Tip before checking
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={option.tip || ''}
+                          onChange={(e) => updateMultipleChoiceFeedback(question._id, idx, 'tip', e.target.value)}
+                          placeholder="Shown before the learner clicks Check"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px' }}>
+                          Feedback if selected
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={option.chosenFeedback || ''}
+                          onChange={(e) => updateMultipleChoiceFeedback(question._id, idx, 'chosenFeedback', e.target.value)}
+                          placeholder="Shown after Check when this option is selected"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px' }}>
+                          Feedback if not selected
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={option.notChosenFeedback || ''}
+                          onChange={(e) => updateMultipleChoiceFeedback(question._id, idx, 'notChosenFeedback', e.target.value)}
+                          placeholder="Shown after Check when this option is not selected"
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
                 <button type="button" className="btn btn-outline btn-sm add-option" onClick={() => addMultipleChoiceOption(question._id)} disabled={question.content.options.length >= 6}>
@@ -188,7 +264,7 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
             </div>
           ) : question.type === 'cloze' ? (
             <div className="edit-field">
-              <label>Cloze Question:</label>
+              <label>Fill in the Blank Question:</label>
               <div className="cloze-editor">
                 <div className="cloze-editor-section">
                   <h4>Question Text with Blanks:</h4>
@@ -359,14 +435,26 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
       ) : question.type === 'multiple-choice' && question.content?.options ? (
         <div className="question-display">
           <div className="question-text">{question.questionText}</div>
+          <div className="question-answer">
+            <strong>Answer Mode:</strong> {multipleChoiceSelectionMode === 'multiple' ? 'Multiple answers' : 'Single answer'}
+          </div>
           <div className="preview-options">
             <strong>Answer Options:</strong>
             <div className="preview-options-list">
-              {question.content.options.map((option: { text: string; isCorrect: boolean }, idx: number) => (
+              {question.content.options.map((option: { text: string; isCorrect: boolean; tip?: string; chosenFeedback?: string; notChosenFeedback?: string }, idx: number) => (
                 <div key={idx} className={`preview-option ${option.isCorrect ? 'preview-option-correct' : ''}`}>
-                  <span className="preview-option-indicator">{option.isCorrect ? '●' : '○'}</span>
+                  <span className="preview-option-indicator">
+                    {option.isCorrect ? (multipleChoiceSelectionMode === 'multiple' ? '☑' : '●') : (multipleChoiceSelectionMode === 'multiple' ? '☐' : '○')}
+                  </span>
                   <span className="preview-option-text">{option.text}</span>
                   {option.isCorrect && <span className="preview-correct-label">Correct Answer</span>}
+                  {(option.tip || option.chosenFeedback || option.notChosenFeedback) && (
+                    <div style={{ marginTop: '8px', marginLeft: '24px', fontSize: '0.9em' }}>
+                      {option.tip && <div><strong>Tip:</strong> {option.tip}</div>}
+                      {option.chosenFeedback && <div><strong>Selected feedback:</strong> {option.chosenFeedback}</div>}
+                      {option.notChosenFeedback && <div><strong>Not selected feedback:</strong> {option.notChosenFeedback}</div>}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

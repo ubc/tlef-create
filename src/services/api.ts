@@ -84,6 +84,9 @@ export interface Quiz {
       type: string;
       learningObjective: string;
       count: number;
+      selectionMode?: 'single' | 'multiple';
+      branchingLayers?: number;
+      branchingChoices?: number;
     }>;
     aiConfig?: {
       totalQuestions: number;
@@ -734,7 +737,13 @@ export interface QuestionConfig {
   difficulty: string;
   learningObjectiveIndex?: number;
   learningObjective?: LearningObjective;
+  learningObjectiveId?: string;
   scope?: 'per-lo' | 'whole-quiz';
+  selectionMode?: 'single' | 'multiple';
+  customPrompt?: string;
+  useCustomPromptOnly?: boolean;
+  branchingLayers?: number;
+  branchingChoices?: number;
 }
 
 export interface GenerationPlanReference {
@@ -874,7 +883,7 @@ export const questionsApi = {
     difficulty: string;
     questionText: string;
     content?: Question['content'];
-    correctAnswer: string;
+    correctAnswer: string | string[] | boolean;
     explanation?: string;
   }): Promise<{ question: Question }> => {
     const response = await apiClient.post<{ success: boolean; data: { question: Question }; message: string }>('/questions', questionData);
@@ -924,7 +933,15 @@ export interface Question {
   difficulty: 'easy' | 'moderate' | 'hard';
   questionText: string;
   content: {
-    options?: Array<{ text: string; isCorrect: boolean; order?: number }>;
+    options?: Array<{
+      text: string;
+      isCorrect: boolean;
+      order?: number;
+      tip?: string;
+      chosenFeedback?: string;
+      notChosenFeedback?: string;
+    }>;
+    selectionMode?: 'single' | 'multiple';
     front?: string;
     back?: string;
     leftItems?: string[];
@@ -963,6 +980,10 @@ export const exportApi = {
 
   exportToPDF: async (quizId: string, type: 'questions' | 'answers' | 'combined'): Promise<ApiResponse<{ exportId: string; filename: string; downloadUrl: string }>> => {
     return await apiClient.post(`/export/pdf/${quizId}`, { type });
+  },
+
+  exportToMarkdown: async (quizId: string, type: 'questions' | 'answers' | 'combined'): Promise<ApiResponse<{ exportId: string; filename: string; downloadUrl: string }>> => {
+    return await apiClient.post(`/export/markdown/${quizId}`, { type });
   },
 
   downloadExport: async (exportId: string): Promise<Blob> => {

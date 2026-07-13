@@ -14,7 +14,8 @@ export function formatContentForDatabase(generatedQuestion, questionType) {
     case 'multiple-choice':
     case 'true-false':
       return {
-        options: c.options || generatedQuestion.options || []
+        options: c.options || generatedQuestion.options || [],
+        selectionMode: c.selectionMode || generatedQuestion.selectionMode || 'single'
       };
 
     case 'flashcard':

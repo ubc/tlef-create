@@ -21,6 +21,7 @@ export interface PlanItem {
   type: string;                  // question type
   learningObjectiveId: string;   // LO._id (empty string = no LO)
   count: number;
+  selectionMode?: 'single' | 'multiple'; // multiple-choice only
   branchingLayers?: number;      // branching-scenario only, default 2
   branchingChoices?: number;     // branching-scenario only, default 2
   customPrompt?: string;         // used when LO is absent or as supplemental context

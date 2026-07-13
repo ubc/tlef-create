@@ -11,6 +11,7 @@ import crypto from 'crypto';
 
 import { createH5PPackage } from '../services/h5pExportService.js';
 import { createPDFExport } from '../services/pdfExportService.js';
+import { createMarkdownExport } from '../services/markdownExportService.js';
 import { getQuestionTypeBreakdown, getDifficultyDistribution, estimateExportSize } from '../services/exportUtils.js';
 
 const router = express.Router();
@@ -125,6 +126,58 @@ router.post('/pdf/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
 }));
 
 /**
+ * POST /api/export/markdown/:quizId
+ * Generate Markdown export
+ */
+router.post('/markdown/:quizId', authenticateToken, validateQuizId, asyncHandler(async (req, res) => {
+  const { type } = req.body;
+
+  if (!['questions', 'answers', 'combined'].includes(type)) {
+    return errorResponse(res, 'Invalid export type. Must be "questions", "answers", or "combined"', 'INVALID_TYPE', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const quiz = await loadQuizForExport(req.params.quizId, req.user.id);
+  if (!quiz) return notFoundResponse(res, 'Quiz');
+  if (!quiz.questions || quiz.questions.length === 0) {
+    return errorResponse(res, 'Quiz must have questions before exporting', 'NO_QUESTIONS', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  try {
+    const exportId = crypto.randomBytes(16).toString('hex');
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+    const filename = `${quiz.name.replace(/[^a-zA-Z0-9]/g, '_')}_${typeLabel}_${exportId}.md`;
+    const uploadsDir = path.join('./routes/create/uploads/');
+    const filePath = path.join(uploadsDir, filename);
+
+    await fs.mkdir(uploadsDir, { recursive: true });
+    await createMarkdownExport(quiz, filePath, type);
+
+    if (quiz.addExport) {
+      await quiz.addExport(filePath);
+    } else {
+      console.log(`Markdown export created for quiz ${quiz._id}: ${filePath}`);
+    }
+
+    const stats = await fs.stat(filePath);
+
+    return successResponse(res, {
+      exportId,
+      filename,
+      downloadUrl: `/api/export/${exportId}/download`,
+      metadata: {
+        questionCount: quiz.questions.length,
+        exportFormat: 'markdown',
+        exportType: type,
+        fileSize: stats.size
+      }
+    }, 'Markdown export generated successfully', HTTP_STATUS.CREATED);
+  } catch (error) {
+    console.error('Markdown export error:', error);
+    return errorResponse(res, 'Failed to generate Markdown export', 'EXPORT_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+}));
+
+/**
  * GET /api/export/:exportId/download
  * Download exported file
  */
@@ -150,7 +203,11 @@ router.get('/:exportId/download', authenticateToken, asyncHandler(async (req, re
 
     const filename = path.basename(exportRecord.filePath);
     const fileExtension = path.extname(filename).toLowerCase();
-    const contentType = fileExtension === '.pdf' ? 'application/pdf' : 'application/octet-stream';
+    const contentType = fileExtension === '.pdf'
+      ? 'application/pdf'
+      : fileExtension === '.md'
+        ? 'text/markdown; charset=utf-8'
+        : 'application/octet-stream';
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', contentType);
@@ -255,6 +312,14 @@ router.get('/:quizId/formats', authenticateToken, validateQuizId, asyncHandler(a
       supported: true,
       fileExtension: '.json',
       features: ['Developer friendly', 'Easy parsing', 'Custom integration']
+    },
+    {
+      name: 'Markdown',
+      id: 'markdown',
+      description: 'Readable text export for editing, sharing, or version control',
+      supported: true,
+      fileExtension: '.md',
+      features: ['Human readable', 'Easy to edit', 'Works in docs and Git workflows']
     }
   ];
 

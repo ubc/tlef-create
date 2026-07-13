@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Save, Wand2 } from 'lucide-react';
 import { RootState, AppDispatch } from '../../store';
@@ -18,6 +18,7 @@ import {
   getDeliveryTargetForFormat,
   getFallbackQuestionType,
   getFormatsForDeliveryTarget,
+  getUnsupportedQuestionTypesForTarget,
   isQuestionTypeAllowedForTarget,
   normalizeQuestionTypeForTarget
 } from '../../constants/questionTypeCapabilities';
@@ -29,10 +30,14 @@ import StreamingProgress from './StreamingProgress';
 import PromptAnalysisSection from './PromptAnalysisSection';
 import '../../styles/components/QuestionGeneration.css';
 
+type GenerationView = 'plan' | 'results';
+type GenerationMode = 'add' | 'replace';
+
 const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQuestionsGenerated }: QuestionGenerationProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const questions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
   const { showNotification } = usePubSub('QuestionGeneration');
+  const hasUserSelectedViewRef = useRef(false);
 
   // Plan mode state
   const [planMode, setPlanMode] = useState<'manual' | 'ai-auto'>('manual');
@@ -49,7 +54,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [currentView, setCurrentView] = useState<GenerationView>('plan');
+  const [showGenerationModeModal, setShowGenerationModeModal] = useState(false);
+  const [isPreparingGeneration, setIsPreparingGeneration] = useState(false);
   const loadingAnimationRef = useRef<HTMLDivElement>(null);
 
   // Streaming state
@@ -132,6 +139,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     onBatchComplete: (summary: { totalGenerated?: number; totalFailed?: number }) => {
       dispatch(setQuestionsGenerating({ generating: false, quizId }));
       reloadQuestions();
+      hasUserSelectedViewRef.current = true;
+      setCurrentView('results');
 
       const successCount = summary.totalGenerated || streamingState.completedQuestions.length;
       const failureCount = summary.totalFailed || 0;
@@ -157,6 +166,20 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     onHeartbeat: () => {}
   });
 
+  const initializeDefaultPlan = useCallback((format: TargetFormat) => {
+    const fallbackType = getFallbackQuestionType(format);
+    if (learningObjectives.length > 0) {
+      const defaultItems: PlanItem[] = learningObjectives.map(lo => ({
+        id: crypto.randomUUID(),
+        type: fallbackType,
+        learningObjectiveId: lo._id,
+        count: 3,
+        ...(fallbackType === 'multiple-choice' && { selectionMode: 'single' as const })
+      }));
+      setPlanItems(defaultItems);
+    }
+  }, [learningObjectives]);
+
   // Restore settings on mount
   useEffect(() => {
     const restoreSettings = async () => {
@@ -179,6 +202,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             type: normalizeQuestionTypeForTarget(item.type, normalizedTargetFormat),
             learningObjectiveId: item.learningObjective,
             count: item.count,
+            ...(item.type === 'multiple-choice' && {
+              selectionMode: item.selectionMode || 'single'
+            }),
             ...(item.type === 'branching-scenario' && {
               branchingLayers: item.branchingLayers ?? 2,
               branchingChoices: item.branchingChoices ?? 2
@@ -204,24 +230,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         }
       } catch (error) {
         console.error('Failed to restore settings:', error);
-        initializeDefaultPlan();
+        initializeDefaultPlan('column');
       }
     };
 
     restoreSettings();
-  }, [quizId]);
-
-  const initializeDefaultPlan = (format: TargetFormat = targetFormat) => {
-    if (learningObjectives.length > 0) {
-      const defaultItems: PlanItem[] = learningObjectives.map(lo => ({
-        id: crypto.randomUUID(),
-        type: getFallbackQuestionType(format),
-        learningObjectiveId: lo._id,
-        count: 3
-      }));
-      setPlanItems(defaultItems);
-    }
-  };
+  }, [initializeDefaultPlan, learningObjectives.length, quizId]);
 
   const reloadQuestions = async () => {
     try {
@@ -242,7 +256,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       const { quiz } = await quizApi.getQuiz(quizId);
 
       // Clean aiConfig - remove empty strings and ensure proper types
-      const cleanedAiConfig: any = {
+      const cleanedAiConfig: {
+        totalQuestions: number;
+        approach?: AIConfig['approach'];
+        additionalInstructions?: string;
+      } = {
         totalQuestions: aiConfig.totalQuestions
       };
 
@@ -267,6 +285,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
             type: item.type,
             learningObjective: item.learningObjectiveId,
             count: item.count,
+            ...(item.type === 'multiple-choice' && {
+              selectionMode: item.selectionMode || 'single'
+            }),
             ...(item.type === 'branching-scenario' && {
               branchingLayers: item.branchingLayers ?? 2,
               branchingChoices: item.branchingChoices ?? 2
@@ -320,7 +341,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         id: crypto.randomUUID(),
         type: normalizeQuestionTypeForTarget(item.type, targetFormat),
         learningObjectiveId: learningObjectives[item.learningObjectiveIndex]._id,
-        count: item.count
+        count: item.count,
+        ...(item.type === 'multiple-choice' && { selectionMode: 'single' as const })
       }));
 
       setPlanItems(items);
@@ -334,13 +356,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     }
   };
 
-  // Generate questions
-  const handleGenerateQuestions = async () => {
-    // Save plan first
-    await handleSavePlan();
-
-    // Convert planItems to questionConfigs
-    const questionConfigs = planItems.flatMap(item => {
+  const buildQuestionConfigs = () => {
+    return planItems.flatMap(item => {
       const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
       const hasLO = !!item.learningObjectiveId && !!lo;
       return Array(item.count).fill(null).map(() => ({
@@ -348,6 +365,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         difficulty: 'moderate',
         learningObjective: lo?.text || '',
         learningObjectiveId: item.learningObjectiveId || undefined,
+        ...(item.type === 'multiple-choice' && {
+          selectionMode: item.selectionMode || 'single'
+        }),
         ...(!hasLO && { useCustomPromptOnly: true }),
         ...(item.customPrompt?.trim() && { customPrompt: item.customPrompt.trim() }),
         ...(item.type === 'branching-scenario' && {
@@ -356,8 +376,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         })
       }));
     });
+  };
 
-    // Start streaming generation
+  const startQuestionGeneration = async () => {
+    const questionConfigs = buildQuestionConfigs();
+
     try {
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -400,28 +423,38 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     }
   };
 
-  // Regenerate questions (delete and regenerate)
-  const handleRegenerateQuestions = async () => {
-    if (!window.confirm('This will delete all existing questions and generate new ones. Continue?')) {
+  const executeGeneration = async (mode: GenerationMode) => {
+    setIsPreparingGeneration(true);
+    try {
+      await handleSavePlan();
+
+      if (mode === 'replace') {
+        for (const question of questions) {
+          await questionsApi.deleteQuestion(question._id);
+        }
+        dispatch(setQuestionsForQuiz({ quizId, questions: [] }));
+      }
+
+      setShowGenerationModeModal(false);
+      await startQuestionGeneration();
+    } catch (error) {
+      console.error('Failed to prepare generation:', error);
+      showNotification('error', 'Generation Failed', mode === 'replace'
+        ? 'Failed to replace existing questions before generation'
+        : 'Failed to prepare question generation');
+    } finally {
+      setIsPreparingGeneration(false);
+    }
+  };
+
+  // Generate questions
+  const handleGenerateQuestions = async () => {
+    if (hasQuestions) {
+      setShowGenerationModeModal(true);
       return;
     }
 
-    setIsRegenerating(true);
-    try {
-      // Delete existing questions
-      for (const question of questions) {
-        await questionsApi.deleteQuestion(question._id);
-      }
-      dispatch(setQuestionsForQuiz({ quizId, questions: [] }));
-
-      // Generate new questions
-      await handleGenerateQuestions();
-    } catch (error) {
-      console.error('Failed to regenerate questions:', error);
-      showNotification('error', 'Regeneration Failed', 'Failed to regenerate questions');
-    } finally {
-      setIsRegenerating(false);
-    }
+    await executeGeneration('add');
   };
 
   // Handle plan mode change - auto-save before switching
@@ -445,6 +478,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         return prevItems;
       }
 
+      const fallbackType = getFallbackQuestionType(format);
+
       return prevItems.map(item => {
         if (isQuestionTypeAllowedForTarget(item.type, format)) {
           return item;
@@ -452,7 +487,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
 
         return {
           ...item,
-          type: getFallbackQuestionType(format),
+          type: fallbackType,
+          selectionMode: fallbackType === 'multiple-choice'
+            ? (item.selectionMode || 'single')
+            : undefined,
           branchingLayers: undefined,
           branchingChoices: undefined
         };
@@ -460,15 +498,100 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
     });
   };
 
-  const handleDeliveryTargetChange = (target: DeliveryTarget) => {
+  const confirmPlanItemCompatibilityForFormat = async (format: TargetFormat) => {
+    const fallbackType = getFallbackQuestionType(format);
+    const incompatiblePlanItems = planItems.filter(item => !isQuestionTypeAllowedForTarget(item.type, format));
+
+    if (incompatiblePlanItems.length === 0) {
+      return true;
+    }
+
+    const incompatibleSummary = incompatiblePlanItems
+      .map(item => `${item.type} (${item.count})`)
+      .join(', ');
+
+    const shouldReplace = window.confirm(
+      `This format does not support some question types in your plan.\n\n` +
+      `Incompatible plan items: ${incompatibleSummary}\n\n` +
+      `If you continue, these plan items will be changed to "${fallbackType}".\n\n` +
+      'Do you want to continue?'
+    );
+
+    if (!shouldReplace) {
+      return false;
+    }
+
+    showNotification(
+      'warning',
+      'Plan Updated For New Format',
+      `Unsupported plan items were converted to ${fallbackType}.`
+    );
+
+    return true;
+  };
+
+  const removeIncompatibleQuestionsForFormat = async (format: TargetFormat) => {
+    const unsupported = getUnsupportedQuestionTypesForTarget(
+      questions.map(question => question.type),
+      format
+    );
+
+    if (unsupported.length === 0) {
+      return true;
+    }
+
+    const unsupportedTypeValues = new Set(unsupported.map(type => type.value));
+    const incompatibleQuestions = questions.filter(question => unsupportedTypeValues.has(question.type));
+
+    const shouldDelete = window.confirm(
+      `This format does not support ${unsupported.map(type => type.label).join(', ')}.\n\n` +
+      `${incompatibleQuestions.length} existing question${incompatibleQuestions.length === 1 ? '' : 's'} will be deleted if you continue.\n\n` +
+      'Do you want to switch formats and remove the incompatible questions?'
+    );
+
+    if (!shouldDelete) {
+      return false;
+    }
+
+    await Promise.all(incompatibleQuestions.map(question => questionsApi.deleteQuestion(question._id)));
+
+    const remainingQuestions = questions.filter(question => !unsupportedTypeValues.has(question.type));
+    dispatch(setQuestionsForQuiz({ quizId, questions: remainingQuestions }));
+
+    showNotification(
+      'warning',
+      'Incompatible Questions Removed',
+      `Removed ${incompatibleQuestions.length} incompatible question${incompatibleQuestions.length === 1 ? '' : 's'} for the new format.`
+    );
+
+    return true;
+  };
+
+  const handleDeliveryTargetChange = async (target: DeliveryTarget) => {
     const nextFormat = getDefaultFormatForDeliveryTarget(target);
+    const canProceed = await removeIncompatibleQuestionsForFormat(nextFormat);
+    if (!canProceed) {
+      return;
+    }
+    const canUpdatePlan = await confirmPlanItemCompatibilityForFormat(nextFormat);
+    if (!canUpdatePlan) {
+      return;
+    }
     setDeliveryTarget(target);
     setTargetFormat(nextFormat);
     normalizePlanItemsForFormat(nextFormat);
     setHasUnsavedChanges(true);
   };
 
-  const handleTargetFormatChange = (format: TargetFormat) => {
+  const handleTargetFormatChange = async (format: TargetFormat) => {
+    const canProceed = await removeIncompatibleQuestionsForFormat(format);
+    if (!canProceed) {
+      return;
+    }
+    const canUpdatePlan = await confirmPlanItemCompatibilityForFormat(format);
+    if (!canUpdatePlan) {
+      return;
+    }
     setTargetFormat(format);
     normalizePlanItemsForFormat(format);
     setHasUnsavedChanges(true);
@@ -477,6 +600,23 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   // Render
   const hasQuestions = questions.length > 0;
   const totalPlannedQuestions = planItems.reduce((sum, item) => sum + item.count, 0);
+  const showResultsView = currentView === 'results' && hasQuestions;
+
+  useEffect(() => {
+    if (!hasUserSelectedViewRef.current) {
+      setCurrentView(hasQuestions ? 'results' : 'plan');
+    }
+  }, [hasQuestions]);
+
+  const handleGoBackToPlan = () => {
+    hasUserSelectedViewRef.current = true;
+    setCurrentView('plan');
+  };
+
+  const handleShowResults = () => {
+    hasUserSelectedViewRef.current = true;
+    setCurrentView('results');
+  };
 
   // Show streaming progress
   if (streamingState.isStreaming) {
@@ -496,7 +636,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
   }
 
   // Show results view if questions exist
-  if (hasQuestions) {
+  if (showResultsView) {
     // Calculate distribution from generated questions
     const typeDistribution = questions.reduce((acc, q) => {
       acc[q.type] = (acc[q.type] || 0) + 1;
@@ -507,8 +647,16 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
       <div className="question-generation">
         <div className="generation-results">
           <div className="results-header">
-            <h3>Questions Generated</h3>
-            <p>{questions.length} questions have been generated and are ready for review</p>
+            <div>
+              <h3>Questions Generated</h3>
+              <p>{questions.length} questions have been generated and are ready for review</p>
+            </div>
+            <button
+              onClick={handleGoBackToPlan}
+              className="btn btn-secondary"
+            >
+              Back to AI Plan Configuration
+            </button>
           </div>
 
           {/* Generation Summary */}
@@ -546,13 +694,6 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
           <PromptAnalysisSection questions={questions} learningObjectives={learningObjectives} />
 
           <div className="results-actions">
-            <button
-              onClick={handleRegenerateQuestions}
-              disabled={isRegenerating}
-              className="btn btn-secondary"
-            >
-              {isRegenerating ? 'Regenerating...' : 'Regenerate All Questions'}
-            </button>
           </div>
 
           <div className="results-info">
@@ -573,6 +714,16 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
         <p className="generation-subtitle">
           Create a plan for your quiz questions by choosing a mode and configuring the distribution
         </p>
+        {hasQuestions && (
+          <div className="generation-header-actions">
+            <button
+              onClick={handleShowResults}
+              className="btn btn-secondary"
+            >
+              View Generated Results
+            </button>
+          </div>
+        )}
       </div>
 
       {learningObjectives.length === 0 ? (
@@ -682,12 +833,62 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, onQ
               <div className="actions-right">
                 <button
                   onClick={handleGenerateQuestions}
-                  disabled={streamingState.isStreaming || totalPlannedQuestions === 0}
+                  disabled={streamingState.isStreaming || totalPlannedQuestions === 0 || isPreparingGeneration}
                   className="btn btn-primary"
                 >
                   <Wand2 size={18} />
-                  Generate {totalPlannedQuestions} Questions
+                  {isPreparingGeneration
+                    ? 'Preparing Generation...'
+                    : `Generate ${totalPlannedQuestions} Questions`}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {showGenerationModeModal && (
+            <div className="modal-overlay" onClick={() => !isPreparingGeneration && setShowGenerationModeModal(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '560px' }}>
+                <div className="modal-header">
+                  <div>
+                    <h3 className="modal-title">Generate More Questions?</h3>
+                    <p className="modal-subtitle">
+                      This quiz already has {questions.length} generated question{questions.length === 1 ? '' : 's'}.
+                    </p>
+                  </div>
+                </div>
+                <div className="modal-body">
+                  <p style={{ marginTop: 0 }}>
+                    Choose whether to keep the existing questions and add new ones, or replace the current set with questions from the updated plan.
+                  </p>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => executeGeneration('add')}
+                      disabled={isPreparingGeneration}
+                    >
+                      Add New Questions
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => executeGeneration('replace')}
+                      disabled={isPreparingGeneration}
+                    >
+                      Replace Existing Questions
+                    </button>
+                  </div>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowGenerationModeModal(false)}
+                    disabled={isPreparingGeneration}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           )}

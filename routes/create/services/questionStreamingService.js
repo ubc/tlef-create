@@ -8,6 +8,46 @@ import llmService from './llmService.js';
 import { formatContentForDatabase } from './questionContentService.js';
 
 class QuestionStreamingService {
+  buildPlannedTaskPrompt(plannedTask, attempt = 1) {
+    if (!plannedTask) {
+      return null;
+    }
+
+    return [
+      `The slice has already been selected for you. You MUST generate a question only about "${plannedTask.sliceLabel}" using the intent "${plannedTask.questionIntent}".`,
+      'You are NOT allowed to switch to another gas, another concept slice, or a broad all-in-one version of the learning objective.',
+      'If the planned slice is a component such as CO2, CH4, or N2O, the question must stay on that component.',
+      'If the planned slice is a comparison, the question must explicitly compare the named components.',
+      'If the planned slice is a misconception task, the question must explicitly test that misconception target.',
+      attempt > 1 ? `This is retry attempt ${attempt} because a previous attempt drifted away from the assigned slice.` : ''
+    ].filter(Boolean).join(' ');
+  }
+
+  mergeCustomPromptWithPlannedTask(customPrompt, plannedTaskPrompt) {
+    return [customPrompt, plannedTaskPrompt].filter(Boolean).join('\n\n');
+  }
+
+  buildSelectionModePrompt(questionConfig) {
+    if (questionConfig.questionType !== 'multiple-choice') {
+      return null;
+    }
+
+    if (questionConfig.selectionMode === 'multiple') {
+      return [
+        'This must be a MULTIPLE-ANSWER multiple choice question.',
+        'Write the stem so students understand they should select all that apply.',
+        'You MUST mark at least two options as correct.',
+        'Return the correctAnswer field as an array of the correct option texts.'
+      ].join(' ');
+    }
+
+    return [
+      'This must be a SINGLE-ANSWER multiple choice question.',
+      'You MUST mark exactly one option as correct.',
+      'Return the correctAnswer field as the single correct option text.'
+    ].join(' ');
+  }
+
   /**
    * Generate a question with streaming progress updates
    */
@@ -74,19 +114,68 @@ class QuestionStreamingService {
         status: 'llm-started',
         message: 'Calling LLM service...'
       });
+
+      const plannedTask = questionConfig.plannedTask || null;
+      const maxAttempts = plannedTask ? 3 : 1;
+      let result = null;
+      let finalValidation = { valid: true, reason: 'No planned task validation required' };
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const plannedTaskPrompt = this.buildPlannedTaskPrompt(plannedTask, attempt);
+        const selectionModePrompt = this.buildSelectionModePrompt(questionConfig);
+        const customPrompt = this.mergeCustomPromptWithPlannedTask(
+          this.mergeCustomPromptWithPlannedTask(questionConfig.customPrompt, selectionModePrompt),
+          plannedTaskPrompt
+        );
+
+        if (plannedTask) {
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'slice-planned',
+            message: `Generating planned slice: ${plannedTask.sliceLabel}`,
+            plannedSlice: plannedTask.sliceLabel,
+            attempt
+          });
+        }
+
+        result = await llmService.generateQuestionStreaming({
+          learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
+          questionType: questionConfig.questionType,
+          relevantContent: relevantContent || [],
+          difficulty: questionConfig.difficulty || 'moderate',
+          courseContext: questionConfig.courseContext || '',
+          previousQuestions: questionConfig.previousQuestions || [],
+          customPrompt,
+          selectionMode: questionConfig.selectionMode,
+          branchingLayers: questionConfig.branchingLayers ?? 2,
+          branchingChoices: questionConfig.branchingChoices ?? 2
+        }, plannedTask ? null : onStreamChunk);
+
+        if (!result?.success) {
+          continue;
+        }
+
+        finalValidation = llmService.questionMatchesPlannedTask(result.questionData, plannedTask);
+        if (finalValidation.valid) {
+          break;
+        }
+
+        console.warn(`[${questionId}] Planned slice validation failed on attempt ${attempt}: ${finalValidation.reason}`);
+        sseService.streamQuestionProgress(sessionId, questionId, {
+          status: 'slice-retry',
+          message: finalValidation.reason,
+          plannedSlice: plannedTask?.sliceLabel,
+          attempt
+        });
+        result = null;
+      }
       
-      const result = await llmService.generateQuestionStreaming({
-        learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
-        questionType: questionConfig.questionType,
-        relevantContent: relevantContent || [],
-        difficulty: questionConfig.difficulty || 'moderate',
-        courseContext: questionConfig.courseContext || '',
-        previousQuestions: questionConfig.previousQuestions || [],
-        customPrompt: questionConfig.customPrompt,
-        branchingLayers: questionConfig.branchingLayers ?? 2,
-        branchingChoices: questionConfig.branchingChoices ?? 2
-      }, onStreamChunk);
-      
+      if (!result?.success) {
+        const failureReason = plannedTask && !finalValidation.valid
+          ? `Failed to generate a question that matches the planned slice "${plannedTask.sliceLabel}": ${finalValidation.reason}`
+          : 'LLM generation failed';
+        throw new Error(failureReason);
+      }
+
       console.log(`[${questionId}] LLM returned, success=${result.success}`);
       sseService.streamQuestionProgress(sessionId, questionId, {
         status: 'llm-complete',
@@ -94,6 +183,13 @@ class QuestionStreamingService {
       });
 
       if (result.success) {
+        if (questionConfig.questionType === 'multiple-choice') {
+          result.questionData.content = {
+            ...(result.questionData.content || {}),
+            selectionMode: questionConfig.selectionMode || 'single'
+          };
+        }
+
         console.log(`[${questionId}] Starting database save...`);
         sseService.streamQuestionProgress(sessionId, questionId, {
           status: 'db-save-started',
@@ -181,6 +277,9 @@ class QuestionStreamingService {
             confidence: 0.9,
             processingTime: result.metadata?.processingTime || 2000,
             streamingGenerated: true,
+            plannedSlice: plannedTask?.sliceLabel || null,
+            plannedIntent: plannedTask?.questionIntent || null,
+            plannedSliceValidation: finalValidation,
             generatedAt: new Date().toISOString()
           }
         });

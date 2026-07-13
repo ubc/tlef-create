@@ -25,6 +25,7 @@ const QuizView = () => {
 
   const { currentQuiz, loading, error } = useSelector((state: RootState) => state.quiz);
   const { materials } = useSelector((state: RootState) => state.material);
+  const { objectives: reduxObjectives } = useSelector((state: RootState) => state.learningObjective);
 
   // Check URL params for initial tab
   const getInitialTab = (): TabType => {
@@ -65,6 +66,16 @@ const QuizView = () => {
   }, [quizId, courseId, dispatch]);
 
   useEffect(() => {
+    if (reduxObjectives.length > 0) {
+      const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
+        _id: obj._id,
+        text: obj.text,
+        order: obj.order !== undefined ? obj.order : idx
+      }));
+      setLearningObjectives(objectiveData);
+      return;
+    }
+
     if (currentQuiz) {
       // Set assigned materials from backend
       const materialIds = currentQuiz.materials.map((m: string | { _id: string }) =>
@@ -76,8 +87,8 @@ const QuizView = () => {
       if (currentQuiz.learningObjectives) {
         const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number }, idx: number) => {
           if (typeof obj === 'string') {
-            // Fallback for string-only objectives (shouldn't happen but handle it)
-            return { _id: obj, text: obj, order: idx };
+            // Keep the id but avoid showing raw ObjectIds as LO text while the full LO payload is loading.
+            return { _id: obj, text: '', order: idx };
           }
           return {
             _id: obj._id,
@@ -88,7 +99,7 @@ const QuizView = () => {
         setLearningObjectives(objectiveData);
       }
     }
-  }, [currentQuiz]);
+  }, [currentQuiz, reduxObjectives]);
 
   if (loading) {
     return (

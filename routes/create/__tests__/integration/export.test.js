@@ -296,6 +296,45 @@ describe('Export API Integration Tests', () => {
     });
   });
 
+  describe('POST /api/export/markdown/:quizId', () => {
+    test('should generate Markdown with questions type', async () => {
+      const response = await request(app)
+        .post(`/api/export/markdown/${quizId}`)
+        .send({ type: 'questions' })
+        .expect(201);
+
+      trackExportFile(response);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.filename).toContain('.md');
+      expect(response.body.data.metadata.exportFormat).toBe('markdown');
+      expect(response.body.data.metadata.exportType).toBe('questions');
+      expect(response.body.data.metadata.fileSize).toBeGreaterThan(0);
+    });
+
+    test('should generate Markdown with combined type', async () => {
+      const response = await request(app)
+        .post(`/api/export/markdown/${quizId}`)
+        .send({ type: 'combined' })
+        .expect(201);
+
+      trackExportFile(response);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.metadata.exportType).toBe('combined');
+    });
+
+    test('should return 400 for invalid markdown export type', async () => {
+      const response = await request(app)
+        .post(`/api/export/markdown/${quizId}`)
+        .send({ type: 'invalid' })
+        .expect(400);
+
+      expect(response.body.error).toBeDefined();
+      expect(response.body.error.message).toContain('Invalid export type');
+    });
+  });
+
   describe('GET /api/export/:quizId/preview', () => {
     test('should return quiz preview successfully', async () => {
       const response = await request(app)
@@ -397,6 +436,11 @@ describe('Export API Integration Tests', () => {
       const jsonFormat = response.body.data.formats.find(f => f.id === 'json');
       expect(jsonFormat).toBeDefined();
       expect(jsonFormat.supported).toBe(true);
+
+      const markdownFormat = response.body.data.formats.find(f => f.id === 'markdown');
+      expect(markdownFormat).toBeDefined();
+      expect(markdownFormat.supported).toBe(true);
+      expect(markdownFormat.fileExtension).toBe('.md');
 
       // Check QTI format exists but not supported
       const qtiFormat = response.body.data.formats.find(f => f.id === 'qti');

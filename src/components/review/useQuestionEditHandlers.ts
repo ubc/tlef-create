@@ -4,6 +4,13 @@ export function useQuestionEditHandlers(
   questions: ExtendedQuestion[],
   setQuestions: React.Dispatch<React.SetStateAction<ExtendedQuestion[]>>
 ) {
+  const deriveCorrectAnswer = (options: Array<{ text: string; isCorrect: boolean }>, selectionMode: 'single' | 'multiple' = 'single') => {
+    const correctOptions = options.filter(option => option.isCorrect);
+    return selectionMode === 'multiple'
+      ? correctOptions.map(option => option.text)
+      : (correctOptions[0]?.text || '');
+  };
+
   const updateQuestion = (questionId: string, field: keyof ExtendedQuestion, value: ExtendedQuestion[keyof ExtendedQuestion]) => {
     setQuestions(questions.map(q =>
         q._id === questionId ? { ...q, [field]: value } : q
@@ -32,11 +39,49 @@ export function useQuestionEditHandlers(
           ...option,
           isCorrect: index === correctIndex
         }));
-        const correctOption = updatedOptions[correctIndex];
         return {
           ...q,
           content: { ...q.content, options: updatedOptions },
-          correctAnswer: correctOption.text
+          correctAnswer: deriveCorrectAnswer(updatedOptions, 'single')
+        };
+      }
+      return q;
+    }));
+  };
+
+  const toggleMultipleChoiceCorrect = (questionId: string, optionIndex: number, isCorrect: boolean) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        const selectionMode = q.content.selectionMode === 'multiple' ? 'multiple' : 'single';
+        const updatedOptions = [...q.content.options];
+        updatedOptions[optionIndex] = { ...updatedOptions[optionIndex], isCorrect };
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions },
+          correctAnswer: deriveCorrectAnswer(updatedOptions, selectionMode)
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateMultipleChoiceSelectionMode = (questionId: string, selectionMode: 'single' | 'multiple') => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        let updatedOptions = [...q.content.options];
+
+        if (selectionMode === 'single') {
+          const firstCorrectIndex = updatedOptions.findIndex(option => option.isCorrect);
+          updatedOptions = updatedOptions.map((option, index) => ({
+            ...option,
+            isCorrect: firstCorrectIndex === -1 ? false : index === firstCorrectIndex
+          }));
+        }
+
+        return {
+          ...q,
+          content: { ...q.content, selectionMode, options: updatedOptions },
+          correctAnswer: deriveCorrectAnswer(updatedOptions, selectionMode)
         };
       }
       return q;
@@ -49,7 +94,10 @@ export function useQuestionEditHandlers(
         const newOption = {
           text: '',
           isCorrect: false,
-          order: q.content.options.length
+          order: q.content.options.length,
+          tip: '',
+          chosenFeedback: '',
+          notChosenFeedback: ''
         };
         const updatedOptions = [...q.content.options, newOption];
         return {
@@ -66,17 +114,36 @@ export function useQuestionEditHandlers(
       if (q._id === questionId && q.content?.options && q.content.options.length > 2) {
         const optionToRemove = q.content.options[optionIndex];
         const updatedOptions = q.content.options.filter((_: { text: string; isCorrect: boolean; order?: number }, index: number) => index !== optionIndex);
-        if (optionToRemove.isCorrect && updatedOptions.length > 0) {
+        const selectionMode = q.content.selectionMode === 'multiple' ? 'multiple' : 'single';
+        if (selectionMode === 'single' && optionToRemove.isCorrect && updatedOptions.length > 0) {
           updatedOptions[0].isCorrect = true;
         }
         updatedOptions.forEach((option: { text: string; isCorrect: boolean; order?: number }, index: number) => {
           option.order = index;
         });
-        const correctOption = updatedOptions.find((opt: { text: string; isCorrect: boolean; order?: number }) => opt.isCorrect);
         return {
           ...q,
           content: { ...q.content, options: updatedOptions },
-          correctAnswer: correctOption?.text || updatedOptions[0]?.text || ''
+          correctAnswer: deriveCorrectAnswer(updatedOptions, selectionMode)
+        };
+      }
+      return q;
+    }));
+  };
+
+  const updateMultipleChoiceFeedback = (
+    questionId: string,
+    optionIndex: number,
+    field: 'tip' | 'chosenFeedback' | 'notChosenFeedback',
+    value: string
+  ) => {
+    setQuestions(questions.map(q => {
+      if (q._id === questionId && q.content?.options) {
+        const updatedOptions = [...q.content.options];
+        updatedOptions[optionIndex] = { ...updatedOptions[optionIndex], [field]: value };
+        return {
+          ...q,
+          content: { ...q.content, options: updatedOptions }
         };
       }
       return q;
@@ -455,6 +522,9 @@ export function useQuestionEditHandlers(
     updateQuestion,
     updateMultipleChoiceOption,
     updateMultipleChoiceCorrect,
+    toggleMultipleChoiceCorrect,
+    updateMultipleChoiceSelectionMode,
+    updateMultipleChoiceFeedback,
     addMultipleChoiceOption,
     removeMultipleChoiceOption,
     updateTrueFalseAnswer,
