@@ -2,6 +2,7 @@ import { ReactNode, useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationSystem from './NotificationSystem';
+import CreateGuide from './help/CreateGuide';
 import '../styles/components/Layout.css';
 
 interface LayoutProps {
@@ -27,6 +28,7 @@ const Layout = ({ children }: LayoutProps) => {
                 </div>
             </div>
             <NotificationSystem />
+            <CreateGuide />
         </div>
     );
 };

@@ -1,10 +1,11 @@
-import { Question } from '../../services/api';
+import { LearningObjective, Question } from '../../services/api';
 
 // NEW: Learning objective with full data
 export interface LearningObjectiveData {
   _id: string;
   text: string;
   order: number;
+  generationMetadata?: LearningObjective['generationMetadata'];
 }
 
 // UPDATED: Pass full LO objects instead of just strings
@@ -12,6 +13,7 @@ export interface QuestionGenerationProps {
   learningObjectives: LearningObjectiveData[];
   assignedMaterials: string[];
   quizId: string;
+  courseId?: string;
   onQuestionsGenerated?: () => void;
 }
 
@@ -21,6 +23,11 @@ export interface PlanItem {
   type: string;                  // question type
   learningObjectiveId: string;   // LO._id (empty string = no LO)
   count: number;
+  pedagogicalIntent?: 'support' | 'assess' | 'gamify';
+  bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+  difficulty?: 'easy' | 'moderate' | 'hard';
+  focusArea?: string;
+  rationale?: string;
   selectionMode?: 'single' | 'multiple'; // multiple-choice only
   branchingLayers?: number;      // branching-scenario only, default 2
   branchingChoices?: number;     // branching-scenario only, default 2
@@ -31,6 +38,8 @@ export interface PlanItem {
 // NEW: AI configuration
 export interface AIConfig {
   totalQuestions: number;
+  autoRecommendTotalQuestions?: boolean;
+  autoRecommendTotalQuestionsUserSet?: boolean;
   approach: 'support' | 'assess' | 'gamify';
   additionalInstructions: string;
 }

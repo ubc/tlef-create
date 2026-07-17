@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { QUESTION_TYPES, DIFFICULTY_LEVELS, REVIEW_STATUS } from '../config/constants.js';
+import { QUESTION_TEXT_LIMITS } from '../utils/questionTextLimits.js';
 
 const questionSchema = new mongoose.Schema({
   // Relationships
@@ -44,7 +45,7 @@ const questionSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: 2000
+    maxlength: QUESTION_TEXT_LIMITS.questionText
   },
   
   // Flexible content structure for different question types
@@ -159,7 +160,7 @@ const questionSchema = new mongoose.Schema({
   explanation: {
     type: String,
     trim: true,
-    maxlength: 1000
+    maxlength: QUESTION_TEXT_LIMITS.explanation
   },
   
   // Question Order (for sequencing questions in quiz)
@@ -176,6 +177,33 @@ const questionSchema = new mongoose.Schema({
     }], // Which materials were used to generate this question
     llmModel: { type: String }, // e.g., "llama3.1:8b"
     generationPrompt: { type: String }, // The prompt used
+    sourceReferences: [{
+      materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' },
+      materialName: { type: String },
+      sourceFile: { type: String },
+      chunkIndex: { type: Number },
+      pageNumber: { type: Number },
+      pageStart: { type: Number },
+      pageEnd: { type: Number },
+      excerpt: { type: String },
+      relevanceScore: { type: Number },
+      section: { type: String },
+      sectionId: { type: String }
+    }],
+    subObjective: { type: String },
+    focusArea: { type: String },
+    complexity: { type: String },
+    pedagogicalIntent: { type: String },
+    bloomLevel: { type: String },
+    planRationale: { type: String },
+    plannedSlice: { type: String },
+    plannedIntent: { type: String },
+    plannedSliceValidation: { type: mongoose.Schema.Types.Mixed },
+    noveltyScore: { type: Number, min: 0, max: 1 },
+    duplicateCheck: { type: mongoose.Schema.Types.Mixed },
+    generationMethod: { type: String },
+    streamingGenerated: { type: Boolean },
+    generatedAt: { type: String },
     confidence: { 
       type: Number, 
       min: 0, 

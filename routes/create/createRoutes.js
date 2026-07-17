@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { RATE_LIMITS, HTTP_STATUS, ERROR_CODES } from './config/constants.js';
 import { errorResponse } from './utils/responseFormatter.js';
+import { auditMutations } from './middleware/audit.js';
 
 // Import controllers
 import authController from './controllers/authController.js';
@@ -19,6 +20,9 @@ import h5pPreviewController from './controllers/h5pPreviewController.js';
 import canvasController from './controllers/canvasController.js';
 import adminController from './controllers/adminController.js';
 import apiKeyController from './controllers/apiKeyController.js'
+import coursePromptController from './controllers/coursePromptController.js';
+import coverageMapController from './controllers/coverageMapController.js';
+import helpController from './controllers/helpController.js';
 
 const router = express.Router();
 
@@ -81,6 +85,9 @@ router.use((req, res, next) => {
   return apiLimiter(req, res, next);
 });
 
+// Record privacy-safe domain actions after route authentication has resolved the actor.
+router.use(auditMutations);
+
 // Health check endpoint
 router.get('/health', (req, res) => {
   res.status(HTTP_STATUS.OK).json({
@@ -106,6 +113,9 @@ router.use('/h5p-preview', h5pPreviewController);
 router.use('/canvas', canvasController);
 router.use('/admin', adminController);
 router.use('/apiKey', apiKeyController);
+router.use('/course-prompts', coursePromptController);
+router.use('/coverage-map', coverageMapController);
+router.use('/help', helpController);
 
 // Disable CSP for H5P routes (H5P requires inline scripts)
 router.use('/h5p', (req, res, next) => {

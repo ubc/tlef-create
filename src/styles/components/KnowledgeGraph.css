@@ -1,0 +1,426 @@
+.knowledge-graph-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 18% 20%, rgba(63, 157, 104, 0.1), transparent 28%),
+    radial-gradient(circle at 80% 76%, rgba(224, 82, 82, 0.09), transparent 30%),
+    linear-gradient(145deg, #fbfcfd, #f4f7f9);
+}
+
+.knowledge-graph-canvas {
+  height: min(760px, 74vh);
+  min-height: 560px;
+}
+
+.knowledge-graph-shell.is-compact .knowledge-graph-canvas {
+  height: min(720px, 72vh);
+  min-height: 620px;
+}
+
+.knowledge-graph-shell .react-flow__edges {
+  z-index: 1;
+}
+
+.knowledge-graph-shell .react-flow__nodes {
+  z-index: 2;
+}
+
+.knowledge-focused-relation {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.2));
+  vector-effect: non-scaling-stroke;
+}
+
+.knowledge-graph-shell .react-flow__edge-path {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.16));
+}
+
+.knowledge-graph-shell.is-compact .react-flow__edge-path {
+  stroke-width: 2.4px;
+}
+
+.knowledge-graph-shell .react-flow__arrowhead polyline,
+.knowledge-graph-shell .react-flow__arrowhead polygon {
+  stroke-linejoin: round;
+}
+
+.knowledge-graph-legend {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  max-width: calc(100% - 150px);
+  padding: 8px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+  color: #475569;
+  font-size: 10px;
+  text-transform: capitalize;
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.knowledge-graph-legend span,
+.knowledge-graph-legend small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.knowledge-graph-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.knowledge-graph-legend small {
+  color: #64748b;
+  text-transform: none;
+}
+
+.knowledge-node {
+  --node-accent: #64748b;
+  display: flex;
+  width: 138px;
+  height: 138px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px;
+  overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  outline: 1px solid color-mix(in srgb, var(--node-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--node-accent) 84%, white);
+  box-shadow: 0 13px 28px color-mix(in srgb, var(--node-accent) 22%, transparent);
+  color: white;
+  text-align: center;
+  transition: transform 160ms ease, box-shadow 160ms ease, outline-color 160ms ease;
+}
+
+.knowledge-node-material { --node-accent: #c59b57; width: 116px; height: 116px; }
+.knowledge-node-evidence { --node-accent: #3f9d68; width: 126px; height: 126px; }
+.knowledge-node-objective { --node-accent: #2878b5; width: 154px; height: 154px; }
+.knowledge-node-subpoint { --node-accent: #2f8795; width: 112px; height: 112px; }
+.knowledge-node-question { --node-accent: #e05252; width: 150px; height: 150px; }
+
+.knowledge-graph-shell.is-compact .knowledge-node-material { width: 150px; height: 150px; }
+.knowledge-graph-shell.is-compact .knowledge-node-evidence { width: 168px; height: 168px; }
+.knowledge-graph-shell.is-compact .knowledge-node-objective { width: 188px; height: 188px; }
+.knowledge-graph-shell.is-compact .knowledge-node-subpoint { width: 160px; height: 160px; }
+.knowledge-graph-shell.is-compact .knowledge-node-question { width: 190px; height: 190px; }
+
+.knowledge-node.is-focused {
+  width: 178px;
+  height: 178px;
+  outline: 4px solid rgba(224, 82, 82, 0.22);
+  box-shadow: 0 20px 48px rgba(224, 82, 82, 0.3);
+}
+
+.knowledge-graph-shell.is-compact .knowledge-node.is-focused {
+  width: 220px;
+  height: 220px;
+}
+
+.knowledge-node.is-previewable {
+  cursor: pointer;
+}
+
+.knowledge-node.is-previewable:hover,
+.knowledge-node.is-selected {
+  z-index: 4;
+  outline: 4px solid color-mix(in srgb, var(--node-accent) 28%, transparent);
+  box-shadow: 0 19px 38px color-mix(in srgb, var(--node-accent) 34%, transparent);
+  transform: scale(1.07);
+}
+
+.knowledge-node-icon {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.knowledge-node-eyebrow {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.knowledge-node strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: 10px;
+  line-height: 1.28;
+}
+
+.knowledge-graph-shell.is-compact .knowledge-node strong {
+  -webkit-line-clamp: 5;
+  font-size: 11px;
+  line-height: 1.26;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-node small {
+  display: block;
+  max-width: 90%;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-graph-shell.is-compact .knowledge-node small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 8.5px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.knowledge-node .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: var(--node-accent);
+  opacity: 0.35;
+}
+
+.knowledge-graph-shell .react-flow__edge-text {
+  fill: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.knowledge-graph-shell .react-flow__edge-textbg {
+  fill: rgba(255, 255, 255, 0.88);
+}
+
+.knowledge-graph-shell .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.knowledge-graph-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+
+.knowledge-focused-shell {
+  display: grid;
+  min-height: 620px;
+  grid-template-columns: minmax(210px, 260px) minmax(760px, 1fr);
+  background: #0b2838;
+  color: #e5eef6;
+}
+
+.knowledge-focused-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 20px 16px;
+  border-right: 1px solid rgba(226, 232, 240, 0.12);
+  background: rgba(9, 31, 45, 0.96);
+}
+
+.knowledge-focused-sidebar h5 {
+  margin: 0 0 12px;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.knowledge-filter-grid,
+.knowledge-relation-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.knowledge-filter-grid span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #dbeafe;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.knowledge-filter-grid i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.knowledge-relation-filters button {
+  min-height: 34px;
+  border: 1px solid rgba(226, 232, 240, 0.22);
+  border-radius: 5px;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.knowledge-relation-filters button.is-active {
+  border-color: #f8fafc;
+  background: rgba(248, 250, 252, 0.08);
+}
+
+.knowledge-selected-properties {
+  display: flex;
+  max-height: 220px;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  color: #dbeafe;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.knowledge-selected-properties p {
+  margin: 0;
+}
+
+.knowledge-selected-properties strong {
+  color: #ffffff;
+}
+
+.knowledge-selected-edges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.knowledge-selected-edges span {
+  border: 1px solid rgba(226, 232, 240, 0.2);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #cbd5e1;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.knowledge-focused-canvas {
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 54% 50%, rgba(148, 163, 184, 0.08), transparent 33%),
+    #0b2838;
+}
+
+.knowledge-focused-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.knowledge-focused-node-position {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.knowledge-focused-node {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.knowledge-focused-node.knowledge-node-material { width: 126px; height: 126px; }
+.knowledge-focused-node.knowledge-node-evidence { width: 148px; height: 148px; }
+.knowledge-focused-node.knowledge-node-objective { width: 172px; height: 172px; }
+.knowledge-focused-node.knowledge-node-subpoint { width: 148px; height: 148px; }
+.knowledge-focused-node.knowledge-node-question { width: 190px; height: 190px; }
+
+.knowledge-focused-node strong {
+  -webkit-line-clamp: 5;
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-focused-node small {
+  white-space: normal;
+}
+
+.knowledge-focused-node.is-selected {
+  outline: 4px solid rgba(255, 255, 255, 0.24);
+  transform: scale(1.04);
+}
+
+@media (max-width: 768px) {
+  .knowledge-graph-canvas,
+  .knowledge-graph-shell.is-compact .knowledge-graph-canvas {
+    height: 68vh;
+    min-height: 520px;
+  }
+
+  .knowledge-graph-legend {
+    top: 10px;
+    max-width: calc(100% - 28px);
+    border-radius: 14px;
+  }
+
+  .knowledge-graph-legend small {
+    display: none;
+  }
+
+  .knowledge-focused-shell {
+    grid-template-columns: 1fr;
+    overflow-x: auto;
+  }
+
+  .knowledge-focused-sidebar {
+    position: relative;
+    z-index: 2;
+    border-right: 0;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.12);
+  }
+
+  .knowledge-focused-canvas {
+    min-width: 820px;
+  }
+}

@@ -3,28 +3,112 @@ import GenerationPlan from '../models/GenerationPlan.js';
 import Quiz from '../models/Quiz.js';
 import LearningObjective from '../models/LearningObjective.js';
 import Material from '../models/Material.js';
+import Question from '../models/Question.js';
 import SystemPromptTemplate from '../models/SystemPromptTemplate.js';
 import UserPromptOverride from '../models/UserPromptOverride.js';
+import CoursePromptOverride from '../models/CoursePromptOverride.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { validateGeneratePlan, validateMongoId, validateQuizId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, PEDAGOGICAL_APPROACHES, QUESTION_TYPES } from '../config/constants.js';
 import llmService from '../services/llmService.js';
+import sseService from '../services/sseService.js';
+import {
+  alignPlanItemsToSubpoints,
+  buildQuestionBudget,
+  discardPlanItemsOutsideBudget,
+  rebalancePlanToBudget
+} from '../services/questionBudgetService.js';
 
 const router = express.Router();
+
+const VALID_BLOOM_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+const VALID_DIFFICULTIES = ['easy', 'moderate', 'hard'];
+
+function normalizeBloomLevel(value) {
+  if (!value || typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.toLowerCase().trim();
+  return VALID_BLOOM_LEVELS.includes(normalized) ? normalized : undefined;
+}
+
+function normalizeDifficulty(value, bloomLevel) {
+  if (value && typeof value === 'string') {
+    const normalized = value.toLowerCase().trim();
+    if (VALID_DIFFICULTIES.includes(normalized)) {
+      return normalized;
+    }
+  }
+
+  if (['remember'].includes(bloomLevel)) {
+    return 'easy';
+  }
+
+  if (['apply', 'analyze', 'evaluate', 'create'].includes(bloomLevel)) {
+    return 'hard';
+  }
+
+  return 'moderate';
+}
+
+function buildCompactPlanningHistory(existingQuestions = []) {
+  if (!existingQuestions.length) {
+    return '';
+  }
+
+  const summarizedQuestions = existingQuestions.slice(0, 20).map((question, index) => {
+    const metadata = question.generationMetadata || {};
+    const focus = metadata.focusArea || metadata.plannedSlice || metadata.subObjective || 'general focus';
+    const bloom = metadata.bloomLevel ? `Bloom: ${metadata.bloomLevel}` : '';
+
+    return [
+      `${index + 1}. [${question.type}] ${question.questionText}`,
+      `Focus: ${focus}`,
+      bloom
+    ].filter(Boolean).join(' | ');
+  });
+
+  const coveredFocusAreas = [...new Set(existingQuestions
+    .map(question => question.generationMetadata?.focusArea || question.generationMetadata?.plannedSlice)
+    .filter(Boolean))]
+    .slice(0, 12);
+
+  return [
+    'EXISTING QUIZ HISTORY:',
+    'The quiz already contains these questions or assessed focus areas:',
+    summarizedQuestions.join('\n'),
+    coveredFocusAreas.length ? `Already covered focus areas: ${coveredFocusAreas.join('; ')}` : '',
+    'When creating the blueprint, avoid over-recommending the same focus areas, stems, scenarios, misconception targets, or answer patterns. Prefer uncovered LOs and uncovered slices unless the instructor explicitly asks to replace existing coverage.'
+  ].filter(Boolean).join('\n');
+}
 
 /**
  * POST /api/plans/generate-ai
  * Generate AI-powered question distribution plan
  */
 router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => {
-  const { quizId, totalQuestions, approach, additionalInstructions } = req.body;
+  const { quizId, totalQuestions, approach, additionalInstructions, sessionId } = req.body;
   const userId = req.user.id;
+  const progressQuestionId = 'quiz-blueprint';
+  const streamProgress = (status, message, metadata = {}) => {
+    if (!sessionId) return;
+    sseService.streamQuestionProgress(sessionId, progressQuestionId, {
+      type: 'quiz-blueprint',
+      status,
+      message,
+      metadata
+    });
+  };
+  const requestedTotalQuestions = totalQuestions === undefined || totalQuestions === null || totalQuestions === ''
+    ? null
+    : Number(totalQuestions);
 
   // Validate inputs
-  if (!quizId || !totalQuestions || !approach) {
-    return errorResponse(res, 'Missing required fields: quizId, totalQuestions, approach', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+  if (!quizId || !approach) {
+    return errorResponse(res, 'Missing required fields: quizId, approach', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
   if (!['support', 'assess', 'gamify'].includes(approach)) {
@@ -41,72 +125,250 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
   }
 
   // Validate totalQuestions
-  const minQuestions = 1;
+  const minQuestions = Math.max(1, quiz.learningObjectives?.length || 0);
   const maxQuestions = 100;
 
-  if (totalQuestions < minQuestions || totalQuestions > maxQuestions) {
-    return errorResponse(res, `Total questions must be between ${minQuestions} and ${maxQuestions}`, 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+  if (!quiz.learningObjectives?.length) {
+    return errorResponse(
+      res,
+      'Quiz must have learning objectives before generating a plan',
+      'NO_OBJECTIVES',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  if (quiz.learningObjectives.length > maxQuestions) {
+    return errorResponse(
+      res,
+      `This quiz has ${quiz.learningObjectives.length} learning objectives. Reduce the number of objectives before generating a plan with a ${maxQuestions}-question limit.`,
+      'TOO_MANY_OBJECTIVES',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  if (
+    requestedTotalQuestions !== null &&
+    (
+      !Number.isInteger(requestedTotalQuestions) ||
+      requestedTotalQuestions < minQuestions ||
+      requestedTotalQuestions > maxQuestions
+    )
+  ) {
+    return errorResponse(res, `Total questions must be a whole number between ${minQuestions} and ${maxQuestions}`, 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
   try {
-    // Step 1: Get prompt template from database
-    // First check if user has a custom override
-    let promptTemplate = await UserPromptOverride.findOne({
-      user: userId,
+    if (sessionId) {
+      sseService.notifyBatchStarted(sessionId, {
+        totalQuestions: 1,
+        workflow: 'quiz-blueprint',
+        message: 'Quiz blueprint generation started'
+      });
+    }
+    streamProgress('started', 'Resolving prompt strategy and quiz context...');
+    // Step 1: Resolve prompt template from database.
+    // Priority: course override > user override > system default.
+    // The system outer prompt remains authoritative so user edits cannot break JSON shape.
+    const systemTemplate = await SystemPromptTemplate.findOne({
       approach,
       isActive: true
     });
 
-    // If no user override, use system template
-    if (!promptTemplate) {
-      promptTemplate = await SystemPromptTemplate.findOne({
-        approach,
-        isActive: true
-      });
-    }
-
-    if (!promptTemplate) {
+    if (!systemTemplate) {
       return errorResponse(res, `No prompt template found for approach: ${approach}`, 'TEMPLATE_NOT_FOUND', HTTP_STATUS.NOT_FOUND);
     }
 
+    const [courseOverride, userOverride] = await Promise.all([
+      CoursePromptOverride.findOne({
+        folder: quiz.folder,
+        user: userId,
+        promptType: 'quiz-blueprint',
+        approach,
+        isActive: true
+      }).sort({ version: -1 }),
+      UserPromptOverride.findOne({
+        user: userId,
+        approach,
+        isActive: true
+      })
+    ]);
+
+    const resolvedInnerPrompt =
+      courseOverride?.customInnerPrompt ||
+      userOverride?.customInnerPrompt ||
+      systemTemplate.innerPrompt;
+
+    const resolvedRules =
+      courseOverride?.customQuestionTypeRules ||
+      userOverride?.customQuestionTypeRules ||
+      systemTemplate.questionTypeRules;
+
+    const questionBudget = buildQuestionBudget(quiz.learningObjectives, {
+      approach,
+      requestedTotal: requestedTotalQuestions,
+      maxQuestions
+    });
+    const effectiveTotalQuestions = questionBudget.total;
+    streamProgress('budget-complete', `Calculated a ${effectiveTotalQuestions}-question coverage budget.`, {
+      total: effectiveTotalQuestions,
+      method: questionBudget.method,
+      allocations: questionBudget.allocations.length
+    });
+
+    console.log('🧮 Deterministic question budget:', {
+      method: questionBudget.method,
+      approach,
+      requestedTotalQuestions,
+      total: questionBudget.total,
+      allocations: questionBudget.allocations.map(allocation => ({
+        learningObjectiveIndex: allocation.learningObjectiveIndex,
+        count: allocation.count,
+        subpointCount: allocation.subpointCount,
+        bloomLevel: allocation.bloomLevel,
+        rationale: allocation.rationale
+      }))
+    });
+
     // Step 2: Build context variables
     const objectivesText = quiz.learningObjectives
-      .map((lo, idx) => `${idx}: ${lo.text}`)
+      .map((lo, idx) => {
+        const metadata = lo.generationMetadata || {};
+        const details = [
+          metadata.topic ? `Topic: ${metadata.topic}` : '',
+          metadata.subtopic ? `Subtopic: ${metadata.subtopic}` : '',
+          Array.isArray(metadata.subpoints) && metadata.subpoints.length
+            ? `Subpoints: ${metadata.subpoints.join('; ')}`
+            : '',
+          metadata.bloomLevel ? `Bloom: ${metadata.bloomLevel}` : '',
+          metadata.rationale ? `Rationale: ${metadata.rationale}` : ''
+        ].filter(Boolean).join(' | ');
+
+        return `${idx}: ${lo.text}${details ? `\n   ${details}` : ''}`;
+      })
       .join('\n');
 
     const materialsContext = quiz.materials && quiz.materials.length > 0
-      ? `Course materials: ${quiz.materials.map(m => m.title || 'Untitled').join(', ')}`
+      ? `Course materials: ${quiz.materials.map(m => m.name || m.title || 'Untitled').join(', ')}`
       : 'No course materials assigned.';
+
+    const existingQuestions = await Question.find({ quiz: quizId })
+      .select('questionText type generationMetadata.focusArea generationMetadata.plannedSlice generationMetadata.subObjective generationMetadata.bloomLevel')
+      .sort({ order: 1 })
+      .lean();
+    const planningHistoryContext = buildCompactPlanningHistory(existingQuestions);
+    streamProgress('context-complete', 'Built LO, material, and question-history context.', {
+      learningObjectives: quiz.learningObjectives.length,
+      existingQuestions: existingQuestions.length
+    });
 
     const additionalContext = additionalInstructions
       ? `\n\nAdditional instructions from instructor: ${additionalInstructions}`
       : '';
 
     // Step 3: Build the complete prompt by replacing variables
-    const innerPrompt = (promptTemplate.customInnerPrompt || promptTemplate.innerPrompt) + additionalContext;
+    const innerPrompt = resolvedInnerPrompt + additionalContext;
 
-    let prompt = promptTemplate.outerPrompt || promptTemplate.outerPrompt;
+    const totalQuestionInstruction = effectiveTotalQuestions;
+
+    let prompt = systemTemplate.outerPrompt;
     prompt = prompt
       .replace('{{learningObjectives}}', objectivesText)
       .replace('{{materialsContext}}', materialsContext)
-      .replace('{{totalQuestions}}', totalQuestions)
+      .replaceAll('{{totalQuestions}}', String(totalQuestionInstruction))
       .replace('{{innerPrompt}}', innerPrompt);
+
+    prompt += `\n\nBLUEPRINT METADATA REQUIREMENTS:
+At the beginning of the JSON response, include "generationSummary" as an array of 3-6 short, instructor-facing statements that explain the visible blueprint decisions. Summarize coverage, question-type mix, Bloom/difficulty balance, and use of subpoints or history. Do not include private chain-of-thought or hidden reasoning.
+
+For every planItems entry, include:
+- "difficulty": one of "easy", "moderate", "hard"
+- "bloomLevel": one of "remember", "understand", "apply", "analyze", "evaluate", "create"
+- "focusArea": a concise assessable slice, misconception, skill, process step, or application context
+- "rationale": a short instructor-facing reason for this row
+
+Use Bloom level to vary cognitive demand. Avoid assigning every row the same focusArea. If an LO is broad, split its coverage across different concrete focus areas.
+
+SUBPOINT COVERAGE RULES:
+- If a learning objective includes Subpoints, use them as the primary coverage checklist.
+- Do not generate only broad all-in-one plan rows when subpoints are available.
+- For multiple questions under the same LO, assign different focusArea values that map to different subpoints.
+- If problem set materials are available, use them as style/difficulty signals, but keep conceptual grounding in the lecture/notes evidence.`;
+
+    const budgetLines = questionBudget.allocations.map(allocation => {
+      const subpointSummary = allocation.subpoints.length
+        ? ` Subpoints: ${allocation.subpoints.join('; ')}`
+        : '';
+      return `- LO ${allocation.learningObjectiveIndex + 1}: EXACTLY ${allocation.count} question(s). ${allocation.rationale}.${subpointSummary}`;
+    });
+
+    prompt += `\n\nAUTHORITATIVE QUESTION BUDGET:
+- The backend has already calculated the question count. Do not recommend or change it.
+- The sum of every planItems count MUST equal EXACTLY ${effectiveTotalQuestions}.
+- The sum for each learningObjectiveIndex MUST match its allocation below.
+${budgetLines.join('\n')}
+- You decide question types, difficulty, Bloom alignment, focus areas, and pedagogical rationale within this fixed budget.`;
+
+    if (planningHistoryContext) {
+      prompt += `\n\n${planningHistoryContext}`;
+    }
+
+    if (requestedTotalQuestions === null) {
+      prompt += `\n\nAUTO QUESTION COUNT MODE:
+- The instructor did not provide a fixed total question count.
+- CREATE already calculated ${effectiveTotalQuestions} questions from LO breadth, subpoints, Bloom levels, and the selected pedagogical approach.
+- Treat this total and every per-LO allocation as fixed constraints.
+- Include "recommendedTotalQuestions" and "totalQuestionRationale" in the JSON response.
+- Set "recommendedTotalQuestions" to ${effectiveTotalQuestions}.
+
+Return ONLY this JSON shape:
+{
+  "generationSummary": [
+    "Coverage decision stated in one short sentence",
+    "Question-type or difficulty decision stated in one short sentence"
+  ],
+  "recommendedTotalQuestions": ${effectiveTotalQuestions},
+  "totalQuestionRationale": "Short explanation of how the fixed coverage budget supports the quiz",
+  "planItems": [
+    { "type": "multiple-choice", "learningObjectiveIndex": 0, "count": 2, "difficulty": "moderate", "bloomLevel": "understand", "focusArea": "specific assessable slice", "rationale": "Short reason for this row" }
+  ]
+}`;
+    }
 
     console.log('📋 Using prompt template:', {
       approach,
-      isCustom: !!promptTemplate.customInnerPrompt,
-      userId: promptTemplate.user || 'system'
+      source: courseOverride ? 'course' : userOverride ? 'user' : 'system',
+      promptType: 'quiz-blueprint',
+      version: courseOverride?.version || 'default',
+      folderId: quiz.folder?.toString(),
+      userId
     });
 
     console.log('🤖 Generating AI plan with prompt:', prompt.substring(0, 200) + '...');
 
-    // Call LLM
-    if (!llmService || !llmService.llm) {
+    // Call the active user's model rather than the server's startup default.
+    if (!llmService) {
       return errorResponse(res, 'LLM service not available', 'AI_SERVICE_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
     }
 
-    const options = llmService.getSendMessageOptions(0.7, 2000);
-    const response = await llmService.llm.sendMessage(prompt, options);
+    const llmConfig = await llmService.resolveUserLLMConfig(userId);
+    console.log(`🤖 Generating AI plan with ${llmConfig.provider} model: ${llmConfig.model}`);
+    streamProgress('llm-started', `Calling ${llmConfig.model} to draft the quiz blueprint...`);
+    const response = await llmService.streamCompletion({
+      prompt,
+      userId,
+      llmConfig,
+      temperature: 0.3,
+      maxTokens: 2400
+    }, (textChunk, metadata) => {
+      if (!sessionId || !metadata?.partial || !textChunk) return;
+      sseService.streamTextChunk(sessionId, progressQuestionId, textChunk, {
+        contentType: 'quiz-blueprint-json',
+        model: llmConfig.model,
+        totalLength: metadata.totalLength,
+        isPartial: true
+      });
+    });
+    streamProgress('llm-complete', 'Blueprint draft returned. Validating structure...');
 
     console.log('🤖 Raw LLM response:', response);
 
@@ -143,6 +405,7 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
 
       console.log('📝 Extracted JSON text:', jsonText);
       planData = JSON.parse(jsonText);
+      streamProgress('parse-complete', 'Blueprint JSON parsed successfully.');
     } catch (parseError) {
       console.error('❌ Failed to parse LLM response:', parseError);
       const responseText = typeof response === 'string' ? response : response.content || JSON.stringify(response);
@@ -155,9 +418,38 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       return errorResponse(res, 'Invalid AI response format', 'AI_INVALID_FORMAT', HTTP_STATUS.INTERNAL_SERVER_ERROR);
     }
 
+    // LLMs can occasionally return an obsolete or one-based LO index. Treat it
+    // as recoverable model output: remove the bad row and let the fixed budget
+    // restore coverage for that objective below.
+    const sanitizedPlan = discardPlanItemsOutsideBudget(planData.planItems, questionBudget);
+    if (sanitizedPlan.discardedIndexes.length) {
+      console.warn('⚠️ Discarded AI plan rows with invalid learning objective indexes:', {
+        discardedIndexes: sanitizedPlan.discardedIndexes,
+        validIndexes: questionBudget.allocations.map(allocation => allocation.learningObjectiveIndex)
+      });
+    }
+    planData.planItems = sanitizedPlan.items;
+
+    const beforeCountSanitization = planData.planItems.length;
+    planData.planItems = planData.planItems
+      .map(item => ({
+        ...item,
+        count: Number.parseInt(item.count, 10)
+      }))
+      .filter(item => Number.isInteger(item.count) && item.count >= 1);
+
+    if (planData.planItems.length !== beforeCountSanitization) {
+      console.warn('⚠️ Discarded AI plan rows with invalid question counts before budget rebalance:', {
+        discardedRows: beforeCountSanitization - planData.planItems.length
+      });
+      streamProgress('count-sanitized', 'Removed invalid zero-count blueprint rows before budget alignment.', {
+        discardedRows: beforeCountSanitization - planData.planItems.length
+      });
+    }
+
     // Step 4: Validate each item
     const validTypes = Object.values(QUESTION_TYPES);
-    const rules = promptTemplate.customQuestionTypeRules || promptTemplate.questionTypeRules;
+    const rules = resolvedRules;
     const allowedTypes = rules?.allowedTypes || validTypes;
     const maxPerLO = rules?.maxPerLO || new Map();
 
@@ -165,6 +457,18 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
     const countPerLO = {}; // Track count by type per LO
 
     for (const item of planData.planItems) {
+      item.bloomLevel = normalizeBloomLevel(item.bloomLevel);
+      item.difficulty = normalizeDifficulty(item.difficulty, item.bloomLevel);
+      item.pedagogicalIntent = ['support', 'assess', 'gamify'].includes(item.pedagogicalIntent)
+        ? item.pedagogicalIntent
+        : approach;
+      item.focusArea = typeof item.focusArea === 'string' && item.focusArea.trim()
+        ? item.focusArea.trim().slice(0, 300)
+        : `LO ${item.learningObjectiveIndex + 1} ${item.type} focus`;
+      item.rationale = typeof item.rationale === 'string' && item.rationale.trim()
+        ? item.rationale.trim().slice(0, 1000)
+        : `Uses ${item.type} to support the ${approach} teaching purpose for this learning objective.`;
+
       // Check if type is valid
       if (!validTypes.includes(item.type)) {
         return errorResponse(res, `Invalid question type: ${item.type}`, 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
@@ -203,75 +507,96 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       }
     }
 
-    // Step 5: Ensure all LOs are covered
-    const coveredLOs = new Set(planData.planItems.map(item => item.learningObjectiveIndex));
-    const missingLOs = [];
-    for (let i = 0; i < quiz.learningObjectives.length; i++) {
-      if (!coveredLOs.has(i)) {
-        missingLOs.push(i);
-      }
+    // Step 5: Treat the deterministic budget as authoritative even if the LLM
+    // returns a different total or omits a learning objective.
+    const fallbackType = allowedTypes[0] || 'multiple-choice';
+    planData.planItems = rebalancePlanToBudget(
+      planData.planItems,
+      questionBudget,
+      fallbackType,
+      approach
+    );
+    planData.planItems = alignPlanItemsToSubpoints(
+      planData.planItems,
+      quiz.learningObjectives
+    );
+    streamProgress('budget-aligned', 'Aligned blueprint rows to LO subpoints and the fixed question budget.');
+
+    totalCount = planData.planItems.reduce((sum, item) => sum + item.count, 0);
+    const finalCountsByLO = planData.planItems.reduce((counts, item) => {
+      counts[item.learningObjectiveIndex] = (counts[item.learningObjectiveIndex] || 0) + item.count;
+      return counts;
+    }, {});
+
+    const mismatchedAllocation = questionBudget.allocations.find(allocation => (
+      finalCountsByLO[allocation.learningObjectiveIndex] !== allocation.count
+    ));
+
+    if (totalCount !== questionBudget.total || mismatchedAllocation) {
+      console.error('❌ Failed to enforce deterministic question budget:', {
+        expectedTotal: questionBudget.total,
+        actualTotal: totalCount,
+        expectedAllocations: questionBudget.allocations,
+        actualCountsByLO: finalCountsByLO
+      });
+      return errorResponse(
+        res,
+        'Failed to align the generated plan with the learning-objective budget',
+        'PLAN_BUDGET_ERROR',
+        HTTP_STATUS.INTERNAL_SERVER_ERROR
+      );
     }
 
-    if (missingLOs.length > 0) {
-      console.warn(`⚠️ Missing LOs: ${missingLOs.join(', ')}. Adding them...`);
-      const firstAllowedType = allowedTypes[0] || 'multiple-choice';
-      for (const loIndex of missingLOs) {
-        planData.planItems.push({
-          type: firstAllowedType,
-          learningObjectiveIndex: loIndex,
-          count: 1
-        });
-        totalCount += 1;
-      }
-    }
-
-    // Step 6: Adjust total count if it doesn't match exactly
-    if (totalCount !== totalQuestions) {
-      console.warn(`⚠️ AI generated ${totalCount} questions but requested ${totalQuestions}. Adjusting...`);
-
-      const diff = totalQuestions - totalCount;
-
-      if (diff > 0) {
-        // Need to add more questions - distribute evenly across all items
-        let remaining = diff;
-        const itemsCount = planData.planItems.length;
-        const addPerItem = Math.floor(diff / itemsCount);
-
-        if (addPerItem > 0) {
-          planData.planItems.forEach(item => {
-            item.count += addPerItem;
-            remaining -= addPerItem;
-          });
-        }
-
-        // Add remaining to first items
-        for (let i = 0; i < remaining; i++) {
-          planData.planItems[i].count += 1;
-        }
-
-        console.log(`✅ Added ${diff} questions distributed across items`);
-      } else if (diff < 0) {
-        // Need to remove questions - remove from items with count > 1, starting from the end
-        let toRemove = Math.abs(diff);
-        for (let i = planData.planItems.length - 1; i >= 0 && toRemove > 0; i--) {
-          const item = planData.planItems[i];
-          const canRemove = Math.min(item.count - 1, toRemove); // Keep at least 1
-          if (canRemove > 0) {
-            item.count -= canRemove;
-            toRemove -= canRemove;
-          }
-        }
-
-        console.log(`✅ Removed ${Math.abs(diff)} questions to match total`);
-      }
-    }
+    planData.recommendedTotalQuestions = questionBudget.total;
+    planData.totalQuestionStrategy = requestedTotalQuestions === null
+      ? 'ai-recommended'
+      : 'user-specified';
+    planData.totalQuestionRationale = questionBudget.rationale;
+    planData.questionBudget = {
+      method: questionBudget.method,
+      approach,
+      total: questionBudget.total,
+      allocations: questionBudget.allocations.map(allocation => ({
+        learningObjectiveIndex: allocation.learningObjectiveIndex,
+        count: allocation.count,
+        subpointCount: allocation.subpointCount,
+        bloomLevel: allocation.bloomLevel,
+        rationale: allocation.rationale
+      }))
+    };
+    planData.promptProvenance = {
+      promptType: 'quiz-blueprint',
+      source: courseOverride ? 'course' : userOverride ? 'user' : 'system',
+      version: courseOverride?.version || null,
+      approach
+    };
 
     console.log('✅ AI plan validated and adjusted:', planData);
+    if (sessionId) {
+      sseService.notifyQuestionComplete(sessionId, progressQuestionId, {
+        planItems: planData.planItems.length,
+        totalQuestions: planData.recommendedTotalQuestions || effectiveTotalQuestions,
+        promptProvenance: planData.promptProvenance
+      });
+      sseService.notifyBatchComplete(sessionId, {
+        totalGenerated: 1,
+        totalFailed: 0,
+        workflow: 'quiz-blueprint'
+      });
+    }
 
     return successResponse(res, planData, 'AI plan generated successfully', HTTP_STATUS.OK);
 
   } catch (error) {
     console.error('❌ AI plan generation error:', error);
+    if (sessionId) {
+      sseService.emitError(sessionId, progressQuestionId, error.message, 'quiz-blueprint-error');
+      sseService.notifyBatchComplete(sessionId, {
+        totalGenerated: 0,
+        totalFailed: 1,
+        workflow: 'quiz-blueprint'
+      });
+    }
     return errorResponse(res, 'Failed to generate AI plan', 'AI_SERVICE_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 }));

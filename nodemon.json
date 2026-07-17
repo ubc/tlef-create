@@ -1,0 +1,14 @@
+{
+  "watch": [
+    "server.js",
+    "routes"
+  ],
+  "ext": "js,json,mjs",
+  "ignore": [
+    "local_cache/**",
+    "routes/create/uploads/**",
+    "uploads/**",
+    "dist/**",
+    "node_modules/**"
+  ]
+}

@@ -3,11 +3,12 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
+import MongoStore from 'connect-mongo';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import createRoutes from './routes/create/createRoutes.js';
 import { passport } from './routes/create/middleware/passport.js';
-import connectDB from './routes/create/config/database.js';
+import connectDB, { getMongoUri } from './routes/create/config/database.js';
 import mongoose from 'mongoose';
 
 
@@ -126,6 +127,13 @@ const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: getMongoUri(),
+    collectionName: 'sessions',
+    ttl: 24 * 60 * 60,
+    autoRemove: 'native',
+    touchAfter: 60 * 60
+  }),
   cookie: {
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
@@ -136,6 +144,10 @@ const sessionConfig = {
   },
   name: 'tlef.sid' // Custom session name
 };
+
+sessionConfig.store.on('error', (error) => {
+  console.error('❌ MongoDB session store error:', error);
+});
 
 app.use(session(sessionConfig));
 
@@ -184,6 +196,23 @@ app.post('/Shibboleth.sso/SAML2/POST', (req, res) => {
   console.log('🔄 Redirecting Shibboleth.sso callback to /api/create/auth/saml/callback');
   // Forward the request to the actual SAML callback handler
   req.url = '/api/create/auth/saml/callback';
+  app.handle(req, res);
+});
+
+// Local docker-simple-saml compatibility route
+// The local IdP registers this SP with a fixed ACS of <base_url>/auth/saml/callback
+// (see saml20-sp-remote.php) and ignores the callbackUrl in our AuthnRequest, so it
+// always POSTs the assertion here. Forward it to our Express callback handler.
+app.post('/auth/saml/callback', (req, res) => {
+  console.log('🔄 Redirecting /auth/saml/callback to /api/create/auth/saml/callback');
+  req.url = '/api/create/auth/saml/callback';
+  app.handle(req, res);
+});
+
+// Local IdP SingleLogoutService endpoint is registered as <base_url>/auth/logout.
+app.get('/auth/logout', (req, res) => {
+  console.log('🔄 Redirecting /auth/logout to /api/create/auth/logout');
+  req.url = '/api/create/auth/logout';
   app.handle(req, res);
 });
 

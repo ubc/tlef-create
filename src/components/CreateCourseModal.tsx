@@ -91,7 +91,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
   ) => {
     const newMaterial: Material = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       name: material.name,
       type: material.type,
       uploadDate: new Date().toLocaleDateString(),
@@ -100,7 +100,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       isUploading: false,
       uploadProgress: 0
     };
-    setMaterials([...materials, newMaterial]);
+    setMaterials((prevMaterials) => [...prevMaterials, newMaterial]);
   };
 
   const handleRemoveMaterial = (id: string) => {

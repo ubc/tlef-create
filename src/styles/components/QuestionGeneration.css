@@ -5,6 +5,14 @@
     margin: 0 auto;
 }
 
+.question-generation .step-prompt-settings {
+    margin-bottom: 1.5rem;
+}
+
+.question-generation .step-prompt-settings .course-prompt-card {
+    margin: 0;
+}
+
 /* Phase Progress Indicator */
 .phase-progress {
     margin-bottom: 2rem;
@@ -2385,6 +2393,27 @@
     margin-bottom: 0.75rem;
 }
 
+.auto-count-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-muted-foreground);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.auto-count-toggle input {
+    width: 1rem;
+    height: 1rem;
+}
+
+.question-count-input.auto-value {
+    font-weight: 700;
+    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-background));
+}
+
 .total-questions-input {
     display: flex;
     align-items: center;
@@ -2570,6 +2599,80 @@
 }
 
 /* Plan Editor */
+.blueprint-summary-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 8%, transparent), var(--color-background));
+}
+
+.blueprint-summary-kicker {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--color-muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.blueprint-summary-card h3 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.blueprint-summary-card p {
+    margin: 0.5rem 0 0 0;
+    color: var(--color-muted-foreground);
+    line-height: 1.5;
+}
+
+.blueprint-summary-card .blueprint-prompt-source {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.blueprint-budget-details {
+    margin-top: 1rem;
+}
+
+.blueprint-budget-details summary {
+    width: fit-content;
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.blueprint-budget-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.blueprint-budget-item {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-background) 84%, transparent);
+}
+
+.blueprint-budget-item span,
+.blueprint-budget-item small {
+    color: var(--color-muted-foreground);
+}
+
+.blueprint-budget-item small {
+    line-height: 1.4;
+}
+
 .plan-editor {
     background: var(--color-background);
     border: 1px solid var(--color-border);
@@ -2635,6 +2738,50 @@
     border-radius: var(--radius-sm);
     background: var(--color-background);
     font-size: 0.875rem;
+}
+
+.plan-row-details {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.plan-row-details summary {
+    cursor: pointer;
+    color: var(--color-muted-foreground);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.plan-row-details-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.plan-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: var(--color-muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.plan-field-wide {
+    grid-column: span 2;
+}
+
+.plan-field-full {
+    grid-column: 1 / -1;
+}
+
+.plan-field textarea {
+    min-height: 64px;
+    resize: vertical;
 }
 
 .count-stepper {
@@ -2859,8 +3006,307 @@
     border-radius: var(--radius-md);
 }
 
+.plan-workflow-progress {
+    display: flex;
+    width: min(100%, 680px);
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1rem auto 0;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+    text-align: left;
+}
+
+.plan-workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--color-muted-foreground);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.plan-workflow-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.plan-workflow-step-error .plan-workflow-dot {
+    background: var(--color-destructive);
+}
+
+.plan-trace {
+    width: min(100%, 980px);
+    margin: 1.5rem auto;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+    border-radius: 24px;
+    background:
+        radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 34%),
+        var(--color-background);
+    box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+    text-align: left;
+}
+
+.plan-trace-error {
+    border-color: color-mix(in srgb, var(--color-destructive) 45%, var(--color-border));
+}
+
+.plan-trace-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.plan-trace-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.plan-trace-icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 14px;
+    background: var(--color-foreground);
+    color: var(--color-background);
+}
+
+.plan-trace-kicker,
+.plan-trace-section-label {
+    color: var(--color-muted-foreground);
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+
+.plan-trace-heading h3 {
+    margin: 0.15rem 0 0;
+    font-size: 1.1rem;
+}
+
+.plan-trace-model {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-muted) 65%, transparent);
+    color: var(--color-muted-foreground);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+}
+
+.plan-trace-body {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.7fr);
+    min-height: 310px;
+}
+
+.plan-trace-activity,
+.plan-trace-draft {
+    padding: 1.35rem 1.5rem;
+}
+
+.plan-trace-activity {
+    border-right: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-muted) 32%, transparent);
+}
+
+.plan-trace-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 1rem;
+}
+
+.plan-trace-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 14px 1fr;
+    gap: 0.7rem;
+    min-height: 46px;
+    color: var(--color-muted-foreground);
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.plan-trace-step:not(:last-child)::after {
+    position: absolute;
+    top: 13px;
+    bottom: -2px;
+    left: 5px;
+    width: 1px;
+    background: var(--color-border);
+    content: '';
+}
+
+.plan-trace-step-marker {
+    position: relative;
+    z-index: 1;
+    width: 11px;
+    height: 11px;
+    margin-top: 0.25rem;
+    border: 2px solid var(--color-background);
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.plan-trace-step-active {
+    color: var(--color-foreground);
+    font-weight: 600;
+}
+
+.plan-trace-step-active .plan-trace-step-marker {
+    animation: trace-pulse 1.5s ease-in-out infinite;
+}
+
+.plan-trace-step-error .plan-trace-step-marker {
+    background: var(--color-destructive);
+}
+
+@keyframes trace-pulse {
+    50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-primary) 12%, transparent); }
+}
+
+.plan-trace-draft-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.plan-trace-draft-header .plan-trace-section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.plan-trace-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+}
+
+.plan-trace-toggle svg {
+    transition: transform 180ms ease;
+}
+
+.plan-trace-toggle svg.is-open {
+    transform: rotate(180deg);
+}
+
+.plan-trace-decisions {
+    display: grid;
+    gap: 0.55rem;
+    margin: 1rem 0;
+}
+
+.plan-trace-decision {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 0.65rem;
+    align-items: start;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+
+.plan-trace-decision > span {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--color-foreground);
+    color: var(--color-background);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.plan-trace-decision p {
+    margin: 0.1rem 0 0;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.plan-trace-output {
+    min-height: 170px;
+    max-height: 300px;
+    margin: 1rem 0 0;
+    overflow: auto;
+    padding: 1rem;
+    border: 1px solid #263244;
+    border-radius: 14px;
+    background: #101722;
+    color: #dbe7f5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 0.78rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.plan-trace-caret {
+    display: inline-block;
+    width: 7px;
+    height: 1.05em;
+    margin-left: 2px;
+    background: #7dd3fc;
+    vertical-align: -0.15em;
+    animation: trace-caret 0.9s steps(1) infinite;
+}
+
+@keyframes trace-caret {
+    50% { opacity: 0; }
+}
+
+.plan-trace-note {
+    margin: 0.75rem 0 0;
+    color: var(--color-muted-foreground);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+    .plan-trace-body {
+        grid-template-columns: 1fr;
+    }
+
+    .plan-trace-activity {
+        border-right: 0;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .plan-trace-header {
+        align-items: flex-start;
+    }
+
+    .plan-trace-model {
+        max-width: 38%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .plan-editor-table-header,
     .plan-editor-row {
         grid-template-columns: 1fr;
@@ -2871,6 +3317,14 @@
     .remove-btn {
         grid-column: 1;
         margin: 0;
+    }
+
+    .plan-row-details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .plan-field-wide {
+        grid-column: 1;
     }
 
     .mode-toggle {

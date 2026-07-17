@@ -10,24 +10,37 @@ import Login from './components/Login';
 import NotFound from "./pages/NotFound";
 import H5PPreview from "./pages/H5PPreview";
 import AdminDashboard from "./pages/AdminDashboard";
+import HelpManual from './components/help/HelpManual';
 import FirstUseApiKeyModal from './components/FirstUseApiKeyModal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_URL } from './config/api';
 import { apiKeyApi } from './services/api';
+import { AUTH_EXPIRED_EVENT } from './utils/authEvents';
+
+interface AuthenticatedUser {
+  canUseEnvKey?: boolean;
+  isAdmin?: boolean;
+}
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [user, setUser] = useState<any>(null);
   const [showFirstUseModal, setShowFirstUseModal] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
-    const handleNoApiKey = () => setShowFirstUseModal(true);
-    window.addEventListener('tlef:no-api-key', handleNoApiKey);
-    return () => window.removeEventListener('tlef:no-api-key', handleNoApiKey);
+  // Show first-use modal if user has no API key and no env key permission
+  const checkFirstUse = useCallback(async (userData: AuthenticatedUser) => {
+    if (userData?.canUseEnvKey || userData?.isAdmin) return;
+    try {
+      const res = await apiKeyApi.getKeys();
+      const keys = res.data?.apiKeys || [];
+      if (keys.length === 0) {
+        setShowFirstUseModal(true);
+      }
+    } catch {
+      // Silently fail — don't block the user if this check errors
+    }
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/create/auth/me`, {
         credentials: 'include'
@@ -39,11 +52,14 @@ const App = () => {
           setIsAuthenticated(false);
           return;
         }
-        const data = await response.json();
+        const data = await response.json() as {
+          data?: { authenticated?: boolean; user?: AuthenticatedUser };
+        };
         if (data.data?.authenticated) {
           setIsAuthenticated(true);
-          setUser(data.data.user);
-          checkFirstUse(data.data.user);
+          if (data.data.user) {
+            checkFirstUse(data.data.user);
+          }
         } else {
           setIsAuthenticated(false);
         }
@@ -54,21 +70,22 @@ const App = () => {
       console.error('Auth check failed:', error);
       setIsAuthenticated(false);
     }
-  };
+  }, [checkFirstUse]);
 
-  // Show first-use modal if user has no API key and no env key permission
-  const checkFirstUse = async (userData: any) => {
-    if (userData?.canUseEnvKey || userData?.isAdmin) return;
-    try {
-      const res = await apiKeyApi.getKeys();
-      const keys = res.data?.apiKeys || [];
-      if (keys.length === 0) {
-        setShowFirstUseModal(true);
-      }
-    } catch {
-      // Silently fail — don't block the user if this check errors
-    }
-  };
+  useEffect(() => {
+    checkAuth();
+    const handleNoApiKey = () => setShowFirstUseModal(true);
+    const handleAuthExpired = () => {
+      setIsAuthenticated(false);
+      setShowFirstUseModal(false);
+    };
+    window.addEventListener('tlef:no-api-key', handleNoApiKey);
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => {
+      window.removeEventListener('tlef:no-api-key', handleNoApiKey);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    };
+  }, [checkAuth]);
 
   if (isAuthenticated === null) {
     return <div>Loading...</div>;
@@ -89,6 +106,7 @@ const App = () => {
           <Route path="/course/:courseId" element={isAuthenticated ? <Layout><CourseView /></Layout> : <Navigate to="/login" />} />
           <Route path="/course/:courseId/quiz/:quizId" element={isAuthenticated ? <Layout><QuizView /></Layout> : <Navigate to="/login" />} />
           <Route path="/account" element={isAuthenticated ? <Layout><UserAccount /></Layout> : <Navigate to="/login" />} />
+          <Route path="/help" element={isAuthenticated ? <Layout><HelpManual /></Layout> : <Navigate to="/login" />} />
           <Route path="/admin" element={isAuthenticated ? <Layout><AdminDashboard /></Layout> : <Navigate to="/login" />} />
 
           {/* H5P Preview — no auth required (dev tool) */}

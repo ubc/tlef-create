@@ -48,8 +48,8 @@ export default function AIConfigPanel({
 
   // Sync input value when aiConfig changes externally
   useEffect(() => {
-    setInputValue(aiConfig.totalQuestions.toString());
-  }, [aiConfig.totalQuestions]);
+    setInputValue(aiConfig.autoRecommendTotalQuestions ? 'Auto' : aiConfig.totalQuestions.toString());
+  }, [aiConfig.totalQuestions, aiConfig.autoRecommendTotalQuestions]);
 
   const handleTotalChange = (value: string) => {
     // Allow empty input for manual typing
@@ -93,27 +93,47 @@ export default function AIConfigPanel({
         <label className="ai-config-label">
           How many questions do you want to generate?
         </label>
+        <label className="auto-count-toggle">
+          <input
+            type="checkbox"
+            checked={!!aiConfig.autoRecommendTotalQuestions}
+            onChange={(e) => onConfigChange({
+              ...aiConfig,
+              autoRecommendTotalQuestions: e.target.checked,
+              autoRecommendTotalQuestionsUserSet: true
+            })}
+            disabled={isGenerating}
+          />
+          Let CREATE recommend the quiz length based on LO complexity and materials
+        </label>
         <div className="total-questions-input">
           <input
             type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={inputValue}
+            inputMode={aiConfig.autoRecommendTotalQuestions ? 'text' : 'numeric'}
+            pattern={aiConfig.autoRecommendTotalQuestions ? undefined : '[0-9]*'}
+            value={aiConfig.autoRecommendTotalQuestions ? 'Auto' : inputValue}
             onChange={(e) => handleTotalChange(e.target.value)}
             onBlur={() => {
+              if (aiConfig.autoRecommendTotalQuestions) {
+                return;
+              }
               // On blur, ensure value is valid
               if (inputValue === '' || isNaN(parseInt(inputValue, 10))) {
                 setInputValue(minQuestions.toString());
                 onConfigChange({ ...aiConfig, totalQuestions: minQuestions });
               }
             }}
-            disabled={isGenerating}
-            className="question-count-input"
+            disabled={isGenerating || aiConfig.autoRecommendTotalQuestions}
+            className={`question-count-input ${aiConfig.autoRecommendTotalQuestions ? 'auto-value' : ''}`}
             placeholder={`${minQuestions}-${maxQuestions}`}
           />
-          <span className="input-hint">questions ({minQuestions}-{maxQuestions})</span>
+          <span className="input-hint">
+            {aiConfig.autoRecommendTotalQuestions
+              ? 'CREATE will recommend a total'
+              : `questions (${minQuestions}-${maxQuestions})`}
+          </span>
         </div>
-        {minQuestions > 1 && (
+        {!aiConfig.autoRecommendTotalQuestions && minQuestions > 1 && (
           <div className="input-hint" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
             Minimum is {minQuestions} (at least 1 question per learning objective)
           </div>

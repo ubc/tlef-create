@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { FileText, Link, Check } from 'lucide-react';
 import { Material } from '../services/api';
+import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
+import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import '../styles/components/MaterialAssignment.css';
 
 interface MaterialUI {
@@ -24,6 +26,7 @@ const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsCh
   const materials = propsCourseMaterials || [];
   const [showNavigation, setShowNavigation] = useState(false);
   const navigationRef = useRef<HTMLDivElement>(null);
+  const materialsTutorial = useFeatureOnboarding('quiz-materials', assignedMaterials.length > 0);
   
   // Transform backend materials to match the UI interface
   const courseMaterials: MaterialUI[] = materials.map(m => ({
@@ -179,28 +182,40 @@ const MaterialAssignment = ({ courseId, assignedMaterials, onAssignedMaterialsCh
                   <p>You have assigned {assignedMaterials.length} material{assignedMaterials.length !== 1 ? 's' : ''} to this quiz.</p>
                 </div>
                 <div className="nav-actions">
-                  <button 
-                    className="btn btn-primary btn-nav"
-                    onClick={() => {
-                      if (onNavigateNext) {
-                        onNavigateNext();
-                      } else {
-                        // Fallback method
-                        const tabButtons = document.querySelectorAll('button');
-                        const objectivesTab = Array.from(tabButtons).find(button => 
-                          button.textContent?.includes('Learning Objectives')
-                        );
-                        if (objectivesTab) {
-                          objectivesTab.click();
-                          setTimeout(() => {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }, 200);
-                        }
-                      }
-                    }}
+                  <FeatureCoachmark
+                    isOpen={materialsTutorial.isActive}
+                    title="These sources ground the quiz"
+                    description="Only assigned materials are used to build this quiz's learning objectives, evidence links, and generated questions."
+                    eyebrow="Quiz materials"
+                    placement="top-end"
+                    onPrimary={materialsTutorial.complete}
+                    onDismiss={materialsTutorial.complete}
+                    onSkip={materialsTutorial.skipAll}
                   >
-                    Next: Set Learning Objectives
-                  </button>
+                    <button
+                      className="btn btn-primary btn-nav"
+                      onClick={() => {
+                        materialsTutorial.complete();
+                        if (onNavigateNext) {
+                          onNavigateNext();
+                        } else {
+                          // Fallback method
+                          const tabButtons = document.querySelectorAll('button');
+                          const objectivesTab = Array.from(tabButtons).find(button =>
+                            button.textContent?.includes('Learning Objectives')
+                          );
+                          if (objectivesTab) {
+                            objectivesTab.click();
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 200);
+                          }
+                        }
+                      }}
+                    >
+                      Next: Set Learning Objectives
+                    </button>
+                  </FeatureCoachmark>
                 </div>
               </div>
             </div>

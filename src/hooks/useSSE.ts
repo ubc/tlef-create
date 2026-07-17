@@ -4,6 +4,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { API_URL } from '../config/api';
+import { notifyAuthExpired } from '../utils/authEvents';
 
 interface BatchStartedData {
   totalQuestions: number;
@@ -18,14 +20,26 @@ interface QuestionProgressData {
 }
 
 interface TextChunkMetadata {
-  questionType: string;
-  questionIndex: number;
+  questionType?: string;
+  questionIndex?: number;
+  contentType?: string;
+  model?: string;
+  totalLength?: number;
+  isPartial?: boolean;
 }
 
 interface TextChunkData {
   chunk: string;
   questionId: string;
   metadata?: TextChunkMetadata;
+}
+
+interface TextResetData {
+  questionId: string;
+  metadata?: {
+    attempt?: number;
+    reason?: string;
+  };
 }
 
 interface QuestionCompleteData {
@@ -56,6 +70,7 @@ interface SSEHookOptions {
   onBatchStarted?: (data: BatchStartedData) => void;
   onQuestionProgress?: (questionId: string, data: QuestionProgressData) => void;
   onTextChunk?: (questionId: string, chunk: string, metadata?: TextChunkMetadata) => void;
+  onTextReset?: (questionId: string, metadata?: TextResetData['metadata']) => void;
   onQuestionComplete?: (questionId: string, question: unknown) => void;
   onBatchComplete?: (summary: BatchCompleteData) => void;
   onError?: (questionId: string, errorMessage: string, errorType: string) => void;
@@ -67,7 +82,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
 
   // Use refs to always have access to the latest callbacks without re-creating EventSource
@@ -86,7 +101,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     }
     
     setConnectionStatus('disconnected');
-    setReconnectAttempts(0);
+    reconnectAttemptsRef.current = 0;
   }, []);
 
   const connect = useCallback(() => {
@@ -116,19 +131,52 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     eventSource.onopen = () => {
       setConnectionStatus('connected');
       setError(null);
-      setReconnectAttempts(0);
+      reconnectAttemptsRef.current = 0;
     };
 
     // Connection error
-    eventSource.onerror = (event) => {
+    eventSource.onerror = async (event) => {
+      const messageEvent = event as MessageEvent;
+      if (typeof messageEvent.data === 'string' && messageEvent.data.trim()) {
+        return;
+      }
+
+      if (eventSourceRef.current !== eventSource) {
+        return;
+      }
+
       console.error('[SSE] Connection error:', event);
+      eventSource.close();
+      eventSourceRef.current = null;
       setConnectionStatus('error');
-      
-      if (reconnectAttempts < maxReconnectAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+
+      try {
+        const authResponse = await fetch(`${API_URL}/api/create/auth/me`, {
+          credentials: 'include'
+        });
+        let authenticated = authResponse.status !== 401;
+
+        if (authResponse.ok) {
+          const authData = await authResponse.json();
+          authenticated = Boolean(authData.data?.authenticated ?? authData.authenticated);
+        }
+
+        if (!authenticated) {
+          setError('Your session has expired. Please sign in again.');
+          callbacksRef.current.onError?.('', 'Your session has expired. Please sign in again.', 'AUTH_ERROR');
+          notifyAuthExpired();
+          return;
+        }
+      } catch {
+        // The server may be temporarily unavailable; use bounded reconnects below.
+      }
+
+      const reconnectAttempt = reconnectAttemptsRef.current;
+      if (reconnectAttempt < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 10000);
+        reconnectAttemptsRef.current = reconnectAttempt + 1;
 
         reconnectTimeoutRef.current = setTimeout(() => {
-          setReconnectAttempts(prev => prev + 1);
           connect();
         }, delay);
       } else {
@@ -178,6 +226,15 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
       }
     });
 
+    eventSource.addEventListener('text-reset', (event) => {
+      try {
+        const data = JSON.parse(event.data) as TextResetData;
+        callbacksRef.current.onTextReset?.(data.questionId, data.metadata);
+      } catch (err) {
+        console.error('[SSE] Error parsing text-reset event:', err);
+      }
+    });
+
     eventSource.addEventListener('question-complete', (event) => {
       try {
         console.log('[SSE] Received question-complete event:', event.data);
@@ -208,7 +265,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
           console.error('[SSE] Error event:', data);
           callbacksRef.current.onError?.(data.questionId, data.message, data.errorType);
         } else {
-          console.error('[SSE] Error event (no data):', event);
+          // Network-level errors are handled by eventSource.onerror.
         }
       } catch (err) {
         console.error('[SSE] Error parsing error event:', err);
@@ -233,7 +290,7 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
       }
     };
 
-  }, [sseUrl, reconnectAttempts]);
+  }, [sseUrl]);
 
   // Connect when URL is provided
   useEffect(() => {
@@ -245,11 +302,11 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
     return () => {
       disconnect();
     };
-  }, [sseUrl]);
+  }, [connect, disconnect, sseUrl]);
 
   // Manual reconnect function
   const reconnect = useCallback(() => {
-    setReconnectAttempts(0);
+    reconnectAttemptsRef.current = 0;
     connect();
   }, [connect]);
 

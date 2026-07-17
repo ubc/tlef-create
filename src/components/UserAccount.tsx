@@ -1,43 +1,68 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { API_URL } from '../config/api';
 import { adminApi } from '../services/api';
 import ApiKeySettings from './settings/ApiKeySettings';
 import { setUser } from '../store/slices/appSlice';
-import { Bug, User, ArrowLeft, Mail, Settings, HelpCircle, LogOut, Shield } from 'lucide-react';
+import type { RootState } from '../store';
+import { Bug, User, ArrowLeft, Settings, HelpCircle, LogOut, Shield, RotateCcw } from 'lucide-react';
+import { restartOnboarding } from '../utils/onboarding';
 import '../styles/components/UserAccount.css';
+
+type AccountUser = NonNullable<RootState['app']['user']>;
 
 const UserAccount = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useDispatch();
-  const reduxUser = useSelector((state: any) => state.app.user);
+  const reduxUser = useSelector((state: RootState) => state.app.user);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showApiKeySettings, setShowApiKeySettings] = useState(false);
-  const [showHelpSupport, setShowHelpSupport] = useState(false);
-  const [user, setLocalUser] = useState<any>(reduxUser);
+  const [user, setLocalUser] = useState<AccountUser | null>(reduxUser);
   const [reportData, setReportData] = useState({ type: 'bug', description: '', email: '' });
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [tutorialsRestarted, setTutorialsRestarted] = useState(false);
 
   useEffect(() => {
-    if (!reduxUser) {
-      fetchUserData();
+    if (reduxUser) {
+      setLocalUser(reduxUser);
+      return;
     }
-  }, [reduxUser]);
 
-  const fetchUserData = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/create/auth/me`, { credentials: 'include' });
-      if (response.ok) {
-        const result = await response.json();
-        const userData = result.data;
-        if (userData?.authenticated && userData.user) {
-          setLocalUser(userData.user);
-          dispatch(setUser(userData.user));
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/create/auth/me`, { credentials: 'include' });
+        if (response.ok) {
+          const result = await response.json() as {
+            data?: { authenticated?: boolean; user?: AccountUser };
+          };
+          const userData = result.data;
+          if (userData?.authenticated && userData.user) {
+            setLocalUser(userData.user);
+            dispatch(setUser(userData.user));
+          }
         }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
       }
-    } catch (error) {
-      console.error('Failed to fetch user data:', error);
+    };
+
+    void fetchUserData();
+  }, [dispatch, reduxUser]);
+
+  useEffect(() => {
+    if (searchParams.get('report') === '1') {
+      setShowReportModal(true);
+    }
+  }, [searchParams]);
+
+  const closeReportModal = () => {
+    setShowReportModal(false);
+    if (searchParams.has('report')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('report');
+      setSearchParams(nextParams, { replace: true });
     }
   };
 
@@ -50,7 +75,7 @@ const UserAccount = () => {
     setReportSubmitting(true);
     try {
       await adminApi.submitReport(reportData.type, reportData.description, reportData.email || undefined);
-      setShowReportModal(false);
+      closeReportModal();
       setReportData({ type: 'bug', description: '', email: '' });
       alert('Report submitted successfully! We will review it and get back to you.');
     } catch {
@@ -121,9 +146,23 @@ const UserAccount = () => {
                   <ApiKeySettings />
                 </div>
               )}
-              <button className="setting-item" onClick={() => setShowHelpSupport(true)}>
+              <Link className="setting-item" to="/help">
                 <HelpCircle size={20} /> <span>Help & Support</span>
+              </Link>
+              <button
+                className="setting-item"
+                onClick={() => {
+                  restartOnboarding();
+                  setTutorialsRestarted(true);
+                }}
+              >
+                <RotateCcw size={20} /> <span>Restart Feature Tutorials</span>
               </button>
+              {tutorialsRestarted && (
+                <p className="tutorial-restart-status" role="status">
+                  Tutorials restarted. Return to your course or learning object to see them again.
+                </p>
+              )}
             </div>
           </div>
 
@@ -145,11 +184,11 @@ const UserAccount = () => {
       {/* Report Modal */}
       {showReportModal && (
         <div className="report-modal">
-          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowReportModal(false); }}>
+          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeReportModal(); }}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h4>Report Question Bug</h4>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowReportModal(false)}>×</button>
+                <button className="btn btn-ghost btn-sm" onClick={closeReportModal}>×</button>
               </div>
               <div className="report-form">
                 <div className="form-field">
@@ -173,7 +212,7 @@ const UserAccount = () => {
                   <button className="btn btn-primary" onClick={handleSubmitReport} disabled={!reportData.description.trim() || reportSubmitting}>
                     <Bug size={16} /> {reportSubmitting ? 'Submitting...' : 'Submit Report'}
                   </button>
-                  <button className="btn btn-outline" onClick={() => setShowReportModal(false)}>Cancel</button>
+                  <button className="btn btn-outline" onClick={closeReportModal}>Cancel</button>
                 </div>
               </div>
             </div>
@@ -181,31 +220,6 @@ const UserAccount = () => {
         </div>
       )}
 
-      {/* Help & Support Modal */}
-      {showHelpSupport && (
-        <div className="modal-overlay" onClick={() => setShowHelpSupport(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h4>Help & Support</h4>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowHelpSupport(false)}>×</button>
-            </div>
-            <div className="help-support-content">
-              <div className="help-section">
-                <h5>Contact Support</h5>
-                <p>Need help? Our support team is here to assist you.</p>
-                <p className="support-email"><Mail size={16} /> <a href="mailto:support@tlef-create.ubc.ca">support@tlef-create.ubc.ca</a></p>
-              </div>
-              <div className="help-section">
-                <h5>Report an Issue</h5>
-                <p>Found a bug? Use the "Report Question Bug" button in the Report Issues section.</p>
-              </div>
-              <div className="modal-actions">
-                <button className="btn btn-primary" onClick={() => setShowHelpSupport(false)}>Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

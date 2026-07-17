@@ -170,12 +170,12 @@ export function renderMarkdownAnswerContent(question) {
         lines.push('- Correct Answers:');
         correctOptions.forEach((correctOption) => {
           const letter = String.fromCharCode(65 + options.indexOf(correctOption));
-          lines.push(`  - ${letter}. ${escapeMarkdown(correctOption.text)}`);
+          lines.push(`  - ${letter}\\. ${escapeMarkdown(correctOption.text)}`);
         });
       } else {
         const correctOption = correctOptions[0];
         const letter = String.fromCharCode(65 + options.indexOf(correctOption));
-        lines.push(`- Correct Answer: ${letter}. ${escapeMarkdown(correctOption.text)}`);
+        lines.push(`- Correct Answer: ${letter}\\. ${escapeMarkdown(correctOption.text)}`);
       }
     } else if (question.correctAnswer) {
       lines.push(`- Correct Answer: ${escapeMarkdown(question.correctAnswer)}`);

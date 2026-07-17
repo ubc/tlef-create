@@ -1,9 +1,10 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2, Pencil, Map } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
+import CoverageMapPanel from './CoverageMapPanel';
 import QuestionGeneration from './generation';
 import ReviewEdit from './review';
 import { RootState, AppDispatch } from '../store';
@@ -14,7 +15,7 @@ import { usePubSub } from '../hooks/usePubSub';
 import { LearningObjectiveData } from './generation/generationTypes';
 import '../styles/components/QuizView.css';
 
-type TabType = 'materials' | 'objectives' | 'generation' | 'review';
+type TabType = 'materials' | 'objectives' | 'coverage' | 'generation' | 'review';
 
 const QuizView = () => {
   const { courseId, quizId } = useParams();
@@ -30,7 +31,7 @@ const QuizView = () => {
   // Check URL params for initial tab
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'objectives' || tabParam === 'generation' || tabParam === 'review') {
+    if (tabParam === 'objectives' || tabParam === 'coverage' || tabParam === 'generation' || tabParam === 'review') {
       return tabParam as TabType;
     }
     return 'materials';
@@ -47,7 +48,7 @@ const QuizView = () => {
   // Update active tab when URL params change
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'objectives' || tabParam === 'generation' || tabParam === 'review') {
+    if (tabParam === 'objectives' || tabParam === 'coverage' || tabParam === 'generation' || tabParam === 'review') {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
@@ -70,7 +71,8 @@ const QuizView = () => {
       const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
         _id: obj._id,
         text: obj.text,
-        order: obj.order !== undefined ? obj.order : idx
+        order: obj.order !== undefined ? obj.order : idx,
+        generationMetadata: obj.generationMetadata
       }));
       setLearningObjectives(objectiveData);
       return;
@@ -85,7 +87,7 @@ const QuizView = () => {
 
       // Set learning objectives if they exist - NEW: Keep full objects
       if (currentQuiz.learningObjectives) {
-        const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number }, idx: number) => {
+        const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number; generationMetadata?: LearningObjectiveData['generationMetadata'] }, idx: number) => {
           if (typeof obj === 'string') {
             // Keep the id but avoid showing raw ObjectIds as LO text while the full LO payload is loading.
             return { _id: obj, text: '', order: idx };
@@ -93,7 +95,8 @@ const QuizView = () => {
           return {
             _id: obj._id,
             text: obj.text,
-            order: obj.order !== undefined ? obj.order : idx
+            order: obj.order !== undefined ? obj.order : idx,
+            generationMetadata: obj.generationMetadata
           };
         });
         setLearningObjectives(objectiveData);
@@ -165,6 +168,7 @@ const QuizView = () => {
     { id: 'objectives' as TabType, label: 'Learning Objectives', icon: Target },
     { id: 'generation' as TabType, label: 'Generate Questions', icon: Wand2 },
     { id: 'review' as TabType, label: 'Review & Edit', icon: Settings },
+    { id: 'coverage' as TabType, label: 'Coverage Map', icon: Map },
   ];
 
   const canProceed = (tab: TabType) => {
@@ -173,12 +177,18 @@ const QuizView = () => {
         return assignedMaterials.length > 0;
       case 'generation':
         return assignedMaterials.length > 0 && learningObjectives.length > 0;
+      case 'coverage':
+        return assignedMaterials.length > 0 && learningObjectives.length > 0;
       case 'review':
         return assignedMaterials.length > 0 && learningObjectives.length > 0;
       default:
         return true;
     }
   };
+
+  const coverageRefreshKey = learningObjectives
+    .map(objective => `${objective._id}:${objective.text}`)
+    .join('|');
 
   return (
       <div className="quiz-view">
@@ -272,6 +282,7 @@ const QuizView = () => {
                 objectives={learningObjectives}
                 onObjectivesChange={setLearningObjectives}
                 quizId={quizId!}
+                courseId={courseId}
                 onNavigateNext={() => {
                   setActiveTab('generation');
                   setTimeout(() => {
@@ -281,12 +292,26 @@ const QuizView = () => {
             />
           </div>
 
+          {activeTab === 'coverage' && (
+            <CoverageMapPanel
+              quizId={quizId!}
+              refreshKey={coverageRefreshKey}
+              onNavigateToGeneration={() => setActiveTab('generation')}
+            />
+          )}
+
           <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
             <QuestionGeneration
                 learningObjectives={learningObjectives}
                 assignedMaterials={assignedMaterials}
                 quizId={quizId!}
-                onQuestionsGenerated={() => setActiveTab('review')}
+                courseId={courseId}
+                onQuestionsGenerated={() => {
+                  setActiveTab('review');
+                  window.setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 100);
+                }}
             />
           </div>
 

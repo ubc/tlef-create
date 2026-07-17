@@ -155,6 +155,18 @@ class SSEService extends EventEmitter {
   }
 
   /**
+   * Clear a streamed draft before a validation retry starts.
+   */
+  streamTextReset(sessionId, questionId, metadata = {}) {
+    return this.sendToClient(sessionId, 'text-reset', {
+      questionId,
+      type: 'text-reset',
+      metadata,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
    * Notify question completion
    */
   notifyQuestionComplete(sessionId, questionId, questionData) {

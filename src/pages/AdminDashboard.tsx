@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { adminApi } from '../services/api';
-import { ArrowLeft, Users, BookOpen, FileQuestion, MessageSquare, CheckCircle, Clock, AlertCircle, Key } from 'lucide-react';
+import { ArrowLeft, Users, BookOpen, FileQuestion, MessageSquare, CheckCircle, Clock, AlertCircle, Key, Activity, Bot } from 'lucide-react';
+import AdminActivityPanel from '../components/admin/AdminActivityPanel';
+import AdminGuideInsightsPanel from '../components/admin/AdminGuideInsightsPanel';
+import AdminUserExplorer from '../components/admin/AdminUserExplorer';
+import { RootState } from '../store';
 import '../styles/components/AdminDashboard.css';
 
 interface PlatformStats {
@@ -10,10 +14,15 @@ interface PlatformStats {
   totalFolders: number;
   totalQuizzes: number;
   totalQuestions: number;
+  totalGuideInteractions: number;
+  activeUsers30d: number;
+  guideHelpful: number;
+  guideNotHelpful: number;
   openReports: number;
 }
 
 interface UserStat {
+  _id: string;
   cwlId: string;
   coursesCreated: number;
   quizzesGenerated: number;
@@ -41,28 +50,21 @@ interface ManagedUser {
   canUseEnvKey: boolean;
   lastLogin: string;
   createdAt: string;
+  stats?: Record<string, number | string>;
 }
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const user = useSelector((state: any) => state.app.user);
+  const user = useSelector((state: RootState) => state.app.user);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
   const [users, setUsers] = useState<UserStat[]>([]);
   const [reports, setReports] = useState<BugReport[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [filterEnvOnly, setFilterEnvOnly] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'reports' | 'api-keys'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'guide' | 'reports' | 'api-keys'>('overview');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user?.isAdmin) {
-      navigate('/account');
-      return;
-    }
-    loadData();
-  }, [user]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [statsRes, reportsRes, usersRes] = await Promise.all([
@@ -85,7 +87,15 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.isAdmin) {
+      navigate('/account');
+      return;
+    }
+    void loadData();
+  }, [loadData, navigate, user]);
 
   const handleToggleUserEnvKey = async (userId: string, current: boolean) => {
     try {
@@ -147,6 +157,15 @@ const AdminDashboard = () => {
         <button className={`admin-tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
           Overview
         </button>
+        <button className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
+          Users & Courses
+        </button>
+        <button className={`admin-tab ${activeTab === 'activity' ? 'active' : ''}`} onClick={() => setActiveTab('activity')}>
+          Activity
+        </button>
+        <button className={`admin-tab ${activeTab === 'guide' ? 'active' : ''}`} onClick={() => setActiveTab('guide')}>
+          Guide Insights
+        </button>
         <button className={`admin-tab ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>
           Bug Reports {platform?.openReports ? <span className="badge">{platform.openReports}</span> : null}
         </button>
@@ -178,6 +197,16 @@ const AdminDashboard = () => {
               <MessageSquare size={24} />
               <div className="stat-value">{platform?.totalQuestions || 0}</div>
               <div className="stat-label">Questions</div>
+            </div>
+            <div className="stat-card">
+              <Bot size={24} />
+              <div className="stat-value">{platform?.totalGuideInteractions || 0}</div>
+              <div className="stat-label">Guide Questions</div>
+            </div>
+            <div className="stat-card">
+              <Activity size={24} />
+              <div className="stat-value">{platform?.activeUsers30d || 0}</div>
+              <div className="stat-label">Active Users · 30d</div>
             </div>
           </div>
 
@@ -219,6 +248,10 @@ const AdminDashboard = () => {
           </div>
         </>
       )}
+
+      {activeTab === 'users' && <AdminUserExplorer users={managedUsers} />}
+      {activeTab === 'activity' && <AdminActivityPanel />}
+      {activeTab === 'guide' && <AdminGuideInsightsPanel />}
 
       {activeTab === 'api-keys' && (
         <div className="card" style={{ marginTop: '1rem' }}>

@@ -7,6 +7,22 @@ import {
   getQuestionTypesForTarget
 } from '../../constants/questionTypeCapabilities';
 
+const DIFFICULTY_OPTIONS = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'hard', label: 'Hard' }
+] as const;
+
+const BLOOM_LEVEL_OPTIONS = [
+  { value: '', label: 'Not specified' },
+  { value: 'remember', label: 'Remember' },
+  { value: 'understand', label: 'Understand' },
+  { value: 'apply', label: 'Apply' },
+  { value: 'analyze', label: 'Analyze' },
+  { value: 'evaluate', label: 'Evaluate' },
+  { value: 'create', label: 'Create' }
+] as const;
+
 interface PlanEditorProps {
   planItems: PlanItem[];
   learningObjectives: LearningObjectiveData[];
@@ -32,6 +48,7 @@ export default function PlanEditor({
       type: fallbackType,
       learningObjectiveId: learningObjectives[0]?._id || '',
       count: 1,
+      difficulty: 'moderate',
       ...(fallbackType === 'multiple-choice' && { selectionMode: 'single' as const })
     };
     onPlanItemsChange([...planItems, newItem]);
@@ -96,6 +113,20 @@ export default function PlanEditor({
     const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
     const loLabel = lo ? `LO ${lo.order + 1}` : 'No LO (custom prompt)';
     acc[loLabel] = (acc[loLabel] || 0) + item.count;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const difficultyDistribution = planItems.reduce((acc, item) => {
+    const difficulty = item.difficulty || 'moderate';
+    acc[difficulty] = (acc[difficulty] || 0) + item.count;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const bloomDistribution = planItems.reduce((acc, item) => {
+    if (!item.bloomLevel) {
+      return acc;
+    }
+    acc[item.bloomLevel] = (acc[item.bloomLevel] || 0) + item.count;
     return acc;
   }, {} as Record<string, number>);
 
@@ -286,6 +317,65 @@ export default function PlanEditor({
                     )}
                   </div>
                 )}
+
+                <details className="plan-row-details">
+                  <summary>Blueprint details</summary>
+                  <div className="plan-row-details-grid">
+                    <label className="plan-field">
+                      <span>Difficulty</span>
+                      <select
+                        value={item.difficulty || 'moderate'}
+                        onChange={(e) => handleUpdateItem(item.id, { difficulty: e.target.value as PlanItem['difficulty'] })}
+                        disabled={readOnly}
+                        className="plan-select"
+                      >
+                        {DIFFICULTY_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="plan-field">
+                      <span>Bloom Level</span>
+                      <select
+                        value={item.bloomLevel || ''}
+                        onChange={(e) => handleUpdateItem(item.id, { bloomLevel: (e.target.value || undefined) as PlanItem['bloomLevel'] })}
+                        disabled={readOnly}
+                        className="plan-select"
+                      >
+                        {BLOOM_LEVEL_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="plan-field plan-field-wide">
+                      <span>Focus Area</span>
+                      <input
+                        value={item.focusArea || ''}
+                        onChange={(e) => handleUpdateItem(item.id, { focusArea: e.target.value })}
+                        disabled={readOnly}
+                        className="plan-select"
+                        placeholder="Specific concept, skill, misconception, or scenario"
+                      />
+                    </label>
+
+                    <label className="plan-field plan-field-full">
+                      <span>Rationale</span>
+                      <textarea
+                        value={item.rationale || ''}
+                        onChange={(e) => handleUpdateItem(item.id, { rationale: e.target.value })}
+                        disabled={readOnly}
+                        className="plan-select"
+                        placeholder="Why this row belongs in the quiz blueprint"
+                      />
+                    </label>
+                  </div>
+                </details>
               </div>
             );
           })}
@@ -341,6 +431,32 @@ export default function PlanEditor({
                 ))}
               </div>
             </div>
+
+            <div className="plan-summary-section">
+              <strong>By Difficulty:</strong>
+              <div className="plan-summary-items">
+                {Object.entries(difficultyDistribution).map(([difficulty, count]) => (
+                  <div key={difficulty} className="plan-summary-item">
+                    <span className="plan-summary-label">{difficulty}:</span>
+                    <span className="plan-summary-value">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {Object.keys(bloomDistribution).length > 0 && (
+              <div className="plan-summary-section">
+                <strong>By Bloom Level:</strong>
+                <div className="plan-summary-items">
+                  {Object.entries(bloomDistribution).map(([bloomLevel, count]) => (
+                    <div key={bloomLevel} className="plan-summary-item">
+                      <span className="plan-summary-label">{bloomLevel}:</span>
+                      <span className="plan-summary-value">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

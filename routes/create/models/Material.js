@@ -73,6 +73,13 @@ const materialSchema = new mongoose.Schema({
     message: { type: String },
     timestamp: { type: Date }
   },
+
+  processingMetadata: {
+    pageCount: { type: Number },
+    chunkCount: { type: Number },
+    parserVersion: { type: String },
+    processedAt: { type: Date }
+  },
   
   // Qdrant Integration
   qdrantDocumentId: { 

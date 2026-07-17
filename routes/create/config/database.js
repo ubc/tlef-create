@@ -3,10 +3,16 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+export const getMongoUri = () => (
+  process.env.MONGODB_URI
+  || process.env.MONGO_URI
+  || 'mongodb://tlef-app:tlef-app-2024@localhost:27017/tlef-create'
+);
+
 const connectDB = async () => {
   try {
     // Support both MONGODB_URI and MONGO_URI for compatibility
-    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://tlef-app:tlef-app-2024@localhost:27017/tlef-create';
+    const mongoUri = getMongoUri();
     const conn = await mongoose.connect(mongoUri, {
       // Mongoose 7+ doesn't need most options as they're defaults
       serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds

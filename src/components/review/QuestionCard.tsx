@@ -1,7 +1,13 @@
-import { Edit, Trash2, Plus, EyeOff, Save, RotateCcw } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
+import { Edit, Trash2, Plus, EyeOff, Save, RotateCcw, Share2, X } from 'lucide-react';
 import { ExtendedQuestion } from './reviewTypes';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import BranchingScenarioTreeView from './BranchingScenarioTreeView';
+import SourceReferencePreviewModal from '../SourceReferencePreviewModal';
+import FeatureCoachmark from '../onboarding/FeatureCoachmark';
+import { CoverageMap, SourceReference } from '../../services/api';
+
+const KnowledgeGraph = lazy(() => import('../KnowledgeGraph'));
 
 interface QuestionCardProps {
   question: ExtendedQuestion;
@@ -11,9 +17,34 @@ interface QuestionCardProps {
   onSave: (questionId: string) => void;
   onDelete: (questionId: string) => void;
   onRegenerate: (questionId: string) => void;
+  evidenceMapOpen: boolean;
+  coverageMap: CoverageMap | null;
+  coverageLoading: boolean;
+  coverageError: string | null;
+  onToggleEvidenceMap: (questionId: string) => void;
+  showEvidenceTutorial?: boolean;
+  onEvidenceTutorialComplete?: () => void;
+  onSkipTutorials?: () => void;
 }
 
-const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelete, onRegenerate }: QuestionCardProps) => {
+const QuestionCard = ({
+  question,
+  index,
+  handlers,
+  onToggleEdit,
+  onSave,
+  onDelete,
+  onRegenerate,
+  evidenceMapOpen,
+  coverageMap,
+  coverageLoading,
+  coverageError,
+  onToggleEvidenceMap,
+  showEvidenceTutorial = false,
+  onEvidenceTutorialComplete,
+  onSkipTutorials
+}: QuestionCardProps) => {
+  const [previewReference, setPreviewReference] = useState<SourceReference | null>(null);
   const {
     updateQuestion, updateMultipleChoiceOption, updateMultipleChoiceCorrect,
     toggleMultipleChoiceCorrect, updateMultipleChoiceSelectionMode, updateMultipleChoiceFeedback,
@@ -31,6 +62,14 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
     || (question.content?.options?.filter(option => option.isCorrect).length || 0) > 1
     ? 'multiple'
     : 'single';
+  const sourceReferences = question.generationMetadata?.sourceReferences || [];
+  const primaryReference = sourceReferences[0];
+  const hasBlueprintMetadata = !!(
+    question.generationMetadata?.focusArea ||
+    question.generationMetadata?.bloomLevel ||
+    question.generationMetadata?.pedagogicalIntent ||
+    question.generationMetadata?.planRationale
+  );
 
   return (
     <div id={`question-${question._id}`} className="question-item">
@@ -42,6 +81,32 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           <span className="question-lo">Order {question.order + 1}</span>
         </div>
         <div className="question-actions">
+          <FeatureCoachmark
+            isOpen={showEvidenceTutorial}
+            title="See why this question was generated"
+            description="Open the evidence map to trace this question to its learning objective, covered subpoint, and exact source material. Select evidence nodes to preview the citation."
+            eyebrow="New: Knowledge Map"
+            primaryLabel="Show evidence map"
+            placement="bottom-end"
+            onPrimary={() => {
+              onEvidenceTutorialComplete?.();
+              if (!evidenceMapOpen) onToggleEvidenceMap(question._id);
+            }}
+            onDismiss={() => onEvidenceTutorialComplete?.()}
+            onSkip={() => onSkipTutorials?.()}
+          >
+            <button
+              className={`btn btn-ghost btn-sm${evidenceMapOpen ? ' is-active' : ''}`}
+              onClick={() => {
+                onEvidenceTutorialComplete?.();
+                onToggleEvidenceMap(question._id);
+              }}
+              title={evidenceMapOpen ? 'Hide question evidence map' : 'Show why this question was generated'}
+              aria-expanded={evidenceMapOpen}
+            >
+              <Share2 size={14} />
+            </button>
+          </FeatureCoachmark>
           <button className="btn btn-ghost btn-sm" onClick={() => onRegenerate(question._id)} title="Regenerate question with custom prompt">
             <RotateCcw size={14} />
           </button>
@@ -53,6 +118,118 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           </button>
         </div>
       </div>
+
+      {primaryReference && (
+        <div className="question-source-references">
+          {hasBlueprintMetadata && (
+            <div className="question-blueprint-metadata">
+              {question.generationMetadata?.focusArea && (
+                <span><strong>Focus:</strong> {question.generationMetadata.focusArea}</span>
+              )}
+              {question.generationMetadata?.bloomLevel && (
+                <span><strong>Bloom:</strong> {question.generationMetadata.bloomLevel}</span>
+              )}
+              {question.generationMetadata?.pedagogicalIntent && (
+                <span><strong>Intent:</strong> {question.generationMetadata.pedagogicalIntent}</span>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            className="source-reference-summary source-reference-button"
+            onClick={() => setPreviewReference(primaryReference)}
+          >
+            <span className="source-reference-label">Based on</span>
+            <strong>{primaryReference.materialName || primaryReference.sourceFile || 'Course material'}</strong>
+            {typeof primaryReference.pageNumber === 'number' ? (
+              <span className="source-reference-chip">Page {primaryReference.pageNumber}</span>
+            ) : typeof primaryReference.chunkIndex === 'number' ? (
+              <span className="source-reference-chip">Chunk {primaryReference.chunkIndex + 1}</span>
+            ) : null}
+          </button>
+          {primaryReference.excerpt && (
+            <div className="source-reference-excerpt">
+              <strong>Evidence:</strong> {primaryReference.excerpt}
+            </div>
+          )}
+          {question.generationMetadata?.planRationale && (
+            <div className="source-reference-excerpt">
+              <strong>Why generated:</strong> {question.generationMetadata.planRationale}
+            </div>
+          )}
+          {sourceReferences.length > 1 && (
+            <details className="source-reference-details">
+              <summary>Show {sourceReferences.length - 1} more source reference{sourceReferences.length > 2 ? 's' : ''}</summary>
+              {sourceReferences.slice(1).map((reference, refIndex) => (
+                <button
+                  type="button"
+                  key={`${reference.materialId || reference.materialName || 'source'}-${refIndex}`}
+                  className="source-reference-extra source-reference-extra-button"
+                  onClick={() => setPreviewReference(reference)}
+                >
+                  <div>
+                    <strong>{reference.materialName || reference.sourceFile || 'Course material'}</strong>
+                    {typeof reference.pageNumber === 'number'
+                      ? ` · Page ${reference.pageNumber}`
+                      : typeof reference.chunkIndex === 'number'
+                        ? ` · Chunk ${reference.chunkIndex + 1}`
+                        : ''}
+                  </div>
+                  {reference.excerpt && <p>{reference.excerpt}</p>}
+                </button>
+              ))}
+            </details>
+          )}
+        </div>
+      )}
+
+      {!primaryReference && hasBlueprintMetadata && (
+        <div className="question-source-references">
+          <div className="question-blueprint-metadata">
+            {question.generationMetadata?.focusArea && (
+              <span><strong>Focus:</strong> {question.generationMetadata.focusArea}</span>
+            )}
+            {question.generationMetadata?.bloomLevel && (
+              <span><strong>Bloom:</strong> {question.generationMetadata.bloomLevel}</span>
+            )}
+            {question.generationMetadata?.pedagogicalIntent && (
+              <span><strong>Intent:</strong> {question.generationMetadata.pedagogicalIntent}</span>
+            )}
+          </div>
+          {question.generationMetadata?.planRationale && (
+            <div className="source-reference-excerpt">
+              <strong>Why generated:</strong> {question.generationMetadata.planRationale}
+            </div>
+          )}
+        </div>
+      )}
+
+      {evidenceMapOpen && (
+        <section className="question-evidence-map" aria-label={`Evidence map for question ${index + 1}`}>
+          <div className="question-evidence-map-header">
+            <div>
+              <span>Question evidence</span>
+              <h4>Why this question?</h4>
+              <p>Trace this question to its learning objective, focus points, and cited material.</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onToggleEvidenceMap(question._id)}
+              aria-label="Close question evidence map"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {coverageLoading && <div className="question-evidence-map-status">Building the evidence map...</div>}
+          {coverageError && <div className="question-evidence-map-status is-error">{coverageError}</div>}
+          {!coverageLoading && !coverageError && coverageMap && (
+            <Suspense fallback={<div className="question-evidence-map-status">Loading graph...</div>}>
+              <KnowledgeGraph coverageMap={coverageMap} focusQuestionId={question._id} compact />
+            </Suspense>
+          )}
+        </section>
+      )}
 
       {question.isEditing ? (
         <div className="question-edit">
@@ -442,14 +619,16 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
             <strong>Answer Options:</strong>
             <div className="preview-options-list">
               {question.content.options.map((option: { text: string; isCorrect: boolean; tip?: string; chosenFeedback?: string; notChosenFeedback?: string }, idx: number) => (
-                <div key={idx} className={`preview-option ${option.isCorrect ? 'preview-option-correct' : ''}`}>
-                  <span className="preview-option-indicator">
-                    {option.isCorrect ? (multipleChoiceSelectionMode === 'multiple' ? '☑' : '●') : (multipleChoiceSelectionMode === 'multiple' ? '☐' : '○')}
-                  </span>
-                  <span className="preview-option-text">{option.text}</span>
-                  {option.isCorrect && <span className="preview-correct-label">Correct Answer</span>}
+                <div key={idx} className={`preview-option preview-option-detailed ${option.isCorrect ? 'preview-option-correct' : ''}`}>
+                  <div className="preview-option-answer-row">
+                    <span className="preview-option-indicator">
+                      {option.isCorrect ? (multipleChoiceSelectionMode === 'multiple' ? '☑' : '●') : (multipleChoiceSelectionMode === 'multiple' ? '☐' : '○')}
+                    </span>
+                    <span className="preview-option-text">{option.text}</span>
+                    {option.isCorrect && <span className="preview-correct-label">Correct Answer</span>}
+                  </div>
                   {(option.tip || option.chosenFeedback || option.notChosenFeedback) && (
-                    <div style={{ marginTop: '8px', marginLeft: '24px', fontSize: '0.9em' }}>
+                    <div className="preview-option-feedback">
                       {option.tip && <div><strong>Tip:</strong> {option.tip}</div>}
                       {option.chosenFeedback && <div><strong>Selected feedback:</strong> {option.chosenFeedback}</div>}
                       {option.notChosenFeedback && <div><strong>Not selected feedback:</strong> {option.notChosenFeedback}</div>}
@@ -530,6 +709,12 @@ const QuestionCard = ({ question, index, handlers, onToggleEdit, onSave, onDelet
           <div className="question-answer"><strong>Answer:</strong> {typeof question.correctAnswer === 'string' ? question.correctAnswer : JSON.stringify(question.correctAnswer)}</div>
           {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
         </div>
+      )}
+      {previewReference && (
+        <SourceReferencePreviewModal
+          reference={previewReference}
+          onClose={() => setPreviewReference(null)}
+        />
       )}
     </div>
   );

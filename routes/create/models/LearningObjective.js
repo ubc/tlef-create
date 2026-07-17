@@ -35,6 +35,36 @@ const learningObjectiveSchema = new mongoose.Schema({
     isAIGenerated: { type: Boolean, default: false },
     llmModel: { type: String }, // e.g., "llama3.1:8b"
     generationPrompt: { type: String }, // The prompt used to generate this objective
+    sourceReferences: [{
+      materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' },
+      materialName: { type: String },
+      sourceFile: { type: String },
+      chunkIndex: { type: Number },
+      pageNumber: { type: Number },
+      pageStart: { type: Number },
+      pageEnd: { type: Number },
+      excerpt: { type: String },
+      relevanceScore: { type: Number },
+      section: { type: String },
+      sectionId: { type: String }
+    }],
+    title: { type: String },
+    topic: { type: String },
+    subtopic: { type: String },
+    sourceOutlineSection: { type: String },
+    sourceSectionIds: [{ type: String }],
+    subpoints: [{ type: String }],
+    bloomLevel: { type: String },
+    rationale: { type: String },
+    promptSource: { type: String },
+    promptVersion: { type: Number },
+    coverageDiagnostics: {
+      requiredSectionCount: { type: Number },
+      coveredSectionCount: { type: Number },
+      missingSectionIds: [{ type: String }],
+      repairApplied: { type: Boolean }
+    },
+    inventoryDiagnostics: { type: mongoose.Schema.Types.Mixed },
     confidence: { 
       type: Number, 
       min: 0, 

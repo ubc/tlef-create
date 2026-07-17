@@ -178,6 +178,11 @@ export const validateAssignMaterials = [
   body('materialIds.*')
     .isMongoId()
     .withMessage('All material IDs must be valid'),
+
+  body('replaceExisting')
+    .optional()
+    .isBoolean()
+    .withMessage('replaceExisting must be a boolean'),
   
   handleValidationErrors
 ];

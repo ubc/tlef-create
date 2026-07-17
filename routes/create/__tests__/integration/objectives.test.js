@@ -198,6 +198,46 @@ describe('Objectives API Integration Tests', () => {
       expect(remaining[0].text).toBe('New 1');
     });
 
+    test('should append manual objectives without replacing AI objective metadata', async () => {
+      const existing = await LearningObjective.create({
+        text: 'Analyze force diagrams',
+        quiz: quiz._id,
+        order: 0,
+        createdBy: user._id,
+        generationMetadata: {
+          isAIGenerated: true,
+          subpoints: ['Identify every force', 'Choose a coordinate system'],
+          sourceSectionIds: ['M1-S1']
+        }
+      });
+      quiz.learningObjectives = [existing._id];
+      await quiz.save();
+
+      const res = await request(app)
+        .post('/api/objectives?mode=append')
+        .send([
+          { text: 'Evaluate friction assumptions', quizId: quiz._id.toString() }
+        ]);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.objectives).toHaveLength(1);
+
+      const remaining = await LearningObjective.find({ quiz: quiz._id }).sort({ order: 1 });
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].generationMetadata.subpoints).toEqual([
+        'Identify every force',
+        'Choose a coordinate system'
+      ]);
+      expect(remaining[1].text).toBe('Evaluate friction assumptions');
+      expect(remaining[1].order).toBe(1);
+
+      const updatedQuiz = await Quiz.findById(quiz._id);
+      expect(updatedQuiz.learningObjectives.map(id => id.toString())).toEqual([
+        existing._id.toString(),
+        remaining[1]._id.toString()
+      ]);
+    });
+
     test('should reject empty array', async () => {
       const res = await request(app)
         .post('/api/objectives')

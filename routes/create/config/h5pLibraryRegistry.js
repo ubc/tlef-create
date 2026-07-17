@@ -155,7 +155,6 @@ export function getNeededLibraries(questionTypes, flags = {}) {
     needed.add('H5P.DocumentExportPage');
     needed.add('H5P.TextInputField');
     needed.add('H5P.Text');
-    needed.add('H5P.Components');
   }
 
   return needed;

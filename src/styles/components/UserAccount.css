@@ -68,6 +68,7 @@
 }
 
 .setting-item {
+    width: 100%;
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
@@ -79,6 +80,8 @@
     background-color: var(--color-background);
     border: 1px solid var(--color-border);
     font-weight: 500;
+    text-align: left;
+    text-decoration: none;
 }
 
 .setting-item:hover {
@@ -87,6 +90,15 @@
     border-color: var(--color-accent);
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
+}
+
+.tutorial-restart-status {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(15, 118, 110, 0.1);
+    color: #0f766e;
+    font-size: var(--font-size-sm);
 }
 
 /* Special handling for dark settings items */
@@ -184,66 +196,6 @@
     font-size: var(--font-size-sm);
     color: var(--color-muted-foreground);
     line-height: 1.5;
-}
-
-/* Help & Support Modal */
-.help-support-content {
-    padding: var(--spacing-lg);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
-    max-height: 70vh;
-    overflow-y: auto;
-}
-
-.help-section {
-    padding: var(--spacing-md);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background-color: var(--color-background);
-}
-
-.help-section h5 {
-    margin: 0 0 var(--spacing-sm) 0;
-    font-size: var(--font-size-lg);
-    font-weight: 600;
-    color: var(--color-foreground);
-}
-
-.help-section p {
-    margin: 0 0 var(--spacing-md) 0;
-    color: var(--color-muted-foreground);
-    line-height: 1.6;
-}
-
-.help-section p:last-child {
-    margin-bottom: 0;
-}
-
-.support-email {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-}
-
-.support-email a {
-    color: var(--color-primary);
-    text-decoration: none;
-}
-
-.support-email a:hover {
-    text-decoration: underline;
-}
-
-.faq-list {
-    margin: var(--spacing-md) 0;
-    padding-left: var(--spacing-xl);
-    color: var(--color-foreground);
-}
-
-.faq-list li {
-    margin-bottom: var(--spacing-xs);
-    line-height: 1.6;
 }
 
 @media (max-width: 768px) {

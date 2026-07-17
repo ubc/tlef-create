@@ -8,6 +8,8 @@ import { successResponse, errorResponse, notFoundResponse } from '../utils/respo
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import llmService from '../services/llmService.js';
+import coursePromptService from '../services/coursePromptService.js';
+import sseService from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -38,8 +40,18 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
  * AI generate from materials
  */
 router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHandler(async (req, res) => {
-  const { quizId, materialIds, targetCount, customPrompt } = req.body;
+  const { quizId, materialIds, targetCount, customPrompt, replaceExisting = false, sessionId } = req.body;
   const userId = req.user.id;
+  const progressQuestionId = 'learning-objectives';
+  const streamProgress = (status, message, metadata = {}) => {
+    if (!sessionId) return;
+    sseService.streamQuestionProgress(sessionId, progressQuestionId, {
+      type: 'learning-objectives',
+      status,
+      message,
+      metadata
+    });
+  };
 
   // Verify quiz exists and user owns it
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
@@ -75,34 +87,133 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
 
   try {
     const startTime = Date.now();
+    if (sessionId) {
+      sseService.notifyBatchStarted(sessionId, {
+        totalQuestions: 1,
+        workflow: 'learning-objectives',
+        message: 'Learning objective generation started'
+      });
+    }
+    streamProgress('started', 'Resolving course prompt and model settings...');
     
     // Get user preferences for AI model selection
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(userId).select('preferences');
     const userPreferences = user?.preferences || null;
+    const [coursePrompt, coveragePrompt] = await Promise.all([
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'learning-objectives',
+        userInstructions: customPrompt
+      }),
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'coverage-map'
+      })
+    ]);
+    const effectiveObjectivePrompt = coursePromptService.mergePromptParts(
+      coursePrompt.prompt,
+      coveragePrompt.prompt
+    );
+    console.log(`🎛️ LO generation prompt | source=${coursePrompt.source} | version=${coursePrompt.version || 'default'} | requestInstructions=${customPrompt?.trim() ? 'yes' : 'no'}`);
     
     // Generate learning objectives using user's preferred LLM
-    const generatedObjectives = await llmService.generateLearningObjectives(
+    const forwardWorkflowProgress = event => {
+      if (!event || typeof event !== 'object') return;
+      streamProgress(event.status || 'progress', event.message || 'Working...', event.metadata || {});
+    };
+    const streamObjectiveOutput = (textChunk, metadata = {}) => {
+      if (!sessionId) return;
+      if (metadata.reset) {
+        sseService.streamTextReset(sessionId, progressQuestionId, {
+          reason: metadata.reason || 'workflow-retry'
+        });
+        return;
+      }
+      if (!metadata.partial || !textChunk) return;
+      sseService.streamTextChunk(sessionId, progressQuestionId, textChunk, {
+        contentType: 'learning-objectives-json',
+        model: metadata.model,
+        totalLength: metadata.totalLength,
+        isPartial: true
+      });
+    };
+
+    const generationResult = await llmService.generateLearningObjectives(
       materials,
       `Quiz: ${quiz.name}`, // Add context about the quiz
       targetCount, // Pass target count if provided
       userPreferences, // Pass user preferences
-      customPrompt // Pass custom prompt if provided
+      effectiveObjectivePrompt || null,
+      customPrompt?.trim() || null, // Request-specific retrieval focus
+      userId,
+      forwardWorkflowProgress,
+      streamObjectiveOutput
     );
+    const generatedObjectives = Array.isArray(generationResult)
+      ? generationResult
+      : generationResult.objectives;
+
+    if (!Array.isArray(generatedObjectives) || generatedObjectives.length === 0) {
+      throw new Error('The model did not return any valid learning objectives. Existing objectives were preserved.');
+    }
     
     const processingTime = Date.now() - startTime;
 
+    let replacementMetadata = null;
+    if (replaceExisting) {
+      const Question = (await import('../models/Question.js')).default;
+      const [objectiveResult, questionResult] = await Promise.all([
+        LearningObjective.deleteMany({ quiz: quizId }),
+        Question.deleteMany({ quiz: quizId })
+      ]);
+      quiz.learningObjectives = [];
+      quiz.questions = [];
+      await quiz.save();
+      replacementMetadata = {
+        replacedObjectives: objectiveResult.deletedCount,
+        removedQuestions: questionResult.deletedCount
+      };
+    }
+
     const objectives = [];
     for (let i = 0; i < generatedObjectives.length; i++) {
+      const generatedObjective = generatedObjectives[i];
+      const objectiveText = typeof generatedObjective === 'string'
+        ? generatedObjective
+        : generatedObjective.text;
+      const objectiveMetadata = typeof generatedObjective === 'object' && generatedObjective !== null
+        ? generatedObjective
+        : {};
+
+      if (!objectiveText || !objectiveText.trim()) {
+        continue;
+      }
+
       const objective = new LearningObjective({
-        text: generatedObjectives[i],
+        text: objectiveText.trim(),
         quiz: quizId,
-        order: i,
+        order: objectives.length,
         generatedFrom: materialIds,
         generationMetadata: {
           isAIGenerated: true,
-          llmModel: userPreferences?.llmModel || 'llama3.1:8b',
-          generationPrompt: 'Generate learning objectives from provided materials',
+          llmModel: generationResult.llmModel || userPreferences?.llmModel || process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'unknown',
+          generationPrompt: `Generate learning objectives from provided materials (${coursePrompt.source} prompt)`,
+          sourceReferences: objectiveMetadata.sourceReferences || [],
+          title: objectiveMetadata.title || '',
+          topic: objectiveMetadata.topic || '',
+          subtopic: objectiveMetadata.subtopic || '',
+          sourceOutlineSection: objectiveMetadata.sourceOutlineSection || '',
+          sourceSectionIds: Array.isArray(objectiveMetadata.sourceSectionIds) ? objectiveMetadata.sourceSectionIds : [],
+          subpoints: Array.isArray(objectiveMetadata.subpoints) ? objectiveMetadata.subpoints : [],
+          bloomLevel: objectiveMetadata.bloomLevel || '',
+          rationale: objectiveMetadata.rationale || '',
+          promptSource: coursePrompt.source,
+          promptVersion: coursePrompt.version || undefined,
+          coverageDiagnostics: generationResult.coverageDiagnostics || undefined,
+          inventoryDiagnostics: generationResult.inventoryDiagnostics || undefined,
           confidence: 0.85,
           processingTime: processingTime
         },
@@ -116,17 +227,42 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
       await quiz.addLearningObjective(objective._id);
     }
 
+    streamProgress('saved', `Saved ${objectives.length} learning objective${objectives.length === 1 ? '' : 's'}.`);
+    if (sessionId) {
+      sseService.notifyQuestionComplete(sessionId, progressQuestionId, {
+        objectiveCount: objectives.length,
+        metadata: {
+          materialsUsed: materials.length,
+          generationModel: generationResult.llmModel || userPreferences?.llmModel || process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'unknown'
+        }
+      });
+      sseService.notifyBatchComplete(sessionId, {
+        totalGenerated: objectives.length,
+        totalFailed: 0,
+        workflow: 'learning-objectives'
+      });
+    }
+
     return successResponse(res, { 
       objectives,
       metadata: {
         generatedCount: objectives.length,
         materialsUsed: materials.length,
-        generationModel: userPreferences?.llmModel || 'llama3.1:8b'
+        generationModel: generationResult.llmModel || userPreferences?.llmModel || process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'unknown',
+        replacement: replacementMetadata
       }
     }, 'Learning objectives generated successfully', HTTP_STATUS.CREATED);
 
   } catch (error) {
     console.error('AI generation error:', error);
+    if (sessionId) {
+      sseService.emitError(sessionId, progressQuestionId, error.message, 'learning-objectives-error');
+      sseService.notifyBatchComplete(sessionId, {
+        totalGenerated: 0,
+        totalFailed: 1,
+        workflow: 'learning-objectives'
+      });
+    }
     return errorResponse(
       res, 
       'Failed to generate learning objectives', 
@@ -153,13 +289,9 @@ router.post('/classify', authenticateToken, validateClassifyObjectives, asyncHan
   try {
     const startTime = Date.now();
     
-    // Get user preferences for AI model selection
-    const { default: User } = await import('../models/User.js');
-    const user = await User.findById(userId).select('preferences');
-    const userPreferences = user?.preferences || null;
-    
     // Classify learning objectives using user's preferred LLM
-    const classifiedObjectives = await llmService.classifyLearningObjectives(text, userPreferences);
+    const activeLLMConfig = await llmService.resolveUserLLMConfig(userId);
+    const classifiedObjectives = await llmService.classifyLearningObjectives(text, activeLLMConfig);
     
     const processingTime = Date.now() - startTime;
 
@@ -180,7 +312,7 @@ router.post('/classify', authenticateToken, validateClassifyObjectives, asyncHan
         order: i,
         generationMetadata: {
           isAIGenerated: true,
-          llmModel: userPreferences?.llmModel || 'llama3.1:8b',
+          llmModel: activeLLMConfig.model,
           generationPrompt: 'Classify text into learning objectives',
           confidence: 0.75,
           processingTime: processingTime
@@ -217,6 +349,156 @@ router.post('/classify', authenticateToken, validateClassifyObjectives, asyncHan
 }));
 
 /**
+ * POST /api/objectives/enrich
+ * Add subpoints and material references to existing instructor-authored LOs
+ */
+router.post('/enrich', authenticateToken, asyncHandler(async (req, res) => {
+  const { quizId, objectiveIds } = req.body;
+  const userId = req.user.id;
+
+  if (!quizId) {
+    return errorResponse(res, 'QuizId is required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
+  if (!quiz) {
+    return notFoundResponse(res, 'Quiz');
+  }
+
+  const objectiveQuery = {
+    quiz: quizId,
+    createdBy: userId
+  };
+
+  if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
+    objectiveQuery._id = { $in: objectiveIds };
+  }
+
+  const objectives = await LearningObjective.find(objectiveQuery).sort({ order: 1 });
+  if (objectives.length === 0) {
+    return errorResponse(res, 'No learning objectives found to enrich', 'NO_OBJECTIVES', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const materials = await Material.find({
+    _id: { $in: quiz.materials },
+    processingStatus: 'completed'
+  });
+
+  if (materials.length === 0) {
+    return errorResponse(
+      res,
+      'No processed materials found for this quiz. Please assign and process materials first.',
+      'NO_MATERIALS',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  try {
+    const startTime = Date.now();
+    const [objectivePrompt, coveragePrompt] = await Promise.all([
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'learning-objectives'
+      }),
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'coverage-map'
+      })
+    ]);
+    const effectivePrompt = coursePromptService.mergePromptParts(
+      objectivePrompt.prompt,
+      coveragePrompt.prompt
+    );
+
+    const enrichmentResult = await llmService.enrichLearningObjectives(
+      objectives,
+      materials,
+      `Quiz: ${quiz.name}`,
+      effectivePrompt || null,
+      userId
+    );
+    const enrichmentById = new Map(
+      enrichmentResult.objectives.map(enrichment => [enrichment.objectiveId, enrichment])
+    );
+    const processingTime = Date.now() - startTime;
+    const updatedObjectives = [];
+
+    for (const objective of objectives) {
+      const enrichment = enrichmentById.get(objective._id.toString());
+      if (!enrichment) {
+        continue;
+      }
+
+      const existingMetadata = typeof objective.generationMetadata?.toObject === 'function'
+        ? objective.generationMetadata.toObject()
+        : (objective.generationMetadata || {});
+      const nextSourceReferences = Array.isArray(enrichment.sourceReferences) && enrichment.sourceReferences.length > 0
+        ? enrichment.sourceReferences
+        : (existingMetadata.sourceReferences || []);
+      const nextSourceSectionIds = Array.isArray(enrichment.sourceSectionIds) && enrichment.sourceSectionIds.length > 0
+        ? enrichment.sourceSectionIds
+        : (existingMetadata.sourceSectionIds || []);
+      const nextSubpoints = Array.isArray(enrichment.subpoints) && enrichment.subpoints.length > 0
+        ? enrichment.subpoints
+        : (existingMetadata.subpoints || []);
+      const hasUsefulEnrichment = nextSourceReferences.length > 0
+        || nextSourceSectionIds.length > 0
+        || nextSubpoints.length > 0;
+
+      if (!hasUsefulEnrichment) {
+        console.warn(`⚠️ Skipping empty enrichment for LO ${objective._id}; existing metadata is preserved.`);
+        continue;
+      }
+
+      objective.generatedFrom = materials.map(material => material._id);
+      objective.generationMetadata = {
+        ...existingMetadata,
+        isAIGenerated: existingMetadata.isAIGenerated || false,
+        aiEnriched: true,
+        llmModel: enrichmentResult.llmModel || existingMetadata.llmModel || 'unknown',
+        generationPrompt: `Enrich existing learning objective with material alignment (${objectivePrompt.source} prompt)`,
+        sourceReferences: nextSourceReferences,
+        title: enrichment.title || existingMetadata.title || '',
+        topic: enrichment.topic || existingMetadata.topic || '',
+        subtopic: enrichment.subtopic || existingMetadata.subtopic || '',
+        sourceOutlineSection: enrichment.sourceOutlineSection || existingMetadata.sourceOutlineSection || '',
+        sourceSectionIds: nextSourceSectionIds,
+        subpoints: nextSubpoints,
+        bloomLevel: enrichment.bloomLevel || existingMetadata.bloomLevel || '',
+        rationale: enrichment.rationale || existingMetadata.rationale || '',
+        promptSource: objectivePrompt.source,
+        promptVersion: objectivePrompt.version || undefined,
+        enrichmentDiagnostics: enrichmentResult.enrichmentDiagnostics,
+        confidence: 0.78,
+        processingTime
+      };
+
+      await objective.save();
+      updatedObjectives.push(objective);
+    }
+
+    return successResponse(res, {
+      objectives: updatedObjectives,
+      metadata: {
+        enrichedCount: updatedObjectives.length,
+        materialsUsed: materials.length,
+        generationModel: enrichmentResult.llmModel || 'unknown'
+      }
+    }, 'Learning objectives enriched successfully');
+  } catch (error) {
+    console.error('Objective enrichment error:', error);
+    return errorResponse(
+      res,
+      'Failed to enrich learning objectives',
+      'AI_ENRICHMENT_ERROR',
+      HTTP_STATUS.SERVICE_UNAVAILABLE
+    );
+  }
+}));
+
+/**
  * POST /api/objectives
  * Add single LO or save batch
  */
@@ -228,6 +510,7 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     const objectivesData = req.body;
     const objectives = [];
     const errors = [];
+    const appendMode = req.query.mode === 'append';
 
     // Handle empty array (delete all)
     if (objectivesData.length === 0) {
@@ -246,11 +529,23 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
       return notFoundResponse(res, 'Quiz');
     }
 
-    // DELETE ALL EXISTING OBJECTIVES FOR THIS QUIZ FIRST
-    await LearningObjective.deleteMany({ quiz: quizId });
-    // Clear learning objectives from quiz
-    quiz.learningObjectives = [];
-    await quiz.save();
+    let nextOrder = 0;
+    let existingTexts = new Set();
+
+    if (appendMode) {
+      const existingObjectives = await LearningObjective.find({ quiz: quizId })
+        .select('text order')
+        .sort({ order: -1 })
+        .lean();
+      nextOrder = existingObjectives.length > 0
+        ? Math.max(...existingObjectives.map(objective => objective.order ?? 0)) + 1
+        : 0;
+      existingTexts = new Set(existingObjectives.map(objective => objective.text.trim().toLowerCase()));
+    } else {
+      await LearningObjective.deleteMany({ quiz: quizId });
+      quiz.learningObjectives = [];
+      await quiz.save();
+    }
 
     for (const objData of objectivesData) {
       try {
@@ -259,16 +554,23 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
           continue;
         }
 
+        const normalizedText = objData.text.trim().toLowerCase();
+        if (appendMode && existingTexts.has(normalizedText)) {
+          errors.push({ data: objData, error: 'An identical learning objective already exists' });
+          continue;
+        }
+
         const objective = new LearningObjective({
           text: objData.text.trim(),
           quiz: objData.quizId,
-          order: objData.order || objectives.length,
+          order: appendMode ? nextOrder + objectives.length : (objData.order ?? objectives.length),
           createdBy: userId
         });
 
         await objective.save();
         await quiz.addLearningObjective(objective._id);
         objectives.push(objective);
+        existingTexts.add(normalizedText);
 
       } catch (error) {
         errors.push({ data: objData, error: error.message });
@@ -289,8 +591,8 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     }
 
     const statusCode = objectives.length > 0 ? HTTP_STATUS.CREATED : HTTP_STATUS.BAD_REQUEST;
-    const message = objectives.length > 0 ? 
-      `${objectives.length} learning objectives created successfully` : 
+    const message = objectives.length > 0 ?
+      `${objectives.length} learning objectives ${appendMode ? 'added' : 'created'} successfully` :
       'No learning objectives were created';
 
     return successResponse(res, response, message, statusCode);
@@ -522,14 +824,33 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(userId).select('preferences');
     const userPreferences = user?.preferences || null;
+    const [coursePrompt, coveragePrompt] = await Promise.all([
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: objective.quiz.folder,
+        userId,
+        promptType: 'learning-objectives',
+        userInstructions: customPrompt
+      }),
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: objective.quiz.folder,
+        userId,
+        promptType: 'coverage-map'
+      })
+    ]);
+    const effectiveObjectivePrompt = coursePromptService.mergePromptParts(
+      coursePrompt.prompt,
+      coveragePrompt.prompt
+    );
     
     // Regenerate the single objective using user's preferred LLM
+    const activeLLMConfig = await llmService.resolveUserLLMConfig(userId);
     const regeneratedText = await llmService.regenerateSingleObjective(
       objective.text,
       materials,
       `Quiz: ${objective.quiz.name}`,
       userPreferences,
-      customPrompt // Pass custom prompt to LLM service
+      effectiveObjectivePrompt || null,
+      activeLLMConfig
     );
     
     const processingTime = Date.now() - startTime;
@@ -539,8 +860,8 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     objective.generationMetadata = {
       ...objective.generationMetadata,
       isAIGenerated: true,
-      llmModel: userPreferences?.llmModel || 'llama3.1:8b',
-      generationPrompt: 'Regenerate single learning objective',
+      llmModel: activeLLMConfig.model,
+      generationPrompt: `Regenerate single learning objective (${coursePrompt.source} prompt)`,
       confidence: 0.8,
       processingTime: processingTime
     };
@@ -554,7 +875,7 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
         regeneratedText: regeneratedText,
         processingTime: processingTime,
         materialsUsed: materials.length,
-        llmModel: userPreferences?.llmModel || 'llama3.1:8b'
+        llmModel: activeLLMConfig.model
       }
     }, 'Learning objective regenerated successfully');
 

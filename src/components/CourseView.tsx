@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import MaterialUpload from './MaterialUpload';
-import { ArrowLeft, Trash2 } from 'lucide-react';
-import { foldersApi, materialsApi, Folder, Material, Quiz, ApiError } from '../services/api';
+import CoursePromptSettings from './CoursePromptSettings';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { foldersApi, materialsApi, quizApi, Folder, Material, Quiz, ApiError } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/CourseView.css';
 
@@ -29,6 +30,7 @@ const CourseView = () => {
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCreatingQuiz, setIsCreatingQuiz] = useState(false);
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasNotifiedRef = useRef(false);
@@ -273,6 +275,62 @@ const CourseView = () => {
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
+  const handleCreateQuiz = async () => {
+    if (!course || !courseId || isCreatingQuiz) return;
+
+    setIsCreatingQuiz(true);
+
+    try {
+      const existingNumbers = course.quizzes
+        .map((quiz) => {
+          const match = quiz.name.match(/^Quiz (\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter((number) => number > 0);
+
+      let quizNumber = 1;
+      while (existingNumbers.includes(quizNumber)) {
+        quizNumber++;
+      }
+
+      const quizName = `Quiz ${quizNumber}`;
+      const response = await quizApi.createQuiz(quizName, courseId);
+      const createdQuiz = response.quiz;
+
+      setCourse(prev => prev
+        ? {
+            ...prev,
+            quizzes: [
+              ...prev.quizzes,
+              {
+                id: createdQuiz._id,
+                name: createdQuiz.name,
+                questionCount: createdQuiz.questions?.length || 0
+              }
+            ]
+          }
+        : prev
+      );
+
+      publish('quiz-created', {
+        quizId: createdQuiz._id,
+        courseId,
+        quizName: createdQuiz.name
+      });
+
+      navigate(`/course/${courseId}/quiz/${createdQuiz._id}`);
+    } catch (err) {
+      console.error('Failed to create quiz:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to create quiz: ${err.message}`);
+      } else {
+        alert('Failed to create quiz. Please try again.');
+      }
+    } finally {
+      setIsCreatingQuiz(false);
+    }
+  };
+
   const handleDeleteCourse = async () => {
     if (!course || !courseId) return;
 
@@ -338,11 +396,16 @@ const CourseView = () => {
               type: m.type,
               uploadDate: new Date(m.createdAt).toLocaleDateString(),
               content: m.content || m.url,
-              processingStatus: m.processingStatus
+              processingStatus: m.processingStatus,
+              parserVersion: m.processingMetadata?.parserVersion
             }))}
             onAddMaterial={handleAddMaterial}
             onRemoveMaterial={handleDeleteMaterial}
           />
+        </div>
+
+        <div className="course-section">
+          <CoursePromptSettings courseId={course.id} />
         </div>
 
         <div className="course-section">
@@ -354,27 +417,48 @@ const CourseView = () => {
               </p>
             </div>
 
-            <div className="quiz-grid">
-              {course.quizzes.map((quiz) => (
-                <div
-                  key={quiz.id}
-                  className="quiz-card"
-                  onClick={() => handleQuizClick(quiz.id)}
+            {course.quizzes.length === 0 ? (
+              <div className="empty-learning-objects">
+                <button
+                  type="button"
+                  className="empty-learning-object-button"
+                  onClick={handleCreateQuiz}
+                  disabled={isCreatingQuiz}
                 >
-                  <div className="quiz-info">
-                    <h4>{quiz.name}</h4>
-                    <p>{quiz.questionCount} questions</p>
+                  <span className="empty-learning-object-icon">
+                    <Plus size={28} />
+                  </span>
+                  <span className="empty-learning-object-title">
+                    {isCreatingQuiz ? 'Creating Quiz...' : 'Create Your First Quiz'}
+                  </span>
+                  <span className="empty-learning-object-description">
+                    Add a learning object to start defining learning objectives and generating questions.
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div className="quiz-grid">
+                {course.quizzes.map((quiz) => (
+                  <div
+                    key={quiz.id}
+                    className="quiz-card"
+                    onClick={() => handleQuizClick(quiz.id)}
+                  >
+                    <div className="quiz-info">
+                      <h4>{quiz.name}</h4>
+                      <p>{quiz.questionCount} questions</p>
+                    </div>
+                    <div className="quiz-status">
+                      {quiz.questionCount > 0 ? (
+                        <span className="status-badge status-complete">Ready</span>
+                      ) : (
+                        <span className="status-badge status-empty">Empty</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="quiz-status">
-                    {quiz.questionCount > 0 ? (
-                      <span className="status-badge status-complete">Ready</span>
-                    ) : (
-                      <span className="status-badge status-empty">Empty</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

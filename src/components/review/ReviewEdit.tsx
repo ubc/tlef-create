@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { Edit, Plus, Play, Download, Upload, BookMarked } from 'lucide-react';
-import { questionsApi, Question, exportApi } from '../../services/api';
+import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
 import { RootState, AppDispatch } from '../../store';
@@ -14,7 +14,9 @@ import PdfExportModal from '../PdfExportModal';
 import CanvasExportModal from './CanvasExportModal';
 import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
+import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
+import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
 import {
   DELIVERY_TARGETS,
@@ -50,6 +52,18 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget>('h5p-package');
   const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [showChapterEditor, setShowChapterEditor] = useState(false);
+  const [coverageMap, setCoverageMap] = useState<CoverageMap | null>(null);
+  const [evidenceQuestionId, setEvidenceQuestionId] = useState<string | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
+  const evidenceTutorial = useFeatureOnboarding(
+    'question-evidence',
+    questions.length > 0 && viewMode === 'edit'
+  );
+  const exportTutorial = useFeatureOnboarding(
+    'export',
+    questions.length > 0 && evidenceTutorial.isCompleted
+  );
 
   // Sync containerMode from Redux once currentQuiz loads
   useEffect(() => {
@@ -110,6 +124,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED,
       (data: { quizId: string }) => {
         if (data.quizId === quizId) {
+          setCoverageMap(null);
           dispatch(fetchQuestions(quizId));
         }
       }
@@ -163,6 +178,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       await dispatch(deleteQuestion({ quizId, questionId })).unwrap();
       const updatedQuestions = questions.filter(q => q._id !== questionId);
       setQuestions(updatedQuestions);
+      setCoverageMap(null);
+      if (evidenceQuestionId === questionId) setEvidenceQuestionId(null);
       showNotification('success', 'Question Deleted', 'Question has been removed');
       publish(PUBSUB_EVENTS.QUESTIONS_DELETED, {
         quizId, deletedQuestionId: questionId, remainingCount: updatedQuestions.length, timestamp: Date.now()
@@ -170,6 +187,27 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     } catch (error) {
       console.error('Failed to delete question:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete question');
+    }
+  };
+
+  const toggleQuestionEvidenceMap = async (questionId: string) => {
+    if (evidenceQuestionId === questionId) {
+      setEvidenceQuestionId(null);
+      return;
+    }
+
+    setEvidenceQuestionId(questionId);
+    if (coverageMap || coverageLoading) return;
+
+    setCoverageLoading(true);
+    setCoverageError(null);
+    try {
+      setCoverageMap(await coverageMapApi.getQuizCoverageMap(quizId));
+    } catch (error) {
+      console.error('Failed to load question evidence map:', error);
+      setCoverageError('The evidence map could not be loaded. Please try again.');
+    } finally {
+      setCoverageLoading(false);
     }
   };
 
@@ -189,6 +227,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       setQuestions(questions.map(q =>
         q._id === questionId ? { ...result.question, isEditing: false } : q
       ));
+      setCoverageMap(null);
       showNotification('success', 'Question Saved', 'Question has been updated');
     } catch (error) {
       console.error('Failed to save question:', error);
@@ -212,6 +251,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       setQuestions(questions.map(q =>
         q._id === questionToRegenerate._id ? { ...result.question, isEditing: false } : q
       ));
+      setCoverageMap(null);
       showNotification('success', 'Question Regenerated', 'Question has been regenerated using AI');
       setRegenerateModalOpen(false);
       setQuestionToRegenerate(null);
@@ -225,6 +265,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
   const handleGenerateAIQuestion = async (loIndex: number, prompt: string, questionType: string) => {
     const initialQuestionCount = questions.length;
+    const existingQuestionIds = new Set(questions.map(question => question._id));
     const selectedLO = loIndex >= 0 ? learningObjectives[loIndex] : null;
     const questionConfig = {
       questionType,
@@ -259,7 +300,16 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       const result = await dispatch(fetchQuestions(quizId)).unwrap();
       if (result.questions.length > initialQuestionCount) {
+        const generatedQuestion = result.questions.find(question => !existingQuestionIds.has(question._id));
         showNotification('success', 'Question Added', 'AI generated a new question successfully');
+        if (generatedQuestion) {
+          window.setTimeout(() => {
+            document.getElementById(`question-${generatedQuestion._id}`)?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }, 250);
+        }
         return;
       }
     }
@@ -537,46 +587,66 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 onSave={saveQuestion}
                 onDelete={handleDeleteQuestion}
                 onRegenerate={openRegenerateModal}
+                evidenceMapOpen={evidenceQuestionId === question._id}
+                coverageMap={coverageMap}
+                coverageLoading={coverageLoading}
+                coverageError={coverageError}
+                onToggleEvidenceMap={toggleQuestionEvidenceMap}
+                showEvidenceTutorial={index === 0 && evidenceTutorial.isActive}
+                onEvidenceTutorialComplete={evidenceTutorial.complete}
+                onSkipTutorials={evidenceTutorial.skipAll}
               />
             ))
           )}
         </div>
 
         {filteredQuestions.length > 0 && (
-          <div className="export-section">
-            <div className="export-header">
-              <h4>Export Learning Object</h4>
-              <p>Export your completed learning object for use in other platforms</p>
-            </div>
-
-            {/* Standalone-type warning */}
-            {deliveryTarget === 'canvas-lti' && (
-              <div className="standalone-warning">
-                <strong>Canvas LTI:</strong> This uses CREATE's LTI player and can render mixed activity types that may not be valid inside a downloadable H5P package.
+          <FeatureCoachmark
+            isOpen={exportTutorial.isActive}
+            title="Publish in the format you need"
+            description="Export the reviewed learning object to H5P, PDF, Markdown, or Canvas. PDF and Markdown exports can include solutions, explanations, tips, and answer feedback."
+            eyebrow="Export"
+            placement="top-start"
+            block
+            onPrimary={exportTutorial.complete}
+            onDismiss={exportTutorial.complete}
+            onSkip={exportTutorial.skipAll}
+          >
+            <div className="export-section">
+              <div className="export-header">
+                <h4>Export Learning Object</h4>
+                <p>Export your completed learning object for use in other platforms</p>
               </div>
-            )}
 
-            {deliveryTarget === 'h5p-package' && h5pUnsupportedTypes.length > 0 && (
-              <div className="standalone-warning">
-                <strong>H5P compatibility:</strong> {h5pUnsupportedTypes.map(type => type.label).join(', ')} cannot be embedded in {targetFormatLabel} format and may be skipped or fail in official H5P players.
+              {/* Standalone-type warning */}
+              {deliveryTarget === 'canvas-lti' && (
+                <div className="standalone-warning">
+                  <strong>Canvas LTI:</strong> This uses CREATE's LTI player and can render mixed activity types that may not be valid inside a downloadable H5P package.
+                </div>
+              )}
+
+              {deliveryTarget === 'h5p-package' && h5pUnsupportedTypes.length > 0 && (
+                <div className="standalone-warning">
+                  <strong>H5P compatibility:</strong> {h5pUnsupportedTypes.map(type => type.label).join(', ')} cannot be embedded in {targetFormatLabel} format and may be skipped or fail in official H5P players.
+                </div>
+              )}
+
+              <div className="export-actions">
+                <button className="btn btn-primary" onClick={handleH5PExport} disabled={exportLoading}>
+                  <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to H5P'}
+                </button>
+                <button className="btn btn-outline" onClick={() => setPdfExportModalOpen(true)} disabled={exportLoading}>
+                  <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to PDF'}
+                </button>
+                <button className="btn btn-outline" onClick={() => setMarkdownExportModalOpen(true)} disabled={exportLoading}>
+                  <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to Markdown'}
+                </button>
+                <button className="btn btn-outline" onClick={() => setCanvasExportModalOpen(true)} disabled={exportLoading}>
+                  <Upload size={16} /> Export to Canvas
+                </button>
               </div>
-            )}
-
-            <div className="export-actions">
-              <button className="btn btn-primary" onClick={handleH5PExport} disabled={exportLoading}>
-                <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to H5P'}
-              </button>
-              <button className="btn btn-outline" onClick={() => setPdfExportModalOpen(true)} disabled={exportLoading}>
-                <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to PDF'}
-              </button>
-              <button className="btn btn-outline" onClick={() => setMarkdownExportModalOpen(true)} disabled={exportLoading}>
-                <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export to Markdown'}
-              </button>
-              <button className="btn btn-outline" onClick={() => setCanvasExportModalOpen(true)} disabled={exportLoading}>
-                <Upload size={16} /> Export to Canvas
-              </button>
             </div>
-          </div>
+          </FeatureCoachmark>
         )}
 
         <ManualQuestionForm

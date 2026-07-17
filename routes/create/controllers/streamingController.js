@@ -8,6 +8,8 @@ import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import sseService from '../services/sseService.js';
 import { planLOSlices } from '../services/loSlicePlanner.js';
+import coursePromptService from '../services/coursePromptService.js';
+import questionMemoryService, { buildQuestionMemory } from '../services/questionMemoryService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
@@ -90,7 +92,8 @@ function attachPlannedTasksToQuestionConfigs(questionConfigs) {
     const slicePlan = planLOSlices({
       learningObjective: group[0].loText,
       questionType: group[0].config.questionType,
-      requestedCount: group.length
+      requestedCount: group.length,
+      subpoints: group[0].config.learningObjective?.generationMetadata?.subpoints || []
     });
 
     console.log(
@@ -159,8 +162,51 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
       return res.status(404).json({ error: 'Quiz not found' });
     }
 
+    const Question = (await import('../models/Question.js')).default;
+    const existingQuestions = await Question.find({ quiz: quizId })
+      .select('questionText type explanation learningObjective generationMetadata.focusArea generationMetadata.plannedSlice generationMetadata.subObjective generationMetadata.sourceReferences')
+      .sort({ order: 1 })
+      .lean();
+    const questionHistory = buildQuestionMemory(existingQuestions);
+    console.log('🧠 Question memory prepared:', questionHistory.stats);
+
+    const [coursePrompt, historyPrompt, validationPrompt] = await Promise.all([
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'question-generation',
+        approach: quiz.settings?.pedagogicalApproach || 'support'
+      }),
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'history-summary'
+      }),
+      coursePromptService.buildCoursePromptInstructions({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'question-validation'
+      })
+    ]);
+
+    const configsWithCoursePrompt = questionConfigs.map(config => ({
+      ...config,
+      previousQuestions: [
+        ...(config.previousQuestions || []),
+        ...questionHistory.previousQuestions
+      ],
+      duplicateCheckQuestions: questionHistory.comparisonQuestions,
+      customPrompt: coursePromptService.mergePromptParts(
+        coursePrompt.prompt,
+        historyPrompt.prompt,
+        questionHistory.prompt,
+        validationPrompt.prompt,
+        config.customPrompt
+      )
+    }));
+
     const enrichedConfigs = attachPlannedTasksToQuestionConfigs(
-      enrichQuestionConfigsWithObjectives(questionConfigs, quiz)
+      enrichQuestionConfigsWithObjectives(configsWithCoursePrompt, quiz)
     );
 
     // Get processed material IDs for RAG retrieval
@@ -202,8 +248,16 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
         if (ragService.isInitialized && processedMaterialIds.length > 0) {
           try {
             const loText = config.learningObjective?.text || config.learningObjective;
-            const ragResult = await ragService.retrieveRelevantContent(
+            const loSubpoints = config.learningObjective?.generationMetadata?.subpoints || [];
+            const retrievalQuery = [
               loText,
+              config.focusArea ? `Focus area: ${config.focusArea}` : '',
+              config.bloomLevel ? `Bloom level: ${config.bloomLevel}` : '',
+              config.plannedTask?.sliceLabel ? `Planned slice: ${config.plannedTask.sliceLabel}` : '',
+              loSubpoints.length ? `Learning objective subpoints: ${loSubpoints.join('; ')}` : ''
+            ].filter(Boolean).join('\n');
+            const ragResult = await ragService.retrieveRelevantContent(
+              retrievalQuery,
               config.questionType,
               { topK: 5, materialIds: processedMaterialIds, minScore: 0.3 }
             );
@@ -231,7 +285,7 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
         return { success: true, questionId };
       } catch (error) {
         console.error(`[${questionId}] Failed to generate:`, error.message);
-        sseService.emitError(finalSessionId, questionId, error.message, 'generation-error');
+        sseService.emitError(finalSessionId, questionId, error.message, error.errorType || 'generation-error');
         
         // Send a "complete" event even for failed questions to unblock the UI
         sseService.notifyQuestionComplete(finalSessionId, questionId, {
@@ -250,6 +304,7 @@ router.post('/generate-questions', authenticateToken, asyncHandler(async (req, r
       
       console.log(`✅ Batch complete: ${successCount} succeeded, ${failureCount} failed`);
       console.log(`📤 Sending batch-complete event to session: ${finalSessionId}`);
+      questionMemoryService.clearSession(finalSessionId);
       
       // Add a small delay to ensure all question-complete events are processed first
       setTimeout(() => {

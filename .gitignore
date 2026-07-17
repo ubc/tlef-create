@@ -5,6 +5,10 @@ build/
 *.log
 .DS_Store
 
+# H5P libraries vendor their browser bundles inside nested dist directories.
+!routes/create/h5p-libs/*/dist/
+!routes/create/h5p-libs/*/dist/**
+
 # ML Model cache (large files)
 local_cache/
 *.onnx

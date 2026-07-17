@@ -8,6 +8,8 @@ import { validateCreateMaterial, validateMongoId } from '../middleware/validator
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, MATERIAL_TYPES, PROCESSING_STATUS } from '../config/constants.js';
+import { resolveReferenceChunk } from '../utils/referenceResolver.js';
+import path from 'path';
 
 const router = express.Router();
 
@@ -292,6 +294,17 @@ router.get('/folder/:folderId', authenticateToken, asyncHandler(async (req, res)
     return notFoundResponse(res, 'Folder');
   }
 
+  // Recover records left pending by the removed legacy reprocess action. These
+  // materials were already fully processed and their embeddings were untouched.
+  await Material.updateMany({
+    folder: folderId,
+    processingStatus: PROCESSING_STATUS.PENDING,
+    'processingMetadata.processedAt': { $exists: true }
+  }, {
+    $set: { processingStatus: PROCESSING_STATUS.COMPLETED },
+    $unset: { processingError: 1 }
+  });
+
   const materials = await Material.find({ folder: folderId })
     .populate('uploadedBy', 'cwlId')
     .sort({ createdAt: -1 });
@@ -381,25 +394,6 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
 }));
 
 /**
- * POST /api/materials/:id/reprocess
- * Trigger reprocessing of material
- */
-router.post('/:id/reprocess', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
-  const materialId = req.params.id;
-  const userId = req.user.id;
-
-  const material = await Material.findOne({ _id: materialId, uploadedBy: userId });
-  if (!material) {
-    return notFoundResponse(res, 'Material');
-  }
-
-  // Reset processing status
-  await material.updateProcessingStatus(PROCESSING_STATUS.PENDING);
-
-  return successResponse(res, { material }, 'Material reprocessing triggered');
-}));
-
-/**
  * GET /api/materials/processing/stats
  * Get processing statistics
  */
@@ -446,6 +440,147 @@ router.get('/allowed-domains', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * GET /api/materials/:materialId/file
+ * Serve an owned source file inline so the browser can open a cited PDF page.
+ */
+router.get('/:materialId/file', authenticateToken, asyncHandler(async (req, res) => {
+  const { materialId } = req.params;
+  const userId = req.user.id;
+  const material = await Material.findById(materialId);
+
+  if (!material) {
+    return notFoundResponse(res, 'Material');
+  }
+
+  const folder = await Folder.findOne({ _id: material.folder, instructor: userId });
+  if (!folder) {
+    return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
+  }
+
+  if (!material.filePath) {
+    return errorResponse(res, 'This material does not have a source file', 'FILE_NOT_AVAILABLE', HTTP_STATUS.NOT_FOUND);
+  }
+
+  const absolutePath = path.isAbsolute(material.filePath)
+    ? material.filePath
+    : path.resolve(process.cwd(), material.filePath);
+  const filename = material.originalFileName || material.name;
+
+  res.setHeader('Content-Type', material.mimeType || (material.type === 'pdf' ? 'application/pdf' : 'application/octet-stream'));
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  return res.sendFile(absolutePath);
+}));
+
+/**
+ * GET /api/materials/:materialId/reference
+ * Return a cited chunk and nearby page context without exposing similarity scores.
+ */
+async function sendResolvedReference(req, res, reference = {}) {
+  const { materialId } = req.params;
+  const userId = req.user.id;
+  const material = await Material.findById(materialId);
+
+  if (!material) {
+    return notFoundResponse(res, 'Material');
+  }
+
+  const folder = await Folder.findOne({ _id: material.folder, instructor: userId });
+  if (!folder) {
+    return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const { default: ragService } = await import('../services/ragService.js');
+  const parsed = await ragService.loadMaterialChunks(material);
+  const chunks = parsed.chunks || [];
+  const { citedIndex, matchScore, resolvedBy } = resolveReferenceChunk(chunks, reference);
+
+  const citedChunk = chunks[citedIndex];
+  const requestedPageNumber = Number.parseInt(reference.pageNumber, 10);
+  const pageNumber = citedChunk?.pageNumber
+    || (Number.isInteger(requestedPageNumber) ? requestedPageNumber : undefined);
+  const nearbyChunks = chunks.filter((chunk, index) => {
+    if (pageNumber && chunk.pageNumber) {
+      return chunk.pageNumber === pageNumber;
+    }
+    return Math.abs(index - citedIndex) <= 1;
+  });
+
+  console.info('[Reference] Resolved material citation', {
+    materialId,
+    requestedChunkIndex: reference.chunkIndex,
+    requestedPageNumber: reference.pageNumber,
+    resolvedChunkIndex: citedIndex,
+    resolvedPageNumber: pageNumber,
+    resolvedBy,
+    matchPercentage: Math.round(matchScore * 100)
+  });
+
+  return successResponse(res, {
+    materialId,
+    materialName: material.name,
+    materialType: material.type,
+    sourceFile: material.originalFileName || material.name,
+    pageNumber,
+    pageCount: parsed.pages?.length || material.processingMetadata?.pageCount,
+    chunkIndex: citedIndex,
+    section: citedChunk?.sectionTitle || citedChunk?.section || '',
+    excerpt: citedChunk?.content || '',
+    pageContext: nearbyChunks.map(chunk => chunk.content).join('\n\n'),
+    hasSourceFile: Boolean(material.filePath),
+    sourceUrl: material.url,
+    mimeType: material.mimeType,
+    previewKind: material.type === MATERIAL_TYPES.PDF
+      ? 'pdf'
+      : material.type === MATERIAL_TYPES.URL
+        ? 'url'
+        : material.type === MATERIAL_TYPES.DOCX
+          ? 'document'
+          : 'text'
+  }, 'Material reference retrieved successfully');
+}
+
+router.post('/:materialId/reference/resolve', authenticateToken, asyncHandler(async (req, res) => {
+  return sendResolvedReference(req, res, req.body || {});
+}));
+
+router.get('/:materialId/reference', authenticateToken, asyncHandler(async (req, res) => {
+  return sendResolvedReference(req, res, req.query || {});
+}));
+
+/**
+ * POST /api/materials/:materialId/reprocess
+ * Re-index an existing material with the latest page-aware parser.
+ */
+router.post('/:materialId/reprocess', authenticateToken, asyncHandler(async (req, res) => {
+  const { materialId } = req.params;
+  const userId = req.user.id;
+  const material = await Material.findById(materialId);
+
+  if (!material) {
+    return notFoundResponse(res, 'Material');
+  }
+
+  const folder = await Folder.findOne({ _id: material.folder, instructor: userId });
+  if (!folder) {
+    return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const { default: ragService } = await import('../services/ragService.js');
+  await ragService.initialize();
+  await material.markAsProcessing();
+  await ragService.cleanupMaterialEmbeddings(materialId);
+  const result = await ragService.processAndEmbedMaterial(material);
+
+  if (!result.success) {
+    await material.markAsFailed(result.error || 'Reprocessing failed');
+    return errorResponse(res, result.error || 'Reprocessing failed', 'REPROCESS_FAILED', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
+
+  await material.markAsCompleted();
+  return successResponse(res, { material, processing: result }, 'Material reprocessed successfully');
+}));
+
+/**
  * GET /api/materials/:materialId/preview
  * Get preview of material content by retrieving all chunks from Qdrant
  */
@@ -468,6 +603,16 @@ router.get('/:materialId/preview', authenticateToken, asyncHandler(async (req, r
   try {
     const { default: ragService } = await import('../services/ragService.js');
     await ragService.initialize();
+
+    if (!ragService.isInitialized || !ragService.ragModule || typeof ragService.ragModule.retrieveContext !== 'function') {
+      return successResponse(res, {
+        content: 'Preview is temporarily unavailable because the retrieval service is not initialized yet. Please try again after the embedding model finishes downloading.',
+        chunkCount: 0,
+        materialName: material.name,
+        materialType: material.type,
+        ragAvailable: false
+      }, 'Material preview temporarily unavailable');
+    }
 
     const allChunks = await ragService.ragModule.retrieveContext('*', {
       limit: 1000,

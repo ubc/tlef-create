@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Upload, Link, FileText, X, Plus, Loader2, Eye } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
+import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
 import { materialsApi } from '../services/api';
+import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import '../styles/components/MaterialUpload.css';
 
 interface Material {
@@ -13,6 +15,7 @@ interface Material {
   uploadProgress?: number;
   isUploading?: boolean;
   processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  parserVersion?: string;
 }
 
 interface MaterialUploadProps {
@@ -42,6 +45,7 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const [allowedDomains, setAllowedDomains] = useState<string[] | null>(null);
 
   const { showNotification } = usePubSub('MaterialUpload');
+  const materialsTutorial = useFeatureOnboarding('course-materials', materials.length > 0);
 
   useEffect(() => {
     materialsApi.getAllowedDomains().then(({ domains }) => {
@@ -396,6 +400,16 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
 
           {/* Materials List */}
           {allMaterials.length > 0 && (
+            <FeatureCoachmark
+              isOpen={materialsTutorial.isActive}
+              title="Your course knowledge base is ready"
+              description="CREATE processes each source for grounded learning objectives and questions. Use the preview icon to inspect extracted content before building a learning object."
+              eyebrow="Materials"
+              block
+              onPrimary={materialsTutorial.complete}
+              onDismiss={materialsTutorial.complete}
+              onSkip={materialsTutorial.skipAll}
+            >
               <div className="materials-list">
                 <h4>Materials ({materials.length})</h4>
                 <div className="materials-grid">
@@ -448,6 +462,7 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                   })}
                 </div>
               </div>
+            </FeatureCoachmark>
           )}
 
           {/* Preview Modal */}

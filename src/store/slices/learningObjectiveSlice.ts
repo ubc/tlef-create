@@ -12,8 +12,15 @@ export const fetchObjectives = createAsyncThunk(
 
 export const generateObjectives = createAsyncThunk(
   'learningObjective/generateObjectives',
-  async (data: { quizId: string; materialIds: string[]; targetCount?: number; customPrompt?: string }) => {
-    const response = await objectivesApi.generateObjectives(data.quizId, data.materialIds, data.targetCount, data.customPrompt);
+  async (data: { quizId: string; materialIds: string[]; targetCount?: number; customPrompt?: string; replaceExisting?: boolean; sessionId?: string }) => {
+    const response = await objectivesApi.generateObjectives(
+      data.quizId,
+      data.materialIds,
+      data.targetCount,
+      data.customPrompt,
+      data.replaceExisting,
+      data.sessionId
+    );
     return response.objectives;
   }
 );
@@ -30,6 +37,14 @@ export const saveObjectives = createAsyncThunk(
   'learningObjective/saveObjectives',
   async (data: { quizId: string; objectives: { text: string; order: number }[] }) => {
     const response = await objectivesApi.saveObjectives(data.quizId, data.objectives);
+    return response.objectives;
+  }
+);
+
+export const enrichObjectives = createAsyncThunk(
+  'learningObjective/enrichObjectives',
+  async (data: { quizId: string; objectiveIds?: string[] }) => {
+    const response = await objectivesApi.enrichObjectives(data.quizId, data.objectiveIds);
     return response.objectives;
   }
 );
@@ -92,6 +107,7 @@ interface LearningObjectiveState {
   error: string | null;
   generating: boolean;
   classifying: boolean;
+  enriching: boolean;
 }
 
 const initialState: LearningObjectiveState = {
@@ -100,6 +116,7 @@ const initialState: LearningObjectiveState = {
   error: null,
   generating: false,
   classifying: false,
+  enriching: false,
 };
 
 const learningObjectiveSlice = createSlice({
@@ -167,12 +184,37 @@ const learningObjectiveSlice = createSlice({
       })
       .addCase(saveObjectives.fulfilled, (state, action) => {
         state.loading = false;
-        state.objectives = action.payload;
+        const objectiveById = new Map(state.objectives.map(objective => [objective._id, objective]));
+        action.payload.forEach(objective => objectiveById.set(objective._id, objective));
+        state.objectives = Array.from(objectiveById.values())
+          .sort((left, right) => (left.order || 0) - (right.order || 0));
         state.error = null;
       })
       .addCase(saveObjectives.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to save objectives';
+      })
+
+      // Enrich objectives with source links and subpoints
+      .addCase(enrichObjectives.pending, (state) => {
+        state.enriching = true;
+        state.error = null;
+      })
+      .addCase(enrichObjectives.fulfilled, (state, action) => {
+        state.enriching = false;
+        const objectiveById = new Map(action.payload.map(objective => [objective._id, objective]));
+        state.objectives = state.objectives.map(objective => objectiveById.get(objective._id) || objective);
+        action.payload.forEach(objective => {
+          if (!state.objectives.some(existing => existing._id === objective._id)) {
+            state.objectives.push(objective);
+          }
+        });
+        state.objectives.sort((left, right) => (left.order || 0) - (right.order || 0));
+        state.error = null;
+      })
+      .addCase(enrichObjectives.rejected, (state, action) => {
+        state.enriching = false;
+        state.error = action.error.message || 'Failed to enrich objectives';
       })
       
       // Update objective

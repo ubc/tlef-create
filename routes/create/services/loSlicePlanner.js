@@ -116,7 +116,20 @@ function buildMisconceptionSlices(componentSlices, learningObjective) {
   return slices;
 }
 
-function buildCandidateSlices(learningObjective) {
+function buildCandidateSlices(learningObjective, subpoints = []) {
+  const subpointSlices = [...new Set(subpoints.map(normalizeWhitespace).filter(Boolean))].map(subpoint => ({
+    id: toId(subpoint),
+    label: subpoint,
+    kind: 'subpoint'
+  }));
+
+  if (subpointSlices.length > 0) {
+    return {
+      breadth: subpointSlices.length > 1 ? 'broad' : 'narrow',
+      candidateSlices: subpointSlices
+    };
+  }
+
   const tail = extractTailAfterKeyword(learningObjective);
   const items = splitEnumeratedItems(tail);
   const breadth = detectBreadth(learningObjective, items);
@@ -160,6 +173,7 @@ function buildTaskIntent(slice, questionType) {
 
 function selectTaskSequence(candidateSlices, requestedCount) {
   const ordered = [
+    ...candidateSlices.filter(slice => slice.kind === 'subpoint'),
     ...candidateSlices.filter(slice => slice.kind === 'component'),
     ...candidateSlices.filter(slice => slice.kind === 'comparison'),
     ...candidateSlices.filter(slice => slice.kind === 'misconception'),
@@ -176,9 +190,9 @@ function selectTaskSequence(candidateSlices, requestedCount) {
   return tasks;
 }
 
-export function planLOSlices({ learningObjective, questionType, requestedCount }) {
+export function planLOSlices({ learningObjective, questionType, requestedCount, subpoints = [] }) {
   const normalizedLO = normalizeWhitespace(learningObjective);
-  const { breadth, candidateSlices } = buildCandidateSlices(normalizedLO);
+  const { breadth, candidateSlices } = buildCandidateSlices(normalizedLO, subpoints);
   const selectedSlices = selectTaskSequence(candidateSlices, requestedCount);
 
   return {

@@ -5,6 +5,7 @@
 
 import sseService from './sseService.js';
 import llmService from './llmService.js';
+import questionMemoryService from './questionMemoryService.js';
 import { formatContentForDatabase } from './questionContentService.js';
 
 class QuestionStreamingService {
@@ -48,6 +49,30 @@ class QuestionStreamingService {
     ].join(' ');
   }
 
+  buildSourceReferences(relevantContent = []) {
+    const contentArray = Array.isArray(relevantContent)
+      ? relevantContent
+      : (relevantContent?.chunks || []);
+
+    return contentArray.slice(0, 3).map(chunk => {
+      const metadata = chunk.metadata || {};
+      const content = String(chunk.content || chunk.pageContent || chunk.text || '');
+      return {
+        materialId: metadata.materialId || undefined,
+        materialName: metadata.materialName || metadata.fileName || metadata.sourceFile || 'Course material',
+        sourceFile: metadata.sourceFile || metadata.fileName || metadata.source || '',
+        chunkIndex: typeof metadata.chunkIndex === 'number' ? metadata.chunkIndex : undefined,
+        pageNumber: typeof metadata.pageNumber === 'number' ? metadata.pageNumber : undefined,
+        pageStart: typeof metadata.pageStart === 'number' ? metadata.pageStart : undefined,
+        pageEnd: typeof metadata.pageEnd === 'number' ? metadata.pageEnd : undefined,
+        excerpt: content.length > 500 ? `${content.substring(0, 500)}...` : content,
+        relevanceScore: typeof chunk.score === 'number' ? chunk.score : undefined,
+        section: metadata.sectionTitle || metadata.section || '',
+        sectionId: metadata.sectionId || undefined
+      };
+    }).filter(ref => ref.excerpt || ref.materialName);
+  }
+
   /**
    * Generate a question with streaming progress updates
    */
@@ -66,11 +91,13 @@ class QuestionStreamingService {
     console.log(`🔍 DEBUG - userId:`, userId);
     
     try {
+      const resolvedLLMConfig = await llmService.resolveUserLLMConfig(userId);
+
       // Send diagnostic info to frontend
       sseService.streamQuestionProgress(sessionId, questionId, {
         status: 'diagnostic',
-        llmProvider: process.env.LLM_PROVIDER || 'not set',
-        llmModel: process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'not set',
+        llmProvider: resolvedLLMConfig.provider,
+        llmModel: resolvedLLMConfig.model,
         environment: process.env.NODE_ENV
       });
 
@@ -116,16 +143,36 @@ class QuestionStreamingService {
       });
 
       const plannedTask = questionConfig.plannedTask || null;
-      const maxAttempts = plannedTask ? 3 : 1;
+      const maxAttempts = 3;
       let result = null;
       let finalValidation = { valid: true, reason: 'No planned task validation required' };
+      let noveltyResult = {
+        novel: true,
+        threshold: 0.76,
+        similarity: 0,
+        noveltyScore: 1,
+        mostSimilarQuestionId: null,
+        mostSimilarQuestionText: ''
+      };
+      let retryGuidance = '';
+      let finalFailureReason = 'LLM generation failed';
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (attempt > 1) {
+          sseService.streamTextReset(sessionId, questionId, {
+            attempt,
+            reason: 'validation-retry'
+          });
+        }
+
         const plannedTaskPrompt = this.buildPlannedTaskPrompt(plannedTask, attempt);
         const selectionModePrompt = this.buildSelectionModePrompt(questionConfig);
         const customPrompt = this.mergeCustomPromptWithPlannedTask(
-          this.mergeCustomPromptWithPlannedTask(questionConfig.customPrompt, selectionModePrompt),
-          plannedTaskPrompt
+          this.mergeCustomPromptWithPlannedTask(
+            this.mergeCustomPromptWithPlannedTask(questionConfig.customPrompt, selectionModePrompt),
+            plannedTaskPrompt
+          ),
+          retryGuidance
         );
 
         if (plannedTask) {
@@ -137,6 +184,14 @@ class QuestionStreamingService {
           });
         }
 
+        const attemptChunks = [];
+        const attemptStreamCallback = (textChunk, metadata) => {
+          if (metadata?.partial && textChunk) {
+            attemptChunks.push(textChunk);
+            onStreamChunk(textChunk, { ...metadata, attempt });
+          }
+        };
+
         result = await llmService.generateQuestionStreaming({
           learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
           questionType: questionConfig.questionType,
@@ -145,35 +200,87 @@ class QuestionStreamingService {
           courseContext: questionConfig.courseContext || '',
           previousQuestions: questionConfig.previousQuestions || [],
           customPrompt,
+          userId,
+          llmConfig: resolvedLLMConfig,
           selectionMode: questionConfig.selectionMode,
           branchingLayers: questionConfig.branchingLayers ?? 2,
           branchingChoices: questionConfig.branchingChoices ?? 2
-        }, plannedTask ? null : onStreamChunk);
+        }, attemptStreamCallback);
 
         if (!result?.success) {
+          finalFailureReason = result?.error || 'LLM generation failed';
           continue;
         }
 
         finalValidation = llmService.questionMatchesPlannedTask(result.questionData, plannedTask);
-        if (finalValidation.valid) {
-          break;
+        if (!finalValidation.valid) {
+          finalFailureReason = `Failed to match the planned slice: ${finalValidation.reason}`;
+          retryGuidance = [
+            'RETRY CORRECTION:',
+            finalValidation.reason,
+            `Stay strictly within the assigned slice "${plannedTask?.sliceLabel}".`
+          ].join(' ');
+          console.warn(`[${questionId}] Planned slice validation failed on attempt ${attempt}: ${finalValidation.reason}`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'slice-retry',
+            message: finalValidation.reason,
+            plannedSlice: plannedTask?.sliceLabel,
+            attempt
+          });
+          result = null;
+          continue;
         }
 
-        console.warn(`[${questionId}] Planned slice validation failed on attempt ${attempt}: ${finalValidation.reason}`);
-        sseService.streamQuestionProgress(sessionId, questionId, {
-          status: 'slice-retry',
-          message: finalValidation.reason,
-          plannedSlice: plannedTask?.sliceLabel,
+        noveltyResult = await questionMemoryService.reserveIfNovel({
+          sessionId,
+          questionId,
+          candidate: result.questionData.questionText,
+          existingQuestions: questionConfig.duplicateCheckQuestions
+            || questionConfig.previousQuestions
+            || []
+        });
+
+        if (!noveltyResult.novel) {
+          const similarStem = noveltyResult.mostSimilarQuestionText?.slice(0, 240) || 'an existing question';
+          finalFailureReason = `Generated question was too similar to an existing question (${Math.round(noveltyResult.similarity * 100)}% similarity)`;
+          retryGuidance = [
+            'NOVELTY RETRY REQUIRED:',
+            `The previous candidate was too similar to: "${similarStem}".`,
+            'Assess a different fact, subpoint, misconception, application context, or reasoning step.',
+            'Use a meaningfully different stem structure and answer-option pattern while preserving the assigned learning objective and planned slice.'
+          ].join(' ');
+          console.warn(`[${questionId}] Novelty validation failed on attempt ${attempt}: similarity=${noveltyResult.similarity}`);
+          sseService.streamQuestionProgress(sessionId, questionId, {
+            status: 'novelty-retry',
+            message: finalFailureReason,
+            similarity: noveltyResult.similarity,
+            threshold: noveltyResult.threshold,
+            attempt
+          });
+          result = null;
+          continue;
+        }
+
+        const acceptedStreamText = attemptChunks.join('') || result.rawContent || '';
+        if (!attemptChunks.length && acceptedStreamText) {
+          onStreamChunk(acceptedStreamText, {
+            totalLength: acceptedStreamText.length,
+            partial: true,
+            buffered: true,
+            attempt
+          });
+        }
+        onStreamChunk('', {
+          totalLength: acceptedStreamText.length,
+          partial: false,
+          completed: true,
           attempt
         });
-        result = null;
+        break;
       }
       
       if (!result?.success) {
-        const failureReason = plannedTask && !finalValidation.valid
-          ? `Failed to generate a question that matches the planned slice "${plannedTask.sliceLabel}": ${finalValidation.reason}`
-          : 'LLM generation failed';
-        throw new Error(failureReason);
+        throw new Error(finalFailureReason);
       }
 
       console.log(`[${questionId}] LLM returned, success=${result.success}`);
@@ -218,7 +325,9 @@ class QuestionStreamingService {
             'discussion': 'critical thinking and analysis',
             'summary': 'synthesis and comprehensive understanding'
           };
-          const loText = typeof lo === 'string' ? lo : lo.text || 'learning objective';
+          const loText = String(typeof lo === 'string'
+            ? lo
+            : (lo?.text || questionConfig.focusArea || questionConfig.customPrompt || 'learning objective'));
           return `Students will demonstrate ${types[questionType] || 'understanding'} of ${loText.substring(0, 50)}${loText.length > 50 ? '...' : ''}`;
         };
 
@@ -252,8 +361,9 @@ class QuestionStreamingService {
         };
 
         const subObjective = generateSubObjective(learningObjective, questionType);
-        const focusArea = extractFocusArea(subObjective);
+        const focusArea = questionConfig.focusArea || extractFocusArea(subObjective);
         const complexity = determineComplexity(subObjective, questionType);
+        const sourceReferences = this.buildSourceReferences(relevantContent);
 
         const newQuestion = new Question({
           quiz: quizId,
@@ -268,18 +378,27 @@ class QuestionStreamingService {
           reviewStatus: 'pending',
           createdBy: userId, // Add the required createdBy field
           generationMetadata: {
-            llmModel: 'gpt-4o-mini',
+            llmModel: result.questionData.generationMetadata?.llmModel || resolvedLLMConfig.model,
             generationPrompt: result.promptUsed || result.questionData.prompt,
+            generatedFrom: sourceReferences
+              .map(ref => ref.materialId)
+              .filter(Boolean),
+            sourceReferences,
             subObjective: subObjective,
             generationMethod: 'AI-streaming-generation',
             focusArea: focusArea,
             complexity: complexity,
+            pedagogicalIntent: questionConfig.pedagogicalIntent || null,
+            bloomLevel: questionConfig.bloomLevel || null,
+            planRationale: questionConfig.planRationale || null,
             confidence: 0.9,
             processingTime: result.metadata?.processingTime || 2000,
             streamingGenerated: true,
             plannedSlice: plannedTask?.sliceLabel || null,
             plannedIntent: plannedTask?.questionIntent || null,
             plannedSliceValidation: finalValidation,
+            noveltyScore: noveltyResult.noveltyScore,
+            duplicateCheck: noveltyResult,
             generatedAt: new Date().toISOString()
           }
         });
@@ -334,7 +453,8 @@ class QuestionStreamingService {
           });
         } catch (saveError) {
           console.error(`[${questionId}] ERROR saving question:`, saveError.message);
-          sseService.emitError(sessionId, questionId, `Failed to save question: ${saveError.message}`, 'database-error');
+          saveError.errorType = saveError.errorType || 'database-error';
+          saveError.message = `Failed to save question: ${saveError.message}`;
           throw saveError;
         }
 
@@ -376,7 +496,6 @@ class QuestionStreamingService {
       
     } catch (error) {
       console.error(`❌ Streaming generation failed for question ${questionId}:`, error);
-      sseService.emitError(sessionId, questionId, error.message);
       throw error;
     }
   }

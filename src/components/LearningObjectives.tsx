@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Upload, Sparkles, Edit, Plus, Trash2, RotateCcw, X } from 'lucide-react';
+import { Sparkles, Edit, Plus, Trash2, RotateCcw, X, Link2 } from 'lucide-react';
 import { RootState, AppDispatch, store } from '../store';
 import {
   fetchObjectives,
@@ -11,7 +11,8 @@ import {
   deleteObjective,
   clearObjectives,
   regenerateSingleObjective,
-  deleteAllObjectives
+  deleteAllObjectives,
+  enrichObjectives
 } from '../store/slices/learningObjectiveSlice';
 import { clearQuestionsForQuiz } from '../store/slices/questionSlice';
 import RegeneratePromptModal from './RegeneratePromptModal';
@@ -20,6 +21,14 @@ import { PUBSUB_EVENTS, QuestionGenerationStartedPayload, QuestionGenerationComp
 import { pubsubService } from '../services/pubsubService';
 import { selectIsGenerating } from '../store/selectors';
 import { LearningObjectiveData } from './generation/generationTypes';
+import SourceReferencePreviewModal from './SourceReferencePreviewModal';
+import CoursePromptSettings from './CoursePromptSettings';
+import AIPlanGenerationTrace from './generation/AIPlanGenerationTrace';
+import { SourceReference } from '../services/api';
+import { API_URL } from '../config/api';
+import { useSSE } from '../hooks/useSSE';
+import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
+import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import '../styles/components/LearningObjectives.css';
 
 interface LearningObjectivesProps {
@@ -27,29 +36,53 @@ interface LearningObjectivesProps {
   objectives: LearningObjectiveData[];
   onObjectivesChange: (objectives: LearningObjectiveData[]) => void;
   quizId: string;
+  courseId?: string;
   onNavigateNext?: () => void;
 }
 
-const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange, quizId, onNavigateNext }: LearningObjectivesProps) => {
+function formatWorkflowMessage(value: unknown, fallback: string) {
+  if (typeof value === 'string' && value.trim()) return value;
+  if (value && typeof value === 'object') {
+    const record = value as { message?: unknown; status?: unknown; metadata?: unknown };
+    if (typeof record.message === 'string' && record.message.trim()) return record.message;
+    if (typeof record.status === 'string' && record.status.trim()) return record.status;
+    return JSON.stringify(record);
+  }
+  return fallback;
+}
+
+const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange, quizId, courseId, onNavigateNext }: LearningObjectivesProps) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { objectives: reduxObjectives, loading, generating, classifying, error } = useSelector((state: RootState) => state.learningObjective);
+  const { objectives: reduxObjectives, loading, generating, classifying, enriching, error } = useSelector((state: RootState) => state.learningObjective);
   const questionsGenerating = useSelector((state: RootState) => selectIsGenerating(state, quizId));
   const questionsByQuiz = useSelector((state: RootState) => state.question.questionsByQuiz);
   
   // PubSub hook for event subscriptions
   const { subscribe, showNotification, publish } = usePubSub('LearningObjectives');
   
-  const [mode, setMode] = useState<'classify' | 'generate' | 'edit' | 'manual'>('classify');
   const [textInput, setTextInput] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [manualObjectives, setManualObjectives] = useState<string[]>([]);
   const [newObjective, setNewObjective] = useState('');
+  const [enrichManualAfterSave, setEnrichManualAfterSave] = useState(true);
   const [showNavigation, setShowNavigation] = useState(false);
   const [targetObjectiveCount, setTargetObjectiveCount] = useState<number | ''>(''); // Allow empty input
+  const [autoRecommendObjectiveCount, setAutoRecommendObjectiveCount] = useState(true);
+  const [previewReference, setPreviewReference] = useState<SourceReference | null>(null);
+  const [loWorkflowSessionId, setLoWorkflowSessionId] = useState<string | null>(null);
+  const [loWorkflowSteps, setLoWorkflowSteps] = useState<Array<{
+    status: string;
+    message: unknown;
+    metadata?: Record<string, unknown>;
+  }>>([]);
+  const [loStreamText, setLoStreamText] = useState('');
+  const [loStreamModel, setLoStreamModel] = useState<string | null>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
   const newObjectiveRef = useRef<HTMLDivElement>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const loTraceRef = useRef<HTMLDivElement>(null);
+  const objectiveResultsRef = useRef<HTMLDivElement>(null);
 
   // Regenerate modal state
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
@@ -77,7 +110,60 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   // Use Redux objectives if available, otherwise fallback to props
   const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives.map(obj => obj.text);
+  const objectivesTutorial = useFeatureOnboarding('learning-objectives', currentObjectives.length > 0);
   const isGenerating = generating || classifying;
+  const loWorkflowUrl = loWorkflowSessionId ? `${API_URL}/api/create/streaming/questions/${loWorkflowSessionId}` : null;
+  const objectivesMissingDetails = reduxObjectives.filter(objective => {
+    const metadata = objective.generationMetadata;
+    return !metadata?.subpoints?.length || !metadata?.sourceReferences?.length;
+  });
+  const commandText = textInput.trim();
+  const objectiveLikeLineCount = commandText
+    .split('\n')
+    .filter(line => /^(?:[-*\d.)\s]*)?(students?\s+will|learners?\s+will|understand|analyze|apply|evaluate|create|explain|describe|identify|calculate|compare|demonstrate)\b/i.test(line.trim()))
+    .length;
+  const detectedCommandIntent = commandText && (/learning objectives?:|^lo\s*\d+/im.test(commandText) || objectiveLikeLineCount >= 2)
+    ? 'Import pasted learning objectives'
+    : 'Generate from assigned materials';
+
+  useSSE(loWorkflowUrl, {
+    onQuestionProgress: (_questionId, data: { status?: string; message?: unknown; metadata?: Record<string, unknown> }) => {
+      if (!data?.status) return;
+      setLoWorkflowSteps(previous => {
+        const next = previous.filter(step => step.status !== data.status);
+        return [...next, {
+          status: data.status || 'progress',
+          message: formatWorkflowMessage(data.message, data.status || 'Working...'),
+          metadata: data.metadata
+        }].slice(-8);
+      });
+    },
+    onTextChunk: (questionId, chunk, metadata) => {
+      if (questionId !== 'learning-objectives' || !chunk) return;
+      setLoStreamText(previous => previous + chunk);
+      if (metadata?.model) setLoStreamModel(metadata.model);
+    },
+    onTextReset: questionId => {
+      if (questionId === 'learning-objectives') setLoStreamText('');
+    },
+    onQuestionComplete: () => {
+      setLoWorkflowSteps(previous => [...previous, {
+        status: 'complete',
+        message: 'Learning objectives are ready.'
+      }].slice(-8));
+      window.setTimeout(() => setLoWorkflowSessionId(null), 1200);
+    },
+    onBatchComplete: () => {
+      window.setTimeout(() => setLoWorkflowSessionId(null), 1200);
+    },
+    onError: (_questionId, errorMessage) => {
+      setLoWorkflowSteps(previous => [...previous, {
+        status: 'error',
+        message: formatWorkflowMessage(errorMessage, 'Learning objective generation failed.')
+      }].slice(-8));
+      window.setTimeout(() => setLoWorkflowSessionId(null), 1800);
+    }
+  });
 
   // Load objectives when component mounts
   useEffect(() => {
@@ -92,7 +178,8 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
         _id: obj._id,
         text: obj.text,
-        order: obj.order !== undefined ? obj.order : idx
+        order: obj.order !== undefined ? obj.order : idx,
+        generationMetadata: obj.generationMetadata
       }));
       onObjectivesChange(objectiveData);
     }
@@ -156,6 +243,16 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
   }, [editingIndex]);
 
+  useEffect(() => {
+    if (!loWorkflowSessionId) return;
+
+    const scrollTimer = window.setTimeout(() => {
+      loTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, [loWorkflowSessionId]);
+
   // Effect to handle navigation appearance with smooth scroll
   useEffect(() => {
     const shouldShowNav = currentObjectives.length > 0;
@@ -186,16 +283,29 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       try {
         await dispatch(classifyObjectives({ quizId, text: textInput }));
         setTextInput('');
-        setMode('edit');
       } catch (error) {
         console.error('Failed to classify objectives:', error);
       }
     }
   };
 
+  const parseManualObjectiveInput = (value: string) => value
+    .split(/\n+/)
+    .map(line => line
+      .replace(/^\s*(?:[-*•]|\d+[.)]|LO\s*\d+\s*:?)\s*/i, '')
+      .trim()
+    )
+    .filter(Boolean);
+
   const handleAddManualObjective = () => {
-    if (newObjective.trim()) {
-      setManualObjectives([...manualObjectives, newObjective.trim()]);
+    const parsedObjectives = parseManualObjectiveInput(newObjective);
+    if (parsedObjectives.length > 0) {
+      const existing = new Set([
+        ...manualObjectives,
+        ...currentObjectives
+      ].map(objective => objective.trim().toLowerCase()));
+      const nextObjectives = parsedObjectives.filter(objective => !existing.has(objective.toLowerCase()));
+      setManualObjectives([...manualObjectives, ...nextObjectives]);
       setNewObjective('');
     }
   };
@@ -206,43 +316,152 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   const handleSaveManualObjectives = async () => {
     if (manualObjectives.length > 0) {
+      let savedObjectives: LearningObjectiveData[] = [];
       try {
         const objectivesData = manualObjectives.map((text, index) => ({
           text,
           order: index
         }));
-        await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
+        savedObjectives = await dispatch(saveObjectives({ quizId, objectives: objectivesData })).unwrap();
         setManualObjectives([]);
-        setMode('edit');
+        showNotification(
+          'success',
+          'Learning Objectives Saved',
+          `${savedObjectives.length} learning objective${savedObjectives.length === 1 ? '' : 's'} saved.`,
+          4000
+        );
       } catch (error) {
         console.error('Failed to save manual objectives:', error);
+        showNotification(
+          'error',
+          'Learning Objective Save Failed',
+          error instanceof Error ? error.message : 'Failed to save learning objectives.',
+          6000
+        );
+        return;
+      }
+
+      if (enrichManualAfterSave && assignedMaterials.length > 0 && savedObjectives.length > 0) {
+        try {
+          await dispatch(enrichObjectives({
+            quizId,
+            objectiveIds: savedObjectives.map(objective => objective._id)
+          })).unwrap();
+          showNotification(
+            'success',
+            'Objectives Linked to Materials',
+            'CREATE added subpoints and source references to the saved objectives.',
+            5000
+          );
+        } catch (error) {
+          console.error('Manual objectives were saved, but enrichment failed:', error);
+          await dispatch(fetchObjectives(quizId));
+          showNotification(
+            'warning',
+            'Objectives Saved, AI Linking Pending',
+            'The new objectives were saved and existing objectives were preserved. Use AI Link Missing to retry adding subpoints and material references.',
+            7000
+          );
+        }
       }
     }
   };
 
-  const handleGenerateObjectives = async () => {
+  const handleEnrichMissingObjectives = async () => {
+    if (objectivesMissingDetails.length === 0) return;
+    try {
+      await dispatch(enrichObjectives({
+        quizId,
+        objectiveIds: objectivesMissingDetails.map(objective => objective._id)
+      })).unwrap();
+      showNotification(
+        'success',
+        'Objectives Enriched',
+        'CREATE added subpoints and material references to objectives that needed details.',
+        5000
+      );
+    } catch (error) {
+      console.error('Failed to enrich objectives:', error);
+      await dispatch(fetchObjectives(quizId));
+      showNotification(
+        'error',
+        'Objective Enrichment Failed',
+        'No existing objective metadata was changed. Please retry AI Link Missing after checking the model connection.',
+        6000
+      );
+    }
+  };
+
+  const handleGenerateObjectives = async (promptOverride?: string) => {
     if (assignedMaterials.length === 0) {
       alert('Please assign materials to this quiz first.');
       return;
     }
 
-    const count = typeof targetObjectiveCount === 'number' ? targetObjectiveCount : parseInt(targetObjectiveCount.toString()) || 6;
+    const count = typeof targetObjectiveCount === 'number' ? targetObjectiveCount : parseInt(targetObjectiveCount.toString());
     
-    if (count < 1 || count > 20) {
+    if (!autoRecommendObjectiveCount && (Number.isNaN(count) || count < 1 || count > 20)) {
       alert('Please enter a number between 1 and 20 for learning objectives.');
       return;
     }
 
     try {
-      await dispatch(generateObjectives({ 
+      const replaceExisting = currentObjectives.length > 0;
+      if (replaceExisting) {
+        const questionCount = (questionsByQuiz[quizId] || []).length;
+        const shouldReplace = window.confirm(
+          `Generate from Materials will replace the existing ${currentObjectives.length} learning objective(s).` +
+          (questionCount > 0
+            ? `\n\nThis will also delete ${questionCount} question(s) linked to the current learning objectives.`
+            : '') +
+          '\n\nDo you want to continue?'
+        );
+
+        if (!shouldReplace) {
+          return;
+        }
+      }
+
+      const workflowSessionId = `lo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      setLoWorkflowSteps([]);
+      setLoStreamText('');
+      setLoStreamModel(null);
+      setLoWorkflowSessionId(workflowSessionId);
+
+      await dispatch(generateObjectives({
         quizId, 
         materialIds: assignedMaterials, 
-        targetCount: count 
-      }));
-      setMode('edit');
+        targetCount: autoRecommendObjectiveCount ? undefined : count,
+        customPrompt: promptOverride?.trim() || undefined,
+        replaceExisting,
+        sessionId: workflowSessionId
+      })).unwrap();
+
+      window.setTimeout(() => {
+        objectiveResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+
+      if (replaceExisting) {
+        dispatch(clearQuestionsForQuiz(quizId));
+      }
     } catch (error) {
       console.error('Failed to generate objectives:', error);
     }
+  };
+
+  const handleSmartObjectiveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (isGenerating) {
+      return;
+    }
+
+    if (detectedCommandIntent === 'Import pasted learning objectives') {
+      await handleClassifyObjectives(e);
+      return;
+    }
+
+    await handleGenerateObjectives(commandText);
   };
 
   const handleEditObjective = (index: number) => {
@@ -516,24 +735,28 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleRegenerateAllWithPrompt = async (customPrompt?: string) => {
-    const currentCount = currentObjectives.length;
     setRegenerateAllLoading(true);
 
     try {
-      // First, delete all existing objectives from backend
-      await dispatch(deleteAllObjectives(quizId));
+      const manualTargetCount = typeof targetObjectiveCount === 'number'
+        ? targetObjectiveCount
+        : Number.parseInt(targetObjectiveCount.toString(), 10);
 
-      // Also clear local state
-      onObjectivesChange([]);
-
-      // Generate new objectives with the same count as before, with optional custom prompt
-      await dispatch(generateObjectives({ 
+      await dispatch(generateObjectives({
         quizId, 
         materialIds: assignedMaterials, 
-        targetCount: currentCount,
-        customPrompt: customPrompt?.trim() || undefined
-      }));
+        targetCount: autoRecommendObjectiveCount || Number.isNaN(manualTargetCount)
+          ? undefined
+          : manualTargetCount,
+        customPrompt: customPrompt?.trim() || undefined,
+        replaceExisting: true
+      })).unwrap();
 
+      window.setTimeout(() => {
+        objectiveResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+
+      dispatch(clearQuestionsForQuiz(quizId));
       setRegenerateAllModalOpen(false);
     } catch (error) {
       console.error('Failed to regenerate all objectives:', error);
@@ -646,6 +869,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   }
 
   return (
+    <>
       <div className="learning-objectives">
         <div className="card">
           <div className="card-header">
@@ -655,204 +879,247 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
             </p>
           </div>
 
+          {courseId && (
+            <div className="step-prompt-settings">
+              <CoursePromptSettings courseId={courseId} defaultPromptType="learning-objectives" />
+            </div>
+          )}
+
+          {(loWorkflowSessionId || loWorkflowSteps.length > 0) && (
+            <div ref={loTraceRef}>
+              <AIPlanGenerationTrace
+                isGenerating={generating}
+                steps={loWorkflowSteps.map((step, index) => ({
+                  ...step,
+                  status: formatWorkflowMessage(step.status, `step-${index}`),
+                  message: formatWorkflowMessage(step.message, 'Working...')
+                }))}
+                streamedText={loStreamText}
+                model={loStreamModel}
+                eyebrow="AI Learning Objectives"
+                activeTitle="Building your learning objectives"
+                completeTitle="Learning objectives are ready"
+                errorTitle="Learning objective generation stopped"
+                emptyOutputText="Preparing the material inventory and instructional structure..."
+              />
+            </div>
+          )}
+
           {currentObjectives.length === 0 && (
               <div className="objectives-setup">
-                <div className="setup-options">
-                  <button
-                      className={`setup-option ${mode === 'classify' ? 'active' : ''}`}
-                      onClick={() => setMode('classify')}
-                  >
-                    <Upload size={24} />
-                    <h4>AI Classify</h4>
-                    <p>Paste text and AI will extract learning objectives</p>
-                  </button>
-
-                  <button
-                      className={`setup-option ${mode === 'manual' ? 'active' : ''}`}
-                      onClick={() => setMode('manual')}
-                  >
-                    <Plus size={24} />
-                    <h4>Add Manually</h4>
-                    <p>Create learning objectives one by one</p>
-                  </button>
-
-                  <button
-                      className={`setup-option ${mode === 'generate' ? 'active' : ''}`}
-                      onClick={() => setMode('generate')}
-                  >
-                    <Sparkles size={24} />
-                    <h4>Generate from Materials</h4>
-                    <p>AI will analyze your materials and suggest objectives</p>
-                  </button>
-                </div>
-
-                {mode === 'classify' && (
-                    <div className="classify-section">
-                      {isGenerating ? (
-                          <div className="generating-state">
-                            <div className="loading-spinner"></div>
-                            <p>Processing your text to identify learning objectives...</p>
-                          </div>
-                      ) : (
-                          <form onSubmit={handleClassifyObjectives} className="classify-form">
-                            <textarea
-                                className="textarea"
-                                placeholder="Paste your course syllabus, lecture notes, or learning materials. AI will extract learning objectives from the text..."
-                                rows={6}
-                                value={textInput}
-                                onChange={(e) => setTextInput(e.target.value)}
-                                required
-                            />
-                            <div className="form-actions">
-                              <button type="submit" className="btn btn-primary">
-                                AI Classify
-                              </button>
-                            </div>
-                          </form>
-                      )}
+                <form onSubmit={handleSmartObjectiveSubmit} className="objective-command-box">
+                  <div className="objective-command-header">
+                    <div>
+                      <h4>Tell CREATE What You Want</h4>
+                      <p>
+                        Paste existing learning objectives, add instructions, or leave this blank to generate a complete LO set from the assigned materials.
+                      </p>
                     </div>
-                )}
+                    <div className="objective-intent-pill">
+                      {detectedCommandIntent}
+                    </div>
+                  </div>
 
-                {mode === 'manual' && (
-                    <div className="manual-section">
-                      <div className="manual-form">
-                        <div className="objective-input-group">
-                          <textarea
-                              className="textarea"
-                              placeholder="Enter a learning objective (e.g., 'Students will be able to explain the key concepts of...')"
-                              rows={3}
-                              value={newObjective}
-                              onChange={(e) => setNewObjective(e.target.value)}
-                          />
-                          <button
-                              type="button"
-                              className="btn btn-primary"
-                              onClick={handleAddManualObjective}
-                              disabled={!newObjective.trim()}
-                          >
-                            <Plus size={16} />
-                            Add Objective
-                          </button>
+                  {isGenerating ? (classifying ? (
+                      <div className="generating-state">
+                        <div className="loading-spinner"></div>
+                        <p>Processing your text to identify learning objectives...</p>
+                      </div>
+                  ) : null) : (
+                      <>
+                        <textarea
+                            className="textarea objective-command-textarea"
+                            placeholder={`Examples:
+- Leave this blank to generate a complete learning objective set from the uploaded materials.
+- Generate complete learning objectives from the uploaded materials.
+- Focus on the most important concepts, skills, and common misconceptions in the materials.
+- I already have these LOs: Students will be able to...
+- Make the objectives measurable and aligned with Bloom's taxonomy.`}
+                            rows={7}
+                            value={textInput}
+                            onChange={(e) => setTextInput(e.target.value)}
+                        />
+
+                        <div className="objective-command-controls">
+                          <label className="auto-objective-count-toggle">
+                            <input
+                              type="checkbox"
+                              checked={autoRecommendObjectiveCount}
+                              onChange={(e) => setAutoRecommendObjectiveCount(e.target.checked)}
+                              disabled={detectedCommandIntent === 'Import pasted learning objectives'}
+                            />
+                            Let CREATE recommend the number of learning objectives
+                          </label>
+
+                          <div className="objective-target-count">
+                            <label htmlFor="objectiveCount" className="input-label">
+                              Optional target number:
+                            </label>
+                            <input
+                              id="objectiveCount"
+                              type="number"
+                              min="1"
+                              max="20"
+                              value={targetObjectiveCount}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === '') {
+                                  setTargetObjectiveCount('');
+                                } else {
+                                  const numValue = parseInt(value);
+                                  if (!isNaN(numValue)) {
+                                    setTargetObjectiveCount(numValue);
+                                  }
+                                }
+                              }}
+                              className="input number-input"
+                              placeholder={autoRecommendObjectiveCount ? 'Auto' : 'Enter number'}
+                              disabled={autoRecommendObjectiveCount || detectedCommandIntent === 'Import pasted learning objectives'}
+                            />
+                          </div>
                         </div>
 
-                        {manualObjectives.length > 0 && (
-                            <div className="manual-objectives-preview">
-                              <h5>Learning Objectives to Save ({manualObjectives.length}):</h5>
-                              <div className="objectives-preview-list">
-                                {manualObjectives.map((objective, index) => (
-                                    <div key={index} className="preview-objective">
-                                      <span className="objective-number">LO {index + 1}</span>
-                                      <span className="objective-text">{objective}</span>
-                                      <button
-                                          className="btn btn-ghost btn-sm"
-                                          onClick={() => handleRemoveManualObjective(index)}
-                                          disabled={questionsGenerating}
-                                          title={questionsGenerating ? 'Cannot remove while generating questions' : 'Remove objective'}
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                ))}
-                              </div>
-                              <div className="manual-actions">
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleSaveManualObjectives}
-                                >
-                                  Save {manualObjectives.length} Objective{manualObjectives.length !== 1 ? 's' : ''}
-                                </button>
-                                <button
-                                    className="btn btn-outline"
-                                    onClick={() => setManualObjectives([])}
-                                >
-                                  Clear All
-                                </button>
-                              </div>
-                            </div>
-                        )}
-                      </div>
-                    </div>
-                )}
+                        <small className="input-hint objective-command-hint">
+                          {detectedCommandIntent === 'Import pasted learning objectives'
+                            ? 'CREATE detected pasted objectives and will cleanly import them.'
+                            : 'CREATE will use your instructions as guidance while staying grounded in the uploaded materials.'}
+                        </small>
 
-                {mode === 'generate' && (
-                    <div className="generate-section">
-                      {isGenerating ? (
-                          <div className="generating-state">
-                            <div className="loading-spinner"></div>
-                            <p>Analyzing your materials to suggest learning objectives...</p>
-                          </div>
-                      ) : (
-                          <div className="generate-prompt">
-                            <p>Generate learning objectives based on {assignedMaterials.length} assigned material(s)</p>
-                            
-                            <div className="objective-count-input">
-                              <label htmlFor="objectiveCount" className="input-label">
-                                Number of learning objectives to generate:
-                              </label>
-                              <input
-                                id="objectiveCount"
-                                type="number"
-                                min="1"
-                                max="20"
-                                value={targetObjectiveCount}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  if (value === '') {
-                                    setTargetObjectiveCount('');
-                                  } else {
-                                    const numValue = parseInt(value);
-                                    if (!isNaN(numValue)) {
-                                      setTargetObjectiveCount(numValue);
-                                    }
-                                  }
-                                }}
-                                className="input number-input"
-                                placeholder="Enter number (e.g., 6)"
-                              />
-                              <small className="input-hint">
-                                Enter a number between 1 and 20 (default: 6)
-                              </small>
-                            </div>
-
-                            <button 
-                              className="btn btn-primary" 
-                              onClick={handleGenerateObjectives}
-                              disabled={
-                                targetObjectiveCount === '' || 
+                        <div className="form-actions">
+                          <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={
+                              !autoRecommendObjectiveCount &&
+                              detectedCommandIntent !== 'Import pasted learning objectives' &&
+                              (
+                                targetObjectiveCount === '' ||
                                 (typeof targetObjectiveCount === 'number' && (targetObjectiveCount < 1 || targetObjectiveCount > 20))
-                              }
+                              )
+                            }
+                          >
+                            <Sparkles size={16} />
+                            {detectedCommandIntent === 'Import pasted learning objectives'
+                              ? 'Import Learning Objectives'
+                              : commandText
+                                ? 'Generate with Instructions'
+                                : 'Generate Complete Learning Objectives'}
+                          </button>
+                        </div>
+                      </>
+                  )}
+                </form>
+
+                <div className="manual-section manual-section-compact">
+                  <div className="manual-form">
+                    <div className="manual-section-header">
+                      <h4>Add Manually</h4>
+                      <p>Paste one or more learning objectives. Put each objective on a separate line.</p>
+                    </div>
+
+                    <div className="objective-input-group">
+                      <textarea
+                          className="textarea"
+                          placeholder="Students will be able to explain key concepts...
+Students will be able to apply those concepts to a new example..."
+                          rows={4}
+                          value={newObjective}
+                          onChange={(e) => setNewObjective(e.target.value)}
+                      />
+                      <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={handleAddManualObjective}
+                          disabled={!newObjective.trim()}
+                      >
+                        <Plus size={16} />
+                        Add Objective{parseManualObjectiveInput(newObjective).length > 1 ? 's' : ''}
+                      </button>
+                    </div>
+
+                    <label className="manual-enrichment-toggle">
+                      <input
+                        type="checkbox"
+                        checked={enrichManualAfterSave}
+                        onChange={(event) => setEnrichManualAfterSave(event.target.checked)}
+                        disabled={assignedMaterials.length === 0}
+                      />
+                      <span>
+                        Use AI to add subpoints and link these objectives to assigned materials after saving
+                      </span>
+                    </label>
+
+                    {manualObjectives.length > 0 && (
+                        <div className="manual-objectives-preview">
+                          <h5>Learning Objectives to Save ({manualObjectives.length}):</h5>
+                          <div className="objectives-preview-list">
+                            {manualObjectives.map((objective, index) => (
+                                <div key={index} className="preview-objective">
+                                  <span className="objective-number">LO {index + 1}</span>
+                                  <span className="objective-text">{objective}</span>
+                                  <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() => handleRemoveManualObjective(index)}
+                                      disabled={questionsGenerating}
+                                      title={questionsGenerating ? 'Cannot remove while generating questions' : 'Remove objective'}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                            ))}
+                          </div>
+                          <div className="manual-actions">
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveManualObjectives}
+                                disabled={loading || enriching}
                             >
-                              <Sparkles size={16} />
-                              {targetObjectiveCount === '' ? 
-                                'Generate Learning Objectives' : 
-                                `Generate ${targetObjectiveCount} Learning Objective${targetObjectiveCount !== 1 ? 's' : ''}`
-                              }
+                              {enriching ? 'Linking to Materials...' : `Save ${manualObjectives.length} Objective${manualObjectives.length !== 1 ? 's' : ''}`}
+                            </button>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setManualObjectives([])}
+                                disabled={loading || enriching}
+                            >
+                              Clear All
                             </button>
                           </div>
-                      )}
-                    </div>
-                )}
+                        </div>
+                    )}
+                  </div>
+                </div>
               </div>
           )}
 
           {currentObjectives.length > 0 && (
-              <div className="objectives-list">
+              <div ref={objectiveResultsRef} className="objectives-list">
                 <div className="objectives-header">
                   <h4>Learning Objectives ({currentObjectives.length})</h4>
                   <div className="objectives-actions">
                     <button 
                       className="btn btn-outline" 
                       onClick={handleAddNewObjective}
-                      disabled={questionsGenerating}
+                      disabled={questionsGenerating || enriching}
                       title={questionsGenerating ? 'Cannot add while generating questions' : 'Add new learning objective'}
                     >
                       <Plus size={16} />
                       Add New
                     </button>
+                    {objectivesMissingDetails.length > 0 && assignedMaterials.length > 0 && (
+                      <button
+                        className="btn btn-outline"
+                        onClick={handleEnrichMissingObjectives}
+                        disabled={questionsGenerating || enriching}
+                        title="Use AI to add subpoints and material references to objectives that need details"
+                      >
+                        <Link2 size={16} />
+                        {enriching ? 'Linking...' : `AI Link Missing (${objectivesMissingDetails.length})`}
+                      </button>
+                    )}
                     <button 
                       className="btn btn-outline btn-danger" 
                       onClick={handleDeleteAll}
-                      disabled={questionsGenerating}
+                      disabled={questionsGenerating || enriching}
                       title={questionsGenerating ? 'Cannot delete while generating questions' : 'Delete all learning objectives'}
                     >
                       <X size={16} />
@@ -861,7 +1128,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                     <button 
                       className="btn btn-outline" 
                       onClick={handleRegenerateAll}
-                      disabled={questionsGenerating}
+                      disabled={questionsGenerating || enriching}
                       title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate all learning objectives'}
                     >
                       <Sparkles size={16} />
@@ -871,7 +1138,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                 </div>
 
                 <div className="objectives-items">
-                  {currentObjectives.map((objective, index) => (
+                  {currentObjectives.map((objective, index) => {
+                    const objectiveData = reduxObjectives[index] || objectives[index];
+                    const metadata = objectiveData?.generationMetadata;
+                    const sourceReferences = objectiveData?.generationMetadata?.sourceReferences || [];
+                    const primaryReference = sourceReferences[0];
+                    const subpoints = metadata?.subpoints || [];
+
+                    return (
                       <div 
                         key={index} 
                         className="objective-item"
@@ -899,7 +1173,60 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                               </div>
                           ) : (
                               <div className="objective-display">
-                                <p>{objective}</p>
+                                <div className="objective-main">
+                                  {(metadata?.title || metadata?.sourceOutlineSection || metadata?.bloomLevel) && (
+                                    <div className="objective-metadata-header">
+                                      {metadata?.title && (
+                                        <h5>{metadata.title}</h5>
+                                      )}
+                                      <div className="objective-metadata-tags">
+                                        {metadata?.sourceOutlineSection && (
+                                          <span>{metadata.sourceOutlineSection}</span>
+                                        )}
+                                        {metadata?.bloomLevel && (
+                                          <span>{metadata.bloomLevel}</span>
+                                        )}
+                                        {metadata?.promptSource && (
+                                          <span>
+                                            Prompt: {metadata.promptSource}
+                                            {metadata.promptVersion ? ` v${metadata.promptVersion}` : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <p>{objective}</p>
+                                  {subpoints.length > 0 && (
+                                    <ul className="objective-subpoints">
+                                      {subpoints.map((subpoint, subpointIndex) => (
+                                        <li key={subpointIndex}>{subpoint}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {primaryReference && (
+                                    <button
+                                      type="button"
+                                      className="objective-source-reference"
+                                      onClick={() => setPreviewReference(primaryReference)}
+                                      title="Preview cited source"
+                                    >
+                                      <div className="objective-source-summary">
+                                        <span>Based on</span>
+                                        <strong>{primaryReference.materialName || primaryReference.sourceFile || 'Course material'}</strong>
+                                        {typeof primaryReference.pageNumber === 'number' ? (
+                                          <em>Page {primaryReference.pageNumber}</em>
+                                        ) : typeof primaryReference.chunkIndex === 'number' ? (
+                                          <em>Chunk {primaryReference.chunkIndex + 1}</em>
+                                        ) : null}
+                                      </div>
+                                      {primaryReference.excerpt && (
+                                        <div className="objective-source-excerpt">
+                                          <strong>Evidence:</strong> {primaryReference.excerpt}
+                                        </div>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
                                 <div className="objective-actions">
                                   <button 
                                     className="btn btn-ghost" 
@@ -928,7 +1255,8 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                           )}
                         </div>
                       </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
           )}
@@ -945,28 +1273,40 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                   <p>You have defined {currentObjectives.length} learning objective{currentObjectives.length !== 1 ? 's' : ''} for this quiz.</p>
                 </div>
                 <div className="nav-actions">
-                  <button
-                    className="btn btn-primary btn-nav"
-                    onClick={() => {
-                      if (onNavigateNext) {
-                        onNavigateNext();
-                      } else {
-                        // Fallback method
-                        const tabButtons = document.querySelectorAll('button');
-                        const questionsTab = Array.from(tabButtons).find(button =>
-                          button.textContent?.includes('Generate Questions')
-                        );
-                        if (questionsTab) {
-                          questionsTab.click();
-                          setTimeout(() => {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }, 200);
-                        }
-                      }
-                    }}
+                  <FeatureCoachmark
+                    isOpen={objectivesTutorial.isActive}
+                    title="Review coverage before generating"
+                    description="Each learning objective can include subpoints and source evidence. The AI Blueprint uses these details to decide question focus, type, difficulty, and count."
+                    eyebrow="Learning objectives"
+                    placement="top-end"
+                    onPrimary={objectivesTutorial.complete}
+                    onDismiss={objectivesTutorial.complete}
+                    onSkip={objectivesTutorial.skipAll}
                   >
-                    Next: Generate Questions
-                  </button>
+                    <button
+                      className="btn btn-primary btn-nav"
+                      onClick={() => {
+                        objectivesTutorial.complete();
+                        if (onNavigateNext) {
+                          onNavigateNext();
+                        } else {
+                          // Fallback method
+                          const tabButtons = document.querySelectorAll('button');
+                          const questionsTab = Array.from(tabButtons).find(button =>
+                            button.textContent?.includes('Generate Questions')
+                          );
+                          if (questionsTab) {
+                            questionsTab.click();
+                            setTimeout(() => {
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }, 200);
+                          }
+                        }
+                      }}
+                    >
+                      Next: Generate Questions
+                    </button>
+                  </FeatureCoachmark>
                 </div>
               </div>
             </div>
@@ -1088,6 +1428,13 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
           </div>
         )}
       </div>
+      {previewReference && (
+        <SourceReferencePreviewModal
+          reference={previewReference}
+          onClose={() => setPreviewReference(null)}
+        />
+      )}
+    </>
   );
 };
 

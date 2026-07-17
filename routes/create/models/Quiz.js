@@ -127,12 +127,48 @@ const quizSchema = new mongoose.Schema({
       learningObjective: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'LearningObjective',
-        required: true
+        default: null,
+        required() {
+          return !this.customPrompt?.trim();
+        }
       },
       count: {
         type: Number,
         required: true,
         min: 1
+      },
+      pedagogicalIntent: {
+        type: String,
+        enum: ['support', 'assess', 'gamify']
+      },
+      bloomLevel: {
+        type: String,
+        enum: ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
+      },
+      difficulty: {
+        type: String,
+        enum: ['easy', 'moderate', 'hard']
+      },
+      focusArea: {
+        type: String,
+        maxlength: 300
+      },
+      rationale: {
+        type: String,
+        maxlength: 1000
+      },
+      selectionMode: {
+        type: String,
+        enum: ['single', 'multiple']
+      },
+      customPrompt: {
+        type: String,
+        trim: true,
+        maxlength: 4000
+      },
+      useCustomPromptOnly: {
+        type: Boolean,
+        default: false
       },
       branchingLayers: {
         type: Number,
@@ -147,6 +183,14 @@ const quizSchema = new mongoose.Schema({
     }],
 
     aiConfig: {
+      autoRecommendTotalQuestions: {
+        type: Boolean,
+        default: true
+      },
+      autoRecommendTotalQuestionsUserSet: {
+        type: Boolean,
+        default: false
+      },
       totalQuestions: {
         type: Number,
         default: 30,

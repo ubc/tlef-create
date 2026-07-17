@@ -15,6 +15,13 @@ const GOOGLE_MODELS = [
   'gemini-1.5-pro'
 ];
 
+const OPENAI_MODELS = [
+  'gpt-4o-mini',
+  'gpt-5.4-nano',
+  'gpt-5.4-mini',
+  'gpt-5.6-luna'
+];
+
 function detectProviderFromKey(key) {
   if (key.startsWith('sk-ant-')) return 'anthropic';
   if (key.startsWith('sk-')) return 'openai';
@@ -41,7 +48,7 @@ router.post('/models', authenticateToken, asyncHandler(async (req, res) => {
     return successResponse(res, { provider, models: GOOGLE_MODELS }, 'Models retrieved');
   }
 
-  // OpenAI — fetch live model list
+  // OpenAI — validate the key, then return the product-supported model choices.
   try {
     const response = await fetch('https://api.openai.com/v1/models', {
       headers: { Authorization: `Bearer ${key}` }
@@ -49,13 +56,8 @@ router.post('/models', authenticateToken, asyncHandler(async (req, res) => {
     if (!response.ok) {
       return errorResponse(res, 'Invalid OpenAI API key or insufficient permissions', 'INVALID_KEY', 401);
     }
-    const data = await response.json();
-    const PREFERRED = ['gpt-5-nano', 'gpt-5.5'];
-    const FALLBACK  = ['gpt-4o-mini', 'gpt-4o'];
-    const available = new Set(data.data.map(m => m.id));
-    const preferred = PREFERRED.filter(m => available.has(m));
-    const models = preferred.length > 0 ? preferred : FALLBACK.filter(m => available.has(m));
-    return successResponse(res, { provider, models }, 'Models retrieved');
+
+    return successResponse(res, { provider, models: OPENAI_MODELS }, 'Models retrieved');
   } catch {
     return errorResponse(res, 'Failed to fetch models from OpenAI', 'FETCH_ERROR', 500);
   }

@@ -1,5 +1,6 @@
 // API Service Layer for TLEF-CREATE Backend Integration
 import { API_URL } from '../config/api';
+import { notifyAuthExpired } from '../utils/authEvents';
 
 const API_BASE = API_URL;
 
@@ -48,11 +49,100 @@ export interface Material {
     message: string;
     timestamp: string;
   };
+  processingMetadata?: {
+    pageCount?: number;
+    chunkCount?: number;
+    parserVersion?: string;
+    processedAt?: string;
+  };
   qdrantDocumentId?: string;
   timesUsedInQuiz: number;
   lastUsed?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SourceReference {
+  materialId?: string;
+  materialName?: string;
+  sourceFile?: string;
+  chunkIndex?: number;
+  pageNumber?: number;
+  pageStart?: number;
+  pageEnd?: number;
+  excerpt?: string;
+  relevanceScore?: number;
+  section?: string;
+  sectionId?: string;
+}
+
+export interface MaterialReferenceDetail {
+  materialId: string;
+  materialName: string;
+  materialType: Material['type'];
+  sourceFile?: string;
+  pageNumber?: number;
+  pageCount?: number;
+  chunkIndex: number;
+  section?: string;
+  excerpt?: string;
+  pageContext?: string;
+  hasSourceFile: boolean;
+  sourceUrl?: string;
+  mimeType?: string;
+  previewKind: 'pdf' | 'url' | 'document' | 'text';
+}
+
+export interface CoverageMap {
+  quizId: string;
+  generatedAt: string;
+  materials: Array<{
+    id: string;
+    name: string;
+    type: string;
+    processingStatus?: string;
+  }>;
+  summary: {
+    topicCount: number;
+    learningObjectiveCount: number;
+    linkedQuestionCount: number;
+    uncoveredLearningObjectiveCount: number;
+  };
+  topics: Array<{
+    id: string;
+    label: string;
+    sourceReferences: SourceReference[];
+    linkedLearningObjectiveIds: string[];
+    linkedQuestionIds: string[];
+    subtopics: Array<{
+      id: string;
+      label: string;
+      learningObjective: {
+        id: string;
+        text: string;
+        order: number;
+        bloomLevel?: string;
+        rationale?: string;
+        subpoints?: string[];
+        sourceReferences?: SourceReference[];
+      };
+      sourceReferences: SourceReference[];
+      linkedQuestions: Array<{
+        id: string;
+        type: string;
+        text: string;
+        order: number;
+        difficulty?: string;
+        focusArea?: string;
+        subObjective?: string;
+        plannedSlice?: string;
+        bloomLevel?: string;
+        sourceReferences?: SourceReference[];
+      }>;
+      coverageStatus: 'covered' | 'needs-questions';
+    }>;
+  }>;
+  uncoveredLearningObjectiveIds: string[];
 }
 
 export interface Quiz {
@@ -82,13 +172,22 @@ export interface Quiz {
     targetFormat?: 'column' | 'interactive-book' | 'question-set' | 'standalone' | 'mixed-activity';
     planItems?: Array<{
       type: string;
-      learningObjective: string;
+      learningObjective: string | null;
       count: number;
+      pedagogicalIntent?: 'support' | 'assess' | 'gamify';
+      bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+      difficulty?: 'easy' | 'moderate' | 'hard';
+      focusArea?: string;
+      rationale?: string;
       selectionMode?: 'single' | 'multiple';
+      customPrompt?: string;
+      useCustomPromptOnly?: boolean;
       branchingLayers?: number;
       branchingChoices?: number;
     }>;
     aiConfig?: {
+      autoRecommendTotalQuestions?: boolean;
+      autoRecommendTotalQuestionsUserSet?: boolean;
       totalQuestions: number;
       approach: 'support' | 'assess' | 'gamify';
       additionalInstructions?: string;
@@ -128,6 +227,35 @@ export interface LearningObjective {
     isAIGenerated: boolean;
     llmModel?: string;
     generationPrompt?: string;
+    sourceReferences?: Array<{
+      materialId?: string;
+      materialName?: string;
+      sourceFile?: string;
+      chunkIndex?: number;
+      pageNumber?: number;
+      pageStart?: number;
+      pageEnd?: number;
+      excerpt?: string;
+      relevanceScore?: number;
+      section?: string;
+      sectionId?: string;
+    }>;
+    title?: string;
+    topic?: string;
+    subtopic?: string;
+    sourceOutlineSection?: string;
+    sourceSectionIds?: string[];
+    subpoints?: string[];
+    bloomLevel?: string;
+    rationale?: string;
+    promptSource?: string;
+    promptVersion?: number;
+    coverageDiagnostics?: {
+      requiredSectionCount?: number;
+      coveredSectionCount?: number;
+      missingSectionIds?: string[];
+      repairApplied?: boolean;
+    };
     confidence?: number;
     processingTime?: number;
   };
@@ -179,6 +307,68 @@ export interface GenerationPlan {
   updatedAt: string;
 }
 
+export type CoursePromptType =
+  | 'quiz-blueprint'
+  | 'learning-objectives'
+  | 'question-generation'
+  | 'coverage-map'
+  | 'history-summary'
+  | 'question-validation';
+
+export type CoursePromptApproach = 'support' | 'assess' | 'gamify' | 'general';
+
+export interface PromptValidationResult {
+  status: 'valid' | 'warning' | 'invalid';
+  errors: string[];
+  warnings: string[];
+  suggestions: string[];
+  validatedAt?: string;
+  aiReview?: {
+    attempted: boolean;
+    available: boolean;
+    provider?: string;
+    model?: string;
+    error?: string;
+  };
+}
+
+export interface CoursePromptOverride {
+  _id: string;
+  folder: string;
+  user: string;
+  promptType: CoursePromptType;
+  approach: CoursePromptApproach;
+  name: string;
+  customInnerPrompt: string;
+  version: number;
+  isActive: boolean;
+  validation?: PromptValidationResult;
+  parentVersion?: string;
+  sourceOverride?: string;
+  sourceFolder?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CoursePromptLibraryItem = Omit<CoursePromptOverride, 'folder'> & {
+  folder: {
+    _id: string;
+    name: string;
+  };
+};
+
+export interface EffectiveCoursePrompt {
+  promptType: CoursePromptType;
+  approach: CoursePromptApproach;
+  source: 'course' | 'user' | 'system';
+  innerPrompt: string;
+  outerPrompt: string;
+  systemDefault: string;
+  activeOverride?: CoursePromptOverride | null;
+  userOverride?: Record<string, unknown> | null;
+  systemTemplate?: Record<string, unknown> | null;
+}
+
 // Base API client with error handling
 class ApiClient {
   private baseUrl: string;
@@ -216,6 +406,10 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          notifyAuthExpired();
+        }
+
         // Backend returns structured error responses
         if (data && typeof data === 'object' && data.error) {
           const apiError = new ApiError(data.error.message, response.status, data.error.code, data.error.details);
@@ -281,6 +475,10 @@ class ApiClient {
       const response = await fetch(url, config);
       
       if (!response.ok) {
+        if (response.status === 401) {
+          notifyAuthExpired();
+        }
+
         // Try to get error message if available
         const contentType = response.headers.get('content-type');
         if (contentType?.includes('application/json')) {
@@ -336,6 +534,10 @@ class ApiClient {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve(data as T);
           } else {
+            if (xhr.status === 401) {
+              notifyAuthExpired();
+            }
+
             // Handle error responses
             const errorData = data as Record<string, Record<string, unknown>>;
             if (data && typeof data === 'object' && (data as Record<string, unknown>).error) {
@@ -448,6 +650,110 @@ export const foldersApi = {
   },
 };
 
+// Course Prompt API
+export const coursePromptsApi = {
+  getPrompt: async (
+    folderId: string,
+    promptType: CoursePromptType = 'quiz-blueprint',
+    approach: CoursePromptApproach = 'support'
+  ): Promise<{ prompt: EffectiveCoursePrompt }> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      data: { prompt: EffectiveCoursePrompt };
+      message: string;
+    }>(`/course-prompts/folder/${folderId}?promptType=${encodeURIComponent(promptType)}&approach=${encodeURIComponent(approach)}`);
+    return response.data;
+  },
+
+  getHistory: async (
+    folderId: string,
+    promptType: CoursePromptType = 'quiz-blueprint',
+    approach: CoursePromptApproach = 'support'
+  ): Promise<{ history: CoursePromptOverride[] }> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      data: { history: CoursePromptOverride[] };
+      message: string;
+    }>(`/course-prompts/folder/${folderId}/history?promptType=${encodeURIComponent(promptType)}&approach=${encodeURIComponent(approach)}`);
+    return response.data;
+  },
+
+  getLibrary: async (
+    folderId: string,
+    promptType: CoursePromptType = 'quiz-blueprint',
+    approach: CoursePromptApproach = 'support'
+  ): Promise<{ library: CoursePromptLibraryItem[] }> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      data: { library: CoursePromptLibraryItem[] };
+      message: string;
+    }>(`/course-prompts/library?promptType=${encodeURIComponent(promptType)}&approach=${encodeURIComponent(approach)}&excludeFolderId=${encodeURIComponent(folderId)}`);
+    return response.data;
+  },
+
+  validatePrompt: async (
+    customInnerPrompt: string,
+    promptType: CoursePromptType = 'quiz-blueprint'
+  ): Promise<{ validation: PromptValidationResult }> => {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: { validation: PromptValidationResult };
+      message: string;
+    }>('/course-prompts/validate', { customInnerPrompt, promptType });
+    return response.data;
+  },
+
+  savePrompt: async (
+    folderId: string,
+    data: {
+      customInnerPrompt: string;
+      promptType?: CoursePromptType;
+      approach?: CoursePromptApproach;
+      name?: string;
+    }
+  ): Promise<{ prompt: CoursePromptOverride; validation: PromptValidationResult }> => {
+    const response = await apiClient.put<{
+      success: boolean;
+      data: { prompt: CoursePromptOverride; validation: PromptValidationResult };
+      message: string;
+    }>(`/course-prompts/folder/${folderId}`, data);
+    return response.data;
+  },
+
+  resetPrompt: async (
+    folderId: string,
+    promptType: CoursePromptType = 'quiz-blueprint',
+    approach: CoursePromptApproach = 'support'
+  ): Promise<{ prompt: EffectiveCoursePrompt }> => {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: { prompt: EffectiveCoursePrompt };
+      message: string;
+    }>(`/course-prompts/folder/${folderId}/reset`, { promptType, approach });
+    return response.data;
+  },
+
+  applyPrompt: async (
+    folderId: string,
+    overrideId: string
+  ): Promise<{
+    prompt: EffectiveCoursePrompt;
+    appliedOverride: CoursePromptOverride;
+    validation: PromptValidationResult;
+  }> => {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: {
+        prompt: EffectiveCoursePrompt;
+        appliedOverride: CoursePromptOverride;
+        validation: PromptValidationResult;
+      };
+      message: string;
+    }>(`/course-prompts/folder/${folderId}/apply/${overrideId}`, {});
+    return response.data;
+  },
+};
+
 // Materials API
 export const materialsApi = {
   // POST /api/create/materials/upload - Upload files (PDF, DOCX)
@@ -515,6 +821,22 @@ export const materialsApi = {
     const response = await apiClient.get<{ success: boolean; data: { domains: string[] | null }; message: string }>('/materials/allowed-domains');
     return response.data;
   },
+
+  getReference: async (reference: SourceReference): Promise<MaterialReferenceDetail> => {
+    if (!reference.materialId) {
+      throw new Error('A material ID is required to preview a source reference.');
+    }
+    const response = await apiClient.post<{ success: boolean; data: MaterialReferenceDetail; message: string }>(
+      `/materials/${reference.materialId}/reference/resolve`,
+      reference
+    );
+    return response.data;
+  },
+
+  getSourceFile: async (materialId: string): Promise<Blob> => {
+    return apiClient.getBlob(`/materials/${materialId}/file`);
+  },
+
 };
 
 // Quiz API
@@ -577,8 +899,15 @@ export const objectivesApi = {
   },
 
   // POST /api/create/objectives/generate - AI generate from materials
-  generateObjectives: async (quizId: string, materialIds: string[], targetCount?: number, customPrompt?: string): Promise<{ objectives: LearningObjective[] }> => {
-    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives/generate', { quizId, materialIds, targetCount, customPrompt });
+  generateObjectives: async (quizId: string, materialIds: string[], targetCount?: number, customPrompt?: string, replaceExisting = false, sessionId?: string): Promise<{ objectives: LearningObjective[] }> => {
+    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives/generate', {
+      quizId,
+      materialIds,
+      targetCount,
+      customPrompt,
+      replaceExisting,
+      sessionId
+    });
     return response.data;
   },
 
@@ -592,7 +921,16 @@ export const objectivesApi = {
   saveObjectives: async (quizId: string, objectives: { text: string; order: number }[]): Promise<{ objectives: LearningObjective[] }> => {
     // Send as array with quizId included in each objective for batch creation
     const objectivesWithQuizId = objectives.map(obj => ({ ...obj, quizId }));
-    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives', objectivesWithQuizId);
+    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives?mode=append', objectivesWithQuizId);
+    return response.data;
+  },
+
+  // POST /api/create/objectives/enrich - Add AI subpoints and source links to existing objectives
+  enrichObjectives: async (quizId: string, objectiveIds?: string[]): Promise<{ objectives: LearningObjective[] }> => {
+    const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives/enrich', {
+      quizId,
+      objectiveIds
+    });
     return response.data;
   },
 
@@ -654,23 +992,76 @@ export const plansApi = {
   // POST /api/create/plans/generate-ai - Generate AI-powered plan (NEW)
   generateAIPlan: async (
     quizId: string,
-    totalQuestions: number,
+    totalQuestions: number | undefined,
     approach: 'support' | 'assess' | 'gamify',
-    additionalInstructions?: string
+    additionalInstructions?: string,
+    sessionId?: string
   ): Promise<{
+    recommendedTotalQuestions?: number;
+    totalQuestionStrategy?: 'user-specified' | 'ai-recommended';
+    totalQuestionRationale?: string;
+    questionBudget?: {
+      method: string;
+      approach: 'support' | 'assess' | 'gamify';
+      total: number;
+      allocations: Array<{
+        learningObjectiveIndex: number;
+        count: number;
+        subpointCount: number;
+        bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+        rationale: string;
+      }>;
+    };
+    promptProvenance?: {
+      promptType: 'quiz-blueprint';
+      source: 'course' | 'user' | 'system';
+      version: number | null;
+      approach: 'support' | 'assess' | 'gamify';
+    };
     planItems: Array<{
       type: string;
       learningObjectiveIndex: number;
       count: number;
+      pedagogicalIntent?: 'support' | 'assess' | 'gamify';
+      bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+      difficulty?: 'easy' | 'moderate' | 'hard';
+      focusArea?: string;
+      rationale?: string;
     }>
   }> => {
     const response = await apiClient.post<{
       success: boolean;
       data: {
+        recommendedTotalQuestions?: number;
+        totalQuestionStrategy?: 'user-specified' | 'ai-recommended';
+        totalQuestionRationale?: string;
+        questionBudget?: {
+          method: string;
+          approach: 'support' | 'assess' | 'gamify';
+          total: number;
+          allocations: Array<{
+            learningObjectiveIndex: number;
+            count: number;
+            subpointCount: number;
+            bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+            rationale: string;
+          }>;
+        };
+        promptProvenance?: {
+          promptType: 'quiz-blueprint';
+          source: 'course' | 'user' | 'system';
+          version: number | null;
+          approach: 'support' | 'assess' | 'gamify';
+        };
         planItems: Array<{
           type: string;
           learningObjectiveIndex: number;
           count: number;
+          pedagogicalIntent?: 'support' | 'assess' | 'gamify';
+          bloomLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+          difficulty?: 'easy' | 'moderate' | 'hard';
+          focusArea?: string;
+          rationale?: string;
         }>
       };
       message: string
@@ -678,7 +1069,8 @@ export const plansApi = {
       quizId,
       totalQuestions,
       approach,
-      additionalInstructions
+      additionalInstructions,
+      sessionId
     });
     return response.data;
   },
@@ -729,6 +1121,18 @@ export const plansApi = {
     const response = await apiClient.delete<{ success: boolean; message: string }>(`/plans/${id}`);
     return { message: response.message };
   },
+};
+
+export const coverageMapApi = {
+  getQuizCoverageMap: async (quizId: string): Promise<CoverageMap> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      data: CoverageMap;
+      message: string;
+    }>(`/coverage-map/quiz/${quizId}`);
+
+    return response.data;
+  }
 };
 
 // Types for streaming question generation
@@ -964,6 +1368,23 @@ export interface Question {
     generatedFrom: string[];
     llmModel: string;
     generationPrompt: string;
+    sourceReferences?: Array<{
+      materialId?: string;
+      materialName?: string;
+      sourceFile?: string;
+      chunkIndex?: number;
+      pageNumber?: number;
+      pageStart?: number;
+      pageEnd?: number;
+      excerpt?: string;
+      relevanceScore?: number;
+      section?: string;
+      sectionId?: string;
+    }>;
+    focusArea?: string;
+    bloomLevel?: string;
+    pedagogicalIntent?: string;
+    planRationale?: string;
     confidence: number;
     processingTime: number;
   };
@@ -1027,6 +1448,62 @@ export const canvasApi = {
 };
 
 // Admin API
+export interface AdminGuideInteraction {
+  _id: string;
+  user?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  question: string;
+  answer: string;
+  context?: { route?: string; pageTitle?: string; activeTab?: string };
+  sources?: Array<{ title?: string; section?: string; sourcePath?: string; navigationPath?: string }>;
+  model?: string;
+  fallback: boolean;
+  status: 'processing' | 'completed' | 'failed';
+  durationMs?: number;
+  rating?: { value?: 'helpful' | 'not-helpful'; reasons?: string[]; comment?: string; ratedAt?: string };
+  createdAt: string;
+}
+
+export interface AdminAuditEvent {
+  _id: string;
+  actor?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  action: string;
+  resourceType?: string;
+  resourceId?: string;
+  folder?: { _id: string; name: string };
+  quiz?: { _id: string; name: string };
+  status: 'success' | 'failed';
+  route?: string;
+  method?: string;
+  statusCode?: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AdminCourseSummary {
+  _id: string;
+  name: string;
+  stats?: { totalQuizzes?: number; totalQuestions?: number; totalMaterials?: number; lastActivity?: string };
+  materials?: string[];
+  quizzes?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCourseDetail extends AdminCourseSummary {
+  instructor?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  materials: Array<Record<string, any>>;
+  quizzes: Array<Record<string, any>>;
+}
+
+export interface AdminQuizDetail extends Record<string, any> {
+  _id: string;
+  name: string;
+  materials: Array<Record<string, any>>;
+  learningObjectives: Array<Record<string, any>>;
+  questions: Array<Record<string, any>>;
+  generationPlans: Array<Record<string, any>>;
+}
+
 export const adminApi = {
   submitReport: async (type: string, description: string, email?: string): Promise<ApiResponse> => {
     return await apiClient.post('/admin/reports', { type, description, email });
@@ -1042,14 +1519,41 @@ export const adminApi = {
   },
 
   getStats: async (): Promise<ApiResponse<{
-    platform: { totalUsers: number; totalFolders: number; totalQuizzes: number; totalQuestions: number; openReports: number };
-    users: Array<{ cwlId: string; coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
+    platform: { totalUsers: number; totalFolders: number; totalQuizzes: number; totalQuestions: number; totalGuideInteractions: number; activeUsers30d: number; guideHelpful: number; guideNotHelpful: number; openReports: number };
+    users: Array<{ _id: string; cwlId: string; coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
   }>> => {
     return await apiClient.get('/admin/stats');
   },
 
-  getUsers: async (): Promise<ApiResponse<{ users: Array<{ _id: string; cwlId: string; displayName: string; email: string; canUseEnvKey: boolean; lastLogin: string; createdAt: string }> }>> => {
+  getUsers: async (): Promise<ApiResponse<{ users: Array<{ _id: string; cwlId: string; displayName: string; email: string; canUseEnvKey: boolean; stats?: Record<string, number | string>; lastLogin: string; createdAt: string }> }>> => {
     return await apiClient.get('/admin/users');
+  },
+
+  getGuideInsights: async (params: { rating?: string; status?: string; search?: string; limit?: number } = {}): Promise<ApiResponse<{
+    interactions: AdminGuideInteraction[];
+    total: number;
+    summary: { total: number; helpful: number; notHelpful: number; fallback: number; failed: number; helpfulRate: number | null };
+    commonQuestions: Array<{ question: string; count: number }>;
+  }>> => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]));
+    return await apiClient.get(`/admin/guide-insights${query.size ? `?${query}` : ''}`);
+  },
+
+  getActivity: async (params: { userId?: string; action?: string; status?: string; from?: string; to?: string; limit?: number } = {}): Promise<ApiResponse<{ events: AdminAuditEvent[]; actions: string[] }>> => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== '').map(([key, value]) => [key, String(value)]));
+    return await apiClient.get(`/admin/activity${query.size ? `?${query}` : ''}`);
+  },
+
+  getUserCourses: async (userId: string): Promise<ApiResponse<{ user: Record<string, any>; courses: AdminCourseSummary[] }>> => {
+    return await apiClient.get(`/admin/users/${userId}/courses`);
+  },
+
+  getAdminCourse: async (courseId: string): Promise<ApiResponse<{ course: AdminCourseDetail }>> => {
+    return await apiClient.get(`/admin/courses/${courseId}`);
+  },
+
+  getAdminQuiz: async (quizId: string): Promise<ApiResponse<{ quiz: AdminQuizDetail }>> => {
+    return await apiClient.get(`/admin/quizzes/${quizId}`);
   },
 
   updateEnvKeyPermission: async (userId: string, canUseEnvKey: boolean): Promise<ApiResponse> => {
