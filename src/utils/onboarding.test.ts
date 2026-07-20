@@ -29,6 +29,18 @@ describe('feature onboarding state', () => {
     expect(readOnboardingState().completed).toEqual(['question-evidence']);
   });
 
+  it('tracks the CREATE Guide tutorial independently', () => {
+    completeOnboardingStep('create-guide');
+
+    expect(readOnboardingState().completed).toEqual(['create-guide']);
+  });
+
+  it('tracks the objective enrichment tutorial independently', () => {
+    completeOnboardingStep('objective-enrichment');
+
+    expect(readOnboardingState().completed).toEqual(['objective-enrichment']);
+  });
+
   it('can skip and restart the tutorial sequence', () => {
     completeOnboardingStep('course-materials');
     skipOnboarding();
@@ -56,4 +68,3 @@ describe('feature onboarding state', () => {
     });
   });
 });
-

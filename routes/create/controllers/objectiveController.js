@@ -10,6 +10,11 @@ import { HTTP_STATUS } from '../config/constants.js';
 import llmService from '../services/llmService.js';
 import coursePromptService from '../services/coursePromptService.js';
 import sseService from '../services/sseService.js';
+import {
+  buildInstructorMetadata,
+  mergeInstructorProtectedMetadata,
+  validateInstructorMetadata
+} from '../utils/learningObjectiveMetadata.js';
 
 const router = express.Router();
 
@@ -440,9 +445,8 @@ router.post('/enrich', authenticateToken, asyncHandler(async (req, res) => {
       const nextSourceSectionIds = Array.isArray(enrichment.sourceSectionIds) && enrichment.sourceSectionIds.length > 0
         ? enrichment.sourceSectionIds
         : (existingMetadata.sourceSectionIds || []);
-      const nextSubpoints = Array.isArray(enrichment.subpoints) && enrichment.subpoints.length > 0
-        ? enrichment.subpoints
-        : (existingMetadata.subpoints || []);
+      const protectedMetadata = mergeInstructorProtectedMetadata(existingMetadata, enrichment);
+      const nextSubpoints = protectedMetadata.subpoints;
       const hasUsefulEnrichment = nextSourceReferences.length > 0
         || nextSourceSectionIds.length > 0
         || nextSubpoints.length > 0;
@@ -466,7 +470,7 @@ router.post('/enrich', authenticateToken, asyncHandler(async (req, res) => {
         sourceOutlineSection: enrichment.sourceOutlineSection || existingMetadata.sourceOutlineSection || '',
         sourceSectionIds: nextSourceSectionIds,
         subpoints: nextSubpoints,
-        bloomLevel: enrichment.bloomLevel || existingMetadata.bloomLevel || '',
+        bloomLevel: protectedMetadata.bloomLevel,
         rationale: enrichment.rationale || existingMetadata.rationale || '',
         promptSource: objectivePrompt.source,
         promptVersion: objectivePrompt.version || undefined,
@@ -479,14 +483,34 @@ router.post('/enrich', authenticateToken, asyncHandler(async (req, res) => {
       updatedObjectives.push(objective);
     }
 
+    if (updatedObjectives.length === 0) {
+      return errorResponse(
+        res,
+        'CREATE could not retrieve source evidence from the assigned materials. Reprocess any completed materials with empty previews, then retry AI Link Missing.',
+        'NO_SOURCE_EVIDENCE',
+        HTTP_STATUS.UNPROCESSABLE_ENTITY,
+        {
+          requestedObjectiveCount: objectives.length,
+          inventorySectionCount: enrichmentResult.enrichmentDiagnostics?.inventorySectionCount || 0,
+          modelError: enrichmentResult.enrichmentDiagnostics?.modelError || undefined
+        }
+      );
+    }
+
     return successResponse(res, {
       objectives: updatedObjectives,
       metadata: {
         enrichedCount: updatedObjectives.length,
+        skippedCount: objectives.length - updatedObjectives.length,
         materialsUsed: materials.length,
-        generationModel: enrichmentResult.llmModel || 'unknown'
+        generationModel: enrichmentResult.llmModel || 'unknown',
+        modelAssistedCount: enrichmentResult.enrichmentDiagnostics?.modelAssistedCount || 0,
+        fallbackCount: enrichmentResult.enrichmentDiagnostics?.fallbackCount || 0,
+        usedSourceGroundedFallback: Boolean(enrichmentResult.enrichmentDiagnostics?.fallbackCount)
       }
-    }, 'Learning objectives enriched successfully');
+    }, enrichmentResult.enrichmentDiagnostics?.modelError
+      ? 'Learning objectives linked using the source-grounded fallback'
+      : 'Learning objectives enriched successfully');
   } catch (error) {
     console.error('Objective enrichment error:', error);
     return errorResponse(
@@ -560,10 +584,17 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
           continue;
         }
 
+        const instructorMetadata = validateInstructorMetadata(objData);
+        if (instructorMetadata.error) {
+          errors.push({ data: objData, error: instructorMetadata.error });
+          continue;
+        }
+
         const objective = new LearningObjective({
           text: objData.text.trim(),
           quiz: objData.quizId,
           order: appendMode ? nextOrder + objectives.length : (objData.order ?? objectives.length),
+          generationMetadata: buildInstructorMetadata(instructorMetadata),
           createdBy: userId
         });
 
@@ -605,6 +636,12 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     return errorResponse(res, 'Text and quizId are required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
+
+  const instructorMetadata = validateInstructorMetadata(req.body);
+  if (instructorMetadata.error) {
+    return errorResponse(res, instructorMetadata.error, 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+  }
+
   // Verify quiz exists and user owns it
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
   if (!quiz) {
@@ -615,6 +652,7 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     text: text.trim(),
     quiz: quizId,
     order: order || 0,
+    generationMetadata: buildInstructorMetadata(instructorMetadata),
     createdBy: userId
   });
 
@@ -675,11 +713,17 @@ router.put('/reorder', authenticateToken, asyncHandler(async (req, res) => {
 router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
   const objectiveId = req.params.id;
   const userId = req.user.id;
-  const { text, order } = req.body;
+  const { text, order, bloomLevel, subpoints } = req.body;
 
   const objective = await LearningObjective.findOne({ _id: objectiveId, createdBy: userId });
   if (!objective) {
     return notFoundResponse(res, 'Learning objective');
+  }
+
+
+  const instructorMetadata = validateInstructorMetadata({ bloomLevel, subpoints });
+  if (instructorMetadata.error) {
+    return errorResponse(res, instructorMetadata.error, 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
   }
 
   if (text && text.trim() !== objective.text) {
@@ -688,6 +732,30 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
 
   if (order !== undefined && order !== objective.order) {
     await objective.reorder(order);
+  }
+
+  if (bloomLevel !== undefined || subpoints !== undefined) {
+    const existingMetadata = typeof objective.generationMetadata?.toObject === 'function'
+      ? objective.generationMetadata.toObject()
+      : (objective.generationMetadata || {});
+    const instructorAuthoredFields = new Set(existingMetadata.instructorAuthoredFields || []);
+
+    if (bloomLevel !== undefined) {
+      if (instructorMetadata.bloomLevel) instructorAuthoredFields.add('bloomLevel');
+      else instructorAuthoredFields.delete('bloomLevel');
+    }
+    if (subpoints !== undefined) {
+      if (instructorMetadata.subpoints?.length) instructorAuthoredFields.add('subpoints');
+      else instructorAuthoredFields.delete('subpoints');
+    }
+
+    objective.generationMetadata = {
+      ...existingMetadata,
+      ...(bloomLevel !== undefined && { bloomLevel: instructorMetadata.bloomLevel || '' }),
+      ...(subpoints !== undefined && { subpoints: instructorMetadata.subpoints || [] }),
+      instructorAuthoredFields: Array.from(instructorAuthoredFields)
+    };
+    await objective.save();
   }
 
   return successResponse(res, { objective }, 'Learning objective updated successfully');
@@ -852,18 +920,57 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
       effectiveObjectivePrompt || null,
       activeLLMConfig
     );
-    
-    const processingTime = Date.now() - startTime;
 
-    // Update the objective
+    // A rewritten objective must not retain subpoints and evidence for the old
+    // wording. Refresh its structured metadata as part of the same operation.
     objective.text = regeneratedText;
+    const enrichmentResult = await llmService.enrichLearningObjectives(
+      [objective],
+      materials,
+      `Quiz: ${objective.quiz.name}`,
+      effectiveObjectivePrompt || null,
+      userId
+    );
+    const enrichment = enrichmentResult.objectives.find(entry => (
+      entry.objectiveId === objective._id.toString()
+    ));
+    if (!enrichment) {
+      throw new Error('The regenerated objective could not be aligned with its source materials');
+    }
+
+    const existingMetadata = typeof objective.generationMetadata?.toObject === 'function'
+      ? objective.generationMetadata.toObject()
+      : (objective.generationMetadata || {});
+    const protectedMetadata = mergeInstructorProtectedMetadata(existingMetadata, enrichment);
+    const nextSourceReferences = Array.isArray(enrichment.sourceReferences)
+      ? enrichment.sourceReferences
+      : [];
+    if (nextSourceReferences.length === 0) {
+      throw new Error('No source evidence could be retrieved for the regenerated objective');
+    }
+
+    const processingTime = Date.now() - startTime;
+    objective.generatedFrom = materials.map(material => material._id);
     objective.generationMetadata = {
-      ...objective.generationMetadata,
+      ...existingMetadata,
       isAIGenerated: true,
+      aiEnriched: true,
       llmModel: activeLLMConfig.model,
-      generationPrompt: `Regenerate single learning objective (${coursePrompt.source} prompt)`,
+      generationPrompt: `Regenerate and realign single learning objective (${coursePrompt.source} prompt)`,
+      sourceReferences: nextSourceReferences,
+      title: enrichment.title || '',
+      topic: enrichment.topic || '',
+      subtopic: enrichment.subtopic || '',
+      sourceOutlineSection: enrichment.sourceOutlineSection || '',
+      sourceSectionIds: enrichment.sourceSectionIds || [],
+      subpoints: protectedMetadata.subpoints,
+      bloomLevel: protectedMetadata.bloomLevel,
+      rationale: enrichment.rationale || '',
+      promptSource: coursePrompt.source,
+      promptVersion: coursePrompt.version || undefined,
+      enrichmentDiagnostics: enrichmentResult.enrichmentDiagnostics,
       confidence: 0.8,
-      processingTime: processingTime
+      processingTime
     };
 
     await objective.save();
@@ -881,11 +988,14 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
 
   } catch (error) {
     console.error('Single objective regeneration error:', error);
+    const noApiKey = error.code === 'NO_API_KEY';
     return errorResponse(
       res, 
-      'Failed to regenerate learning objective', 
-      'AI_REGENERATION_ERROR', 
-      HTTP_STATUS.SERVICE_UNAVAILABLE
+      noApiKey
+        ? 'No AI API key is configured. Add a key in User Account, then retry.'
+        : `Failed to regenerate learning objective: ${error.message}`,
+      noApiKey ? 'NO_API_KEY' : 'AI_REGENERATION_ERROR',
+      noApiKey ? HTTP_STATUS.BAD_REQUEST : HTTP_STATUS.SERVICE_UNAVAILABLE
     );
   }
 }));

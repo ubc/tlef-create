@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Wand2, Eye, EyeOff, Info, Trash2 } from 'lucide-react';
+import { X, RotateCcw, Eye, EyeOff, Info, Trash2 } from 'lucide-react';
 import '../styles/components/RegeneratePromptModal.css';
 
 interface RegeneratePromptModalProps {
@@ -117,7 +117,7 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
       <div className="regenerate-prompt-modal">
         <div className="modal-header">
           <h3 className="modal-title">
-            <Wand2 size={20} />
+            <RotateCcw size={20} />
             Regenerate {itemType} with Custom Prompt
           </h3>
           <button className="modal-close" onClick={onClose}>
@@ -225,7 +225,7 @@ Return ONLY a valid JSON object with the required structure for ${question.type}
               </>
             ) : (
               <>
-                <Wand2 size={16} />
+                <RotateCcw size={16} />
                 Regenerate {itemType}
               </>
             )}

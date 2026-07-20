@@ -59,10 +59,26 @@
   grid-template-columns: minmax(0, 1.6fr) minmax(310px, 0.75fr);
 }
 
+.source-preview-body.is-material-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .source-preview-document,
 .source-preview-text-document {
   min-height: 680px;
   background: #e7ebef;
+}
+
+.source-preview-material-file-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px;
+  border-bottom: 1px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+.source-preview-material-file-actions .source-preview-open {
+  margin-top: 0;
 }
 
 .source-preview-text-document {
@@ -88,6 +104,13 @@
   color: #0f172a;
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.25rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.source-preview-text-heading .source-preview-open {
+  align-self: flex-start;
+  margin-top: 8px;
   letter-spacing: 0;
   text-transform: none;
 }

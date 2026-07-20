@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz, setUser } from '../store/slices/appSlice';
+import { createQuiz } from '../store/slices/quizSlice';
 import { Plus, Search, ChevronDown, ChevronRight, User, X } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
 import SearchModal from './SearchModal';
-import { foldersApi, quizApi, materialsApi, Folder, ApiError } from '../services/api';
+import { foldersApi, materialsApi, Folder, ApiError } from '../services/api';
 import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
 import '../styles/components/Sidebar.css';
@@ -20,6 +21,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   const location = useLocation();
   const dispatch = useAppDispatch();
   const { activeCourse, activeQuiz, user: reduxUser } = useAppSelector((state) => state.app);
+  const { quizzes: reduxQuizzes, selectedFolderId } = useAppSelector((state) => state.quiz);
   const { subscribe, publish } = usePubSub('Sidebar');
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -94,6 +96,32 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       loadFolders();
     });
   }, [subscribe]);
+
+  // Merge newly created Redux quizzes into the matching sidebar course immediately.
+  useEffect(() => {
+    if (!selectedFolderId || reduxQuizzes.length === 0) {
+      return;
+    }
+
+    setFolders(prev => prev.map(folder => {
+        if (folder._id !== selectedFolderId) {
+          return folder;
+        }
+
+        const existingQuizIds = new Set(
+          (folder.quizzes || []).map(quiz => typeof quiz === 'string' ? quiz : quiz._id)
+        );
+        const newQuizzes = reduxQuizzes.filter(quiz => !existingQuizIds.has(quiz._id));
+        if (newQuizzes.length === 0) {
+          return folder;
+        }
+
+        return {
+          ...folder,
+          quizzes: [...(folder.quizzes || []), ...newQuizzes]
+        };
+      }));
+  }, [reduxQuizzes, selectedFolderId]);
 
   // Listen for quiz rename events
   useEffect(() => {
@@ -249,16 +277,14 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
       const quizName = `Quiz ${quizNumber}`;
       
-      const response = await quizApi.createQuiz(quizName, folderId);
-      
-      // Reload folders to get the updated quiz list
-      await loadFolders();
+      const createdQuiz = await dispatch(createQuiz({ name: quizName, folderId })).unwrap();
 
       // Publish quiz-created event for CourseView to refresh
       publish('quiz-created', { 
-        quizId: response.quiz._id, 
+        quizId: createdQuiz._id,
         courseId: folderId,
-        quizName: response.quiz.name 
+        quizName: createdQuiz.name,
+        quiz: createdQuiz
       });
       
     } catch (err) {

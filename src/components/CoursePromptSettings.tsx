@@ -9,13 +9,37 @@ import {
   PromptValidationResult
 } from '../services/api';
 
-const PROMPT_TYPES: Array<{ value: CoursePromptType; label: string }> = [
-  { value: 'quiz-blueprint', label: 'Quiz Blueprint' },
-  { value: 'learning-objectives', label: 'Learning Objectives' },
-  { value: 'question-generation', label: 'Question Generation' },
-  { value: 'coverage-map', label: 'Coverage Map' },
-  { value: 'history-summary', label: 'Question History Summary' },
-  { value: 'question-validation', label: 'Question Validation' }
+const PROMPT_TYPES: Array<{ value: CoursePromptType; label: string; description: string }> = [
+  {
+    value: 'quiz-blueprint',
+    label: 'Quiz Blueprint',
+    description: 'Plans the quiz allocation: total count, question types, LO/subpoint coverage, Bloom levels, and difficulty.'
+  },
+  {
+    value: 'learning-objectives',
+    label: 'Learning Objectives',
+    description: 'Extracts and structures measurable learning objectives and subpoints from assigned materials.'
+  },
+  {
+    value: 'question-generation',
+    label: 'Question Generation',
+    description: 'Writes each individual question, answer, tip, and feedback by following the approved blueprint and evidence.'
+  },
+  {
+    value: 'coverage-map',
+    label: 'Coverage Map',
+    description: 'Links materials, source evidence, learning objectives, subpoints, and generated questions.'
+  },
+  {
+    value: 'history-summary',
+    label: 'Question History Summary',
+    description: 'Compresses existing questions into coverage and duplication memory for future generations.'
+  },
+  {
+    value: 'question-validation',
+    label: 'Question Validation',
+    description: 'Checks grounding, alignment, ambiguity, difficulty, and similarity before a question is accepted.'
+  }
 ];
 
 const APPROACHES: Array<{ value: CoursePromptApproach; label: string }> = [
@@ -55,6 +79,7 @@ export default function CoursePromptSettings({
   const [applyingPromptId, setApplyingPromptId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const selectedApproach = APPROACH_DEPENDENT_PROMPT_TYPES.has(promptType) ? approach : 'general';
+  const selectedPromptDefinition = PROMPT_TYPES.find(type => type.value === promptType);
 
   const loadPrompt = useCallback(async (preserveMessage = false) => {
     setIsLoading(true);
@@ -66,7 +91,7 @@ export default function CoursePromptSettings({
         coursePromptsApi.getLibrary(courseId, promptType, selectedApproach)
       ]);
       setEffectivePrompt(prompt);
-      setDraftPrompt(prompt.innerPrompt);
+      setDraftPrompt(prompt.editablePrompt ?? prompt.innerPrompt);
       setPromptName(
         prompt.activeOverride?.name
         || `${PROMPT_TYPES.find(type => type.value === promptType)?.label || 'Course'} prompt`
@@ -90,10 +115,12 @@ export default function CoursePromptSettings({
     setMessage(null);
     setIsValidating(true);
     try {
-      const result = await coursePromptsApi.validatePrompt(draftPrompt, promptType);
+      const result = await coursePromptsApi.validatePrompt(draftPrompt, promptType, selectedApproach);
       setValidation(result.validation);
       setMessage(
-        result.validation.aiReview?.available
+        result.validation.isSystemDefault
+          ? 'This is the unchanged CREATE system default. Its locked instructions and runtime context are already included, so no additional course-level fixes are required.'
+          : result.validation.aiReview?.available
           ? `Static checks and AI review completed with ${result.validation.aiReview.model}. Saving will run blocking checks again.`
           : 'Static checks completed. AI review was unavailable; saving will run blocking checks again.'
       );
@@ -132,7 +159,7 @@ export default function CoursePromptSettings({
     try {
       const result = await coursePromptsApi.resetPrompt(courseId, promptType, selectedApproach);
       setEffectivePrompt(result.prompt);
-      setDraftPrompt(result.prompt.innerPrompt);
+      setDraftPrompt(result.prompt.editablePrompt ?? result.prompt.innerPrompt);
       setValidation(null);
       await loadPrompt(true);
       setMessage('Course prompt reset to the default. Previous versions remain in history.');
@@ -148,6 +175,13 @@ export default function CoursePromptSettings({
     setDraftPrompt(value);
     setValidation(null);
     setMessage(null);
+  };
+
+  const handleApplyValidationChanges = () => {
+    if (!validation?.suggestedPrompt) return;
+    setDraftPrompt(validation.suggestedPrompt);
+    setValidation(null);
+    setMessage('Suggested changes were applied to the draft. Review the text, then Validate again before saving.');
   };
 
   const handleLoadHistory = (item: CoursePromptOverride) => {
@@ -245,12 +279,55 @@ export default function CoursePromptSettings({
             </label>
           </div>
 
-          <textarea
-            className="course-prompt-editor"
-            value={draftPrompt}
-            onChange={(event) => handleDraftChange(event.target.value)}
-            spellCheck={false}
-          />
+          <div className="course-prompt-purpose">
+            <strong>{selectedPromptDefinition?.label}</strong>
+            <span>{selectedPromptDefinition?.description}</span>
+            {promptType === 'quiz-blueprint' && (
+              <small>Blueprint decides what to generate; it does not write question content.</small>
+            )}
+            {promptType === 'question-generation' && (
+              <small>Question Generation writes content for one allocation; it does not redesign the quiz plan.</small>
+            )}
+          </div>
+
+          <div className="course-prompt-layer">
+            <div className="course-prompt-layer-heading">
+              <div>
+                <strong>Editable course instructions</strong>
+                <span>Teaching context and reusable preferences for this course and workflow.</span>
+              </div>
+              <span className="course-prompt-layer-badge is-editable">Editable</span>
+            </div>
+            <textarea
+              className="course-prompt-editor"
+              value={draftPrompt}
+              onChange={(event) => handleDraftChange(event.target.value)}
+              spellCheck={false}
+              aria-label="Editable course prompt instructions"
+            />
+          </div>
+
+          <details className="course-prompt-locked" open={promptType === 'quiz-blueprint' || promptType === 'question-generation'}>
+            <summary>
+              <span>
+                <strong>Locked CREATE instructions</strong>
+                <small>Applied to every request and cannot be changed at course level.</small>
+              </span>
+              <span className="course-prompt-layer-badge">Read only</span>
+            </summary>
+            <pre>{effectivePrompt?.lockedPrompt || 'Loading locked workflow instructions...'}</pre>
+            {effectivePrompt?.lockedGuardrails?.length ? (
+              <div className="course-prompt-guardrails">
+                <strong>Runtime guardrails</strong>
+                <ul>
+                  {effectivePrompt.lockedGuardrails.map(item => <li key={item}>{item}</li>)}
+                </ul>
+                {effectivePrompt.hasDynamicRuntimeContext && (
+                  <small>Objectives, evidence, Blueprint rows, history, and output schemas are inserted dynamically for the current request.</small>
+                )}
+              </div>
+            ) : null}
+          </details>
 
           {validation && (
             <div className={`course-prompt-validation validation-${validation.status}`}>
@@ -258,6 +335,22 @@ export default function CoursePromptSettings({
               {[...validation.errors, ...validation.warnings, ...validation.suggestions].map((item, index) => (
                 <p key={`${item}-${index}`}>{item}</p>
               ))}
+              {validation.changeSummary?.length ? (
+                <div className="course-prompt-validation-summary">
+                  <strong>Suggested changes</strong>
+                  <ul>
+                    {validation.changeSummary.map(item => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+              {validation.suggestedPrompt && (
+                <div className="course-prompt-validation-actions">
+                  <button type="button" className="btn btn-outline" onClick={handleApplyValidationChanges}>
+                    Apply Changes
+                  </button>
+                  <small>Updates the draft only. Validate again, then save when ready.</small>
+                </div>
+              )}
             </div>
           )}
 

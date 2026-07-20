@@ -16,12 +16,27 @@ export interface ApiResponse<T = unknown> {
   };
 }
 
+export type BloomLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+
+export interface LearningObjectiveInput {
+  text: string;
+  order: number;
+  bloomLevel?: BloomLevel | '';
+  subpoints?: string[];
+}
+
+export interface FolderQuizSummary {
+  _id: string;
+  name?: string;
+  questions?: string[];
+}
+
 export interface Folder {
   _id: string;
   name: string;
   instructor: string;
   materials: string[];
-  quizzes: string[];
+  quizzes: Array<string | FolderQuizSummary>;
   stats: {
     totalQuizzes: number;
     totalQuestions: number;
@@ -74,6 +89,7 @@ export interface SourceReference {
   relevanceScore?: number;
   section?: string;
   sectionId?: string;
+  previewMode?: 'material';
 }
 
 export interface MaterialReferenceDetail {
@@ -225,6 +241,7 @@ export interface LearningObjective {
   generatedFrom: string[];
   generationMetadata: {
     isAIGenerated: boolean;
+    aiEnriched?: boolean;
     llmModel?: string;
     generationPrompt?: string;
     sourceReferences?: Array<{
@@ -246,7 +263,8 @@ export interface LearningObjective {
     sourceOutlineSection?: string;
     sourceSectionIds?: string[];
     subpoints?: string[];
-    bloomLevel?: string;
+    bloomLevel?: BloomLevel;
+    instructorAuthoredFields?: Array<'bloomLevel' | 'subpoints'>;
     rationale?: string;
     promptSource?: string;
     promptVersion?: number;
@@ -256,6 +274,7 @@ export interface LearningObjective {
       missingSectionIds?: string[];
       repairApplied?: boolean;
     };
+    enrichmentDiagnostics?: Record<string, unknown>;
     confidence?: number;
     processingTime?: number;
   };
@@ -323,6 +342,9 @@ export interface PromptValidationResult {
   warnings: string[];
   suggestions: string[];
   validatedAt?: string;
+  isSystemDefault?: boolean;
+  suggestedPrompt?: string;
+  changeSummary?: string[];
   aiReview?: {
     attempted: boolean;
     available: boolean;
@@ -362,8 +384,13 @@ export interface EffectiveCoursePrompt {
   approach: CoursePromptApproach;
   source: 'course' | 'user' | 'system';
   innerPrompt: string;
+  editablePrompt: string;
+  lockedPrompt: string;
+  lockedGuardrails: string[];
+  hasDynamicRuntimeContext: boolean;
   outerPrompt: string;
   systemDefault: string;
+  systemDefaultEditablePrompt: string;
   activeOverride?: CoursePromptOverride | null;
   userOverride?: Record<string, unknown> | null;
   systemTemplate?: Record<string, unknown> | null;
@@ -693,13 +720,14 @@ export const coursePromptsApi = {
 
   validatePrompt: async (
     customInnerPrompt: string,
-    promptType: CoursePromptType = 'quiz-blueprint'
+    promptType: CoursePromptType = 'quiz-blueprint',
+    approach: CoursePromptApproach = 'support'
   ): Promise<{ validation: PromptValidationResult }> => {
     const response = await apiClient.post<{
       success: boolean;
       data: { validation: PromptValidationResult };
       message: string;
-    }>('/course-prompts/validate', { customInnerPrompt, promptType });
+    }>('/course-prompts/validate', { customInnerPrompt, promptType, approach });
     return response.data;
   },
 
@@ -918,7 +946,7 @@ export const objectivesApi = {
   },
 
   // POST /api/create/objectives - Add single LO or save batch
-  saveObjectives: async (quizId: string, objectives: { text: string; order: number }[]): Promise<{ objectives: LearningObjective[] }> => {
+  saveObjectives: async (quizId: string, objectives: LearningObjectiveInput[]): Promise<{ objectives: LearningObjective[] }> => {
     // Send as array with quizId included in each objective for batch creation
     const objectivesWithQuizId = objectives.map(obj => ({ ...obj, quizId }));
     const response = await apiClient.post<{ success: boolean; data: { objectives: LearningObjective[] }; message: string }>('/objectives?mode=append', objectivesWithQuizId);
@@ -935,7 +963,10 @@ export const objectivesApi = {
   },
 
   // PUT /api/create/objectives/:id - Update objective
-  updateObjective: async (id: string, updates: { text: string }): Promise<{ objective: LearningObjective }> => {
+  updateObjective: async (
+    id: string,
+    updates: Pick<LearningObjectiveInput, 'text' | 'bloomLevel' | 'subpoints'>
+  ): Promise<{ objective: LearningObjective }> => {
     const response = await apiClient.put<{ success: boolean; data: { objective: LearningObjective }; message: string }>(`/objectives/${id}`, updates);
     return response.data;
   },

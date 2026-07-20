@@ -24,7 +24,9 @@ Choose the smallest relevant set. Unrelated, outdated, or duplicate materials ca
 
 ## Preview extracted content
 
-Use the eye icon on a material card to inspect the content CREATE extracted. The preview is useful for confirming that headings, page text, and important passages are present before generation. A visually correct original file can still produce incomplete extracted text, especially when a PDF contains scanned images rather than selectable text.
+Use the eye icon on a material card to inspect a processed source. PDF materials open in CREATE's existing PDF viewer, starting at page 1 with page navigation and an **Open full PDF** action. URL, DOC/DOCX, and pasted-text materials show the cleaned text CREATE extracted; URL previews also provide an **Open original webpage** action, and Word previews can download the original file.
+
+The extracted-text preview is useful for confirming that headings and important passages are present before generation. A visually correct original file can still produce incomplete extracted text, especially when a PDF contains scanned images rather than selectable text.
 
 ## Page numbers and source locations
 

@@ -323,6 +323,14 @@ export const validateMongoId = [
   handleValidationErrors
 ];
 
+export const validateMaterialId = [
+  param('materialId')
+    .isMongoId()
+    .withMessage('Invalid material ID format'),
+
+  handleValidationErrors
+];
+
 export const validateFolderId = [
   param('folderId')
     .isMongoId()

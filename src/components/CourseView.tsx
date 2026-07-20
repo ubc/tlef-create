@@ -3,8 +3,10 @@ import { useState, useEffect, useRef } from 'react';
 import MaterialUpload from './MaterialUpload';
 import CoursePromptSettings from './CoursePromptSettings';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { foldersApi, materialsApi, quizApi, Folder, Material, Quiz, ApiError } from '../services/api';
+import { foldersApi, materialsApi, Material, Quiz, ApiError } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
+import { useAppDispatch } from '../hooks/redux';
+import { createQuiz } from '../store/slices/quizSlice';
 import '../styles/components/CourseView.css';
 
 interface QuizData {
@@ -22,6 +24,7 @@ interface CourseData {
 const CourseView = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { showNotification, publish, subscribe } = usePubSub('CourseView');
 
   const [course, setCourse] = useState<CourseData | null>(null);
@@ -58,10 +61,25 @@ const CourseView = () => {
 
   // Listen for quiz creation events
   useEffect(() => {
-    const handleQuizCreated = (data: { quizId: string; courseId: string; quizName: string }) => {
-      // Refresh course data to get updated quiz list
+    const handleQuizCreated = (data: { quizId: string; courseId: string; quizName: string; quiz?: Quiz }) => {
       if (data.courseId === courseId) {
-        loadCourseData();
+        setCourse(prev => {
+          if (!prev || prev.quizzes.some(quiz => quiz.id === data.quizId)) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            quizzes: [
+              ...prev.quizzes,
+              {
+                id: data.quizId,
+                name: data.quizName,
+                questionCount: data.quiz?.questions?.length || 0
+              }
+            ]
+          };
+        });
       }
     };
 
@@ -294,8 +312,7 @@ const CourseView = () => {
       }
 
       const quizName = `Quiz ${quizNumber}`;
-      const response = await quizApi.createQuiz(quizName, courseId);
-      const createdQuiz = response.quiz;
+      const createdQuiz = await dispatch(createQuiz({ name: quizName, folderId: courseId })).unwrap();
 
       setCourse(prev => prev
         ? {
@@ -315,7 +332,8 @@ const CourseView = () => {
       publish('quiz-created', {
         quizId: createdQuiz._id,
         courseId,
-        quizName: createdQuiz.name
+        quizName: createdQuiz.name,
+        quiz: createdQuiz
       });
 
       navigate(`/course/${courseId}/quiz/${createdQuiz._id}`);
@@ -383,7 +401,7 @@ const CourseView = () => {
         </div>
         <h1>{course.name}</h1>
         <p className="course-description">
-          Manage materials and learning objects for {course.name}
+          Manage materials and quizzes for {course.name}
         </p>
       </div>
 
@@ -410,11 +428,24 @@ const CourseView = () => {
 
         <div className="course-section">
           <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Learning Objects ({course.quizzes.length})</h3>
-              <p className="card-description">
-                Click on a learning object to start generating questions
-              </p>
+            <div className="card-header quiz-section-header">
+              <div>
+                <h3 className="card-title">Quizzes ({course.quizzes.length})</h3>
+                <p className="card-description">
+                  Open a quiz to assign materials, define learning objectives, and generate questions
+                </p>
+              </div>
+              {course.quizzes.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleCreateQuiz}
+                  disabled={isCreatingQuiz}
+                >
+                  <Plus size={16} />
+                  {isCreatingQuiz ? 'Creating...' : 'Add Quiz'}
+                </button>
+              )}
             </div>
 
             {course.quizzes.length === 0 ? (
@@ -432,7 +463,7 @@ const CourseView = () => {
                     {isCreatingQuiz ? 'Creating Quiz...' : 'Create Your First Quiz'}
                   </span>
                   <span className="empty-learning-object-description">
-                    Add a learning object to start defining learning objectives and generating questions.
+                    Add a quiz to start defining learning objectives and generating questions.
                   </span>
                 </button>
               </div>

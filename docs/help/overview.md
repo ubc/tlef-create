@@ -11,11 +11,15 @@ CREATE helps instructors turn course materials into evidence-grounded learning o
 - **AI Blueprint:** an editable plan that allocates question types, counts, difficulty, Bloom level, focus areas, and rationale before generation.
 - **Question:** a generated or manually created activity that can be reviewed, traced to evidence, and exported.
 
+## Create and open quizzes
+
+The course page lists saved learning objects in the **Quizzes** section using their editable names. Select **Add Quiz** to create another quiz; this button remains available when the course already has one or more quizzes. A newly created quiz appears in the course list and left sidebar immediately. Open a quiz to assign materials, define learning objectives, generate questions, review coverage, and export.
+
 ## Recommended end-to-end workflow
 
 1. From the Dashboard, create a course for the subject or teaching context.
 2. Open the course and add PDF or DOCX files, approved URLs, or pasted text.
-3. Create a learning object, open it, and assign only the relevant course materials.
+3. In Quizzes, select Add Quiz, open it, and assign only the relevant course materials.
 4. Generate learning objectives from the materials, paste existing objectives, or add them manually.
 5. Review the objectives and their subpoints, Bloom levels, and references before continuing.
 6. Open Generate Questions, choose a delivery target, format, teaching purpose, and automatic or fixed question count.
@@ -35,6 +39,8 @@ Courses, learning objects, assigned materials, objectives, plans, and generated 
 ## Using CREATE Guide
 
 CREATE Guide is the floating AI help chat available throughout the signed-in application. Ask about the page you are viewing, a workflow decision, question compatibility, exports, or troubleshooting. Its answers are grounded in this manual and include source cards. Selecting a source opens this Help Center and highlights the cited section.
+
+On first use, a short tutorial highlights the round chat button in the bottom-right corner. Select **Try CREATE Guide** to open the chat immediately, dismiss the tutorial to keep the button closed, or select **Skip tutorials** to stop all quick-tour prompts. You can replay it later from **User Account → Restart Feature Tutorials**.
 
 CREATE Guide is read-only. It cannot click controls, change a course, regenerate a question, delete data, or see information that is not included in its help sources and the current page context.
 

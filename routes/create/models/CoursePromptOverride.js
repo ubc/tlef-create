@@ -71,6 +71,7 @@ const coursePromptOverrideSchema = new mongoose.Schema({
     warnings: [{ type: String }],
     suggestions: [{ type: String }],
     validatedAt: { type: Date },
+    isSystemDefault: { type: Boolean, default: false },
     aiReview: {
       attempted: { type: Boolean, default: false },
       available: { type: Boolean, default: false },

@@ -43,6 +43,127 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(sources.some(source => source.navigationPath?.startsWith('/help?doc=learning-objectives&section='))).toBe(true);
   });
 
+  test('retrieves AI Link Missing recovery guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'AI Link Missing failed to add source references',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Evidence and enrichment')).toBe(true);
+  });
+
+  test('retrieves learning-objective generation log guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What happens before the Live model draft? Explain the source inventory and instructional clusters.',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Understand the generation log')).toBe(true);
+  });
+
+  test('retrieves source-type material preview guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Does the material eye icon open the PDF and show extracted text for a URL?',
+      { route: '/course/course-1', activeTab: 'Materials' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Preview extracted content')).toBe(true);
+  });
+
+  test('explains editable and locked course prompt layers', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What are locked CREATE instructions in Course Prompts?',
+      { route: '/course/course-1', activeTab: 'Course Prompts' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Editable and locked instructions')).toBe(true);
+  });
+
+  test('retrieves prompt validation and Apply Changes guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why did the default prompt get a warning, and what does Apply Changes do after Validate?',
+      { route: '/course/course-1', activeTab: 'Course Prompts' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Validate before saving')).toBe(true);
+  });
+
+  test('retrieves how to add another quiz from a populated course', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I add another quiz when my course already has quizzes?',
+      { route: '/course/course-1', activeTab: 'Quizzes' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Create and open quizzes')).toBe(true);
+  });
+
+  test('retrieves the CREATE Guide launcher tutorial', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I replay the tutorial for the AI chat button in the bottom-right corner?',
+      { route: '/course/course-1', activeTab: 'Materials' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Using CREATE Guide')).toBe(true);
+  });
+
+  test('retrieves manual Bloom, subpoint, and single-objective enrichment guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I manually choose Bloom create, add subpoints, and AI enrich one LO?',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Add existing or manual objectives')).toBe(true);
+    expect(sources.some(source => source.section === 'Evidence and enrichment')).toBe(true);
+  });
+
+  test('retrieves stale search result recovery guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Global Search opened Quiz not found and returned 404',
+      { route: '/course/missing-course/quiz/missing-quiz', activeTab: 'Search' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'A search result is no longer available')).toBe(true);
+  });
+
+  test('retrieves the individual AI Enrich tutorial guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why does the sparkle button tutorial appear after I manually add an LO, and how do I use Enrich this LO?',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Evidence and enrichment')).toBe(true);
+  });
+
+  test('retrieves linked-question guidance after an objective is edited', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Should I regenerate linked questions after editing a learning objective?',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Editing and deleting objectives')).toBe(true);
+  });
+
+  test('retrieves PDF guidance for structured question types', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Does PDF export include Mark the Words, Documentation Tool, Summary, and Essay content?',
+      { route: '/course/course-1/quiz/quiz-1?tab=review', activeTab: 'Review & Edit' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'PDF and Markdown export')).toBe(true);
+  });
+
   test('generates compatibility facts from the canonical TypeScript source', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'Which question types work in standalone?',

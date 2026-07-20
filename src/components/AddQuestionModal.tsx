@@ -381,7 +381,7 @@ const AddQuestionModal = ({
                     rows={6}
                   />
                   <p className="field-hint">
-                    {questionType === 'mark-the-words' ? 'Wrap correct words in *asterisks*. Students will click to select them.' :
+                    {questionType === 'mark-the-words' ? 'Wrap each correct word separately: *normal* *force*, not *normal force*.' :
                      questionType === 'essay' ? 'Students will write a longer response. You can review it manually.' :
                      questionType === 'free-text' || questionType === 'open-ended' ? 'Open-ended question with no single correct answer.' :
                      questionType === 'sort-paragraphs' ? 'Students will rearrange these into the correct order.' :

@@ -14,6 +14,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, PEDAGOGICAL_APPROACHES, QUESTION_TYPES } from '../config/constants.js';
 import llmService from '../services/llmService.js';
 import sseService from '../services/sseService.js';
+import coursePromptService from '../services/coursePromptService.js';
 import {
   alignPlanItemsToSubpoints,
   buildQuestionBudget,
@@ -178,7 +179,7 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       return errorResponse(res, `No prompt template found for approach: ${approach}`, 'TEMPLATE_NOT_FOUND', HTTP_STATUS.NOT_FOUND);
     }
 
-    const [courseOverride, userOverride] = await Promise.all([
+    const [courseOverride, userOverride, resolvedBlueprintPrompt] = await Promise.all([
       CoursePromptOverride.findOne({
         folder: quiz.folder,
         user: userId,
@@ -190,13 +191,16 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
         user: userId,
         approach,
         isActive: true
+      }),
+      coursePromptService.resolveCoursePrompt({
+        folderId: quiz.folder,
+        userId,
+        promptType: 'quiz-blueprint',
+        approach
       })
     ]);
 
-    const resolvedInnerPrompt =
-      courseOverride?.customInnerPrompt ||
-      userOverride?.customInnerPrompt ||
-      systemTemplate.innerPrompt;
+    const resolvedInnerPrompt = resolvedBlueprintPrompt.innerPrompt;
 
     const resolvedRules =
       courseOverride?.customQuestionTypeRules ||
@@ -336,7 +340,7 @@ Return ONLY this JSON shape:
 
     console.log('📋 Using prompt template:', {
       approach,
-      source: courseOverride ? 'course' : userOverride ? 'user' : 'system',
+      source: resolvedBlueprintPrompt.source,
       promptType: 'quiz-blueprint',
       version: courseOverride?.version || 'default',
       folderId: quiz.folder?.toString(),

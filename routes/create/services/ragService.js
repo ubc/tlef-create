@@ -224,8 +224,12 @@ export class QuizRAGService {
       // Add API key if available
       if (process.env.QDRANT_API_KEY) {
         qdrantConfig.apiKey = process.env.QDRANT_API_KEY;
-        console.log('🔑 Using Qdrant API key from environment:', process.env.QDRANT_API_KEY);
-        console.log('🔧 Final qdrantConfig:', JSON.stringify(qdrantConfig, null, 2));
+        console.log('🔑 Using Qdrant API key from environment (value hidden)');
+        console.log('🔧 Qdrant target:', {
+          url: qdrantConfig.url,
+          collectionName: qdrantConfig.collectionName,
+          hasApiKey: true
+        });
       } else {
         console.log('❌ No QDRANT_API_KEY found in environment');
         console.log('🔍 Available env vars:', Object.keys(process.env).filter(k => k.includes('QDRANT')));

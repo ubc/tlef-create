@@ -1,4 +1,4 @@
-import { RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -13,7 +13,16 @@ import {
   ReactFlow,
   useNodesState
 } from '@xyflow/react';
-import { BookOpen, FileText, Focus, HelpCircle, ListTree, Target } from 'lucide-react';
+import {
+  BookOpen,
+  ExternalLink,
+  FileText,
+  HelpCircle,
+  ListTree,
+  RotateCcw,
+  Search,
+  Target
+} from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { CoverageMap, SourceReference } from '../services/api';
 import SourceReferencePreviewModal from './SourceReferencePreviewModal';
@@ -95,7 +104,9 @@ function overlapScore(left = '', right = '') {
   return [...leftWords].filter(word => rightWords.has(word)).length / Math.min(leftWords.size, rightWords.size);
 }
 
-function buildGraph(coverageMap: CoverageMap) {
+// Exported for graph-contract regression tests.
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildGraph(coverageMap: CoverageMap) {
   const nodes: KnowledgeNode[] = [];
   const edges: Edge[] = [];
   const nodeIds = new Set<string>();
@@ -268,7 +279,9 @@ function buildGraph(coverageMap: CoverageMap) {
   return { nodes, edges };
 }
 
-function focusedGraph(nodes: KnowledgeNode[], edges: Edge[], questionId?: string) {
+// Exported for graph-contract regression tests.
+// eslint-disable-next-line react-refresh/only-export-components
+export function focusedGraph(nodes: KnowledgeNode[], edges: Edge[], questionId?: string) {
   if (!questionId) return { nodes, edges };
   const focusId = `question-${questionId}`;
   const nodeById = new Map(nodes.map(node => [node.id, node]));
@@ -366,260 +379,6 @@ function nodeProperties(node: KnowledgeNode) {
   ].filter(([, value]) => Boolean(value)) as Array<[string, string]>;
 }
 
-function useMeasuredRelations(
-  containerRef: RefObject<HTMLDivElement>,
-  nodeRefs: RefObject<Map<string, HTMLElement>>,
-  nodes: KnowledgeNode[],
-  edges: Edge[],
-  activeRelations: Set<string>
-) {
-  const [paths, setPaths] = useState<Array<{ id: string; label: string; color: string; path: string }>>([]);
-
-  useLayoutEffect(() => {
-    const calculate = () => {
-      const container = containerRef.current;
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
-      const nextPaths = edges.flatMap(edge => {
-        const label = String(edge.label || '');
-        if (!activeRelations.has(label)) return [];
-        const sourceElement = nodeRefs.current.get(edge.source);
-        const targetElement = nodeRefs.current.get(edge.target);
-        if (!sourceElement || !targetElement) return [];
-
-        const source = sourceElement.getBoundingClientRect();
-        const target = targetElement.getBoundingClientRect();
-        const sourceX = source.left - containerRect.left + source.width / 2;
-        const sourceY = source.top - containerRect.top + source.height / 2;
-        const targetX = target.left - containerRect.left + target.width / 2;
-        const targetY = target.top - containerRect.top + target.height / 2;
-        const dx = targetX - sourceX;
-        const dy = targetY - sourceY;
-        const distance = Math.max(1, Math.hypot(dx, dy));
-        const sourceRadius = Math.min(source.width, source.height) / 2;
-        const targetRadius = Math.min(target.width, target.height) / 2;
-        const startX = sourceX + (dx / distance) * sourceRadius;
-        const startY = sourceY + (dy / distance) * sourceRadius;
-        const endX = targetX - (dx / distance) * (targetRadius + 6);
-        const endY = targetY - (dy / distance) * (targetRadius + 6);
-        const curve = Math.min(180, Math.max(70, Math.abs(endX - startX) * 0.42));
-        const path = `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`;
-
-        return [{
-          id: edge.id,
-          label,
-          color: String(edge.style?.stroke || '#64748b'),
-          path
-        }];
-      });
-      setPaths(nextPaths);
-    };
-
-    calculate();
-    const resizeObserver = new ResizeObserver(calculate);
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-    nodeRefs.current.forEach(element => resizeObserver.observe(element));
-    window.addEventListener('resize', calculate);
-    const timer = window.setTimeout(calculate, 120);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', calculate);
-      window.clearTimeout(timer);
-    };
-  }, [activeRelations, containerRef, edges, nodeRefs, nodes]);
-
-  return paths;
-}
-
-function FocusedNodeBubble({
-  node,
-  selected,
-  registerNode,
-  onSelect
-}: {
-  node: KnowledgeNode;
-  selected: boolean;
-  registerNode: (id: string) => (element: HTMLElement | null) => void;
-  onSelect: (node: KnowledgeNode) => void;
-}) {
-  const Icon = NODE_ICONS[node.data.kind];
-  const canPreview = node.data.kind === 'evidence' && Boolean(node.data.reference?.materialId);
-
-  return (
-    <button
-      ref={registerNode(node.id)}
-      type="button"
-      className={`knowledge-node knowledge-focused-node knowledge-node-${node.data.kind}${node.data.isFocused ? ' is-focused' : ''}${selected ? ' is-selected' : ''}${canPreview ? ' is-previewable' : ''}`}
-      onClick={() => onSelect(node)}
-      title={canPreview ? 'Open the cited source' : `${node.data.eyebrow}: ${node.data.label}`}
-    >
-      <span className="knowledge-node-icon"><Icon size={16} /></span>
-      <span className="knowledge-node-eyebrow">{node.data.eyebrow}</span>
-      <strong>{node.data.label}</strong>
-      {node.data.meta && <small>{node.data.meta}</small>}
-    </button>
-  );
-}
-
-function FocusedKnowledgeGraph({
-  nodes,
-  edges,
-  visibleKinds,
-  compact,
-  onPreviewReference
-}: {
-  nodes: KnowledgeNode[];
-  edges: Edge[];
-  visibleKinds: KnowledgeNodeKind[];
-  compact: boolean;
-  onPreviewReference: (reference: SourceReference) => void;
-}) {
-  const markerPrefix = useId().replace(/:/g, '');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const nodeRefs = useRef(new Map<string, HTMLElement>());
-  const relationTypes = useMemo(() => [...new Set(edges.map(edge => String(edge.label || '')).filter(Boolean))], [edges]);
-  const [activeRelations, setActiveRelations] = useState(() => new Set(relationTypes));
-  const [selectedNodeId, setSelectedNodeId] = useState(nodes.find(node => node.data.kind === 'question')?.id || nodes[0]?.id);
-
-  useEffect(() => {
-    setActiveRelations(new Set(relationTypes));
-  }, [relationTypes]);
-
-  useEffect(() => {
-    setSelectedNodeId(nodes.find(node => node.data.kind === 'question')?.id || nodes[0]?.id);
-  }, [nodes]);
-
-  const paths = useMeasuredRelations(containerRef, nodeRefs, nodes, edges, activeRelations);
-  const selectedNode = nodes.find(node => node.id === selectedNodeId) || nodes[0];
-  const selectedEdges = selectedNode
-    ? edges.filter(edge => edge.source === selectedNode.id || edge.target === selectedNode.id)
-    : [];
-
-  const registerNode = (id: string) => (element: HTMLElement | null) => {
-    if (element) {
-      nodeRefs.current.set(id, element);
-    } else {
-      nodeRefs.current.delete(id);
-    }
-  };
-
-  const positionedNodes = nodes.map((node, index) => {
-    const sameKindIndex = nodes.filter(candidate => candidate.data.kind === node.data.kind).findIndex(candidate => candidate.id === node.id);
-    const evidencePositions = [
-      { left: '29%', top: '16%' },
-      { left: '29%', top: '42%' },
-      { left: '29%', top: '68%' }
-    ];
-    const positionByKind: Record<KnowledgeNodeKind, { left: string; top: string }> = {
-      material: { left: '8%', top: '43%' },
-      evidence: evidencePositions[sameKindIndex] || { left: '29%', top: `${22 + sameKindIndex * 18}%` },
-      objective: { left: '55%', top: '17%' },
-      subpoint: { left: '55%', top: '67%' },
-      question: { left: '81%', top: '43%' }
-    };
-    return { node, style: positionByKind[node.data.kind] || { left: '50%', top: `${35 + index * 8}%` } };
-  });
-
-  return (
-    <div className={`knowledge-graph-shell knowledge-focused-shell${compact ? ' is-compact' : ''}`}>
-      <aside className="knowledge-focused-sidebar">
-        <section>
-          <h5>Node Labels</h5>
-          <div className="knowledge-filter-grid">
-            {visibleKinds.map(kind => (
-              <span key={kind}><i style={{ background: NODE_COLORS[kind] }} />{kind}</span>
-            ))}
-          </div>
-        </section>
-        <section>
-          <h5>Relationship Types</h5>
-          <div className="knowledge-relation-filters">
-            {relationTypes.map(type => (
-              <button
-                key={type}
-                type="button"
-                className={activeRelations.has(type) ? 'is-active' : ''}
-                onClick={() => setActiveRelations(previous => {
-                  const next = new Set(previous);
-                  if (next.has(type)) next.delete(type);
-                  else next.add(type);
-                  return next;
-                })}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-        </section>
-        {selectedNode && (
-          <section>
-            <h5>Selected Node</h5>
-            <div className="knowledge-selected-properties">
-              {nodeProperties(selectedNode).map(([key, value]) => (
-                <p key={key}><strong>{key}:</strong> {value}</p>
-              ))}
-            </div>
-            {selectedEdges.length > 0 && (
-              <div className="knowledge-selected-edges">
-                {selectedEdges.map(edge => (
-                  <span key={edge.id}>{String(edge.label || 'related')}</span>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-      </aside>
-
-      <div className="knowledge-focused-canvas" ref={containerRef}>
-        <svg className="knowledge-focused-svg" aria-hidden="true">
-          <defs>
-            {paths.map(path => (
-              <marker
-                key={path.id}
-                id={`${markerPrefix}-${path.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
-                viewBox="0 0 10 10"
-                refX="9"
-                refY="5"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={path.color} />
-              </marker>
-            ))}
-          </defs>
-          {paths.map(path => (
-            <path
-              key={path.id}
-              className="knowledge-focused-relation"
-              d={path.path}
-              stroke={path.color}
-              markerEnd={`url(#${markerPrefix}-${path.id.replace(/[^a-zA-Z0-9_-]/g, '-')})`}
-            />
-          ))}
-        </svg>
-        {positionedNodes.map(({ node, style }) => (
-          <div key={node.id} className="knowledge-focused-node-position" style={style}>
-            <FocusedNodeBubble
-              node={node}
-              selected={selectedNodeId === node.id}
-              registerNode={registerNode}
-              onSelect={(selected) => {
-                setSelectedNodeId(selected.id);
-                const reference = selected.data.reference as SourceReference | undefined;
-                if (reference?.materialId) onPreviewReference(reference);
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function hashValue(value: string) {
   return [...value].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
 }
@@ -691,6 +450,256 @@ function forceLayout(nodes: KnowledgeNode[], edges: Edge[], focusQuestionId?: st
   });
 }
 
+function FullKnowledgeGraph({
+  initialNodes,
+  edges,
+  visibleKinds,
+  compact,
+  onPreviewReference
+}: {
+  initialNodes: KnowledgeNode[];
+  edges: Edge[];
+  visibleKinds: KnowledgeNodeKind[];
+  compact: boolean;
+  onPreviewReference: (reference: SourceReference) => void;
+}) {
+  const [nodes, setNodes, onNodesChange] = useNodesState<KnowledgeNode>(initialNodes);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const relationTypes = useMemo(
+    () => [...new Set(edges.map(edge => String(edge.label || '')).filter(Boolean))],
+    [edges]
+  );
+  const [activeKinds, setActiveKinds] = useState(() => new Set(visibleKinds));
+  const [activeRelations, setActiveRelations] = useState(() => new Set(relationTypes));
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setSelectedNodeId(null);
+    setFocusNodeId(null);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => setActiveKinds(new Set(visibleKinds)), [visibleKinds]);
+  useEffect(() => setActiveRelations(new Set(relationTypes)), [relationTypes]);
+
+  const nodeById = useMemo(() => new Map(nodes.map(node => [node.id, node])), [nodes]);
+  const focusNeighborhood = useMemo(() => {
+    if (!focusNodeId) return null;
+    const ids = new Set([focusNodeId]);
+    edges.forEach(edge => {
+      if (!activeRelations.has(String(edge.label || ''))) return;
+      if (edge.source === focusNodeId) ids.add(edge.target);
+      if (edge.target === focusNodeId) ids.add(edge.source);
+    });
+    return ids;
+  }, [activeRelations, edges, focusNodeId]);
+  const selectedNeighborhood = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const ids = new Set([selectedNodeId]);
+    edges.forEach(edge => {
+      if (!activeRelations.has(String(edge.label || ''))) return;
+      if (edge.source === selectedNodeId) ids.add(edge.target);
+      if (edge.target === selectedNodeId) ids.add(edge.source);
+    });
+    return ids;
+  }, [activeRelations, edges, selectedNodeId]);
+
+  const displayedNodes = nodes.map(node => {
+    const hidden = !activeKinds.has(node.data.kind)
+      || Boolean(focusNeighborhood && !focusNeighborhood.has(node.id));
+    const isDimmed = Boolean(selectedNeighborhood && !selectedNeighborhood.has(node.id));
+    return {
+      ...node,
+      hidden,
+      style: {
+        ...node.style,
+        opacity: isDimmed ? 0.16 : 1,
+        transition: 'opacity 160ms ease'
+      }
+    };
+  });
+  const visibleNodeIds = new Set(displayedNodes.filter(node => !node.hidden).map(node => node.id));
+  const displayedEdges = edges.map(edge => {
+    const relation = String(edge.label || '');
+    const isConnected = !selectedNodeId || edge.source === selectedNodeId || edge.target === selectedNodeId;
+    return {
+      ...edge,
+      hidden: !activeRelations.has(relation)
+        || !visibleNodeIds.has(edge.source)
+        || !visibleNodeIds.has(edge.target),
+      animated: Boolean(selectedNodeId && isConnected),
+      style: {
+        ...edge.style,
+        strokeWidth: selectedNodeId && isConnected ? 2.8 : 1.4,
+        opacity: selectedNodeId && !isConnected ? 0.1 : 0.9
+      },
+      labelStyle: {
+        ...edge.labelStyle,
+        fill: selectedNodeId && !isConnected ? 'transparent' : '#dbeafe'
+      },
+      labelBgStyle: {
+        ...edge.labelBgStyle,
+        fill: '#0b2838',
+        fillOpacity: selectedNodeId && !isConnected ? 0 : 0.88
+      }
+    };
+  });
+  const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
+  const selectedEdges = selectedNode
+    ? edges.filter(edge => edge.source === selectedNode.id || edge.target === selectedNode.id)
+    : [];
+
+  const selectSearchResult = (value: string) => {
+    setSearchQuery(value);
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return;
+    const match = nodes.find(node => (
+      `${node.data.eyebrow} ${node.data.label} ${node.data.meta || ''}`.toLowerCase().includes(normalized)
+    ));
+    if (match) {
+      setSelectedNodeId(match.id);
+      setFocusNodeId(null);
+    }
+  };
+
+  const resetView = () => {
+    setSelectedNodeId(null);
+    setFocusNodeId(null);
+    setSearchQuery('');
+    setActiveKinds(new Set(visibleKinds));
+    setActiveRelations(new Set(relationTypes));
+  };
+
+  return (
+    <div className={`knowledge-graph-shell knowledge-explorer-shell${compact ? ' is-compact' : ''}`}>
+      <aside className="knowledge-focused-sidebar knowledge-explorer-sidebar">
+        <section>
+          <h5>Explore Coverage</h5>
+          <label className="knowledge-search">
+            <Search size={14} />
+            <input
+              value={searchQuery}
+              onChange={event => selectSearchResult(event.target.value)}
+              placeholder="Search nodes"
+            />
+          </label>
+          <p className="knowledge-explorer-help">Drag nodes to arrange the map. Select a node to inspect it; double-click to isolate its direct connections.</p>
+        </section>
+
+        <section>
+          <h5>Node Labels</h5>
+          <div className="knowledge-kind-filters">
+            {visibleKinds.map(kind => {
+              const count = nodes.filter(node => node.data.kind === kind).length;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className={activeKinds.has(kind) ? 'is-active' : ''}
+                  onClick={() => setActiveKinds(previous => {
+                    const next = new Set(previous);
+                    if (next.has(kind)) next.delete(kind);
+                    else next.add(kind);
+                    return next;
+                  })}
+                >
+                  <i style={{ background: NODE_COLORS[kind] }} />
+                  <span>{kind}</span>
+                  <small>{count}</small>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <h5>Relationship Types</h5>
+          <div className="knowledge-relation-filters">
+            {relationTypes.map(type => (
+              <button
+                key={type}
+                type="button"
+                className={activeRelations.has(type) ? 'is-active' : ''}
+                onClick={() => setActiveRelations(previous => {
+                  const next = new Set(previous);
+                  if (next.has(type)) next.delete(type);
+                  else next.add(type);
+                  return next;
+                })}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {selectedNode && (
+          <section className="knowledge-explorer-selection">
+            <h5>Selected Node</h5>
+            <div className="knowledge-selected-properties">
+              {nodeProperties(selectedNode).map(([key, value]) => (
+                <p key={key}><strong>{key}:</strong> {value}</p>
+              ))}
+            </div>
+            {selectedEdges.length > 0 && (
+              <div className="knowledge-selected-edges">
+                {selectedEdges.map(edge => (
+                  <span key={edge.id}>{String(edge.label || 'related')}</span>
+                ))}
+              </div>
+            )}
+            {selectedNode.data.kind === 'evidence' && selectedNode.data.reference?.materialId && (
+              <button
+                type="button"
+                className="knowledge-source-button"
+                onClick={() => onPreviewReference(selectedNode.data.reference as SourceReference)}
+              >
+                <ExternalLink size={14} /> Open cited source
+              </button>
+            )}
+          </section>
+        )}
+
+        <button type="button" className="knowledge-reset-button" onClick={resetView}>
+          <RotateCcw size={14} /> Show complete map
+        </button>
+      </aside>
+
+      <div className="knowledge-graph-canvas knowledge-explorer-canvas">
+        <ReactFlow
+          nodes={displayedNodes}
+          edges={displayedEdges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          fitView
+          fitViewOptions={{ padding: 0.25, maxZoom: compact ? 1.1 : 0.95 }}
+          minZoom={0.12}
+          maxZoom={2.2}
+          nodesConnectable={false}
+          onPaneClick={() => setSelectedNodeId(null)}
+          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+          onNodeDoubleClick={(_, node) => {
+            setSelectedNodeId(node.id);
+            setFocusNodeId(previous => previous === node.id ? null : node.id);
+          }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={28} size={1} color="rgba(148, 163, 184, 0.24)" />
+          <Controls showInteractive={false} />
+          {!compact && (
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={node => NODE_COLORS[(node.data as KnowledgeNodeData).kind]}
+              maskColor="rgba(9, 31, 45, 0.72)"
+            />
+          )}
+        </ReactFlow>
+      </div>
+    </div>
+  );
+}
+
 interface KnowledgeGraphProps {
   coverageMap: CoverageMap;
   focusQuestionId?: string;
@@ -709,10 +718,6 @@ export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact =
       edges: filtered.edges
     };
   }, [coverageMap, focusQuestionId]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<KnowledgeNode>(graph.nodes);
-
-  useEffect(() => setNodes(graph.nodes), [graph.nodes, setNodes]);
-
   if (graph.nodes.length === 0) {
     return <div className="knowledge-graph-empty">No linked evidence is available for this question yet.</div>;
   }
@@ -723,8 +728,8 @@ export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact =
   if (focusQuestionId) {
     return (
       <>
-        <FocusedKnowledgeGraph
-          nodes={graph.nodes}
+        <FullKnowledgeGraph
+          initialNodes={graph.nodes}
           edges={graph.edges}
           visibleKinds={visibleKinds}
           compact={compact}
@@ -741,47 +746,20 @@ export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact =
   }
 
   return (
-    <div className={`knowledge-graph-shell${compact ? ' is-compact' : ''}`}>
-      <div className="knowledge-graph-legend" aria-label="Knowledge graph legend">
-        {visibleKinds.map(kind => (
-          <span key={kind}><i style={{ background: NODE_COLORS[kind] }} />{kind}</span>
-        ))}
-        <small><Focus size={12} /> Drag nodes or select evidence to inspect its source.</small>
-      </div>
-      <div className="knowledge-graph-canvas">
-        <ReactFlow
-          nodes={nodes}
-          edges={graph.edges}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-          fitView
-          fitViewOptions={{ padding: 0.28, maxZoom: compact ? 1.15 : 1 }}
-          minZoom={0.15}
-          maxZoom={2.2}
-          nodesConnectable={false}
-          onNodeClick={(_, node) => {
-            const reference = node.data.reference as SourceReference | undefined;
-            if (reference?.materialId) setSelectedReference(reference);
-          }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="#cbd5e1" />
-          <Controls showInteractive={false} />
-          {!compact && (
-            <MiniMap
-              pannable
-              zoomable
-              nodeColor={node => NODE_COLORS[(node.data as KnowledgeNodeData).kind]}
-              maskColor="rgba(248, 250, 252, 0.78)"
-            />
-          )}
-        </ReactFlow>
-      </div>
+    <>
+      <FullKnowledgeGraph
+        initialNodes={graph.nodes}
+        edges={graph.edges}
+        visibleKinds={visibleKinds}
+        compact={compact}
+        onPreviewReference={setSelectedReference}
+      />
       {selectedReference && (
         <SourceReferencePreviewModal
           reference={selectedReference}
           onClose={() => setSelectedReference(null)}
         />
       )}
-    </div>
+    </>
   );
 }

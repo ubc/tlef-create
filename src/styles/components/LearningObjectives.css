@@ -536,10 +536,71 @@
     flex-shrink: 0;
 }
 
+.objective-actions > .feature-coachmark-anchor.is-tutorial-active::after {
+    inset: -4px;
+    border-radius: 999px;
+}
+
 .objective-edit {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+}
+
+.objective-edit-grid {
+    display: grid;
+    grid-template-columns: minmax(180px, 280px) 1fr;
+    gap: var(--spacing-md);
+}
+
+.objective-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    color: var(--color-foreground);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.objective-edit-field-full {
+    grid-column: 1 / -1;
+}
+
+.objective-edit-field select,
+.objective-edit-field input {
+    width: 100%;
+}
+
+.objective-subpoints-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.objective-subpoints-editor-header small,
+.objective-edit-hint {
+    color: var(--color-muted-foreground);
+    font-weight: 400;
+}
+
+.objective-subpoints-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.objective-subpoint-input {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.objective-subpoint-input > span {
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-xs);
+    text-align: center;
 }
 
 .edit-actions {
@@ -600,6 +661,15 @@
 
     .objective-actions {
         align-self: flex-start;
+    }
+
+    .objective-edit-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .objective-subpoints-editor-header {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .objective-input-group {

@@ -11,7 +11,7 @@ import ragService from '../services/ragService.js';
 async function testRagInit() {
   console.log('🧪 Testing RAG Service Initialization...');
   console.log(`🔗 Connecting to Qdrant at: ${process.env.QDRANT_URL}`);
-  console.log(`🔑 Using API key: ${process.env.QDRANT_API_KEY}`);
+console.log(`🔑 Using API key: ${process.env.QDRANT_API_KEY ? '(configured; value hidden)' : '(not configured)'}`);
   
   try {
     const initialized = await ragService.initialize();

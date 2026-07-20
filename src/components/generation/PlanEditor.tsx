@@ -176,8 +176,8 @@ export default function PlanEditor({
                     disabled={readOnly}
                     className="plan-select"
                   >
-                    {questionTypes.map(type => (
-                      <option key={type.value} value={type.value}>
+                    {questionTypes.map((type, typeIndex) => (
+                      <option key={`${type.value}-${typeIndex}`} value={type.value}>
                         {type.label}
                       </option>
                     ))}
@@ -209,8 +209,8 @@ export default function PlanEditor({
                     title={lo?.text}
                   >
                     <option value="">— No Learning Objective —</option>
-                    {learningObjectives.map(lo => (
-                      <option key={lo._id} value={lo._id}>
+                    {learningObjectives.map((lo, objectiveIndex) => (
+                      <option key={`${lo._id || 'objective'}-${lo.order}-${objectiveIndex}`} value={lo._id}>
                         {getLearningObjectiveLabel(lo)}
                       </option>
                     ))}
@@ -268,13 +268,13 @@ export default function PlanEditor({
                         }}
                         disabled={readOnly}
                         className="count-input"
-                        style={{ width: '50px', textAlign: 'center', border: 'none', background: 'transparent' }}
                       />
                       <button
                         onClick={() => handleCountChange(item.id, 1)}
                         disabled={readOnly}
                         className="count-btn"
                         aria-label="Increase count"
+                        title="Increase count"
                       >
                         <Plus size={16} />
                       </button>
@@ -295,10 +295,10 @@ export default function PlanEditor({
                 </div>
 
                 {showCustomPrompt && (
-                  <div style={{ width: '100%', padding: '4px 0 6px 4px' }}>
+                  <div className={`plan-custom-prompt${item.type === 'documentation-tool' ? ' plan-custom-prompt-documentation' : ''}`}>
                     <textarea
                       className="plan-select"
-                      style={{ width: '100%', minHeight: 56, resize: 'vertical', fontSize: '0.82rem', padding: '4px 6px', boxSizing: 'border-box', borderColor: customPromptError ? 'var(--color-destructive)' : undefined }}
+                      style={{ borderColor: customPromptError ? 'var(--color-destructive)' : undefined }}
                       value={item.customPrompt || ''}
                       onChange={(e) => handleUpdateItem(item.id, { customPrompt: e.target.value })}
                       disabled={readOnly}
@@ -329,8 +329,8 @@ export default function PlanEditor({
                         disabled={readOnly}
                         className="plan-select"
                       >
-                        {DIFFICULTY_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>
+                        {DIFFICULTY_OPTIONS.map((option, optionIndex) => (
+                          <option key={`${option.value}-${optionIndex}`} value={option.value}>
                             {option.label}
                           </option>
                         ))}
@@ -345,8 +345,8 @@ export default function PlanEditor({
                         disabled={readOnly}
                         className="plan-select"
                       >
-                        {BLOOM_LEVEL_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>
+                        {BLOOM_LEVEL_OPTIONS.map((option, optionIndex) => (
+                          <option key={`${option.value || 'unspecified'}-${optionIndex}`} value={option.value}>
                             {option.label}
                           </option>
                         ))}

@@ -6,6 +6,10 @@ Coverage tools show how course evidence flows into objectives and questions. The
 
 Open the learning object's Coverage Map tab to inspect relationships among assigned materials, learning objectives, evidence, and generated questions. Use it after objectives are created and again after question generation.
 
+In Graph view, drag nodes to rearrange the map, pan or zoom the canvas, select a node to inspect its properties and direct relationships, and double-click a node to isolate its one-hop neighborhood. Use Node Labels and Relationship Types to filter the map, search for a visible entity, and choose **Show complete map** to reset exploration. Evidence nodes with a resolved material can open the cited source.
+
+The lines are generated from saved evidence and coverage relationships. CREATE does not let an instructor draw an arbitrary new line in this view because an unsaved line would falsely represent source support; update the objective, Blueprint, question, or source reference that owns the relationship instead.
+
 Look for objectives with no evidence, objectives with no questions, heavily reused source passages, and clusters of questions that test the same subpoint. A sparse map can indicate missing coverage; an extremely dense area can indicate duplication.
 
 ## Learning-objective references
@@ -14,7 +18,7 @@ Objective references point to excerpts used during objective generation or enric
 
 ## Question evidence graph
 
-In Review & Edit, open the evidence graph for one question. The graph connects the question to its learning objective, relevant subpoint, source material, and resolved evidence. Select an evidence node to inspect the source preview.
+In Review & Edit, open the evidence graph for one question. The graph uses the same drag, zoom, filter, selection, and relationship-line interactions as the full Coverage Map, but starts with only that question's relevant neighborhood. Select an evidence node and choose **Open cited source** to inspect the source preview.
 
 The evidence graph is question-specific, while Coverage Map summarizes the learning object. Use the graph for close review and the map for balance across the whole design.
 

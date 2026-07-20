@@ -7,9 +7,14 @@ import '../styles/components/SourceReferencePreviewModal.css';
 interface SourceReferencePreviewModalProps {
   reference: SourceReference;
   onClose: () => void;
+  mode?: 'reference' | 'material';
 }
 
-export default function SourceReferencePreviewModal({ reference, onClose }: SourceReferencePreviewModalProps) {
+export default function SourceReferencePreviewModal({
+  reference,
+  onClose,
+  mode = 'reference'
+}: SourceReferencePreviewModalProps) {
   const [detail, setDetail] = useState<MaterialReferenceDetail | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +26,10 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
 
     const loadPreview = async () => {
       try {
-        const referenceDetail = await materialsApi.getReference(reference);
+        const referenceDetail = await materialsApi.getReference({
+          ...reference,
+          ...(mode === 'material' ? { previewMode: 'material' as const } : {})
+        });
         if (!active) return;
         setDetail(referenceDetail);
 
@@ -44,7 +52,7 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [reference]);
+  }, [mode, reference]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -56,7 +64,8 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
 
   const pageNumber = detail?.pageNumber || reference.pageNumber;
   const isPdf = detail?.previewKind === 'pdf' && Boolean(fileUrl);
-  const citedExcerpt = reference.excerpt || detail?.excerpt || '';
+  const isMaterialPreview = mode === 'material';
+  const citedExcerpt = isMaterialPreview ? '' : reference.excerpt || detail?.excerpt || '';
   const locationLabel = pageNumber
     ? `Page ${pageNumber}`
     : detail?.previewKind === 'url'
@@ -76,10 +85,14 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
       >
         <header className="source-preview-header">
           <div>
-            <span className="source-preview-eyebrow">Source evidence</span>
+            <span className="source-preview-eyebrow">
+              {isMaterialPreview ? 'Material preview' : 'Source evidence'}
+            </span>
             <h3 id="source-preview-title">{detail?.materialName || reference.materialName || 'Course material'}</h3>
             <p>
-              {[locationLabel, detail?.section || reference.section].filter(Boolean).join(' · ')}
+              {isMaterialPreview
+                ? materialTypeLabel(detail?.previewKind)
+                : [locationLabel, detail?.section || reference.section].filter(Boolean).join(' · ')}
             </p>
           </div>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close source preview">
@@ -87,13 +100,24 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
           </button>
         </header>
 
-        {loading && <div className="source-preview-status">Loading the cited source...</div>}
+        {loading && (
+          <div className="source-preview-status">
+            {isMaterialPreview ? 'Loading the material preview...' : 'Loading the cited source...'}
+          </div>
+        )}
         {error && <div className="source-preview-status source-preview-error">{error}</div>}
 
         {!loading && !error && (
-          <div className={`source-preview-body ${isPdf ? 'has-pdf' : 'has-text-preview'}`}>
+          <div className={`source-preview-body ${isPdf ? 'has-pdf' : 'has-text-preview'} ${isMaterialPreview ? 'is-material-preview' : ''}`}>
             {isPdf && fileUrl && (
               <div className="source-preview-document">
+                {isMaterialPreview && (
+                  <div className="source-preview-material-file-actions">
+                    <a className="source-preview-open" href={`${fileUrl}#page=1`} target="_blank" rel="noreferrer">
+                      Open full PDF <ExternalLink size={15} />
+                    </a>
+                  </div>
+                )}
                 <PdfPagePreview
                   fileUrl={fileUrl}
                   initialPage={pageNumber || 1}
@@ -104,8 +128,18 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
             {!isPdf && (
               <div className="source-preview-text-document">
                 <div className="source-preview-text-heading">
-                  <span>{locationLabel}</span>
-                  <strong>{detail?.section || 'Extracted material context'}</strong>
+                  <span>{isMaterialPreview ? 'Processed by CREATE' : locationLabel}</span>
+                  <strong>{isMaterialPreview ? 'Extracted material text' : detail?.section || 'Extracted material context'}</strong>
+                  {isMaterialPreview && detail?.previewKind === 'url' && detail.sourceUrl && (
+                    <a className="source-preview-open" href={detail.sourceUrl} target="_blank" rel="noreferrer">
+                      Open original webpage <ExternalLink size={15} />
+                    </a>
+                  )}
+                  {isMaterialPreview && detail?.previewKind === 'document' && fileUrl && (
+                    <a className="source-preview-open" href={fileUrl} download={detail.sourceFile || detail.materialName}>
+                      Download original Word file <ExternalLink size={15} />
+                    </a>
+                  )}
                 </div>
                 <HighlightedContext
                   context={detail?.pageContext || detail?.excerpt || ''}
@@ -113,7 +147,7 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
                 />
               </div>
             )}
-            <aside className="source-preview-evidence">
+            {!isMaterialPreview && <aside className="source-preview-evidence">
               <div className="source-preview-location">
                 <strong>Cited passage</strong>
                 {detail?.pageCount && pageNumber && <span>Page {pageNumber} of {detail.pageCount}</span>}
@@ -140,12 +174,25 @@ export default function SourceReferencePreviewModal({ reference, onClose }: Sour
                   Download original Word file <ExternalLink size={15} />
                 </a>
               )}
-            </aside>
+            </aside>}
           </div>
         )}
       </section>
     </div>
   );
+}
+
+function materialTypeLabel(previewKind?: MaterialReferenceDetail['previewKind']) {
+  switch (previewKind) {
+    case 'pdf':
+      return 'PDF · Original document';
+    case 'url':
+      return 'URL · Extracted text';
+    case 'document':
+      return 'Word document · Extracted text';
+    default:
+      return 'Text · Extracted text';
+  }
 }
 
 function HighlightedContext({ context, excerpt }: { context: string; excerpt: string }) {

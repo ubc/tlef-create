@@ -33,6 +33,7 @@ const learningObjectiveSchema = new mongoose.Schema({
   // AI Generation Metadata
   generationMetadata: {
     isAIGenerated: { type: Boolean, default: false },
+    aiEnriched: { type: Boolean, default: false },
     llmModel: { type: String }, // e.g., "llama3.1:8b"
     generationPrompt: { type: String }, // The prompt used to generate this objective
     sourceReferences: [{
@@ -55,6 +56,10 @@ const learningObjectiveSchema = new mongoose.Schema({
     sourceSectionIds: [{ type: String }],
     subpoints: [{ type: String }],
     bloomLevel: { type: String },
+    instructorAuthoredFields: [{
+      type: String,
+      enum: ['bloomLevel', 'subpoints']
+    }],
     rationale: { type: String },
     promptSource: { type: String },
     promptVersion: { type: Number },
@@ -65,6 +70,7 @@ const learningObjectiveSchema = new mongoose.Schema({
       repairApplied: { type: Boolean }
     },
     inventoryDiagnostics: { type: mongoose.Schema.Types.Mixed },
+    enrichmentDiagnostics: { type: mongoose.Schema.Types.Mixed },
     confidence: { 
       type: Number, 
       min: 0, 

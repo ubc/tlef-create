@@ -14,7 +14,7 @@ import {
   deleteAllObjectives,
   enrichObjectives
 } from '../store/slices/learningObjectiveSlice';
-import { clearQuestionsForQuiz } from '../store/slices/questionSlice';
+import { clearQuestionsForQuiz, fetchQuestions } from '../store/slices/questionSlice';
 import RegeneratePromptModal from './RegeneratePromptModal';
 import { usePubSub } from '../hooks/usePubSub';
 import { PUBSUB_EVENTS, QuestionGenerationStartedPayload, QuestionGenerationCompletedPayload, QuestionGenerationFailedPayload } from '../services/pubsubService';
@@ -24,10 +24,15 @@ import { LearningObjectiveData } from './generation/generationTypes';
 import SourceReferencePreviewModal from './SourceReferencePreviewModal';
 import CoursePromptSettings from './CoursePromptSettings';
 import AIPlanGenerationTrace from './generation/AIPlanGenerationTrace';
-import { SourceReference } from '../services/api';
+import { BloomLevel, Question, questionsApi, SourceReference } from '../services/api';
 import { API_URL } from '../config/api';
 import { useSSE } from '../hooks/useSSE';
 import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
+import {
+  buildLinkedQuestionRegenerationPrompt,
+  getQuestionsLinkedToObjective,
+  regenerateQuestionsSequentially,
+} from '../utils/learningObjectiveQuestions';
 import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import '../styles/components/LearningObjectives.css';
 
@@ -39,6 +44,28 @@ interface LearningObjectivesProps {
   courseId?: string;
   onNavigateNext?: () => void;
 }
+
+interface ObjectiveDraft {
+  text: string;
+  bloomLevel: BloomLevel | '';
+  subpoints: string[];
+}
+
+const BLOOM_LEVEL_OPTIONS: Array<{ value: BloomLevel | ''; label: string }> = [
+  { value: '', label: 'Not specified' },
+  { value: 'remember', label: 'Remember' },
+  { value: 'understand', label: 'Understand' },
+  { value: 'apply', label: 'Apply' },
+  { value: 'analyze', label: 'Analyze' },
+  { value: 'evaluate', label: 'Evaluate' },
+  { value: 'create', label: 'Create' }
+];
+
+const createEmptyObjectiveDraft = (): ObjectiveDraft => ({
+  text: '',
+  bloomLevel: '',
+  subpoints: ['']
+});
 
 function formatWorkflowMessage(value: unknown, fallback: string) {
   if (typeof value === 'string' && value.trim()) return value;
@@ -62,7 +89,9 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   
   const [textInput, setTextInput] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editText, setEditText] = useState('');
+  const [isCreatingObjective, setIsCreatingObjective] = useState(false);
+  const [objectiveDraft, setObjectiveDraft] = useState<ObjectiveDraft>(createEmptyObjectiveDraft);
+  const [enrichingObjectiveId, setEnrichingObjectiveId] = useState<string | null>(null);
   const [manualObjectives, setManualObjectives] = useState<string[]>([]);
   const [newObjective, setNewObjective] = useState('');
   const [enrichManualAfterSave, setEnrichManualAfterSave] = useState(true);
@@ -110,12 +139,22 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   // Use Redux objectives if available, otherwise fallback to props
   const currentObjectives = reduxObjectives.length > 0 ? reduxObjectives.map(obj => obj.text) : objectives.map(obj => obj.text);
+  const displayedObjectives = isCreatingObjective ? [...currentObjectives, ''] : currentObjectives;
+  const enrichmentTutorialObjectiveIndex = currentObjectives.findIndex((_, index) => (
+    Boolean((reduxObjectives[index] || objectives[index])?._id)
+    && (reduxObjectives[index] || objectives[index])?.generationMetadata?.isAIGenerated !== true
+  ));
   const objectivesTutorial = useFeatureOnboarding('learning-objectives', currentObjectives.length > 0);
+  const enrichmentTutorial = useFeatureOnboarding(
+    'objective-enrichment',
+    assignedMaterials.length > 0 && enrichmentTutorialObjectiveIndex >= 0
+  );
   const isGenerating = generating || classifying;
   const loWorkflowUrl = loWorkflowSessionId ? `${API_URL}/api/create/streaming/questions/${loWorkflowSessionId}` : null;
   const objectivesMissingDetails = reduxObjectives.filter(objective => {
     const metadata = objective.generationMetadata;
-    return !metadata?.subpoints?.length || !metadata?.sourceReferences?.length;
+    return metadata?.isAIGenerated !== true
+      && (!metadata?.subpoints?.length || !metadata?.sourceReferences?.length);
   });
   const commandText = textInput.trim();
   const objectiveLikeLineCount = commandText
@@ -239,7 +278,6 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   useEffect(() => {
     if (editingIndex !== null && editTextareaRef.current) {
       editTextareaRef.current.focus();
-      editTextareaRef.current.select();
     }
   }, [editingIndex]);
 
@@ -386,9 +424,46 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       showNotification(
         'error',
         'Objective Enrichment Failed',
-        'No existing objective metadata was changed. Please retry AI Link Missing after checking the model connection.',
+        error instanceof Error
+          ? error.message
+          : 'No objective metadata was changed. Verify that assigned materials have completed processing and contain previewable text, then retry.',
         6000
       );
+    }
+  };
+
+  const handleEnrichObjective = async (objectiveId: string, index: number) => {
+    if (assignedMaterials.length === 0) {
+      showNotification(
+        'warning',
+        'Materials Required',
+        'Assign at least one processed material before enriching this learning objective.'
+      );
+      return;
+    }
+
+    setEnrichingObjectiveId(objectiveId);
+    try {
+      await dispatch(enrichObjectives({ quizId, objectiveIds: [objectiveId] })).unwrap();
+      showNotification(
+        'success',
+        `LO ${index + 1} Enriched`,
+        'CREATE added AI-generated metadata and source evidence while preserving instructor-entered Bloom level and subpoints.',
+        5000
+      );
+    } catch (error) {
+      console.error(`Failed to enrich objective ${objectiveId}:`, error);
+      await dispatch(fetchObjectives(quizId));
+      showNotification(
+        'error',
+        `LO ${index + 1} Enrichment Failed`,
+        error instanceof Error
+          ? error.message
+          : 'Verify that assigned materials have completed processing and contain previewable text, then retry.',
+        6000
+      );
+    } finally {
+      setEnrichingObjectiveId(null);
     }
   };
 
@@ -471,35 +546,161 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return;
     }
     
+    const objectiveData = reduxObjectives[index] || objectives[index];
+    const metadata = objectiveData?.generationMetadata;
+    setIsCreatingObjective(false);
     setEditingIndex(index);
-    setEditText(currentObjectives[index]);
+    setObjectiveDraft({
+      text: currentObjectives[index],
+      bloomLevel: (metadata?.bloomLevel || '') as BloomLevel | '',
+      subpoints: metadata?.subpoints?.length ? [...metadata.subpoints] : ['']
+    });
+  };
+
+  const handleCancelObjectiveEdit = () => {
+    setEditingIndex(null);
+    setIsCreatingObjective(false);
+    setObjectiveDraft(createEmptyObjectiveDraft());
+  };
+
+  const handleAddDraftSubpoint = () => {
+    setObjectiveDraft(previous => ({
+      ...previous,
+      subpoints: [...previous.subpoints, '']
+    }));
+  };
+
+  const handleUpdateDraftSubpoint = (index: number, value: string) => {
+    setObjectiveDraft(previous => ({
+      ...previous,
+      subpoints: previous.subpoints.map((subpoint, subpointIndex) =>
+        subpointIndex === index ? value : subpoint
+      )
+    }));
+  };
+
+  const handleRemoveDraftSubpoint = (index: number) => {
+    setObjectiveDraft(previous => {
+      const remaining = previous.subpoints.filter((_, subpointIndex) => subpointIndex !== index);
+      return {
+        ...previous,
+        subpoints: remaining.length > 0 ? remaining : ['']
+      };
+    });
+  };
+
+  const getLinkedQuestionRegenerationChoice = async (
+    objectiveId: string,
+    action: 'edit' | 'regenerate'
+  ) => {
+    let quizQuestions = questionsByQuiz[quizId] || [];
+    try {
+      const latest = await questionsApi.getQuestions(quizId);
+      quizQuestions = latest.questions;
+    } catch (error) {
+      console.warn('Could not refresh linked questions before updating the objective:', error);
+    }
+
+    const linkedQuestions = getQuestionsLinkedToObjective(quizQuestions, objectiveId);
+    if (linkedQuestions.length === 0) {
+      return { linkedQuestions, regenerate: false };
+    }
+
+    return {
+      linkedQuestions,
+      regenerate: window.confirm(buildLinkedQuestionRegenerationPrompt(linkedQuestions.length, action))
+    };
+  };
+
+  const regenerateLinkedQuestions = async (linkedQuestions: Question[]) => {
+    if (linkedQuestions.length === 0) return;
+
+    showNotification(
+      'info',
+      'Regenerating Linked Questions',
+      `Updating ${linkedQuestions.length} question${linkedQuestions.length === 1 ? '' : 's'} to match the revised learning objective.`
+    );
+
+    const result = await regenerateQuestionsSequentially(
+      linkedQuestions,
+      async question => {
+        try {
+          await questionsApi.regenerateQuestion(
+            question._id,
+            'The linked learning objective was revised. Regenerate this question so its assessed content, answer, and explanation align with the current objective.'
+          );
+        } catch (error) {
+          console.error(`Failed to regenerate linked question ${question._id}:`, error);
+          throw error;
+        }
+      }
+    );
+
+    await dispatch(fetchQuestions(quizId));
+
+    if (result.failed.length > 0) {
+      showNotification(
+        'warning',
+        'Some Questions Need Attention',
+        `${result.succeeded.length} question${result.succeeded.length === 1 ? '' : 's'} regenerated; ${result.failed.length} failed. Retry the failed questions from Review & Edit.`
+      );
+      return;
+    }
+
+    showNotification(
+      'success',
+      'Linked Questions Regenerated',
+      `${result.succeeded.length} question${result.succeeded.length === 1 ? '' : 's'} now match the revised learning objective.`
+    );
   };
 
   const handleSaveEdit = async () => {
-    if (editingIndex !== null && editText.trim()) {
-      try {
-        // If using Redux objectives, update via Redux
-        if (reduxObjectives.length > 0 && reduxObjectives[editingIndex]) {
-          const objectiveId = reduxObjectives[editingIndex]._id;
-          await dispatch(updateObjective({ id: objectiveId, text: editText.trim() }));
-        } else {
-          // Otherwise, update via local state and save to backend
-          const updatedObjectives = [...currentObjectives];
-          updatedObjectives[editingIndex] = editText.trim();
-          const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
-          await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
+    if (editingIndex === null || !objectiveDraft.text.trim()) {
+      showNotification('warning', 'Learning Objective Required', 'Enter the learning objective before saving.');
+      return;
+    }
+
+    const subpoints = objectiveDraft.subpoints
+      .map(subpoint => subpoint.trim())
+      .filter(Boolean);
+
+    try {
+      if (isCreatingObjective) {
+        await dispatch(saveObjectives({
+          quizId,
+          objectives: [{
+            text: objectiveDraft.text.trim(),
+            order: currentObjectives.length,
+            bloomLevel: objectiveDraft.bloomLevel,
+            subpoints
+          }]
+        })).unwrap();
+        showNotification('success', 'Learning Objective Added', 'The learning objective and its manual details were saved.');
+      } else {
+        const objectiveData = reduxObjectives[editingIndex] || objectives[editingIndex];
+        if (!objectiveData?._id) {
+          throw new Error('The learning objective is still loading. Please retry in a moment.');
         }
-        setEditingIndex(null);
-        setEditText('');
-      } catch (error) {
-        console.error('Failed to update objective:', error);
-        // Fallback to local state only
-        const updatedObjectives = [...currentObjectives];
-        updatedObjectives[editingIndex] = editText.trim();
-        onObjectivesChange(updatedObjectives);
-        setEditingIndex(null);
-        setEditText('');
+        const questionImpact = await getLinkedQuestionRegenerationChoice(objectiveData._id, 'edit');
+        await dispatch(updateObjective({
+          id: objectiveData._id,
+          text: objectiveDraft.text.trim(),
+          bloomLevel: objectiveDraft.bloomLevel,
+          subpoints
+        })).unwrap();
+        if (questionImpact.regenerate) {
+          await regenerateLinkedQuestions(questionImpact.linkedQuestions);
+        }
+        showNotification('success', 'Learning Objective Updated', 'The learning objective and its manual details were saved.');
       }
+      handleCancelObjectiveEdit();
+    } catch (error) {
+      console.error('Failed to save objective:', error);
+      showNotification(
+        'error',
+        'Learning Objective Save Failed',
+        error instanceof Error ? error.message : 'Failed to save the learning objective.'
+      );
     }
   };
 
@@ -525,8 +726,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
           
           // Also clear editing state if we're deleting the one being edited
           if (editingIndex === index) {
-            setEditingIndex(null);
-            setEditText('');
+            handleCancelObjectiveEdit();
           }
           return;
         }
@@ -649,68 +849,21 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     localStorage.setItem('dontShowDeleteLOWarning', checked.toString());
   };
 
-  const handleAddNewObjective = async () => {
+  const handleAddNewObjective = () => {
     // Guard: Prevent adding while questions are being generated
     if (questionsGenerating) {
       showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
       return;
     }
     
-    const newObjectiveText = 'New learning objective...';
-    try {
-      // Use current objectives (which could be from Redux or local state)
-      const existingObjectives = currentObjectives.map((text, i) => ({ text, order: i }));
-      const objectivesData = [
-        ...existingObjectives,
-        { text: newObjectiveText, order: currentObjectives.length }
-      ];
-      
-      const newIndex = currentObjectives.length;
-      
-      await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
-      
-      // Set editing mode for the new objective
-      setEditingIndex(newIndex);
-      setEditText(newObjectiveText);
-      
-      // Scroll to the new objective and auto-focus after a short delay
-      setTimeout(() => {
-        if (newObjectiveRef.current) {
-          newObjectiveRef.current.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-        
-        // Auto-focus the textarea
-        if (editTextareaRef.current) {
-          editTextareaRef.current.focus();
-          // Select all text for easy replacement
-          editTextareaRef.current.select();
-        }
-      }, 100);
-    } catch (error) {
-      console.error('Failed to add objective:', error);
-      // Fall back to local state
-      const newIndex = currentObjectives.length;
-      onObjectivesChange([...currentObjectives, newObjectiveText]);
-      setEditingIndex(newIndex);
-      setEditText(newObjectiveText);
-      
-      // Still try to scroll and focus
-      setTimeout(() => {
-        if (newObjectiveRef.current) {
-          newObjectiveRef.current.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-        if (editTextareaRef.current) {
-          editTextareaRef.current.focus();
-          editTextareaRef.current.select();
-        }
-      }, 100);
-    }
+    setIsCreatingObjective(true);
+    setEditingIndex(currentObjectives.length);
+    setObjectiveDraft(createEmptyObjectiveDraft());
+
+    window.setTimeout(() => {
+      newObjectiveRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      editTextareaRef.current?.focus();
+    }, 100);
   };
 
   const handleRegenerateAll = () => {
@@ -823,10 +976,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       // If using Redux objectives, regenerate via Redux action
       if (reduxObjectives.length > 0 && reduxObjectives[index]) {
         const objectiveId = reduxObjectives[index]._id;
+        const questionImpact = await getLinkedQuestionRegenerationChoice(objectiveId, 'regenerate');
         await dispatch(regenerateSingleObjective({
           id: objectiveId,
           customPrompt: customPrompt?.trim() || undefined
-        }));
+        })).unwrap();
+        if (questionImpact.regenerate) {
+          await regenerateLinkedQuestions(questionImpact.linkedQuestions);
+        }
       } else {
         // Fallback: regenerate all and take first result (for local state objectives)
         const generatedObjectives = await dispatch(generateObjectives({ quizId, materialIds: assignedMaterials, targetCount: 1 }));
@@ -844,7 +1001,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       setObjectiveToRegenerate(null);
     } catch (error) {
       console.error('Failed to regenerate objective:', error);
-      alert('Failed to regenerate the learning objective. Please try again.');
+      showNotification(
+        'error',
+        'Learning Objective Regeneration Failed',
+        error instanceof Error
+          ? error.message
+          : 'Failed to regenerate the learning objective. Please try again.',
+        7000
+      );
     } finally {
       setRegenerateLoading(false);
     }
@@ -1094,13 +1258,17 @@ Students will be able to apply those concepts to a new example..."
           {currentObjectives.length > 0 && (
               <div ref={objectiveResultsRef} className="objectives-list">
                 <div className="objectives-header">
-                  <h4>Learning Objectives ({currentObjectives.length})</h4>
+                  <h4>Learning Objectives ({displayedObjectives.length})</h4>
                   <div className="objectives-actions">
                     <button 
                       className="btn btn-outline" 
                       onClick={handleAddNewObjective}
-                      disabled={questionsGenerating || enriching}
-                      title={questionsGenerating ? 'Cannot add while generating questions' : 'Add new learning objective'}
+                      disabled={questionsGenerating || enriching || editingIndex !== null}
+                      title={questionsGenerating
+                        ? 'Cannot add while generating questions'
+                        : editingIndex !== null
+                          ? 'Save or cancel the current learning objective first'
+                          : 'Add new learning objective'}
                     >
                       <Plus size={16} />
                       Add New
@@ -1131,23 +1299,37 @@ Students will be able to apply those concepts to a new example..."
                       disabled={questionsGenerating || enriching}
                       title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate all learning objectives'}
                     >
-                      <Sparkles size={16} />
+                      <RotateCcw size={16} />
                       Regenerate All
                     </button>
                   </div>
                 </div>
 
                 <div className="objectives-items">
-                  {currentObjectives.map((objective, index) => {
+                  {displayedObjectives.map((objective, index) => {
                     const objectiveData = reduxObjectives[index] || objectives[index];
                     const metadata = objectiveData?.generationMetadata;
                     const sourceReferences = objectiveData?.generationMetadata?.sourceReferences || [];
                     const primaryReference = sourceReferences[0];
                     const subpoints = metadata?.subpoints || [];
+                    const canEnrichObjective = Boolean(objectiveData?._id)
+                      && metadata?.isAIGenerated !== true;
+                    const showEnrichmentTutorial = enrichmentTutorial.isActive
+                      && objectivesTutorial.isCompleted
+                      && index === enrichmentTutorialObjectiveIndex
+                      && !questionsGenerating
+                      && !enriching;
+
+                    const enrichThisObjective = () => {
+                      enrichmentTutorial.complete();
+                      if (objectiveData?._id) {
+                        void handleEnrichObjective(objectiveData._id, index);
+                      }
+                    };
 
                     return (
                       <div 
-                        key={index} 
+                        key={objectiveData?._id || `new-objective-${index}`}
                         className="objective-item"
                         ref={index === editingIndex ? newObjectiveRef : null}
                       >
@@ -1155,19 +1337,93 @@ Students will be able to apply those concepts to a new example..."
                         <div className="objective-content">
                           {editingIndex === index ? (
                               <div className="objective-edit">
-                        <textarea
-                            ref={editTextareaRef}
-                            className="textarea"
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            rows={2}
-                        />
+                                <label className="objective-edit-field objective-edit-field-full">
+                                  <span>Learning Objective</span>
+                                  <textarea
+                                      ref={editTextareaRef}
+                                      className="textarea"
+                                      value={objectiveDraft.text}
+                                      onChange={(event) => setObjectiveDraft(previous => ({
+                                        ...previous,
+                                        text: event.target.value
+                                      }))}
+                                      placeholder="Students will be able to..."
+                                      maxLength={500}
+                                      rows={3}
+                                  />
+                                </label>
+
+                                <div className="objective-edit-grid">
+                                  <label className="objective-edit-field">
+                                    <span>Bloom Level</span>
+                                    <select
+                                      className="input"
+                                      value={objectiveDraft.bloomLevel}
+                                      onChange={(event) => setObjectiveDraft(previous => ({
+                                        ...previous,
+                                        bloomLevel: event.target.value as BloomLevel | ''
+                                      }))}
+                                    >
+                                      {BLOOM_LEVEL_OPTIONS.map(option => (
+                                        <option key={option.label} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+
+                                  <div className="objective-edit-field objective-edit-field-full">
+                                    <div className="objective-subpoints-editor-header">
+                                      <span>Subpoints <small>(optional)</small></span>
+                                      <button
+                                        type="button"
+                                        className="btn btn-outline btn-sm"
+                                        onClick={handleAddDraftSubpoint}
+                                        disabled={objectiveDraft.subpoints.length >= 20}
+                                      >
+                                        <Plus size={14} />
+                                        Add Subpoint
+                                      </button>
+                                    </div>
+                                    <div className="objective-subpoints-editor">
+                                      {objectiveDraft.subpoints.map((subpoint, subpointIndex) => (
+                                        <div key={`subpoint-${subpointIndex}`} className="objective-subpoint-input">
+                                          <span>{subpointIndex + 1}</span>
+                                          <input
+                                            className="input"
+                                            value={subpoint}
+                                            onChange={(event) => handleUpdateDraftSubpoint(subpointIndex, event.target.value)}
+                                            placeholder="Enter a specific skill, concept, or performance step"
+                                            maxLength={500}
+                                          />
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => handleRemoveDraftSubpoint(subpointIndex)}
+                                            aria-label={`Remove subpoint ${subpointIndex + 1}`}
+                                            title="Remove subpoint"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <small className="objective-edit-hint">
+                                      Instructor-entered Bloom level and subpoints are preserved if you later use AI Enrich.
+                                    </small>
+                                  </div>
+                                </div>
                                 <div className="edit-actions">
-                                  <button className="btn btn-secondary" onClick={() => setEditingIndex(null)}>
+                                  <button type="button" className="btn btn-secondary" onClick={handleCancelObjectiveEdit}>
                                     Cancel
                                   </button>
-                                  <button className="btn btn-primary" onClick={handleSaveEdit}>
-                                    Save
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={handleSaveEdit}
+                                    disabled={loading || !objectiveDraft.text.trim()}
+                                  >
+                                    {loading ? 'Saving...' : isCreatingObjective ? 'Add Learning Objective' : 'Save Changes'}
                                   </button>
                                 </div>
                               </div>
@@ -1231,21 +1487,54 @@ Students will be able to apply those concepts to a new example..."
                                   <button 
                                     className="btn btn-ghost" 
                                     onClick={() => handleEditObjective(index)}
-                                    disabled={questionsGenerating}
+                                    disabled={questionsGenerating || enriching}
+                                    aria-label={`Edit learning objective ${index + 1}`}
+                                    title={questionsGenerating ? 'Cannot edit while generating questions' : 'Edit learning objective'}
                                   >
                                     <Edit size={16} />
                                   </button>
+                                  {canEnrichObjective && (
+                                    <FeatureCoachmark
+                                      isOpen={showEnrichmentTutorial}
+                                      title="Enrich one objective with AI"
+                                      description="Use the sparkle action to add source-grounded metadata and evidence while keeping the objective wording and instructor-entered Bloom level and subpoints. Assigned processed materials are required."
+                                      eyebrow="AI Enrich"
+                                      primaryLabel="Enrich this LO"
+                                      placement="bottom-end"
+                                      onPrimary={enrichThisObjective}
+                                      onDismiss={enrichmentTutorial.complete}
+                                      onSkip={enrichmentTutorial.skipAll}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost"
+                                        onClick={enrichThisObjective}
+                                        disabled={questionsGenerating || enriching || assignedMaterials.length === 0 || !objectiveData?._id}
+                                        aria-label={`AI enrich learning objective ${index + 1}`}
+                                        title={assignedMaterials.length === 0
+                                          ? 'Assign processed materials before using AI Enrich'
+                                          : enrichingObjectiveId === objectiveData?._id
+                                            ? 'Enriching this learning objective...'
+                                            : 'Use AI to enrich this objective with metadata and source evidence'}
+                                      >
+                                        <Sparkles size={16} />
+                                      </button>
+                                    </FeatureCoachmark>
+                                  )}
                                   <button 
                                     className="btn btn-ghost" 
                                     onClick={() => openRegenerateModal(index)}
-                                    disabled={questionsGenerating}
+                                    disabled={questionsGenerating || enriching}
+                                    aria-label={`Regenerate learning objective ${index + 1}`}
+                                    title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate learning objective'}
                                   >
                                     <RotateCcw size={16} />
                                   </button>
                                   <button 
                                     className="btn btn-ghost" 
                                     onClick={() => handleDeleteObjective(index)}
-                                    disabled={questionsGenerating}
+                                    disabled={questionsGenerating || enriching}
+                                    aria-label={`Delete learning objective ${index + 1}`}
                                     title={questionsGenerating ? 'Cannot delete while generating questions' : 'Delete learning objective'}
                                   >
                                     <Trash2 size={16} />

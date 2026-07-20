@@ -207,7 +207,9 @@ router.get('/:exportId/download', authenticateToken, asyncHandler(async (req, re
       ? 'application/pdf'
       : fileExtension === '.md'
         ? 'text/markdown; charset=utf-8'
-        : 'application/octet-stream';
+        : fileExtension === '.h5p'
+          ? 'application/zip'
+          : 'application/octet-stream';
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', contentType);

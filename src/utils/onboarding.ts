@@ -9,7 +9,9 @@ export type OnboardingStep =
   | 'delivery-format'
   | 'ai-blueprint'
   | 'question-evidence'
-  | 'export';
+  | 'export'
+  | 'objective-enrichment'
+  | 'create-guide';
 
 interface OnboardingState {
   version: number;

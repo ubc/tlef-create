@@ -4,7 +4,7 @@ import Folder from '../models/Folder.js';
 import FileService from '../services/fileService.js';
 import processingJobService from '../services/processingJobService.js';
 import { authenticateToken, attachUser } from '../middleware/auth.js';
-import { validateCreateMaterial, validateMongoId } from '../middleware/validator.js';
+import { validateCreateMaterial, validateMaterialId, validateMongoId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, MATERIAL_TYPES, PROCESSING_STATUS } from '../config/constants.js';
@@ -492,6 +492,7 @@ async function sendResolvedReference(req, res, reference = {}) {
   const { default: ragService } = await import('../services/ragService.js');
   const parsed = await ragService.loadMaterialChunks(material);
   const chunks = parsed.chunks || [];
+  const isMaterialPreview = reference.previewMode === 'material';
   const { citedIndex, matchScore, resolvedBy } = resolveReferenceChunk(chunks, reference);
 
   const citedChunk = chunks[citedIndex];
@@ -524,8 +525,10 @@ async function sendResolvedReference(req, res, reference = {}) {
     pageCount: parsed.pages?.length || material.processingMetadata?.pageCount,
     chunkIndex: citedIndex,
     section: citedChunk?.sectionTitle || citedChunk?.section || '',
-    excerpt: citedChunk?.content || '',
-    pageContext: nearbyChunks.map(chunk => chunk.content).join('\n\n'),
+    excerpt: isMaterialPreview ? '' : citedChunk?.content || '',
+    pageContext: isMaterialPreview
+      ? parsed.content || chunks.map(chunk => chunk.content).join('\n\n')
+      : nearbyChunks.map(chunk => chunk.content).join('\n\n'),
     hasSourceFile: Boolean(material.filePath),
     sourceUrl: material.url,
     mimeType: material.mimeType,
@@ -551,18 +554,13 @@ router.get('/:materialId/reference', authenticateToken, asyncHandler(async (req,
  * POST /api/materials/:materialId/reprocess
  * Re-index an existing material with the latest page-aware parser.
  */
-router.post('/:materialId/reprocess', authenticateToken, asyncHandler(async (req, res) => {
+router.post('/:materialId/reprocess', authenticateToken, validateMaterialId, asyncHandler(async (req, res) => {
   const { materialId } = req.params;
   const userId = req.user.id;
-  const material = await Material.findById(materialId);
+  const material = await Material.findOne({ _id: materialId, uploadedBy: userId });
 
   if (!material) {
     return notFoundResponse(res, 'Material');
-  }
-
-  const folder = await Folder.findOne({ _id: material.folder, instructor: userId });
-  if (!folder) {
-    return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
   }
 
   const { default: ragService } = await import('../services/ragService.js');

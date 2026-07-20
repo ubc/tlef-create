@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, MessageSquare, Target, X } from 'lucide-react';
-import { searchApi, SearchResult } from '../services/api';
+import { foldersApi, materialsApi, quizApi, searchApi, SearchResult } from '../services/api';
 import '../styles/components/SearchModal.css';
 
 interface SearchModalProps {
@@ -14,8 +14,11 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [openingResultId, setOpeningResultId] = useState<string | null>(null);
+  const [resultError, setResultError] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchRequestIdRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when modal opens
@@ -31,11 +34,15 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
       setSearchQuery('');
       setSearchResults([]);
       setSelectedIndex(0);
+      setOpeningResultId(null);
+      setResultError('');
     }
   }, [isOpen]);
 
   // Handle search with debouncing
   useEffect(() => {
+    const requestId = ++searchRequestIdRef.current;
+    setResultError('');
     // Clear previous timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -44,6 +51,7 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
     // If query is empty, clear results
     if (!searchQuery.trim()) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
@@ -54,13 +62,18 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
       setIsSearching(true);
       try {
         const response = await searchApi.search(searchQuery);
-        setSearchResults(response.data.results);
+        if (requestId !== searchRequestIdRef.current) return;
+        setSearchResults(response.data?.results || []);
         setSelectedIndex(0);
       } catch (error) {
+        if (requestId !== searchRequestIdRef.current) return;
         console.error('Search error:', error);
         setSearchResults([]);
+        setResultError('Search could not be completed. Please retry.');
       } finally {
-        setIsSearching(false);
+        if (requestId === searchRequestIdRef.current) {
+          setIsSearching(false);
+        }
       }
     }, 300);
 
@@ -76,9 +89,11 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
     if (e.key === 'Escape') {
       onClose();
     } else if (e.key === 'ArrowDown') {
+      if (searchResults.length === 0) return;
       e.preventDefault();
       setSelectedIndex((prev) => (prev + 1) % searchResults.length);
     } else if (e.key === 'ArrowUp') {
+      if (searchResults.length === 0) return;
       e.preventDefault();
       setSelectedIndex((prev) => (prev - 1 + searchResults.length) % searchResults.length);
     } else if (e.key === 'Enter' && searchResults.length > 0) {
@@ -88,9 +103,58 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
   };
 
   // Handle result click
-  const handleResultClick = (result: SearchResult) => {
-    navigate(result.navigationPath);
-    onClose();
+  const handleResultClick = async (result: SearchResult) => {
+    if (openingResultId) return;
+
+    setOpeningResultId(result.id);
+    setResultError('');
+    try {
+      if (!result.courseId) {
+        throw new Error('The result is missing its course.');
+      }
+
+      let navigationPath: string;
+      if (result.type === 'material') {
+        await Promise.all([
+          foldersApi.getFolder(result.courseId),
+          materialsApi.getProcessingStatus(result.id)
+        ]);
+        navigationPath = `/course/${result.courseId}`;
+      } else {
+        if (!result.quizId) {
+          throw new Error('The result is missing its quiz.');
+        }
+        const [response] = await Promise.all([
+          quizApi.getQuiz(result.quizId),
+          foldersApi.getFolder(result.courseId)
+        ]);
+        const folderValue = response.quiz.folder as unknown;
+        const resolvedCourseId = typeof folderValue === 'string'
+          ? folderValue
+          : folderValue && typeof folderValue === 'object' && '_id' in folderValue
+            ? String((folderValue as { _id: unknown })._id)
+            : '';
+        if (resolvedCourseId && resolvedCourseId !== result.courseId) {
+          throw new Error('The result no longer belongs to this course.');
+        }
+
+        navigationPath = result.type === 'question'
+          ? `/course/${result.courseId}/quiz/${result.quizId}?tab=review&questionId=${result.id}`
+          : `/course/${result.courseId}/quiz/${result.quizId}?tab=objectives`;
+      }
+
+      navigate(navigationPath);
+      onClose();
+    } catch (error) {
+      console.warn('Search result is no longer available:', error);
+      setSearchResults(previous => previous.filter(candidate => (
+        candidate.type !== result.type || candidate.id !== result.id
+      )));
+      setSelectedIndex(0);
+      setResultError('That result is no longer available or you no longer have access. It was removed from the list.');
+    } finally {
+      setOpeningResultId(null);
+    }
   };
 
   // Get icon for search result type
@@ -145,6 +209,11 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
         </div>
 
         <div className="search-modal-content">
+          {resultError && (
+            <div className="search-modal-error" role="alert">
+              {resultError}
+            </div>
+          )}
           {isSearching ? (
             <div className="search-modal-loading">
               <div className="spinner"></div>
@@ -179,6 +248,7 @@ const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                   className={`search-result-card ${index === selectedIndex ? 'selected' : ''}`}
                   onClick={() => handleResultClick(result)}
                   onMouseEnter={() => setSelectedIndex(index)}
+                  aria-busy={openingResultId === result.id}
                 >
                   <div className="search-result-icon-badge">
                     {getSearchResultIcon(result.type)}

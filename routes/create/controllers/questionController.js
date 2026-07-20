@@ -8,7 +8,7 @@ import { validateCreateQuestion, validateReorderQuestions, validateMongoId, vali
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, REVIEW_STATUS } from '../config/constants.js';
-import { formatContentForDatabase } from '../services/questionContentService.js';
+import { formatContentForDatabase, normalizeMarkTheWordsText } from '../services/questionContentService.js';
 
 const router = express.Router();
 
@@ -94,7 +94,9 @@ router.post('/', authenticateToken, validateCreateQuestion, asyncHandler(async (
     type,
     difficulty,
     questionText,
-    content: content || {},
+    content: type === 'mark-the-words'
+      ? { ...(content || {}), text: normalizeMarkTheWordsText(content?.text || questionText || '') }
+      : (content || {}),
     correctAnswer,
     explanation,
     order,
@@ -176,6 +178,13 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
       question[field] = updates[field];
     }
   });
+
+  if (question.type === 'mark-the-words' && updates.content !== undefined) {
+    question.content = {
+      ...question.content,
+      text: normalizeMarkTheWordsText(question.content?.text || question.questionText || '')
+    };
+  }
 
   // Add to edit history
   await question.addEdit(userId, 'Manual update', previousData);

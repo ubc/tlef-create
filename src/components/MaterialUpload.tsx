@@ -4,6 +4,7 @@ import { usePubSub } from '../hooks/usePubSub';
 import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
 import { materialsApi } from '../services/api';
 import FeatureCoachmark from './onboarding/FeatureCoachmark';
+import SourceReferencePreviewModal from './SourceReferencePreviewModal';
 import '../styles/components/MaterialUpload.css';
 
 interface Material {
@@ -33,10 +34,7 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [showTextForm, setShowTextForm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
-  const [previewContent, setPreviewContent] = useState<string>('');
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Track upload progress for each file
@@ -182,7 +180,7 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
     }
   };
 
-  const handlePreview = async (material: Material) => {
+  const handlePreview = (material: Material) => {
     // Don't allow preview for materials not yet uploaded (local-only materials)
     if (material.id.length !== 24) {
       showNotification('info', 'Preview Not Available', 'Please upload the material first to preview its content.');
@@ -190,41 +188,6 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
     }
 
     setPreviewMaterial(material);
-    setShowPreview(true);
-    setIsLoadingPreview(true);
-    setPreviewContent('');
-
-    try {
-      // Use API_URL to ensure correct base URL
-      const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:8051'
-        : `${window.location.protocol}//${window.location.hostname}`;
-
-      const response = await fetch(`${API_URL}/api/create/materials/${material.id}/preview`, {
-        credentials: 'include' // Include cookies for authentication
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Preview error response:', errorText);
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        setPreviewContent(data.data.content);
-      } else {
-        showNotification('error', 'Preview Error', data.error || 'Failed to load preview');
-        setShowPreview(false);
-      }
-    } catch (error) {
-      console.error('Error fetching preview:', error);
-      showNotification('error', 'Preview Error', 'Failed to load material preview. The material may not be fully processed yet.');
-      setShowPreview(false);
-    } finally {
-      setIsLoadingPreview(false);
-    }
   };
 
   const getFileIcon = (type: string) => {
@@ -465,38 +428,15 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
             </FeatureCoachmark>
           )}
 
-          {/* Preview Modal */}
-          {showPreview && previewMaterial && (
-              <div className="modal-overlay" onClick={() => setShowPreview(false)}>
-                <div className="modal-content preview-modal" onClick={(e) => e.stopPropagation()}>
-                  <div className="modal-header">
-                    <div>
-                      <h3 className="modal-title">{previewMaterial.name}</h3>
-                      <p className="modal-subtitle">
-                        {previewMaterial.type.toUpperCase()} • {previewMaterial.uploadDate}
-                      </p>
-                    </div>
-                    <button
-                        className="btn btn-ghost modal-close"
-                        onClick={() => setShowPreview(false)}
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-                  <div className="modal-body">
-                    {isLoadingPreview ? (
-                        <div className="preview-loading">
-                          <Loader2 size={32} className="spinner" />
-                          <p>Loading content...</p>
-                        </div>
-                    ) : (
-                        <div className="preview-content">
-                          <pre>{previewContent}</pre>
-                        </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+          {previewMaterial && (
+            <SourceReferencePreviewModal
+              mode="material"
+              reference={{
+                materialId: previewMaterial.id,
+                materialName: previewMaterial.name
+              }}
+              onClose={() => setPreviewMaterial(null)}
+            />
           )}
         </div>
       </div>

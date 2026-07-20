@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2, Pencil, Map } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
@@ -44,6 +44,17 @@ const QuizView = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
+  const coverageScrollPositionRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (activeTab !== 'coverage' || coverageScrollPositionRef.current === null) return;
+
+    window.scrollTo({
+      top: coverageScrollPositionRef.current,
+      behavior: 'auto'
+    });
+    coverageScrollPositionRef.current = null;
+  }, [activeTab]);
 
   // Update active tab when URL params change
   useEffect(() => {
@@ -67,6 +78,13 @@ const QuizView = () => {
   }, [quizId, courseId, dispatch]);
 
   useEffect(() => {
+    if (currentQuiz) {
+      const materialIds = currentQuiz.materials.map((material: string | { _id: string }) =>
+        typeof material === 'string' ? material : material._id
+      );
+      setAssignedMaterials(materialIds);
+    }
+
     if (reduxObjectives.length > 0) {
       const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
         _id: obj._id,
@@ -79,12 +97,6 @@ const QuizView = () => {
     }
 
     if (currentQuiz) {
-      // Set assigned materials from backend
-      const materialIds = currentQuiz.materials.map((m: string | { _id: string }) =>
-        typeof m === 'string' ? m : m._id
-      );
-      setAssignedMaterials(materialIds);
-
       // Set learning objectives if they exist - NEW: Keep full objects
       if (currentQuiz.learningObjectives) {
         const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number; generationMetadata?: LearningObjectiveData['generationMetadata'] }, idx: number) => {
@@ -186,6 +198,14 @@ const QuizView = () => {
     }
   };
 
+  const handleTabChange = (tab: TabType) => {
+    if (!canProceed(tab)) return;
+    if (tab === 'coverage') {
+      coverageScrollPositionRef.current = window.scrollY;
+    }
+    setActiveTab(tab);
+  };
+
   const coverageRefreshKey = learningObjectives
     .map(objective => `${objective._id}:${objective.text}`)
     .join('|');
@@ -204,7 +224,7 @@ const QuizView = () => {
               disabled={isDeleting}
             >
               <Trash2 size={16} />
-              {isDeleting ? 'Deleting...' : 'Delete Learning Object'}
+              {isDeleting ? 'Deleting...' : `Delete ${currentQuiz.name}`}
             </button>
           </div>
           <div className="quiz-title-row">
@@ -243,8 +263,10 @@ const QuizView = () => {
               <button
                   key={tab.id}
                   className={`quiz-tab ${activeTab === tab.id ? 'active' : ''} ${!canProceed(tab.id) ? 'disabled' : ''}`}
-                  onClick={() => canProceed(tab.id) && setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   disabled={!canProceed(tab.id)}
+                  aria-label={tab.label}
+                  title={canProceed(tab.id) ? tab.label : `${tab.label} is not available yet`}
               >
                 <tab.icon size={20} />
                 <span>{tab.label}</span>
@@ -292,13 +314,13 @@ const QuizView = () => {
             />
           </div>
 
-          {activeTab === 'coverage' && (
+          <div style={{ display: activeTab === 'coverage' ? 'block' : 'none' }}>
             <CoverageMapPanel
               quizId={quizId!}
               refreshKey={coverageRefreshKey}
               onNavigateToGeneration={() => setActiveTab('generation')}
             />
-          )}
+          </div>
 
           <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
             <QuestionGeneration
@@ -345,7 +367,7 @@ const QuizView = () => {
                   onClick={handleDeleteQuiz}
                   disabled={isDeleting}
                 >
-                  {isDeleting ? 'Deleting...' : 'Delete Learning Object'}
+                  {isDeleting ? 'Deleting...' : `Delete ${currentQuiz.name}`}
                 </button>
               </div>
             </div>
