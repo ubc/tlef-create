@@ -60,6 +60,7 @@ export default function AIPlanGenerationTrace({
   );
   const modelDraftStarted = Boolean(streamedText) || steps.some(step => [
     'draft-started',
+    'draft-retry',
     'llm-started',
     'draft-complete',
     'llm-complete',
