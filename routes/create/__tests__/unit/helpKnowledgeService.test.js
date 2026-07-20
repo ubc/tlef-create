@@ -63,6 +63,16 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(sources.some(source => source.section === 'Understand the generation log')).toBe(true);
   });
 
+  test('retrieves GPT-5 output-budget retry guidance for learning objectives', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why did GPT-5 stop before returning learning objective text, and will CREATE retry the output budget?',
+      { route: '/course/course-1/quiz/quiz-1?tab=objectives', activeTab: 'Learning Objectives' },
+      4
+    );
+
+    expect(sources.some(source => source.section === 'Understand the generation log')).toBe(true);
+  });
+
   test('retrieves source-type material preview guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'Does the material eye icon open the PDF and show extracted text for a URL?',

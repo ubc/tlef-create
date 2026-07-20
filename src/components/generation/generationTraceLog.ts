@@ -17,6 +17,7 @@ const PUBLIC_STEP_DETAILS: Record<string, string> = {
   'budget-complete': 'A deterministic question budget has been allocated across the learning objectives.',
   'context-complete': 'Learning objectives, assigned materials, and existing question history are ready for the model.',
   'draft-started': 'The model is now drafting the learning-objective JSON from the prepared context.',
+  'draft-retry': 'The first request ended before a complete visible draft was returned. CREATE is retrying once with a larger output budget.',
   'llm-started': 'The model is now drafting the quiz blueprint from the prepared context.',
   'draft-complete': 'The model draft has returned and is being checked against the source inventory.',
   'llm-complete': 'The model draft has returned and is being validated.',

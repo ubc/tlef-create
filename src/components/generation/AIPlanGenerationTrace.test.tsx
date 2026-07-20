@@ -110,4 +110,14 @@ describe('public generation log formatting', () => {
     expect(buildPublicWorkflowLog([], true, 'Preparing source inventory...'))
       .toBe('[WAIT] Preparing source inventory...');
   });
+
+  it('explains the bounded output-budget retry without exposing request internals', () => {
+    const log = buildPublicWorkflowLog([{
+      status: 'draft-retry',
+      message: 'The model used its output budget. Retrying once...',
+    }], true, 'Preparing source inventory...');
+
+    expect(log).toContain('retrying once with a larger output budget');
+    expect(log).not.toContain('24000');
+  });
 });

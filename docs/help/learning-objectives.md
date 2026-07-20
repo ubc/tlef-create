@@ -14,6 +14,8 @@ The **Live generation log** explains what CREATE is doing before model text appe
 
 When drafting starts, the same log adds a **Live model draft** section. After the draft returns, CREATE checks whether the required source sections are covered and may run a targeted repair pass before saving the objectives. A long preparation stage does not by itself mean generation is stuck, but an error event in the log identifies the stage that needs attention.
 
+GPT-5 models use one output budget for both internal reasoning and the visible objective JSON. CREATE reserves a larger budget for these models. If OpenAI reports that the first request exhausted that budget before completing the draft, CREATE clears the incomplete draft and retries once with more room. If the retry also stops, check the visible error, try a processed-material subset, or select another configured model rather than repeatedly submitting the same request.
+
 ## Add existing or manual objectives
 
 Paste existing objectives into the generation instructions when you want the model to preserve or refine a provided set. Use **Add Manually** when wording must be stored exactly as entered. Manual entry is also useful when a required objective is not stated explicitly in the uploaded material.

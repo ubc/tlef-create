@@ -1,9 +1,13 @@
 import { describe, expect, test } from '@jest/globals';
 import {
+  buildOpenAIIncompleteResponseError,
   buildOpenAIStreamingRequest,
+  extractResponsesOutputText,
+  getLearningObjectiveCompletionOptions,
+  isOpenAIOutputBudgetError,
   isGpt5Family,
   parseCoursePromptReviewResponse
-} from '../../services/llmService.js';
+} from '../../utils/openAIRequestUtils.js';
 
 describe('OpenAI streaming request configuration', () => {
   test('recognizes GPT-5 family model names', () => {
@@ -17,16 +21,50 @@ describe('OpenAI streaming request configuration', () => {
       prompt: 'Generate a question',
       temperature: 0.7,
       maxTokens: 4000,
-      useResponsesApi: true
+      useResponsesApi: true,
+      reasoningEffort: 'none'
     });
 
     expect(request).toEqual({
       model: 'gpt-5.4-nano',
       input: 'Generate a question',
       max_output_tokens: 4000,
-      stream: true
+      stream: true,
+      reasoning: { effort: 'none' }
     });
     expect(request.temperature).toBeUndefined();
+  });
+
+  test('allocates a reasoning-safe LO budget for GPT-5.4 nano with one larger retry', () => {
+    expect(getLearningObjectiveCompletionOptions('gpt-5.4-nano')).toEqual({
+      maxTokens: 12000,
+      reasoningEffort: 'none'
+    });
+    expect(getLearningObjectiveCompletionOptions('gpt-5.4-nano', true)).toEqual({
+      maxTokens: 24000,
+      reasoningEffort: 'none'
+    });
+    expect(getLearningObjectiveCompletionOptions('gpt-4o-mini')).toEqual({
+      maxTokens: 2600,
+      reasoningEffort: null
+    });
+  });
+
+  test('recovers final Responses API text when no delta event was delivered', () => {
+    expect(extractResponsesOutputText({
+      output: [{
+        type: 'message',
+        content: [{ type: 'output_text', text: '{"objectives":[]}' }]
+      }]
+    })).toBe('{"objectives":[]}');
+  });
+
+  test('classifies max-output incomplete responses as retryable budget errors', () => {
+    const error = buildOpenAIIncompleteResponseError('gpt-5.4-nano', 'max_output_tokens');
+
+    expect(error.message).toContain('used its output budget');
+    expect(error.incompleteReason).toBe('max_output_tokens');
+    expect(isOpenAIOutputBudgetError(error)).toBe(true);
   });
 
   test('uses Chat Completions parameters for GPT-4o mini', () => {

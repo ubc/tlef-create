@@ -12,6 +12,24 @@ import { QUESTION_TYPES } from '../config/constants.js';
 import UserApiKey from '../models/UserApiKey.js';
 import User from '../models/User.js';
 import { normalizeGeneratedQuestionText } from '../utils/questionTextLimits.js';
+import {
+  buildOpenAIIncompleteResponseError,
+  buildOpenAIStreamingRequest,
+  extractResponsesOutputText,
+  getLearningObjectiveCompletionOptions,
+  isGpt5Family,
+  isOpenAIOutputBudgetError,
+  parseCoursePromptReviewResponse
+} from '../utils/openAIRequestUtils.js';
+export {
+  buildOpenAIIncompleteResponseError,
+  buildOpenAIStreamingRequest,
+  extractResponsesOutputText,
+  getLearningObjectiveCompletionOptions,
+  isGpt5Family,
+  isOpenAIOutputBudgetError,
+  parseCoursePromptReviewResponse
+};
 const ADMIN_CWLS = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 export function normalizeLearningObjectiveText(value) {
@@ -22,57 +40,6 @@ export function normalizeLearningObjectiveText(value) {
 
 function normalizeOptionalText(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-export function isGpt5Family(model = '') {
-  return model.toLowerCase().startsWith('gpt-5');
-}
-
-export function buildOpenAIStreamingRequest({ model, prompt, temperature, maxTokens, useResponsesApi }) {
-  if (useResponsesApi) {
-    return {
-      model,
-      input: prompt,
-      max_output_tokens: maxTokens,
-      stream: true
-    };
-  }
-
-  return {
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    max_completion_tokens: maxTokens,
-    stream: true,
-    ...(!isGpt5Family(model) ? { temperature } : {})
-  };
-}
-
-export function parseCoursePromptReviewResponse(content = '') {
-  const withoutFence = String(content)
-    .replace(/```json\s*/gi, '')
-    .replace(/```/g, '')
-    .trim();
-  const jsonMatch = withoutFence.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Prompt review did not return a JSON object');
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  const normalizeItems = value => (
-    Array.isArray(value)
-      ? value.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim()).slice(0, 5)
-      : []
-  );
-  const revisedPrompt = typeof parsed.revisedPrompt === 'string'
-    ? parsed.revisedPrompt.trim().slice(0, 12000)
-    : '';
-
-  return {
-    warnings: normalizeItems(parsed.warnings),
-    suggestions: normalizeItems(parsed.suggestions),
-    revisedPrompt,
-    changeSummary: normalizeItems(parsed.changeSummary)
-  };
 }
 
 function extractBalancedJson(value = '') {
@@ -330,11 +297,14 @@ class QuizLLMService {
     userId = null,
     llmConfig: providedLLMConfig = null,
     temperature = 0.3,
-    maxTokens = 2400
+    maxTokens = 2400,
+    reasoningEffort = null
   }, onStreamChunk = null) {
     const llmConfig = providedLLMConfig || await this.resolveUserLLMConfig(userId);
     const { provider, model } = llmConfig;
     let accumulatedContent = '';
+    let finalResponseText = '';
+    let incompleteReason = '';
 
     if (provider === 'openai') {
       const OpenAI = (await import('openai')).default;
@@ -347,7 +317,8 @@ class QuizLLMService {
         prompt,
         temperature,
         maxTokens,
-        useResponsesApi
+        useResponsesApi,
+        reasoningEffort
       });
       const stream = useResponsesApi
         ? await openai.responses.create(request)
@@ -367,8 +338,20 @@ class QuizLLMService {
           });
         }
 
+        if (useResponsesApi && chunk.type === 'response.output_text.done' && typeof chunk.text === 'string') {
+          finalResponseText = chunk.text;
+        }
+
+        if (useResponsesApi && ['response.completed', 'response.incomplete'].includes(chunk.type)) {
+          finalResponseText = extractResponsesOutputText(chunk.response) || finalResponseText;
+        }
+
         if (useResponsesApi && chunk.type === 'response.failed') {
           throw new Error(chunk.response?.error?.message || 'OpenAI Responses API reported a failed response');
+        }
+
+        if (useResponsesApi && chunk.type === 'response.incomplete') {
+          incompleteReason = chunk.response?.incomplete_details?.reason || 'unknown';
         }
       }
     } else {
@@ -400,6 +383,20 @@ class QuizLLMService {
           deliveredAsSingleChunk: true
         });
       }
+    }
+
+    if (incompleteReason) {
+      throw buildOpenAIIncompleteResponseError(model, incompleteReason);
+    }
+
+    if (!accumulatedContent && finalResponseText) {
+      accumulatedContent = finalResponseText;
+      onStreamChunk?.(accumulatedContent, {
+        partial: true,
+        totalLength: accumulatedContent.length,
+        model,
+        deliveredAsSingleChunk: true
+      });
     }
 
     if (!accumulatedContent.trim()) {
@@ -2555,15 +2552,40 @@ Learning Objectives:`;
       };
 
       const temperature = 0.3;
-      const maxTokens = 2600;
+      const completionOptions = getLearningObjectiveCompletionOptions(model);
       progress('draft-started', `Calling ${model} to draft the learning objectives...`);
-      const response = await this.streamCompletion({
-        prompt,
-        userId,
-        llmConfig,
-        temperature,
-        maxTokens
-      }, streamOutputCallback);
+      let response;
+      try {
+        response = await this.streamCompletion({
+          prompt,
+          userId,
+          llmConfig,
+          temperature,
+          ...completionOptions
+        }, streamOutputCallback);
+      } catch (error) {
+        if (!isOpenAIOutputBudgetError(error)) {
+          throw error;
+        }
+
+        const retryOptions = getLearningObjectiveCompletionOptions(model, true);
+        progress(
+          'draft-retry',
+          `${model} used its output budget before returning a complete draft. Retrying once with more room...`
+        );
+        streamOutputCallback?.('', {
+          reset: true,
+          reason: 'output-budget-retry',
+          model
+        });
+        response = await this.streamCompletion({
+          prompt,
+          userId,
+          llmConfig,
+          temperature,
+          ...retryOptions
+        }, streamOutputCallback);
+      }
       progress('draft-complete', 'Learning objective draft returned. Checking source coverage...');
       let objectives = parseObjectivesResponse(response.content);
 
@@ -2614,7 +2636,9 @@ ${targetCount ? `- Keep exactly ${targetCount} main objectives.` : ''}`;
           userId,
           llmConfig,
           temperature: 0.2,
-          maxTokens: 2800
+          ...(isGpt5Family(model)
+            ? getLearningObjectiveCompletionOptions(model)
+            : { maxTokens: 2800 })
         }, streamOutputCallback);
         const repairedObjectives = parseObjectivesResponse(repairResponse.content);
         if (repairedObjectives.length > 0) {
