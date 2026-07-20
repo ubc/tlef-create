@@ -30,6 +30,20 @@
   background: var(--guide-green);
 }
 
+.create-guide > .feature-coachmark-anchor.is-tutorial-active::after {
+  inset: -7px;
+  border-radius: 999px;
+}
+
+.create-guide > .feature-coachmark-anchor.is-tutorial-active .create-guide-launcher {
+  animation: create-guide-tutorial-bob 1.8s ease-in-out infinite;
+}
+
+@keyframes create-guide-tutorial-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
 .create-guide-panel {
   position: absolute;
   right: 0;
@@ -157,4 +171,5 @@
 @media (prefers-reduced-motion: reduce) {
   .create-guide-panel { animation: none; }
   .create-guide-launcher { transition: none; }
+  .create-guide > .feature-coachmark-anchor.is-tutorial-active .create-guide-launcher { animation: none; }
 }

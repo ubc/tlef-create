@@ -7,7 +7,8 @@ import { authenticateToken } from '../middleware/auth.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ERROR_CODES, HTTP_STATUS } from '../config/constants.js';
-import { GENERAL_SYSTEM_PROMPTS } from '../services/coursePromptDefaults.js';
+import { GENERAL_SYSTEM_PROMPTS, LOCKED_PROMPT_GUARDRAILS } from '../services/coursePromptDefaults.js';
+import coursePromptService from '../services/coursePromptService.js';
 import llmService from '../services/llmService.js';
 
 const router = express.Router();
@@ -40,6 +41,24 @@ function normalizeApproach(approach, promptType) {
 
 function normalizePromptName(value, fallback = 'Course prompt') {
   return (value?.trim() || fallback).slice(0, 120);
+}
+
+function normalizePromptForComparison(value = '') {
+  return String(value)
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
+}
+
+async function resolveSystemDefaultEditablePrompt(promptType, approach) {
+  if (!APPROACH_DEPENDENT_PROMPT_TYPES.has(promptType) || !APPROACHES.includes(approach)) {
+    return '';
+  }
+
+  const systemTemplate = await SystemPromptTemplate.findOne({ approach, isActive: true })
+    .select('innerPrompt')
+    .lean();
+  return coursePromptService.stripLockedTaskPrompt(systemTemplate?.innerPrompt || '', promptType);
 }
 
 async function getOwnedFolder(folderId, userId) {
@@ -97,11 +116,29 @@ export function validatePromptContent(customInnerPrompt, promptType) {
   };
 }
 
-async function validatePromptWithAI(customInnerPrompt, promptType, userId) {
+export async function validatePromptWithAI(
+  customInnerPrompt,
+  promptType,
+  userId,
+  { systemDefaultEditablePrompt = '' } = {}
+) {
   const validation = validatePromptContent(customInnerPrompt, promptType);
   if (validation.status === 'invalid') {
     validation.aiReview = { attempted: false, available: false };
     return validation;
+  }
+
+  const normalizedPrompt = normalizePromptForComparison(customInnerPrompt);
+  const normalizedSystemDefault = normalizePromptForComparison(systemDefaultEditablePrompt);
+  if (normalizedSystemDefault && normalizedPrompt === normalizedSystemDefault) {
+    return {
+      ...validation,
+      status: 'valid',
+      warnings: [],
+      suggestions: [],
+      isSystemDefault: true,
+      aiReview: { attempted: false, available: false }
+    };
   }
 
   try {
@@ -113,6 +150,17 @@ async function validatePromptWithAI(customInnerPrompt, promptType, userId) {
     validation.warnings = [...new Set([...validation.warnings, ...aiReview.warnings])];
     validation.suggestions = [...new Set([...validation.suggestions, ...aiReview.suggestions])];
     validation.status = validation.warnings.length > 0 ? 'warning' : 'valid';
+    const revisedPromptValidation = aiReview.revisedPrompt
+      ? validatePromptContent(aiReview.revisedPrompt, promptType)
+      : null;
+    if (
+      aiReview.revisedPrompt
+      && normalizePromptForComparison(aiReview.revisedPrompt) !== normalizedPrompt
+      && revisedPromptValidation?.status !== 'invalid'
+    ) {
+      validation.suggestedPrompt = aiReview.revisedPrompt;
+      validation.changeSummary = aiReview.changeSummary || [];
+    }
     validation.aiReview = {
       attempted: true,
       available: true,
@@ -205,32 +253,60 @@ async function resolveEffectivePrompt({ folderId, userId, promptType, approach }
     isActive: true
   }).sort({ version: -1 }).lean();
 
-  const innerPrompt =
+  const selectedBasePrompt =
     courseOverride?.customInnerPrompt ||
     userOverride?.customInnerPrompt ||
     systemTemplate?.innerPrompt ||
-    GENERAL_SYSTEM_PROMPTS[promptType] ||
     '';
+  const lockedPrompt = GENERAL_SYSTEM_PROMPTS[promptType] || '';
+  const editablePrompt = coursePromptService.stripLockedTaskPrompt(selectedBasePrompt, promptType);
+  const mergeLockedPrompt = (basePrompt = '') => coursePromptService.mergePromptParts(
+    lockedPrompt,
+    coursePromptService.stripLockedTaskPrompt(basePrompt, promptType)
+  );
+  const innerPrompt = mergeLockedPrompt(editablePrompt);
+  const systemDefaultEditablePrompt = coursePromptService.stripLockedTaskPrompt(
+    systemTemplate?.innerPrompt || '',
+    promptType
+  );
+  const systemDefault = mergeLockedPrompt(systemDefaultEditablePrompt);
 
   return {
     promptType,
     approach,
     source: courseOverride ? 'course' : userOverride ? 'user' : 'system',
     innerPrompt,
-    outerPrompt: systemTemplate?.outerPrompt || '',
-    systemDefault: systemTemplate?.innerPrompt || GENERAL_SYSTEM_PROMPTS[promptType] || '',
+    editablePrompt,
+    lockedPrompt,
+    lockedGuardrails: LOCKED_PROMPT_GUARDRAILS[promptType] || [],
+    hasDynamicRuntimeContext: true,
+    outerPrompt: '',
+    systemDefault,
+    systemDefaultEditablePrompt,
     activeOverride: courseOverride,
-    userOverride,
-    systemTemplate
+    userOverride: userOverride ? {
+      _id: userOverride._id,
+      approach: userOverride.approach,
+      isActive: userOverride.isActive
+    } : null,
+    systemTemplate: systemTemplate ? {
+      _id: systemTemplate._id,
+      approach: systemTemplate.approach,
+      version: systemTemplate.version,
+      isActive: systemTemplate.isActive
+    } : null
   };
 }
 
 router.post('/validate', authenticateToken, asyncHandler(async (req, res) => {
   const promptType = normalizePromptType(req.body.promptType);
+  const approach = normalizeApproach(req.body.approach, promptType);
+  const systemDefaultEditablePrompt = await resolveSystemDefaultEditablePrompt(promptType, approach);
   const validation = await validatePromptWithAI(
     req.body.customInnerPrompt || '',
     promptType,
-    req.user.id
+    req.user.id,
+    { systemDefaultEditablePrompt }
   );
 
   return successResponse(res, { validation }, 'Prompt validation completed');
@@ -313,12 +389,19 @@ router.put('/folder/:folderId', authenticateToken, asyncHandler(async (req, res)
   const approach = normalizeApproach(req.body.approach, promptType);
   const customInnerPrompt = req.body.customInnerPrompt?.trim() || '';
   const name = normalizePromptName(req.body.name);
-  const validation = await validatePromptWithAI(customInnerPrompt, promptType, userId);
 
   const folder = await getOwnedFolder(folderId, userId);
   if (!folder) {
     return notFoundResponse(res, 'Folder');
   }
+
+  const systemDefaultEditablePrompt = await resolveSystemDefaultEditablePrompt(promptType, approach);
+  const validation = await validatePromptWithAI(
+    customInnerPrompt,
+    promptType,
+    userId,
+    { systemDefaultEditablePrompt }
+  );
 
   if (validation.status === 'invalid') {
     return errorResponse(

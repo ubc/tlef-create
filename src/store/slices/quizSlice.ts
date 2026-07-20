@@ -134,13 +134,20 @@ const quizSlice = createSlice({
       })
       
       // Create quiz
-      .addCase(createQuiz.pending, (state) => {
+      .addCase(createQuiz.pending, (state, action) => {
+        if (state.selectedFolderId !== action.meta.arg.folderId) {
+          state.quizzes = [];
+        }
+        state.selectedFolderId = action.meta.arg.folderId;
         state.loading = true;
         state.error = null;
       })
       .addCase(createQuiz.fulfilled, (state, action) => {
         state.loading = false;
-        state.quizzes.unshift(action.payload);
+        state.quizzes = [
+          action.payload,
+          ...state.quizzes.filter(quiz => quiz._id !== action.payload._id),
+        ];
         state.error = null;
       })
       .addCase(createQuiz.rejected, (state, action) => {

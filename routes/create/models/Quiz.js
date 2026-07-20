@@ -50,8 +50,7 @@ const quizSchema = new mongoose.Schema({
     pedagogicalApproach: {
       type: String,
       enum: Object.values(PEDAGOGICAL_APPROACHES),
-      default: PEDAGOGICAL_APPROACHES.SUPPORT,
-      index: true
+      default: PEDAGOGICAL_APPROACHES.SUPPORT
     },
 
     questionsPerObjective: {

@@ -13,8 +13,7 @@ const materialSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: Object.values(MATERIAL_TYPES),
-    required: true,
-    index: true
+    required: true
   },
   
   // File Information (for uploaded files)

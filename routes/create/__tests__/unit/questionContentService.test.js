@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { formatContentForDatabase } from '../../services/questionContentService.js';
+import { formatContentForDatabase, normalizeMarkTheWordsText } from '../../services/questionContentService.js';
 
 describe('questionContentService', () => {
   describe('formatContentForDatabase', () => {
@@ -104,6 +104,14 @@ describe('questionContentService', () => {
       expect(result.textWithBlanks).toBe('Fallback text');
     });
 
+    test('mark-the-words: normalizes multi-word marked phrases into selectable tokens', () => {
+      const result = formatContentForDatabase({
+        text: 'The *normal force* balances *weight*.'
+      }, 'mark-the-words');
+
+      expect(result.text).toBe('The *normal* *force* balances *weight*.');
+    });
+
     test('summary: returns content as-is', () => {
       const content = { keyPoints: [{ title: 'A', explanation: 'B' }] };
       const result = formatContentForDatabase({ content }, 'summary');
@@ -123,6 +131,17 @@ describe('questionContentService', () => {
     test('unknown type: returns content or empty object', () => {
       expect(formatContentForDatabase({}, 'unknown-type')).toEqual({});
       expect(formatContentForDatabase({ content: { x: 1 } }, 'unknown-type')).toEqual({ x: 1 });
+    });
+  });
+
+  describe('normalizeMarkTheWordsText', () => {
+    test('preserves spacing and already valid markers', () => {
+      expect(normalizeMarkTheWordsText('Use *net   force* and *mass*.'))
+        .toBe('Use *net*   *force* and *mass*.');
+    });
+
+    test('returns an empty string for non-string input', () => {
+      expect(normalizeMarkTheWordsText(null)).toBe('');
     });
   });
 });

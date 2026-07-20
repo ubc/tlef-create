@@ -38,6 +38,8 @@ H5P export creates a downloadable `.h5p` package. Column and Interactive Book su
 
 PDF and Markdown exports can include questions only, answers only, or a combined version. Use questions-only for a learner handout and answers/combined for review or facilitation. These are snapshots: edits made after download require a new export.
 
+PDF exports preserve the learner-facing content for every supported type. Mark the Words includes the statement without revealing the marked answers; Fill in the Blank uses printed blank lines instead of internal `$$` markers; Single Choice Set includes every subquestion and option; Documentation Tool includes its pages and response fields; Summary includes its knowledge points; and Essay includes the essay topic. Answer and combined exports add the corresponding answer or instructor-review guidance.
+
 ## Canvas export
 
 Canvas export opens the Canvas connection and destination workflow. It requires a valid Canvas connection and appropriate permissions. Canvas LTI uses CREATE's player for Mixed Activity content; this is different from uploading a standard H5P package into Canvas.

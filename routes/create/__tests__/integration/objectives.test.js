@@ -238,6 +238,28 @@ describe('Objectives API Integration Tests', () => {
       ]);
     });
 
+    test('should save instructor-authored Bloom level and subpoints', async () => {
+      const res = await request(app)
+        .post('/api/objectives?mode=append')
+        .send([{
+          text: 'Apply Newton laws to a new system',
+          quizId: quiz._id.toString(),
+          bloomLevel: 'apply',
+          subpoints: ['Draw the free-body diagram', 'Solve the component equations']
+        }]);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.objectives[0].generationMetadata.bloomLevel).toBe('apply');
+      expect(res.body.data.objectives[0].generationMetadata.subpoints).toEqual([
+        'Draw the free-body diagram',
+        'Solve the component equations'
+      ]);
+      expect(res.body.data.objectives[0].generationMetadata.instructorAuthoredFields).toEqual([
+        'bloomLevel',
+        'subpoints'
+      ]);
+    });
+
     test('should reject empty array', async () => {
       const res = await request(app)
         .post('/api/objectives')
@@ -314,6 +336,39 @@ describe('Objectives API Integration Tests', () => {
       const updated = await LearningObjective.findById(objective._id);
       expect(updated.editHistory).toHaveLength(1);
       expect(updated.editHistory[0].previousText).toBe('Original text');
+    });
+
+    test('should update Bloom level and subpoints without removing other metadata', async () => {
+      const objective = await LearningObjective.create({
+        text: 'Analyze force diagrams',
+        quiz: quiz._id,
+        order: 0,
+        createdBy: user._id,
+        generationMetadata: {
+          isAIGenerated: true,
+          sourceOutlineSection: 'Forces'
+        }
+      });
+
+      const res = await request(app)
+        .put(`/api/objectives/${objective._id}`)
+        .send({
+          text: 'Create and analyze force diagrams',
+          bloomLevel: 'create',
+          subpoints: ['Choose the system boundary', 'Check the diagram for omissions']
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.objective.generationMetadata.sourceOutlineSection).toBe('Forces');
+      expect(res.body.data.objective.generationMetadata.bloomLevel).toBe('create');
+      expect(res.body.data.objective.generationMetadata.subpoints).toEqual([
+        'Choose the system boundary',
+        'Check the diagram for omissions'
+      ]);
+      expect(res.body.data.objective.generationMetadata.instructorAuthoredFields).toEqual([
+        'bloomLevel',
+        'subpoints'
+      ]);
     });
   });
 

@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Sparkles } from 'lucide-react';
 import '../../styles/components/QuestionGeneration.css';
-
-type TraceStep = {
-  status: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-};
+import { buildPublicWorkflowLog, type TraceStep } from './generationTraceLog';
 
 type AIPlanGenerationTraceProps = {
   isGenerating: boolean;
@@ -58,8 +53,26 @@ export default function AIPlanGenerationTrace({
   const [showRawOutput, setShowRawOutput] = useState(true);
   const outputRef = useRef<HTMLPreElement>(null);
   const summaries = useMemo(() => extractGenerationSummary(streamedText), [streamedText]);
-  const latestStep = steps.at(-1);
   const hasError = steps.some(step => step.status === 'error');
+  const workflowLog = useMemo(
+    () => buildPublicWorkflowLog(steps, isGenerating, emptyOutputText),
+    [steps, isGenerating, emptyOutputText]
+  );
+  const modelDraftStarted = Boolean(streamedText) || steps.some(step => [
+    'draft-started',
+    'llm-started',
+    'draft-complete',
+    'llm-complete',
+    'repair-started',
+    'coverage-complete',
+    'parse-complete',
+    'budget-aligned',
+    'saved',
+    'complete'
+  ].includes(step.status));
+  const consoleText = modelDraftStarted
+    ? `${workflowLog}\n\n----- LIVE MODEL DRAFT -----\n${streamedText || 'Waiting for the first model token...'}`
+    : workflowLog;
 
   useEffect(() => {
     if (isGenerating) setShowRawOutput(true);
@@ -69,7 +82,7 @@ export default function AIPlanGenerationTrace({
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [streamedText]);
+  }, [consoleText]);
 
   return (
     <section className={`plan-trace ${hasError ? 'plan-trace-error' : ''}`} aria-live="polite">
@@ -115,7 +128,7 @@ export default function AIPlanGenerationTrace({
           <div className="plan-trace-draft-header">
             <span className="plan-trace-section-label">
               <Sparkles size={14} aria-hidden="true" />
-              Live model draft
+              Live generation log
             </span>
             <button
               type="button"
@@ -123,7 +136,7 @@ export default function AIPlanGenerationTrace({
               onClick={() => setShowRawOutput(value => !value)}
               aria-expanded={showRawOutput}
             >
-              {showRawOutput ? 'Hide' : 'Show'} output
+              {showRawOutput ? 'Hide' : 'Show'} log
               <ChevronDown size={16} className={showRawOutput ? 'is-open' : ''} />
             </button>
           </div>
@@ -141,14 +154,12 @@ export default function AIPlanGenerationTrace({
 
           {showRawOutput && (
             <pre ref={outputRef} className="plan-trace-output">
-              {streamedText || (latestStep?.status === 'llm-started'
-                ? 'Waiting for the first model token...'
-                : emptyOutputText)}
-              {isGenerating && streamedText && <span className="plan-trace-caret" aria-hidden="true" />}
+              {consoleText}
+              {isGenerating && <span className="plan-trace-caret" aria-hidden="true" />}
             </pre>
           )}
           <p className="plan-trace-note">
-            Shows the model's generated blueprint and public decision summary, not private hidden reasoning.
+            Shows public workflow events, aggregate counts, and model output — not private hidden reasoning or source text.
           </p>
         </div>
       </div>

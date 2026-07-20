@@ -2731,6 +2731,24 @@
     align-items: center;
 }
 
+.plan-custom-prompt {
+    grid-column: 1 / -1;
+    width: 100%;
+    padding: 0.25rem 0 0.375rem;
+}
+
+.plan-custom-prompt textarea {
+    min-height: 64px;
+    box-sizing: border-box;
+    padding: 0.5rem 0.625rem;
+    resize: vertical;
+    font-size: 0.82rem;
+}
+
+.plan-custom-prompt-documentation textarea {
+    min-height: 104px;
+}
+
 .plan-select {
     width: 100%;
     padding: 0.5rem;
@@ -2789,6 +2807,13 @@
     align-items: center;
     gap: 0.5rem;
     justify-content: center;
+}
+
+.count-input {
+    width: 46px;
+    border: none;
+    background: transparent;
+    text-align: center;
 }
 
 .count-btn {
@@ -3285,6 +3310,34 @@
     line-height: 1.4;
 }
 
+/* Tablet and narrow-laptop layout */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .plan-editor {
+        padding: 1.25rem;
+    }
+
+    .plan-editor-table-header,
+    .plan-editor-row {
+        grid-template-columns: minmax(135px, 1.25fr) minmax(190px, 1.8fr) minmax(104px, 0.7fr) 44px;
+        gap: 0.5rem;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .count-stepper {
+        gap: 0.2rem;
+    }
+
+    .count-btn {
+        width: 28px;
+        height: 28px;
+    }
+
+    .count-input {
+        width: 36px;
+    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .plan-trace-body {
@@ -3311,6 +3364,36 @@
     .plan-editor-row {
         grid-template-columns: 1fr;
         gap: 0.5rem;
+    }
+
+    .plan-editor-table-header {
+        display: none;
+    }
+
+    .plan-editor {
+        padding: 1rem;
+    }
+
+    .plan-col-type::before,
+    .plan-col-lo::before,
+    .plan-col-count::before,
+    .plan-col-actions::before {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--color-muted-foreground);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .plan-col-type::before { content: 'Question type'; }
+    .plan-col-lo::before { content: 'Learning objective'; }
+    .plan-col-count::before { content: 'Count'; }
+    .plan-col-actions::before { content: 'Actions'; }
+
+    .count-stepper {
+        justify-content: flex-start;
     }
 
     .plan-col-actions,

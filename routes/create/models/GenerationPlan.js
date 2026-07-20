@@ -111,8 +111,7 @@ const generationPlanSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: Object.values(PLAN_STATUS),
-    default: PLAN_STATUS.DRAFT,
-    index: true
+    default: PLAN_STATUS.DRAFT
   },
   
   // Modification History

@@ -14,8 +14,7 @@ const questionSchema = new mongoose.Schema({
   learningObjective: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'LearningObjective',
-    required: false,
-    index: true
+    required: false
   },
   
   // Reference to the generation plan that created this question
@@ -216,8 +215,7 @@ const questionSchema = new mongoose.Schema({
   reviewStatus: { 
     type: String, 
     enum: Object.values(REVIEW_STATUS), 
-    default: REVIEW_STATUS.PENDING,
-    index: true
+    default: REVIEW_STATUS.PENDING
   },
   
   // Edit History (track manual edits)

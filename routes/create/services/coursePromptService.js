@@ -24,6 +24,19 @@ function mergePromptParts(...parts) {
     .join('\n\n');
 }
 
+function stripLockedTaskPrompt(basePrompt = '', promptType) {
+  const taskPrompt = GENERAL_SYSTEM_PROMPTS[promptType] || '';
+  return taskPrompt
+    ? String(basePrompt).replace(taskPrompt, '').trim()
+    : String(basePrompt).trim();
+}
+
+function mergeTaskPrompt(basePrompt, promptType) {
+  const taskPrompt = GENERAL_SYSTEM_PROMPTS[promptType] || '';
+  const editablePrompt = stripLockedTaskPrompt(basePrompt, promptType);
+  return mergePromptParts(taskPrompt, editablePrompt);
+}
+
 async function resolveCoursePrompt({
   folderId,
   userId,
@@ -43,7 +56,7 @@ async function resolveCoursePrompt({
   if (courseOverride?.customInnerPrompt) {
     return {
       source: 'course',
-      innerPrompt: courseOverride.customInnerPrompt,
+      innerPrompt: mergeTaskPrompt(courseOverride.customInnerPrompt, promptType),
       override: courseOverride
     };
   }
@@ -58,7 +71,7 @@ async function resolveCoursePrompt({
     if (userOverride?.customInnerPrompt) {
       return {
         source: 'user',
-        innerPrompt: userOverride.customInnerPrompt,
+        innerPrompt: mergeTaskPrompt(userOverride.customInnerPrompt, promptType),
         override: userOverride
       };
     }
@@ -71,7 +84,7 @@ async function resolveCoursePrompt({
     if (systemTemplate?.innerPrompt) {
       return {
         source: 'system',
-        innerPrompt: systemTemplate.innerPrompt,
+        innerPrompt: mergeTaskPrompt(systemTemplate.innerPrompt, promptType),
         override: null
       };
     }
@@ -129,5 +142,6 @@ async function buildCoursePromptInstructions({
 export default {
   resolveCoursePrompt,
   buildCoursePromptInstructions,
-  mergePromptParts
+  mergePromptParts,
+  stripLockedTaskPrompt
 };

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { objectivesApi, LearningObjective } from '../../services/api';
+import { objectivesApi, BloomLevel, LearningObjective, LearningObjectiveInput } from '../../services/api';
 
 // Async thunks for learning objective operations
 export const fetchObjectives = createAsyncThunk(
@@ -35,7 +35,7 @@ export const classifyObjectives = createAsyncThunk(
 
 export const saveObjectives = createAsyncThunk(
   'learningObjective/saveObjectives',
-  async (data: { quizId: string; objectives: { text: string; order: number }[] }) => {
+  async (data: { quizId: string; objectives: LearningObjectiveInput[] }) => {
     const response = await objectivesApi.saveObjectives(data.quizId, data.objectives);
     return response.objectives;
   }
@@ -51,8 +51,12 @@ export const enrichObjectives = createAsyncThunk(
 
 export const updateObjective = createAsyncThunk(
   'learningObjective/updateObjective',
-  async (data: { id: string; text: string }) => {
-    const response = await objectivesApi.updateObjective(data.id, { text: data.text });
+  async (data: { id: string; text: string; bloomLevel?: BloomLevel | ''; subpoints?: string[] }) => {
+    const response = await objectivesApi.updateObjective(data.id, {
+      text: data.text,
+      bloomLevel: data.bloomLevel,
+      subpoints: data.subpoints
+    });
     return response.objective;
   }
 );

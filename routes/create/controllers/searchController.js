@@ -7,6 +7,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
+import { ERROR_CODES, HTTP_STATUS } from '../config/constants.js';
 
 const router = express.Router();
 
@@ -18,11 +19,12 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { q: query } = req.query;
   const userId = req.user.id;
 
-  if (!query || query.trim().length < 2) {
+  if (typeof query !== 'string' || query.trim().length < 2) {
     return successResponse(res, { results: [] }, 'Query too short');
   }
 
-  console.log(`🔍 Search query: "${query}" from user: ${userId}`);
+  const normalizedQuery = query.trim().slice(0, 120);
+  console.log('🔍 Search request received', { userId, queryLength: normalizedQuery.length });
 
   try {
     // Import models
@@ -30,13 +32,25 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     const Question = (await import('../models/Question.js')).default;
     const LearningObjective = (await import('../models/LearningObjective.js')).default;
     const Folder = (await import('../models/Folder.js')).default;
+    const Quiz = (await import('../models/Quiz.js')).default;
 
-    // Create case-insensitive regex for search
-    const searchRegex = new RegExp(query, 'i');
+    // Treat user input as literal text rather than a regular-expression program.
+    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedQuery, 'i');
+
+    // Resolve valid parents first so orphaned records and records belonging to
+    // another instructor can never produce navigable search results.
+    const ownedFolders = await Folder.find({ instructor: userId }).select('_id').lean();
+    const ownedFolderIds = ownedFolders.map(folder => folder._id);
+    const ownedQuizzes = ownedFolderIds.length > 0
+      ? await Quiz.find({ createdBy: userId, folder: { $in: ownedFolderIds } }).select('_id').lean()
+      : [];
+    const ownedQuizIds = ownedQuizzes.map(quiz => quiz._id);
 
     // Search materials (name, content)
     const materialsPromise = Material.find({
       uploadedBy: userId,
+      folder: { $in: ownedFolderIds },
       $or: [
         { name: searchRegex },
         { content: searchRegex }
@@ -49,6 +63,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     // Search questions (questionText, explanation)
     const questionsPromise = Question.find({
       createdBy: userId,
+      quiz: { $in: ownedQuizIds },
       $or: [
         { questionText: searchRegex },
         { explanation: searchRegex }
@@ -67,6 +82,8 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
     // Search learning objectives (text, description)
     const objectivesPromise = LearningObjective.find({
+      createdBy: userId,
+      quiz: { $in: ownedQuizIds },
       $or: [
         { text: searchRegex },
         { description: searchRegex }
@@ -95,6 +112,9 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
     // Add materials to results
     materials.forEach(material => {
+      if (!material.folder?._id) {
+        return;
+      }
       results.push({
         type: 'material',
         id: material._id,
@@ -103,7 +123,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
         courseName: material.folder?.name || 'Unknown Course',
         courseId: material.folder?._id,
         // For materials, navigate to course page
-        navigationPath: `/course/${material.folder?._id}`
+        navigationPath: `/course/${material.folder._id}`
       });
     });
 
@@ -156,23 +176,36 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     });
 
     console.log(`✅ Found ${results.length} total results`);
-    console.log(`   - Materials: ${materials.length}`);
-    console.log(`   - Questions: ${questions.length}`);
-    console.log(`   - Learning Objectives: ${objectives.length}`);
+    const resultCounts = results.reduce((counts, result) => {
+      if (result.type === 'material') counts.materials += 1;
+      if (result.type === 'question') counts.questions += 1;
+      if (result.type === 'learning-objective') counts.objectives += 1;
+      return counts;
+    }, { materials: 0, questions: 0, objectives: 0 });
+
+    console.log(`   - Materials: ${resultCounts.materials}`);
+    console.log(`   - Questions: ${resultCounts.questions}`);
+    console.log(`   - Learning Objectives: ${resultCounts.objectives}`);
 
     return successResponse(res, {
       results,
       counts: {
-        materials: materials.length,
-        questions: questions.length,
-        objectives: objectives.length,
+        materials: resultCounts.materials,
+        questions: resultCounts.questions,
+        objectives: resultCounts.objectives,
         total: results.length
       }
     }, 'Search completed');
 
   } catch (error) {
     console.error('❌ Search error:', error);
-    return errorResponse(res, 'Search failed', 500, error.message);
+    return errorResponse(
+      res,
+      'Search failed',
+      ERROR_CODES.INTERNAL_SERVER_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      { reason: error.message }
+    );
   }
 }));
 

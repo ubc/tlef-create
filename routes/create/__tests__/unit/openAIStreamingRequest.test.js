@@ -52,13 +52,17 @@ describe('course prompt AI review parsing', () => {
       {
         "warnings": ["The output format is ambiguous."],
         "suggestions": ["Request evidence references."],
+        "revisedPrompt": "Use the supplied evidence and return the required format.",
+        "changeSummary": ["Added evidence and output guidance."],
         "ignored": "field"
       }
     \`\`\``);
 
     expect(result).toEqual({
       warnings: ['The output format is ambiguous.'],
-      suggestions: ['Request evidence references.']
+      suggestions: ['Request evidence references.'],
+      revisedPrompt: 'Use the supplied evidence and return the required format.',
+      changeSummary: ['Added evidence and output guidance.']
     });
   });
 

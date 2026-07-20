@@ -65,6 +65,18 @@ describe('h5pExportService', () => {
       expect(convertQuestionToH5P(question).params.correct).toBe('false');
     });
 
+    test('mark-the-words: normalizes legacy multi-word markers for H5P', () => {
+      const result = convertQuestionToH5P({
+        type: 'mark-the-words',
+        questionText: 'Select the forces.',
+        content: { text: 'The *normal force* balances *weight*.' }
+      });
+
+      expect(result.library).toBe('H5P.MarkTheWords 1.11');
+      expect(result.params.textField).toBe('The *normal* *force* balances *weight*.');
+      expect(result.params.textField).not.toContain('*normal force*');
+    });
+
     test('matching: returns H5P.DragText 1.10 with textField containing asterisk markers', () => {
       const question = {
         type: 'matching',

@@ -6,6 +6,10 @@ Start with the smallest safe recovery step: preserve your work, read the visible
 
 Complete the prerequisite in the previous tab. Assign processed materials before grounded objective generation, create at least one learning objective before the Blueprint, and generate at least one question before export. Refresh if the prerequisite was just saved but the tab has not updated.
 
+## A search result is no longer available
+
+Global Search only returns materials, questions, and learning objectives inside courses and quizzes owned by the signed-in instructor. CREATE verifies a result again when you select it. If its course, quiz, or material was deleted—or access changed after the search—the result is removed from the list instead of opening an invalid page. Search again or return to the course from the left sidebar. If an old browser tab already shows **Course not found** or **Quiz not found**, close that tab or navigate back; retrying generation on the invalid URL will continue to return 404 errors.
+
 ## AI generation does not start
 
 Check that the account has a usable API key or permission to use the deployment key. Then confirm the learning object has assigned, processed materials where required and at least one learning objective. For a fixed Blueprint count, use a whole number between the number of objectives and 100.

@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -7,7 +7,23 @@ import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
 // Import Question model so mongoose.model('Question') works inside Folder.updateStats
 import '../../models/Question.js';
-import materialController from '../../controllers/materialController.js';
+import FileService from '../../services/fileService.js';
+
+const mockRagService = {
+  initialize: jest.fn().mockResolvedValue(undefined),
+  loadMaterialChunks: jest.fn(),
+  cleanupMaterialEmbeddings: jest.fn().mockResolvedValue(undefined),
+  processAndEmbedMaterial: jest.fn().mockResolvedValue({
+    success: true,
+    chunksProcessed: 1
+  })
+};
+
+jest.unstable_mockModule('../../services/ragService.js', () => ({
+  default: mockRagService
+}));
+
+const { default: materialController } = await import('../../controllers/materialController.js');
 
 // Create test app with auth middleware bypass
 function createTestApp(userDoc) {
@@ -150,6 +166,19 @@ describe('Material Management API Integration Tests', () => {
   });
 
   describe('POST /api/materials/url', () => {
+    beforeEach(() => {
+      // URL intake itself is under test here; keep external HEAD requests and
+      // environment-specific domain allowlists out of this integration suite.
+      jest.spyOn(FileService, 'validateUrlContentType').mockResolvedValue({
+        isValid: true,
+        contentType: 'pdf'
+      });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     test('should create URL material successfully', async () => {
       const materialData = {
         name: 'Test URL Material',
@@ -486,11 +515,11 @@ describe('Material Management API Integration Tests', () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toContain('reprocessing');
+      expect(response.body.message).toContain('reprocessed');
 
       // Verify status update in database
       const materialInDb = await Material.findById(materialId);
-      expect(materialInDb.processingStatus).toBe('pending');
+      expect(materialInDb.processingStatus).toBe('completed');
     });
 
     test('should reject reprocessing for other user material', async () => {
@@ -605,6 +634,38 @@ describe('Material Management API Integration Tests', () => {
       const fakeId = new mongoose.Types.ObjectId();
       const res = await request(unauthApp).get(`/api/materials/${fakeId}/preview`);
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('POST /api/materials/:materialId/reference/resolve', () => {
+    test('returns the complete extracted text for a whole-material preview', async () => {
+      const material = await Material.create({
+        name: 'Formatted webpage',
+        type: 'url',
+        url: 'https://example.com/course',
+        content: 'Heading\n\nFirst section.\n\nSecond section.',
+        folder: folderId,
+        uploadedBy: userId,
+        processingStatus: 'completed'
+      });
+      mockRagService.loadMaterialChunks.mockResolvedValueOnce({
+        content: material.content,
+        pages: [],
+        chunks: [
+          { chunkIndex: 0, content: 'Heading\n\nFirst section.' },
+          { chunkIndex: 1, content: 'Second section.' }
+        ]
+      });
+
+      const response = await request(app)
+        .post(`/api/materials/${material._id}/reference/resolve`)
+        .send({ previewMode: 'material' })
+        .expect(200);
+
+      expect(response.body.data.pageContext).toBe(material.content);
+      expect(response.body.data.excerpt).toBe('');
+      expect(response.body.data.previewKind).toBe('url');
+      expect(response.body.data.sourceUrl).toBe(material.url);
     });
   });
 });

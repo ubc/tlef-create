@@ -2,8 +2,10 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { ArrowUp, BookOpen, ExternalLink, HelpCircle, Loader2, MessageCircle, RotateCcw, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { API_URL } from '../../config/api';
+import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { notifyAuthExpired } from '../../utils/authEvents';
 import '../../styles/components/CreateGuide.css';
+import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import GuideFeedback, { GuideRating } from './GuideFeedback';
 
 interface HelpSource {
@@ -89,6 +91,7 @@ function renderMessageContent(content: string) {
 const CreateGuide = () => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const guideTutorial = useFeatureOnboarding('create-guide');
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -210,6 +213,11 @@ const CreateGuide = () => {
   const context = getPageContext(location.pathname, location.search);
   const suggestions = suggestionsFor(location.pathname, context.activeTab);
 
+  const openGuide = () => {
+    guideTutorial.complete();
+    setIsOpen(true);
+  };
+
   return (
     <div className={`create-guide ${isOpen ? 'is-open' : ''}`}>
       {isOpen && (
@@ -294,15 +302,33 @@ const CreateGuide = () => {
         </section>
       )}
 
-      <button
-        type="button"
-        className="create-guide-launcher"
-        onClick={() => setIsOpen(open => !open)}
-        aria-label={isOpen ? 'Close CREATE Guide' : 'Open CREATE Guide'}
-        aria-expanded={isOpen}
+      <FeatureCoachmark
+        isOpen={guideTutorial.isActive && !isOpen}
+        title="Meet your CREATE Guide"
+        description="This AI help chat stays available in the bottom-right corner. Ask about the page you are viewing, workflow choices, exports, or troubleshooting. It explains CREATE without changing your course."
+        eyebrow="AI help chat"
+        primaryLabel="Try CREATE Guide"
+        placement="top-end"
+        onPrimary={openGuide}
+        onDismiss={guideTutorial.complete}
+        onSkip={guideTutorial.skipAll}
       >
-        {isOpen ? <X size={24} /> : <MessageCircle size={25} />}
-      </button>
+        <button
+          type="button"
+          className="create-guide-launcher"
+          onClick={() => {
+            if (isOpen) {
+              setIsOpen(false);
+            } else {
+              openGuide();
+            }
+          }}
+          aria-label={isOpen ? 'Close CREATE Guide' : 'Open CREATE Guide'}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X size={24} /> : <MessageCircle size={25} />}
+        </button>
+      </FeatureCoachmark>
     </div>
   );
 };

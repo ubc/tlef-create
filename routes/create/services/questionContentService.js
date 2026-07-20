@@ -1,4 +1,20 @@
 /**
+ * H5P Mark the Words accepts one marked token per asterisk pair. Models and
+ * manual editors sometimes produce a phrase such as `*normal force*`, which
+ * H5P renders as two literal, unselectable fragments. Preserve whitespace but
+ * mark every token in a multi-word span independently.
+ */
+export function normalizeMarkTheWordsText(text = '') {
+  if (typeof text !== 'string') return '';
+
+  return text.replace(/\*([^*\r\n]+)\*/g, (match, markedText) => {
+    const tokens = markedText.match(/\S+/g) || [];
+    if (tokens.length <= 1) return match;
+    return markedText.replace(/\S+/g, token => `*${token}*`);
+  });
+}
+
+/**
  * Format LLM-generated question content for database storage.
  * Maps raw generation output to the schema-expected content structure
  * for each question type.
@@ -49,7 +65,7 @@ export function formatContentForDatabase(generatedQuestion, questionType) {
 
     case 'mark-the-words':
       return {
-        text: c.text || generatedQuestion.text || ''
+        text: normalizeMarkTheWordsText(c.text || generatedQuestion.text || '')
       };
 
     case 'single-choice-set':

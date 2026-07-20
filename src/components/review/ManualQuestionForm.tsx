@@ -893,7 +893,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                     rows={6}
                   />
                   <p className="aq-hint">
-                    {newQuestion.type === 'mark-the-words' ? 'Wrap correct words in *asterisks*.' :
+                    {newQuestion.type === 'mark-the-words' ? 'Wrap each correct word separately: *normal* *force*, not *normal force*.' :
                      newQuestion.type === 'essay' ? 'Students write a longer response.' :
                      newQuestion.type === 'free-text' || newQuestion.type === 'open-ended' ? 'Open-ended, no single correct answer.' :
                      newQuestion.type === 'sort-paragraphs' ? 'Students rearrange into correct order.' :

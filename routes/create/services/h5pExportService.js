@@ -7,9 +7,14 @@ import fs from 'fs/promises';
 import crypto from 'crypto';
 import archiver from 'archiver';
 import { createWriteStream } from 'fs';
+import { fileURLToPath } from 'url';
 
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
+import { normalizeMarkTheWordsText } from './questionContentService.js';
+
+const SERVICE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_H5P_LIBRARY_PATH = path.resolve(SERVICE_DIR, '../h5p-libs');
 
 function getMultipleChoiceSelectionMode(question) {
   if (question.content?.selectionMode === 'multiple') {
@@ -81,7 +86,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     }
 
     // Recursively resolve ALL transitive dependencies by reading library.json files
-    const libraryPath = options.libraryPath || path.join('./routes/create/h5p-libs/');
+    const libraryPath = options.libraryPath || DEFAULT_H5P_LIBRARY_PATH;
     const allLibs = new Map(); // key: "machineName-major.minor" → { machineName, majorVersion, minorVersion, dirName }
     const queue = [];
 
@@ -1215,7 +1220,9 @@ export function convertQuestionToH5P(question, quiz) {
       }
     };
   } else if (question.type === 'mark-the-words') {
-    const text = question.content?.text || question.questionText || '';
+    // Normalize legacy and manually-authored phrase markers at the export
+    // boundary so existing questions also remain interactive.
+    const text = normalizeMarkTheWordsText(question.content?.text || question.questionText || '');
     return {
       "params": {
         "taskDescription": `<p>${escapeHtml(question.questionText)}</p>`,
