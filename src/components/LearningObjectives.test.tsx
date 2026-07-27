@@ -8,12 +8,14 @@ import planSlice from '../store/slices/planSlice';
 import appSlice from '../store/slices/appSlice';
 import learningObjectiveSlice from '../store/slices/learningObjectiveSlice';
 import questionSlice from '../store/slices/questionSlice';
+import quizSlice from '../store/slices/quizSlice';
 import { pubsubService, PUBSUB_EVENTS } from '../services/pubsubService';
-import { objectivesApi, questionsApi, type LearningObjective, type Question } from '../services/api';
+import { objectivesApi, questionsApi, quizApi, type LearningObjective, type Question } from '../services/api';
 import { completeOnboardingStep, ONBOARDING_STORAGE_KEY, readOnboardingState } from '../utils/onboarding';
 
 // Mock the usePubSub hook
 const mockShowNotification = vi.fn();
+const mockPublish = vi.fn();
 const mockSubscribe = vi.fn((event: string, callback: (payload: unknown) => void) => {
   // Return a mock token
   void callback;
@@ -24,8 +26,14 @@ vi.mock('../hooks/usePubSub', () => ({
   usePubSub: () => ({
     showNotification: mockShowNotification,
     subscribe: mockSubscribe,
+    publish: mockPublish,
   }),
 }));
+
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: vi.fn(),
+});
 
 describe('LearningObjectives Component - Redux State Subscription', () => {
   let store: ReturnType<typeof configureStore>;
@@ -46,6 +54,7 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
         app: appSlice,
         learningObjective: learningObjectiveSlice,
         question: questionSlice,
+        quiz: quizSlice,
       },
     });
 
@@ -269,6 +278,87 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
     expect(getQuestionsSpy).toHaveBeenCalled();
   });
 
+  it('keeps complete objective records and refreshes questions after a confirmed cascade delete', async () => {
+    const deletedObjective = {
+      _id: 'objective-1',
+      text: 'Analyze old evidence',
+      order: 0
+    } as LearningObjective;
+    const remainingObjective = {
+      _id: 'objective-2',
+      text: 'Evaluate a revised model',
+      order: 1
+    } as LearningObjective;
+    const linkedQuestion = {
+      _id: 'question-1',
+      learningObjective: deletedObjective,
+      questionText: 'Question linked to the deleted objective'
+    } as Question;
+
+    vi.spyOn(objectivesApi, 'getObjectives')
+      .mockResolvedValueOnce({ objectives: [deletedObjective, remainingObjective] })
+      .mockResolvedValueOnce({ objectives: [remainingObjective] });
+    vi.spyOn(questionsApi, 'getQuestions')
+      .mockResolvedValueOnce({ questions: [linkedQuestion] })
+      .mockResolvedValueOnce({ questions: [] });
+    const deleteObjectiveSpy = vi.spyOn(objectivesApi, 'deleteObjective')
+      .mockResolvedValueOnce({
+        message: 'Confirmation required',
+        requiresConfirmation: true,
+        questionCount: 1,
+        objectiveId: deletedObjective._id
+      })
+      .mockResolvedValueOnce({ message: 'Deleted' });
+    vi.spyOn(quizApi, 'getQuiz').mockResolvedValue({
+      quiz: {
+        _id: 'test-quiz-123',
+        learningObjectives: [remainingObjective],
+        questions: []
+      } as never
+    });
+
+    const onObjectivesChange = vi.fn();
+    render(
+      <Provider store={store}>
+        <LearningObjectives
+          {...defaultProps}
+          objectives={[deletedObjective, remainingObjective]}
+          onObjectivesChange={onObjectivesChange}
+        />
+      </Provider>
+    );
+
+    const deleteButton = await screen.findByRole('button', {
+      name: 'Delete learning objective 1'
+    });
+    fireEvent.click(deleteButton);
+
+    const confirmButton = await screen.findByRole('button', {
+      name: 'Delete Learning Objective and 1 Question(s)'
+    });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(deleteObjectiveSpy).toHaveBeenLastCalledWith(deletedObjective._id, true);
+      expect(onObjectivesChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          _id: remainingObjective._id,
+          text: remainingObjective.text
+        })
+      ]);
+    });
+
+    expect(onObjectivesChange.mock.calls.some(
+      ([nextObjectives]) => nextObjectives.some(
+        (objective: unknown) => typeof objective === 'string'
+      )
+    )).toBe(false);
+    expect(mockPublish).toHaveBeenCalledWith(
+      PUBSUB_EVENTS.OBJECTIVES_DELETED,
+      expect.objectContaining({ quizId: 'test-quiz-123', remainingCount: 1 })
+    );
+  });
+
   it('should have correct disabled state for all action buttons', () => {
     // Arrange - set questionsGenerating to true
     store.dispatch({ 
@@ -343,6 +433,7 @@ describe('LearningObjectives Component - PubSub Event Subscriptions', () => {
         app: appSlice,
         learningObjective: learningObjectiveSlice,
         question: questionSlice,
+        quiz: quizSlice,
       },
     });
 

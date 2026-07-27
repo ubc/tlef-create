@@ -9,12 +9,12 @@ import {
   saveObjectives,
   updateObjective,
   deleteObjective,
-  clearObjectives,
   regenerateSingleObjective,
   deleteAllObjectives,
   enrichObjectives
 } from '../store/slices/learningObjectiveSlice';
 import { clearQuestionsForQuiz, fetchQuestions } from '../store/slices/questionSlice';
+import { fetchQuizById } from '../store/slices/quizSlice';
 import RegeneratePromptModal from './RegeneratePromptModal';
 import { usePubSub } from '../hooks/usePubSub';
 import { PUBSUB_EVENTS, QuestionGenerationStartedPayload, QuestionGenerationCompletedPayload, QuestionGenerationFailedPayload } from '../services/pubsubService';
@@ -33,6 +33,7 @@ import {
   getQuestionsLinkedToObjective,
   regenerateQuestionsSequentially,
 } from '../utils/learningObjectiveQuestions';
+import { normalizeLearningObjectiveData } from '../utils/learningObjectiveState';
 import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import '../styles/components/LearningObjectives.css';
 
@@ -214,15 +215,23 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   // Sync Redux objectives with parent component
   useEffect(() => {
     if (reduxObjectives.length > 0) {
-      const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
-        _id: obj._id,
-        text: obj.text,
-        order: obj.order !== undefined ? obj.order : idx,
-        generationMetadata: obj.generationMetadata
-      }));
+      const objectiveData = normalizeLearningObjectiveData(reduxObjectives);
       onObjectivesChange(objectiveData);
     }
   }, [reduxObjectives, onObjectivesChange]);
+
+  const refreshAfterObjectiveDeletion = async () => {
+    const refreshedObjectives = await dispatch(fetchObjectives(quizId)).unwrap();
+    const objectiveData = normalizeLearningObjectiveData(refreshedObjectives);
+    onObjectivesChange(objectiveData);
+
+    await Promise.all([
+      dispatch(fetchQuestions(quizId)),
+      dispatch(fetchQuizById(quizId))
+    ]);
+
+    return objectiveData;
+  };
 
   // Subscribe to PubSub events for question generation
   useEffect(() => {
@@ -719,9 +728,9 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         // If objective doesn't have an _id, it's a new unsaved objective
         // Delete it directly without confirmation
         if (!objective._id) {
-          const remainingObjectives = reduxObjectives
-            .filter((_, i) => i !== index)
-            .map(obj => obj.text);
+          const remainingObjectives = normalizeLearningObjectiveData(
+            reduxObjectives.filter((_, i) => i !== index)
+          );
           onObjectivesChange(remainingObjectives);
           
           // Also clear editing state if we're deleting the one being edited
@@ -736,12 +745,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         // If user has chosen "don't show again", delete directly with confirmation
         if (dontShowDeleteWarning) {
           await dispatch(deleteObjective({ id: objectiveId, confirmed: true })).unwrap();
-          
-          // After deletion, update parent component with remaining objectives
-          const remainingObjectives = reduxObjectives
-            .filter((_, i) => i !== index)
-            .map(obj => obj.text);
-          onObjectivesChange(remainingObjectives);
+          const remainingObjectives = await refreshAfterObjectiveDeletion();
           
           // Publish event to notify other components
           publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
@@ -757,8 +761,8 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         const result = await dispatch(deleteObjective({ id: objectiveId, confirmed: false }));
         
         // Check if confirmation is required
-        if (result.type === 'learningObjective/deleteObjective/rejected' && result.payload) {
-          const payload = result.payload as { requiresConfirmation?: boolean; objectiveId?: string; questionCount?: number; message?: string };
+        if (deleteObjective.rejected.match(result)) {
+          const payload = (result.payload || {}) as { requiresConfirmation?: boolean; objectiveId?: string; questionCount?: number; message?: string };
           if (payload.requiresConfirmation) {
             // Show confirmation dialog
             setDeleteConfirmation({
@@ -769,13 +773,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
             });
             return;
           }
+          throw new Error(
+            typeof result.payload === 'string'
+              ? result.payload
+              : payload.message || 'Failed to delete learning objective.'
+          );
         }
         
-        // If no confirmation needed, update parent component
-        const remainingObjectives = reduxObjectives
-          .filter((_, i) => i !== index)
-          .map(obj => obj.text);
-        onObjectivesChange(remainingObjectives);
+        const remainingObjectives = await refreshAfterObjectiveDeletion();
         
         // Publish event to notify other components
         publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
@@ -788,22 +793,25 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         // Otherwise, delete from local state and save to backend
         const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
         const objectivesData = updatedObjectives.map((text, i) => ({ text, order: i }));
-        await dispatch(saveObjectives({ quizId, objectives: objectivesData }));
-        onObjectivesChange(updatedObjectives);
+        const savedObjectives = await dispatch(saveObjectives({ quizId, objectives: objectivesData })).unwrap();
+        const remainingObjectives = normalizeLearningObjectiveData(savedObjectives);
+        onObjectivesChange(remainingObjectives);
         
         // Publish event to notify other components
         publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
           quizId,
           deletedObjective: currentObjectives[index],
-          remainingCount: updatedObjectives.length,
+          remainingCount: remainingObjectives.length,
           timestamp: Date.now()
         });
       }
     } catch (error) {
       console.error('Failed to delete objective:', error);
-      // Fallback to local state only
-      const updatedObjectives = currentObjectives.filter((_, i) => i !== index);
-      onObjectivesChange(updatedObjectives);
+      showNotification(
+        'error',
+        'Learning Objective Delete Failed',
+        error instanceof Error ? error.message : 'Failed to delete the learning objective.'
+      );
     }
   };
 
@@ -817,11 +825,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         confirmed: true 
       })).unwrap();
       
-      // Update parent component
-      const remainingObjectives = reduxObjectives
-        .filter((_, i) => i !== deleteConfirmation.index)
-        .map(obj => obj.text);
-      onObjectivesChange(remainingObjectives);
+      const remainingObjectives = await refreshAfterObjectiveDeletion();
       
       // Publish event to notify other components
       const deletedObjective = reduxObjectives[deleteConfirmation.index];
@@ -836,6 +840,11 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       setDeleteConfirmation(null);
     } catch (error) {
       console.error('Failed to delete objective:', error);
+      showNotification(
+        'error',
+        'Learning Objective Delete Failed',
+        error instanceof Error ? error.message : 'Failed to delete the learning objective.'
+      );
       setDeleteConfirmation(null);
     }
   };
@@ -932,14 +941,23 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   const handleConfirmDeleteAll = async () => {
     try {
-      await dispatch(deleteAllObjectives(quizId));
+      await dispatch(deleteAllObjectives(quizId)).unwrap();
       // Also clear questions from Redux so the UI updates immediately without a page refresh
       dispatch(clearQuestionsForQuiz(quizId));
-      onObjectivesChange([]);
+      const remainingObjectives = await refreshAfterObjectiveDeletion();
+      publish(PUBSUB_EVENTS.OBJECTIVES_DELETED, {
+        quizId,
+        deletedObjective: 'all objectives',
+        remainingCount: remainingObjectives.length,
+        timestamp: Date.now()
+      });
     } catch (error) {
       console.error('Failed to delete all objectives:', error);
-      dispatch(clearObjectives());
-      onObjectivesChange([]);
+      showNotification(
+        'error',
+        'Learning Objectives Delete Failed',
+        error instanceof Error ? error.message : 'Failed to delete the learning objectives.'
+      );
     } finally {
       setDeleteAllConfirmation(null);
     }

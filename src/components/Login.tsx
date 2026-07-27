@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -14,6 +14,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
   const navigate = useNavigate();
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
   const [samlAvailable, setSamlAvailable] = useState<boolean | null>(null);
+  const [autoLoginAvailable, setAutoLoginAvailable] = useState(false);
   const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
 
   const handleSamlLogin = () => {
@@ -21,7 +22,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
     window.location.href = `${API_URL}/api/create/auth/saml/login`;
   };
 
-  const handleAutoLogin = async () => {
+  const handleAutoLogin = useCallback(async () => {
     if (autoLoginAttempted || isAutoLoggingIn) {
       return; // Prevent multiple attempts
     }
@@ -99,9 +100,9 @@ const Login = ({ onAuthChange }: LoginProps) => {
       console.error('Auto-login error:', error);
       setIsAutoLoggingIn(false);
     }
-  };
+  }, [autoLoginAttempted, isAutoLoggingIn, navigate, onAuthChange]);
 
-  const checkSamlAvailability = async () => {
+  const checkSamlAvailability = useCallback(async () => {
     if (autoLoginAttempted || samlAvailable !== null) {
       return; // Don't check again if we've already checked or attempted auto-login
     }
@@ -117,9 +118,10 @@ const Login = ({ onAuthChange }: LoginProps) => {
         }
         const config = await response.json();
         setSamlAvailable(config.data.samlAvailable);
+        setAutoLoginAvailable(!!config.data.autoLoginAvailable);
         
         // If SAML is not available, automatically trigger auto-login
-        if (!config.data.samlAvailable && !autoLoginAttempted) {
+        if (!config.data.samlAvailable && config.data.autoLoginAvailable && !autoLoginAttempted) {
           // Add a delay to prevent immediate execution
           setTimeout(() => {
             handleAutoLogin();
@@ -132,14 +134,8 @@ const Login = ({ onAuthChange }: LoginProps) => {
     } catch (error) {
       console.error('Error checking SAML availability:', error);
       setSamlAvailable(false);
-      // Fallback to auto-login if config check fails
-      if (!autoLoginAttempted) {
-        setTimeout(() => {
-          handleAutoLogin();
-        }, 1000);
-      }
     }
-  };
+  }, [autoLoginAttempted, handleAutoLogin, samlAvailable]);
 
   useEffect(() => {
     // Check if we're returning from SAML callback with error
@@ -153,7 +149,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
     if (samlAvailable === null && !autoLoginAttempted) {
       checkSamlAvailability();
     }
-  }, []);
+  }, [autoLoginAttempted, checkSamlAvailability, samlAvailable]);
 
   return (
     <div className="login-container">
@@ -191,8 +187,10 @@ const Login = ({ onAuthChange }: LoginProps) => {
               Welcome Back
             </CardTitle>
             <CardDescription className="login-description">
-              {samlAvailable === false 
+              {samlAvailable === false && autoLoginAvailable
                 ? "Continue to the application to start creating intelligent quizzes"
+                : samlAvailable === false
+                  ? "Sign-in is temporarily unavailable. Contact the deployment administrator."
                 : "Sign in with your institutional credentials to continue creating intelligent quizzes"
               }
             </CardDescription>
@@ -252,7 +250,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
                 <span>Sign in with UBC CWL</span>
                 <ArrowRight size={18} />
               </Button>
-            ) : (
+            ) : autoLoginAvailable ? (
               // Auto-login button for staging
               <Button 
                 onClick={handleAutoLogin}
@@ -261,6 +259,10 @@ const Login = ({ onAuthChange }: LoginProps) => {
               >
                 <span>Enter Application</span>
                 <ArrowRight size={18} />
+              </Button>
+            ) : (
+              <Button className="login-button" disabled>
+                Sign-in unavailable
               </Button>
             )}
 

@@ -13,6 +13,7 @@ import { fetchMaterials } from '../store/slices/materialSlice';
 import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
 import { LearningObjectiveData } from './generation/generationTypes';
+import { normalizeLearningObjectiveData } from '../utils/learningObjectiveState';
 import '../styles/components/QuizView.css';
 
 type TabType = 'materials' | 'objectives' | 'coverage' | 'generation' | 'review';
@@ -86,33 +87,19 @@ const QuizView = () => {
     }
 
     if (reduxObjectives.length > 0) {
-      const objectiveData: LearningObjectiveData[] = reduxObjectives.map((obj, idx) => ({
-        _id: obj._id,
-        text: obj.text,
-        order: obj.order !== undefined ? obj.order : idx,
-        generationMetadata: obj.generationMetadata
-      }));
-      setLearningObjectives(objectiveData);
+      setLearningObjectives(normalizeLearningObjectiveData(reduxObjectives));
       return;
     }
 
     if (currentQuiz) {
-      // Set learning objectives if they exist - NEW: Keep full objects
-      if (currentQuiz.learningObjectives) {
-        const objectiveData: LearningObjectiveData[] = currentQuiz.learningObjectives.map((obj: string | { _id: string; text: string; order: number; generationMetadata?: LearningObjectiveData['generationMetadata'] }, idx: number) => {
-          if (typeof obj === 'string') {
-            // Keep the id but avoid showing raw ObjectIds as LO text while the full LO payload is loading.
-            return { _id: obj, text: '', order: idx };
-          }
-          return {
-            _id: obj._id,
-            text: obj.text,
-            order: obj.order !== undefined ? obj.order : idx,
-            generationMetadata: obj.generationMetadata
-          };
-        });
-        setLearningObjectives(objectiveData);
-      }
+      // Raw ObjectIds can appear briefly after an unpopulated quiz update.
+      // Never turn them into empty objectives because Review & Edit would show
+      // those entries as "Unknown"; the objectives request will provide the
+      // complete records.
+      const quizObjectives = (currentQuiz.learningObjectives || []) as Array<string | LearningObjectiveData>;
+      const populatedObjectives = quizObjectives
+        .filter((objective): objective is LearningObjectiveData => typeof objective !== 'string');
+      setLearningObjectives(normalizeLearningObjectiveData(populatedObjectives));
     }
   }, [currentQuiz, reduxObjectives]);
 

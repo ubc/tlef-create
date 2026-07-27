@@ -2,6 +2,42 @@ export function isGpt5Family(model = '') {
   return model.toLowerCase().startsWith('gpt-5');
 }
 
+export function extractBalancedJson(value = '') {
+  const text = String(value)
+    .replace(/```json\s*/gi, '')
+    .replace(/```/g, '')
+    .trim();
+  const start = text.search(/[\[{]/);
+  if (start < 0) return '';
+
+  const opening = text[start];
+  const closing = opening === '[' ? ']' : '}';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (character === opening) depth += 1;
+    if (character === closing) depth -= 1;
+    if (depth === 0) return text.slice(start, index + 1);
+  }
+  return '';
+}
+
 export function buildOpenAIStreamingRequest({
   model,
   prompt,
@@ -52,6 +88,19 @@ export function getLearningObjectiveCompletionOptions(model, retry = false) {
     maxTokens: retry ? 24000 : 12000,
     // GPT-5.4 nano supports `none` and is intended for extraction-style work.
     // Older GPT-5 aliases do not all support `none`, so keep those on `low`.
+    reasoningEffort: model.toLowerCase().startsWith('gpt-5.4-nano') ? 'none' : 'low'
+  };
+}
+
+export function getBlueprintCompletionOptions(model, retry = false) {
+  if (!isGpt5Family(model)) {
+    return { maxTokens: retry ? 4800 : 2400, reasoningEffort: null };
+  }
+
+  return {
+    // Structured GPT-5 responses share their output budget with reasoning.
+    // Keep this aligned with the LO workflow and permit one bounded retry.
+    maxTokens: retry ? 24000 : 12000,
     reasoningEffort: model.toLowerCase().startsWith('gpt-5.4-nano') ? 'none' : 'low'
   };
 }

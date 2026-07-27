@@ -233,7 +233,11 @@
 .admin-common-list > div { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: 12px; }
 
 .admin-timeline { display: grid; padding: 8px 20px 18px; }
-.admin-event { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--color-border); }
+.admin-event { border-bottom: 1px solid var(--color-border); }
+.admin-event-row { width: 100%; display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 12px 2px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.admin-event-row:hover { background: color-mix(in srgb, var(--color-muted) 35%, transparent); }
+.admin-event-row > svg { color: var(--color-muted-foreground); transition: transform 0.16s ease; }
+.admin-event-row > svg.is-open { transform: rotate(180deg); }
 .admin-event-icon { color: #238057; }
 .admin-event.failed .admin-event-icon { color: #bd4434; }
 .admin-event-main { min-width: 0; display: grid; gap: 3px; }
@@ -241,6 +245,15 @@
 .admin-event-main span,
 .admin-event-meta { color: var(--color-muted-foreground); font-size: 10px; }
 .admin-event-meta { display: grid; justify-items: end; gap: 3px; }
+.admin-event-details { margin: 0 28px 12px 31px; padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; border-radius: 8px; background: color-mix(in srgb, var(--color-muted) 45%, transparent); }
+.admin-event-details > div { min-width: 0; display: grid; gap: 4px; }
+.admin-event-details span { color: var(--color-muted-foreground); font-size: 10px; }
+.admin-event-details code { overflow-wrap: anywhere; color: var(--color-foreground); font-size: 11px; }
+.admin-event-request-id { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .admin-event-details { grid-template-columns: 1fr; }
+  .admin-event-request-id { grid-column: auto; }
+}
 
 .admin-explorer { min-height: 680px; display: grid; grid-template-columns: 285px 1fr; overflow: hidden; border: 1px solid var(--color-border); border-radius: 18px; background: var(--color-card); }
 .admin-explorer-sidebar { padding: 16px; border-right: 1px solid var(--color-border); background: #f6f8f7; }

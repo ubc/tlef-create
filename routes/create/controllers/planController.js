@@ -15,6 +15,11 @@ import { HTTP_STATUS, PEDAGOGICAL_APPROACHES, QUESTION_TYPES } from '../config/c
 import llmService from '../services/llmService.js';
 import sseService from '../services/sseService.js';
 import coursePromptService from '../services/coursePromptService.js';
+import { classifyAIError } from '../utils/aiErrorUtils.js';
+import {
+  completeBlueprintWithRetry,
+  parseBlueprintResponse
+} from '../utils/blueprintResponseUtils.js';
 import {
   alignPlanItemsToSubpoints,
   buildQuestionBudget,
@@ -106,6 +111,9 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
   const requestedTotalQuestions = totalQuestions === undefined || totalQuestions === null || totalQuestions === ''
     ? null
     : Number(totalQuestions);
+  let workflowStage = 'preflight';
+  let llmConfig = null;
+  let llmAttempt = 0;
 
   // Validate inputs
   if (!quizId || !approach) {
@@ -347,23 +355,21 @@ Return ONLY this JSON shape:
       userId
     });
 
-    console.log('🤖 Generating AI plan with prompt:', prompt.substring(0, 200) + '...');
-
     // Call the active user's model rather than the server's startup default.
     if (!llmService) {
       return errorResponse(res, 'LLM service not available', 'AI_SERVICE_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
     }
 
-    const llmConfig = await llmService.resolveUserLLMConfig(userId);
+    workflowStage = 'config';
+    llmConfig = await llmService.resolveUserLLMConfig(userId);
+    res.locals.auditMetadata = {
+      ...(res.locals.auditMetadata || {}),
+      provider: llmConfig.provider,
+      model: llmConfig.model
+    };
     console.log(`🤖 Generating AI plan with ${llmConfig.provider} model: ${llmConfig.model}`);
     streamProgress('llm-started', `Calling ${llmConfig.model} to draft the quiz blueprint...`);
-    const response = await llmService.streamCompletion({
-      prompt,
-      userId,
-      llmConfig,
-      temperature: 0.3,
-      maxTokens: 2400
-    }, (textChunk, metadata) => {
+    const streamBlueprintOutput = (textChunk, metadata) => {
       if (!sessionId || !metadata?.partial || !textChunk) return;
       sseService.streamTextChunk(sessionId, progressQuestionId, textChunk, {
         contentType: 'quiz-blueprint-json',
@@ -371,56 +377,54 @@ Return ONLY this JSON shape:
         totalLength: metadata.totalLength,
         isPartial: true
       });
+    };
+    const requestBlueprint = (completionOptions, { attempt, retry }) => {
+      llmAttempt = attempt;
+      res.locals.auditMetadata = {
+        ...(res.locals.auditMetadata || {}),
+        attempt: llmAttempt,
+        retryApplied: retry
+      };
+      return llmService.streamCompletion({
+        prompt,
+        userId,
+        llmConfig,
+        temperature: 0.3,
+        ...completionOptions
+      }, streamBlueprintOutput);
+    };
+
+    workflowStage = 'llm';
+    const response = await completeBlueprintWithRetry({
+      model: llmConfig.model,
+      complete: requestBlueprint,
+      onRetry: () => {
+        streamProgress(
+          'llm-retry',
+          `${llmConfig.model} ended before returning a complete Blueprint. Retrying once with more room...`
+        );
+        if (sessionId) {
+          sseService.streamTextReset(sessionId, progressQuestionId, {
+            attempt: 2,
+            reason: 'output-budget-retry'
+          });
+        }
+      }
     });
     streamProgress('llm-complete', 'Blueprint draft returned. Validating structure...');
 
-    console.log('🤖 Raw LLM response:', response);
-
     // Parse response - extract content from response object
     let planData;
+    workflowStage = 'parse';
     try {
-      // LLM returns an object with 'content' field
-      const responseText = typeof response === 'string' ? response : response.content;
-      if (!responseText) {
-        throw new Error('No content in LLM response');
-      }
-
-      // Extract JSON from response (handle markdown code blocks)
-      let jsonText = responseText.trim();
-
-      // Try multiple extraction strategies
-      if (jsonText.includes('```json')) {
-        const parts = jsonText.split('```json');
-        if (parts.length > 1) {
-          jsonText = parts[1].split('```')[0].trim();
-        }
-      } else if (jsonText.includes('```')) {
-        const parts = jsonText.split('```');
-        if (parts.length > 1) {
-          jsonText = parts[1].split('```')[0].trim();
-        }
-      }
-
-      // Try to find JSON object in text
-      const jsonMatch = jsonText.match(/\{[\s\S]*"planItems"[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonText = jsonMatch[0];
-      }
-
-      console.log('📝 Extracted JSON text:', jsonText);
-      planData = JSON.parse(jsonText);
+      planData = parseBlueprintResponse(response);
       streamProgress('parse-complete', 'Blueprint JSON parsed successfully.');
     } catch (parseError) {
-      console.error('❌ Failed to parse LLM response:', parseError);
-      const responseText = typeof response === 'string' ? response : response.content || JSON.stringify(response);
-      console.error('❌ Response text:', responseText.substring(0, 500));
-      return errorResponse(res, `Failed to parse AI response: ${parseError.message}`, 'AI_PARSE_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+      parseError.stage = 'parse';
+      throw parseError;
     }
 
-    // Validate plan
-    if (!planData.planItems || !Array.isArray(planData.planItems)) {
-      return errorResponse(res, 'Invalid AI response format', 'AI_INVALID_FORMAT', HTTP_STATUS.INTERNAL_SERVER_ERROR);
-    }
+    workflowStage = 'validate';
 
     // LLMs can occasionally return an obsolete or one-based LO index. Treat it
     // as recoverable model output: remove the bad row and let the fixed budget
@@ -543,12 +547,10 @@ Return ONLY this JSON shape:
         expectedAllocations: questionBudget.allocations,
         actualCountsByLO: finalCountsByLO
       });
-      return errorResponse(
-        res,
-        'Failed to align the generated plan with the learning-objective budget',
-        'PLAN_BUDGET_ERROR',
-        HTTP_STATUS.INTERNAL_SERVER_ERROR
-      );
+      const budgetError = new Error('Failed to align the generated plan with the learning-objective budget');
+      budgetError.code = 'PLAN_BUDGET_ERROR';
+      budgetError.stage = 'budget';
+      throw budgetError;
     }
 
     planData.recommendedTotalQuestions = questionBudget.total;
@@ -575,7 +577,12 @@ Return ONLY this JSON shape:
       approach
     };
 
-    console.log('✅ AI plan validated and adjusted:', planData);
+    console.log('✅ AI plan validated and adjusted:', {
+      requestId: req.auditRequestId,
+      planItems: planData.planItems.length,
+      totalQuestions: planData.recommendedTotalQuestions || effectiveTotalQuestions,
+      approach
+    });
     if (sessionId) {
       sseService.notifyQuestionComplete(sessionId, progressQuestionId, {
         planItems: planData.planItems.length,
@@ -592,16 +599,44 @@ Return ONLY this JSON shape:
     return successResponse(res, planData, 'AI plan generated successfully', HTTP_STATUS.OK);
 
   } catch (error) {
-    console.error('❌ AI plan generation error:', error);
+    const classified = error.code === 'PLAN_BUDGET_ERROR'
+      ? {
+          errorCode: 'PLAN_BUDGET_ERROR',
+          errorStage: 'budget',
+          statusCode: HTTP_STATUS.BAD_GATEWAY,
+          userMessage: 'CREATE could not align the Blueprint with every learning objective. Please retry.'
+        }
+      : classifyAIError(error, workflowStage);
+    res.locals.auditMetadata = {
+      ...(res.locals.auditMetadata || {}),
+      errorCode: classified.errorCode,
+      errorStage: classified.errorStage,
+      attempt: llmAttempt || undefined,
+      provider: llmConfig?.provider,
+      model: llmConfig?.model
+    };
+    console.error('❌ AI plan generation error:', {
+      requestId: req.auditRequestId,
+      errorCode: classified.errorCode,
+      errorStage: classified.errorStage,
+      provider: llmConfig?.provider,
+      model: llmConfig?.model,
+      message: error.message
+    });
     if (sessionId) {
-      sseService.emitError(sessionId, progressQuestionId, error.message, 'quiz-blueprint-error');
+      sseService.emitError(sessionId, progressQuestionId, classified.userMessage, classified.errorCode);
       sseService.notifyBatchComplete(sessionId, {
         totalGenerated: 0,
         totalFailed: 1,
         workflow: 'quiz-blueprint'
       });
     }
-    return errorResponse(res, 'Failed to generate AI plan', 'AI_SERVICE_ERROR', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    return errorResponse(
+      res,
+      classified.userMessage,
+      classified.errorCode,
+      classified.statusCode
+    );
   }
 }));
 

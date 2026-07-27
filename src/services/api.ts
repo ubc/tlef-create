@@ -1503,6 +1503,7 @@ export interface AdminAuditEvent {
   folder?: { _id: string; name: string };
   quiz?: { _id: string; name: string };
   status: 'success' | 'failed';
+  requestId?: string;
   route?: string;
   method?: string;
   statusCode?: number;

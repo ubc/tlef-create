@@ -62,6 +62,7 @@ export default function AIPlanGenerationTrace({
     'draft-started',
     'draft-retry',
     'llm-started',
+    'llm-retry',
     'draft-complete',
     'llm-complete',
     'repair-started',

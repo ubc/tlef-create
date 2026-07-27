@@ -3,7 +3,8 @@ import AuditEvent from '../models/AuditEvent.js';
 const ALLOWED_METADATA_KEYS = new Set([
   'targetUserId', 'count', 'format', 'provider', 'model', 'fallback', 'rating',
   'reasonCount', 'processingStatus', 'questionType', 'deliveryTarget', 'targetFormat',
-  'resultCount', 'source', 'adminView'
+  'resultCount', 'source', 'adminView', 'errorCode', 'errorStage', 'attempt',
+  'durationMs', 'retryApplied'
 ]);
 
 export function sanitizeAuditMetadata(metadata = {}) {

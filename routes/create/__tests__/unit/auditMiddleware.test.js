@@ -6,6 +6,8 @@ describe('privacy-safe audit classification', () => {
   test('classifies important CREATE mutations', () => {
     expect(classifyAuditAction('POST', '/materials/upload')).toEqual({ action: 'material.upload', resourceType: 'material' });
     expect(classifyAuditAction('POST', '/objectives/generate')).toEqual({ action: 'objective.generate', resourceType: 'objective' });
+    expect(classifyAuditAction('POST', '/plans/generate-ai')).toEqual({ action: 'plan.generate_ai', resourceType: 'plan' });
+    expect(classifyAuditAction('POST', '/plans/generate')).toEqual({ action: 'plan.generate_legacy', resourceType: 'plan' });
     expect(classifyAuditAction('POST', '/objectives/classify')).toEqual({ action: 'objective.classify', resourceType: 'objective' });
     expect(classifyAuditAction('PUT', '/questions/507f1f77bcf86cd799439011/review')).toEqual({ action: 'question.review', resourceType: 'question' });
     expect(classifyAuditAction('POST', '/course-prompts/folder/507f1f77bcf86cd799439011/reset')).toEqual({ action: 'prompt.reset', resourceType: 'prompt' });
@@ -23,9 +25,18 @@ describe('privacy-safe audit classification', () => {
     expect(sanitizeAuditMetadata({
       model: 'gpt-4o-mini',
       count: 3,
+      errorCode: 'AI_TIMEOUT',
+      errorStage: 'llm',
+      durationMs: 123,
       prompt: 'private prompt',
       content: 'raw course content',
       apiKey: 'secret'
-    })).toEqual({ model: 'gpt-4o-mini', count: 3 });
+    })).toEqual({
+      model: 'gpt-4o-mini',
+      count: 3,
+      errorCode: 'AI_TIMEOUT',
+      errorStage: 'llm',
+      durationMs: 123
+    });
   });
 });

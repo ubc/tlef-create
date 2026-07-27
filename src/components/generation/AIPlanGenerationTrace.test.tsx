@@ -120,4 +120,14 @@ describe('public generation log formatting', () => {
     expect(log).toContain('retrying once with a larger output budget');
     expect(log).not.toContain('24000');
   });
+
+  it('explains a bounded Blueprint retry without exposing its token budget', () => {
+    const log = buildPublicWorkflowLog([{
+      status: 'llm-retry',
+      message: 'The Blueprint ended early. Retrying once...',
+    }], true, 'Preparing Blueprint context...');
+
+    expect(log).toContain('Blueprint response ended before its visible JSON was complete');
+    expect(log).not.toContain('24000');
+  });
 });

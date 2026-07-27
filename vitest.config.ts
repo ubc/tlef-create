@@ -9,7 +9,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
-    exclude: ['routes/**', 'node_modules/**'],
+    exclude: ['routes/**', 'e2e/**', 'node_modules/**'],
   },
   resolve: {
     alias: {
