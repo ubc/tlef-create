@@ -21,7 +21,8 @@ const RULES = [
   { pattern: /^\/objectives\/reorder/, type: 'objective', actions: { PUT: 'objective.reorder' } },
   { pattern: /^\/objectives\/[^/]+\/regenerate/, type: 'objective', actions: { POST: 'objective.regenerate' } },
   { pattern: /^\/objectives(?:\/|$)/, type: 'objective', actions: { POST: 'objective.create', PUT: 'objective.update', PATCH: 'objective.update', DELETE: 'objective.delete' } },
-  { pattern: /^\/plans\/generate/, type: 'plan', actions: { POST: 'plan.generate' } },
+  { pattern: /^\/plans\/generate-ai$/, type: 'plan', actions: { POST: 'plan.generate_ai' } },
+  { pattern: /^\/plans\/generate$/, type: 'plan', actions: { POST: 'plan.generate_legacy' } },
   { pattern: /^\/plans\/[^/]+\/approve/, type: 'plan', actions: { POST: 'plan.approve' } },
   { pattern: /^\/plans(?:\/|$)/, type: 'plan', actions: { POST: 'plan.create', PUT: 'plan.update', PATCH: 'plan.update', DELETE: 'plan.delete' } },
   { pattern: /^\/streaming\/generate/, type: 'question', actions: { POST: 'question.generate' } },
@@ -73,6 +74,9 @@ export function auditMutations(req, res, next) {
   if (!classification) return next();
 
   const requestId = req.get('x-request-id') || crypto.randomUUID();
+  const startedAt = Date.now();
+  req.auditRequestId = requestId;
+  res.setHeader('x-request-id', requestId);
   res.on('finish', () => {
     const actor = req.user?.id || req.user?._id;
     if (!actor) return;
@@ -85,7 +89,11 @@ export function auditMutations(req, res, next) {
       requestId,
       route,
       method: req.method,
-      statusCode: res.statusCode
+      statusCode: res.statusCode,
+      metadata: {
+        ...(res.locals.auditMetadata || {}),
+        durationMs: Date.now() - startedAt
+      }
     });
   });
   return next();

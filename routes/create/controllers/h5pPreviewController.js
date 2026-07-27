@@ -139,13 +139,21 @@ router.get('/quiz/:quizId/render', authenticateToken, asyncHandler(async (req, r
 
   // Filter by learning objective if specified
   if (loFilter && loFilter !== 'null') {
-    const loIndex = parseInt(loFilter, 10);
-    if (!isNaN(loIndex) && quiz.learningObjectives && quiz.learningObjectives[loIndex]) {
-      const targetLOText = quiz.learningObjectives[loIndex].text;
-      questions = questions.filter(q => {
-        const loText = q.learningObjective?.text;
-        return loText === targetLOText;
-      });
+    const filterValue = String(loFilter);
+    let targetObjective = quiz.learningObjectives?.find(
+      objective => objective._id.toString() === filterValue
+    );
+
+    // Keep old index-based preview URLs working while the UI migrates to ids.
+    if (!targetObjective && /^\d+$/.test(filterValue)) {
+      targetObjective = quiz.learningObjectives?.[Number.parseInt(filterValue, 10)];
+    }
+
+    if (targetObjective) {
+      const targetObjectiveId = targetObjective._id.toString();
+      questions = questions.filter(
+        question => question.learningObjective?._id?.toString() === targetObjectiveId
+      );
     }
   }
 

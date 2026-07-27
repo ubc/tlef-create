@@ -10,6 +10,18 @@ import questionSlice from '../store/slices/questionSlice';
 
 // Mock the API module
 vi.mock('../services/api', () => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    code?: string;
+    details?: Record<string, unknown>;
+
+    constructor(message: string, status: number, code?: string, details?: Record<string, unknown>) {
+      super(message);
+      this.status = status;
+      this.code = code;
+      this.details = details;
+    }
+  },
   questionsApi: {
     generateFromPlanStream: vi.fn(),
     getQuestions: vi.fn().mockResolvedValue({ questions: [] }),

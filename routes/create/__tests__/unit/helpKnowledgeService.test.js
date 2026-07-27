@@ -73,6 +73,19 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(sources.some(source => source.section === 'Understand the generation log')).toBe(true);
   });
 
+  test('retrieves incomplete Blueprint retry and provider-error guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why did the AI Blueprint stop with incomplete JSON, rate limit, or timeout, and will CREATE retry?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Generate Questions' },
+      5
+    );
+
+    expect(sources.some(source => (
+      source.title === 'Troubleshooting and Recovery'
+      && source.section === 'AI generation does not start'
+    ))).toBe(true);
+  });
+
   test('retrieves source-type material preview guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'Does the material eye icon open the PDF and show extracted text for a URL?',

@@ -52,9 +52,11 @@ function clearSessionAndRedirect(req, res, redirectUrl = null) {
  */
 router.get('/config', asyncHandler(async (req, res) => {
   const samlAvailable = process.env.SAML_AVAILABLE === 'true';
+  const autoLoginAvailable = !samlAvailable && process.env.AUTO_LOGIN_ENABLED === 'true';
   
   return successResponse(res, {
-    samlAvailable
+    samlAvailable,
+    autoLoginAvailable
   }, 'Authentication configuration retrieved');
 }));
 
@@ -64,9 +66,10 @@ router.get('/config', asyncHandler(async (req, res) => {
  */
 router.post('/auto-login', asyncHandler(async (req, res) => {
   const samlAvailable = process.env.SAML_AVAILABLE === 'true';
+  const autoLoginAvailable = !samlAvailable && process.env.AUTO_LOGIN_ENABLED === 'true';
   
-  if (samlAvailable) {
-    return errorResponse(res, 'Auto-login not available when SAML is enabled', HTTP_STATUS.BAD_REQUEST);
+  if (!autoLoginAvailable) {
+    return errorResponse(res, 'Auto-login is disabled', 'AUTO_LOGIN_DISABLED', HTTP_STATUS.FORBIDDEN);
   }
 
   // Import User model dynamically to avoid circular dependency

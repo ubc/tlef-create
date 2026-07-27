@@ -19,6 +19,7 @@ const PUBLIC_STEP_DETAILS: Record<string, string> = {
   'draft-started': 'The model is now drafting the learning-objective JSON from the prepared context.',
   'draft-retry': 'The first request ended before a complete visible draft was returned. CREATE is retrying once with a larger output budget.',
   'llm-started': 'The model is now drafting the quiz blueprint from the prepared context.',
+  'llm-retry': 'The first Blueprint response ended before its visible JSON was complete. CREATE is retrying once with a larger output budget.',
   'draft-complete': 'The model draft has returned and is being checked against the source inventory.',
   'llm-complete': 'The model draft has returned and is being validated.',
   'repair-started': 'A targeted repair pass is adding coverage for source sections missed by the first draft.',

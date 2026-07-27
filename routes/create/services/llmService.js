@@ -15,6 +15,7 @@ import { normalizeGeneratedQuestionText } from '../utils/questionTextLimits.js';
 import {
   buildOpenAIIncompleteResponseError,
   buildOpenAIStreamingRequest,
+  extractBalancedJson,
   extractResponsesOutputText,
   getLearningObjectiveCompletionOptions,
   isGpt5Family,
@@ -40,42 +41,6 @@ export function normalizeLearningObjectiveText(value) {
 
 function normalizeOptionalText(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function extractBalancedJson(value = '') {
-  const text = String(value)
-    .replace(/```json\s*/gi, '')
-    .replace(/```/g, '')
-    .trim();
-  const start = text.search(/[\[{]/);
-  if (start < 0) return '';
-
-  const opening = text[start];
-  const closing = opening === '[' ? ']' : '}';
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = start; index < text.length; index += 1) {
-    const character = text[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (character === '\\' && inString) {
-      escaped = true;
-      continue;
-    }
-    if (character === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (character === opening) depth += 1;
-    if (character === closing) depth -= 1;
-    if (depth === 0) return text.slice(start, index + 1);
-  }
-  return '';
 }
 
 export function parseObjectiveEnrichmentResponse(content = '') {
@@ -352,6 +317,10 @@ class QuizLLMService {
 
         if (useResponsesApi && chunk.type === 'response.incomplete') {
           incompleteReason = chunk.response?.incomplete_details?.reason || 'unknown';
+        }
+
+        if (!useResponsesApi && chunk.choices?.[0]?.finish_reason === 'length') {
+          incompleteReason = 'max_output_tokens';
         }
       }
     } else {

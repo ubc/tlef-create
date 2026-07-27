@@ -30,6 +30,11 @@ export const successResponse = (res, data = null, message = 'Success', statusCod
  * @param {*} details - Additional error details
  */
 export const errorResponse = (res, message = 'An error occurred', code = ERROR_CODES.INTERNAL_SERVER_ERROR, statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR, details = null) => {
+  res.locals ||= {};
+  res.locals.auditMetadata = {
+    ...(res.locals.auditMetadata || {}),
+    errorCode: code
+  };
   const response = {
     success: false,
     error: {

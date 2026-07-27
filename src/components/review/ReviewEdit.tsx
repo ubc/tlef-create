@@ -17,6 +17,7 @@ import QuestionCard from './QuestionCard';
 import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
+import { filterQuestionsByLearningObjectiveId } from '../../utils/questionLearningObjective';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
 import {
   DELIVERY_TARGETS,
@@ -47,7 +48,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
-  const [filterByLO, setFilterByLO] = useState<number | null>(null);
+  const [filterByLOId, setFilterByLOId] = useState<string | null>(null);
   const [containerMode, setContainerMode] = useState<'column' | 'question-set' | 'interactive-book'>('column');
   const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget>('h5p-package');
   const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
@@ -159,13 +160,19 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   }, [searchParams, questions, loading]);
 
-  const filteredQuestions = filterByLO !== null
-    ? questions.filter(q => {
-        const loText = typeof q.learningObjective === 'string' ? q.learningObjective : q.learningObjective?.text;
-        const targetLO = learningObjectives[filterByLO]?.text;
-        return loText === targetLO;
-      })
-    : questions;
+  useEffect(() => {
+    if (
+      filterByLOId
+      && !learningObjectives.some(objective => objective._id === filterByLOId)
+    ) {
+      setFilterByLOId(null);
+    }
+  }, [filterByLOId, learningObjectives]);
+
+  const filteredQuestions = filterQuestionsByLearningObjectiveId(
+    questions,
+    filterByLOId
+  );
 
   const toggleEdit = (questionId: string) => {
     setQuestions(questions.map(q =>
@@ -514,14 +521,14 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             <label>Filter by Learning Objective:</label>
             <select
               className="select-input"
-              value={filterByLO ?? ''}
-              onChange={(e) => setFilterByLO(e.target.value ? parseInt(e.target.value) : null)}
+              value={filterByLOId ?? ''}
+              onChange={(e) => setFilterByLOId(e.target.value || null)}
             >
               <option value="">All Objectives</option>
               {learningObjectives.map((obj, index) => {
-                const text = obj?.text || 'Unknown';
+                const text = obj.text;
                 return (
-                  <option key={index} value={index}>
+                  <option key={obj._id} value={obj._id}>
                     LO {index + 1}: {text.substring(0, 50)}{text.length > 50 ? '...' : ''}
                   </option>
                 );
@@ -529,7 +536,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </select>
           </div>
           <div className="questions-count">
-            {filteredQuestions.length} questions {filterByLO !== null ? 'in this objective' : 'total'}
+            {filteredQuestions.length} questions {filterByLOId !== null ? 'in this objective' : 'total'}
           </div>
         </div>
 
@@ -546,8 +553,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           ) : viewMode === 'interact' ? (
             <div className="questions-interactive">
               <iframe
-                key={`h5p-preview-${quizId}-${filterByLO ?? 'all'}-${containerMode}`}
-                src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${containerMode}${filterByLO !== null ? `&lo=${filterByLO}` : ''}`}
+                key={`h5p-preview-${quizId}-${filterByLOId ?? 'all'}-${containerMode}`}
+                src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${containerMode}${filterByLOId !== null ? `&lo=${filterByLOId}` : ''}`}
                 style={{
                   width: '100%',
                   height: `${Math.max(800, filteredQuestions.length * 350)}px`,

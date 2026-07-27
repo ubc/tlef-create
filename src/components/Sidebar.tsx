@@ -9,6 +9,7 @@ import SearchModal from './SearchModal';
 import { foldersApi, materialsApi, Folder, ApiError } from '../services/api';
 import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
+import { PUBSUB_EVENTS } from '../services/pubsubService';
 import '../styles/components/Sidebar.css';
 
 interface SidebarProps {
@@ -132,10 +133,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
   // Listen for question changes (generation completed, questions deleted)
   useEffect(() => {
-    subscribe('QUESTION_GENERATION_COMPLETED', () => {
+    subscribe(PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED, () => {
       loadFolders();
     });
-    subscribe('QUESTIONS_DELETED', () => {
+    subscribe(PUBSUB_EVENTS.QUESTIONS_DELETED, () => {
+      loadFolders();
+    });
+    subscribe(PUBSUB_EVENTS.OBJECTIVES_DELETED, () => {
       loadFolders();
     });
   }, [subscribe]);

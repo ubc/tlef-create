@@ -447,15 +447,25 @@ MAX_FILE_SIZE=104857600
 - `GET|POST /api/create/quizzes` - Quiz CRUD operations
 - `POST /api/create/objectives/generate` - AI generate learning objectives
 - `POST /api/create/objectives/classify` - AI classify user objectives
-- `POST /api/create/plans/generate` - Generate question generation plan
+- `POST /api/create/plans/generate-ai` - Generate the editable AI Blueprint
 - `POST /api/create/questions/generate-from-plan` - AI generate questions
 - `GET /api/create/export/h5p/:quizId` - Export quiz to H5P format
 
 ## 🧪 Testing
 
 ```bash
-# Run all backend tests
+# Frontend component/unit tests
 npm test
+
+# Pure backend unit tests (does not require MongoDB)
+npm run test:backend:unit
+
+# Full backend suite (requires the configured backing services)
+npm run test:backend
+
+# Install Chromium once, then run the production-build E2E smoke
+npm run test:e2e:install
+npm run test:e2e
 
 # Run with coverage report
 npm run test:coverage
@@ -469,6 +479,8 @@ npm run test:watch
 - ✅ API endpoint integration tests
 - ✅ Unit tests for utilities and helpers
 - ⚠️ Some integration tests need SAML session updates
+
+See [`docs/testing.md`](docs/testing.md) for test isolation, Playwright authentication, CI, and real-model canary guidance.
 
 ## 🚀 Development
 

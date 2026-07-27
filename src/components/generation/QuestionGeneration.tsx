@@ -31,6 +31,7 @@ import PromptAnalysisSection from './PromptAnalysisSection';
 import CoursePromptSettings from '../CoursePromptSettings';
 import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
+import { getBlueprintGenerationError } from './blueprintErrorPresentation';
 import '../../styles/components/QuestionGeneration.css';
 
 type GenerationView = 'plan' | 'results';
@@ -544,7 +545,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       );
     } catch (error) {
       console.error('Failed to generate AI plan:', error);
-      showNotification('error', 'Generation Failed', 'Failed to generate AI plan');
+      const presentation = getBlueprintGenerationError(error);
+      showNotification('error', presentation.title, presentation.message);
     } finally {
       setIsGeneratingPlan(false);
       if (planGenerated) {

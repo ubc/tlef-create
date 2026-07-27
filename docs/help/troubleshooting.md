@@ -14,6 +14,8 @@ Global Search only returns materials, questions, and learning objectives inside 
 
 Check that the account has a usable API key or permission to use the deployment key. Then confirm the learning object has assigned, processed materials where required and at least one learning objective. For a fixed Blueprint count, use a whole number between the number of objectives and 100.
 
+If the model ends before returning a complete Blueprint, CREATE retries once with a larger output budget. The live generation log clears the incomplete first draft before showing the retry. If the retry also stops early, the error identifies an incomplete AI response; retry later or choose another available model in User Account. A rate-limit, timeout, or key/model authorization message describes a provider problem rather than a Blueprint-row validation problem.
+
 If a request fails, keep the learning object open and retry once. Do not submit several identical generations in parallel.
 
 ## The Blueprint says Validation failed
@@ -31,6 +33,12 @@ Inspect objective subpoints and Blueprint focus areas. Split broad objectives in
 ## A source reference is wrong or empty
 
 Preview the material, confirm its processing state, and verify it is assigned to the current learning object. Scanned PDFs may require OCR. For a wrong excerpt, regenerate or enrich the dependent objective/question and verify the new reference.
+
+## Questions remain after deleting a learning objective
+
+Deleting a learning objective with linked questions shows the number of affected questions before confirmation. After confirmation, CREATE permanently deletes those linked questions and immediately refreshes the learning-object count, the left sidebar count, and the **Review & Edit** objective filter. Questions linked to other objectives remain.
+
+If a linked question still appears or the filter shows an unknown objective, refresh once and report the issue with the learning-object name and deletion time. Do not delete unrelated objectives as a workaround.
 
 ## A question type disappears
 
