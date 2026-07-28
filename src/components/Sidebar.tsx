@@ -136,7 +136,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     subscribe(PUBSUB_EVENTS.QUESTION_GENERATION_COMPLETED, () => {
       loadFolders();
     });
-    subscribe(PUBSUB_EVENTS.QUESTIONS_DELETED, () => {
+    subscribe(PUBSUB_EVENTS.QUESTIONS_CHANGED, () => {
       loadFolders();
     });
     subscribe(PUBSUB_EVENTS.OBJECTIVES_DELETED, () => {

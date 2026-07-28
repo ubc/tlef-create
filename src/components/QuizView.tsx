@@ -305,6 +305,7 @@ const QuizView = () => {
             <CoverageMapPanel
               quizId={quizId!}
               refreshKey={coverageRefreshKey}
+              isActive={activeTab === 'coverage'}
               onNavigateToGeneration={() => setActiveTab('generation')}
             />
           </div>

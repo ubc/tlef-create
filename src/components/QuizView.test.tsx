@@ -41,7 +41,11 @@ vi.mock('../hooks/usePubSub', () => ({
 
 vi.mock('./MaterialAssignment', () => ({ default: () => <div>Materials panel</div> }));
 vi.mock('./LearningObjectives', () => ({ default: () => <div>Objectives panel</div> }));
-vi.mock('./CoverageMapPanel', () => ({ default: () => <div data-testid="coverage-panel">Coverage panel</div> }));
+vi.mock('./CoverageMapPanel', () => ({
+  default: ({ isActive }: { isActive?: boolean }) => (
+    <div data-testid="coverage-panel" data-active={String(Boolean(isActive))}>Coverage panel</div>
+  )
+}));
 vi.mock('./generation', () => ({ default: () => <div>Generation panel</div> }));
 vi.mock('./review', () => ({ default: () => <div>Review panel</div> }));
 
@@ -58,10 +62,12 @@ describe('QuizView tabs', () => {
     const coverageTab = await screen.findByRole('button', { name: 'Coverage Map' });
     await waitFor(() => expect(coverageTab).toBeEnabled());
     expect(coverageTab).toHaveAttribute('title', 'Coverage Map');
+    expect(screen.getByTestId('coverage-panel')).toHaveAttribute('data-active', 'false');
 
     fireEvent.click(coverageTab);
 
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 640, behavior: 'auto' });
     expect(screen.getByTestId('coverage-panel').parentElement).toHaveStyle({ display: 'block' });
+    expect(screen.getByTestId('coverage-panel')).toHaveAttribute('data-active', 'true');
   });
 });

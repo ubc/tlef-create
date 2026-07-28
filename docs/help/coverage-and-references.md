@@ -6,7 +6,7 @@ Coverage tools show how course evidence flows into objectives and questions. The
 
 Open the learning object's Coverage Map tab to inspect relationships among assigned materials, learning objectives, evidence, and generated questions. Use it after objectives are created and again after question generation.
 
-In Graph view, drag nodes to rearrange the map, pan or zoom the canvas, select a node to inspect its properties and direct relationships, and double-click a node to isolate its one-hop neighborhood. Use Node Labels and Relationship Types to filter the map, search for a visible entity, and choose **Show complete map** to reset exploration. Evidence nodes with a resolved material can open the cited source.
+In Graph view, CREATE fits the complete map into the canvas when the Coverage Map tab becomes visible. Drag nodes to rearrange the map, pan or zoom the canvas, select a node to inspect its properties and direct relationships, and double-click a node to isolate its one-hop neighborhood. Use Node Labels and Relationship Types to filter the map, search for a visible entity, and choose **Show complete map** to reset exploration and fit all nodes back into view. Evidence nodes with a resolved material can open the cited source.
 
 The lines are generated from saved evidence and coverage relationships. CREATE does not let an instructor draw an arbitrary new line in this view because an unsaved line would falsely represent source support; update the objective, Blueprint, question, or source reference that owns the relationship instead.
 

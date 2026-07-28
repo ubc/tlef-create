@@ -7,10 +7,16 @@ const KnowledgeGraph = lazy(() => import('./KnowledgeGraph'));
 interface CoverageMapPanelProps {
   quizId: string;
   refreshKey?: string;
+  isActive?: boolean;
   onNavigateToGeneration?: () => void;
 }
 
-const CoverageMapPanel = ({ quizId, refreshKey, onNavigateToGeneration }: CoverageMapPanelProps) => {
+const CoverageMapPanel = ({
+  quizId,
+  refreshKey,
+  isActive = true,
+  onNavigateToGeneration
+}: CoverageMapPanelProps) => {
   const [coverageMap, setCoverageMap] = useState<CoverageMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +99,7 @@ const CoverageMapPanel = ({ quizId, refreshKey, onNavigateToGeneration }: Covera
 
       {viewMode === 'graph' ? (
         <Suspense fallback={<div className="coverage-map-empty">Loading interactive graph...</div>}>
-          <KnowledgeGraph coverageMap={coverageMap} />
+          <KnowledgeGraph coverageMap={coverageMap} isVisible={isActive} />
         </Suspense>
       ) : (
       <div className="coverage-topic-list">

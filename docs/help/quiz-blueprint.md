@@ -36,6 +36,8 @@ Choose **No Learning Objective** only for an intentionally custom activity. That
 
 The sum of row counts is the number of questions to generate. Keep at least one planned question per objective. A row count represents repeated generation from that row's configuration; subpoint alignment can split one recommendation into more focused rows.
 
+After adding or deleting questions in **Review & Edit**, the left sidebar and Generate Questions results use the current saved question inventory. Selecting **Back to AI Plan Configuration** reconciles the Question Plan counts and rows with those current questions while preserving matching row details such as focus and difficulty. Review the reconciled plan before generating again.
+
 ## One-time instructions
 
 Additional instructions affect the current Blueprint or generation request. Use them for audience, terminology, scenario constraints, exclusions, tone, or required emphasis. Do not paste API keys, student records, or other sensitive data. Course prompts are the better place for reusable behavior.

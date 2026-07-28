@@ -32,6 +32,7 @@ import CoursePromptSettings from '../CoursePromptSettings';
 import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { getBlueprintGenerationError } from './blueprintErrorPresentation';
+import { reconcilePlanItemsWithQuestions } from '../../utils/questionPlanSync';
 import '../../styles/components/QuestionGeneration.css';
 
 type GenerationView = 'plan' | 'results';
@@ -849,6 +850,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
   const handleGoBackToPlan = () => {
     hasUserSelectedViewRef.current = true;
+    const reconciledPlanItems = reconcilePlanItemsWithQuestions(planItems, questions);
+    if (reconciledPlanItems.some((item, index) => (
+      item.id !== planItems[index]?.id
+      || item.count !== planItems[index]?.count
+    )) || reconciledPlanItems.length !== planItems.length) {
+      setPlanItems(reconciledPlanItems);
+      setHasUnsavedChanges(true);
+    }
     setCurrentView('plan');
   };
 
