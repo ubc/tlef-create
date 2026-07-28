@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -11,6 +11,7 @@ import {
   NodeProps,
   Position,
   ReactFlow,
+  ReactFlowInstance,
   useNodesState
 } from '@xyflow/react';
 import {
@@ -455,15 +456,18 @@ function FullKnowledgeGraph({
   edges,
   visibleKinds,
   compact,
+  isVisible,
   onPreviewReference
 }: {
   initialNodes: KnowledgeNode[];
   edges: Edge[];
   visibleKinds: KnowledgeNodeKind[];
   compact: boolean;
+  isVisible: boolean;
   onPreviewReference: (reference: SourceReference) => void;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<KnowledgeNode>(initialNodes);
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<KnowledgeNode, Edge> | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -482,6 +486,31 @@ function FullKnowledgeGraph({
 
   useEffect(() => setActiveKinds(new Set(visibleKinds)), [visibleKinds]);
   useEffect(() => setActiveRelations(new Set(relationTypes)), [relationTypes]);
+
+  const scheduleFitView = useCallback((duration = 250) => {
+    if (!isVisible || !flowInstance) return undefined;
+
+    let secondFrame: number | undefined;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        flowInstance.fitView({
+          padding: 0.25,
+          maxZoom: compact ? 1.1 : 0.95,
+          duration
+        });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [compact, flowInstance, isVisible]);
+
+  useEffect(() => {
+    if (initialNodes.length === 0) return undefined;
+    return scheduleFitView(0);
+  }, [initialNodes, scheduleFitView]);
 
   const nodeById = useMemo(() => new Map(nodes.map(node => [node.id, node])), [nodes]);
   const focusNeighborhood = useMemo(() => {
@@ -569,6 +598,7 @@ function FullKnowledgeGraph({
     setSearchQuery('');
     setActiveKinds(new Set(visibleKinds));
     setActiveRelations(new Set(relationTypes));
+    scheduleFitView();
   };
 
   return (
@@ -672,6 +702,7 @@ function FullKnowledgeGraph({
           edges={displayedEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
+          onInit={setFlowInstance}
           fitView
           fitViewOptions={{ padding: 0.25, maxZoom: compact ? 1.1 : 0.95 }}
           minZoom={0.12}
@@ -704,9 +735,15 @@ interface KnowledgeGraphProps {
   coverageMap: CoverageMap;
   focusQuestionId?: string;
   compact?: boolean;
+  isVisible?: boolean;
 }
 
-export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact = false }: KnowledgeGraphProps) {
+export default function KnowledgeGraph({
+  coverageMap,
+  focusQuestionId,
+  compact = false,
+  isVisible = true
+}: KnowledgeGraphProps) {
   const [selectedReference, setSelectedReference] = useState<SourceReference | null>(null);
   const graph = useMemo(() => {
     const complete = buildGraph(coverageMap);
@@ -733,6 +770,7 @@ export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact =
           edges={graph.edges}
           visibleKinds={visibleKinds}
           compact={compact}
+          isVisible={isVisible}
           onPreviewReference={setSelectedReference}
         />
         {selectedReference && (
@@ -752,6 +790,7 @@ export default function KnowledgeGraph({ coverageMap, focusQuestionId, compact =
         edges={graph.edges}
         visibleKinds={visibleKinds}
         compact={compact}
+        isVisible={isVisible}
         onPreviewReference={setSelectedReference}
       />
       {selectedReference && (

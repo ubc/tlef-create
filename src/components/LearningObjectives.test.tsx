@@ -278,6 +278,101 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
     expect(getQuestionsSpy).toHaveBeenCalled();
   });
 
+  it('saves an edited objective without regenerating questions when the instructor selects Cancel', async () => {
+    const objective = {
+      _id: 'objective-1',
+      text: 'Analyze old evidence',
+      order: 0
+    } as LearningObjective;
+    const linkedQuestion = {
+      _id: 'question-1',
+      learningObjective: objective,
+      questionText: 'Keep this question'
+    } as Question;
+
+    vi.spyOn(objectivesApi, 'getObjectives').mockResolvedValue({ objectives: [objective] });
+    vi.spyOn(questionsApi, 'getQuestions').mockResolvedValue({ questions: [linkedQuestion] });
+    const updateObjectiveSpy = vi.spyOn(objectivesApi, 'updateObjective')
+      .mockResolvedValue({ objective: { ...objective, text: 'Analyze revised evidence' } });
+    const regenerateQuestionSpy = vi.spyOn(questionsApi, 'regenerateQuestion')
+      .mockResolvedValue({ question: linkedQuestion });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <Provider store={store}>
+        <LearningObjectives {...defaultProps} objectives={[objective]} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit learning objective 1' }));
+    fireEvent.change(screen.getByLabelText('Learning Objective'), {
+      target: { value: 'Analyze revised evidence' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(updateObjectiveSpy).toHaveBeenCalledWith(
+      objective._id,
+      expect.objectContaining({ text: 'Analyze revised evidence' })
+    ));
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Select Cancel to keep the existing questions unchanged.')
+    );
+    expect(regenerateQuestionSpy).not.toHaveBeenCalled();
+  });
+
+  it('regenerates linked questions after a single objective is regenerated', async () => {
+    const objective = {
+      _id: 'objective-1',
+      text: 'Analyze old evidence',
+      order: 0
+    } as LearningObjective;
+    const regeneratedObjective = {
+      ...objective,
+      text: 'Evaluate revised evidence'
+    };
+    const linkedQuestion = {
+      _id: 'question-1',
+      learningObjective: objective._id,
+      questionText: 'Old question'
+    } as Question;
+
+    vi.spyOn(objectivesApi, 'getObjectives').mockResolvedValue({ objectives: [objective] });
+    vi.spyOn(questionsApi, 'getQuestions').mockResolvedValue({ questions: [linkedQuestion] });
+    const regenerateObjectiveSpy = vi.spyOn(objectivesApi, 'regenerateSingleObjective')
+      .mockResolvedValue({ objective: regeneratedObjective });
+    const regenerateQuestionSpy = vi.spyOn(questionsApi, 'regenerateQuestion')
+      .mockResolvedValue({ question: linkedQuestion });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <Provider store={store}>
+        <LearningObjectives {...defaultProps} objectives={[objective]} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Regenerate learning objective 1'
+    }));
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Regenerate Learning Objective'
+    }));
+
+    await waitFor(() => expect(regenerateObjectiveSpy).toHaveBeenCalledWith(
+      objective._id,
+      undefined
+    ));
+    await waitFor(() => expect(regenerateQuestionSpy).toHaveBeenCalledWith(
+      linkedQuestion._id,
+      expect.stringContaining('linked learning objective was revised')
+    ));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining('If you regenerate this learning objective')
+    );
+    expect(regenerateObjectiveSpy.mock.invocationCallOrder[0])
+      .toBeLessThan(regenerateQuestionSpy.mock.invocationCallOrder[0]);
+  });
+
   it('keeps complete objective records and refreshes questions after a confirmed cascade delete', async () => {
     const deletedObjective = {
       _id: 'objective-1',

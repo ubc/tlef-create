@@ -6,7 +6,12 @@ import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi } from '
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
 import { RootState, AppDispatch } from '../../store';
-import { fetchQuestions, deleteQuestion, updateQuestion as updateQuestionThunk } from '../../store/slices/questionSlice';
+import {
+  addQuestionForQuiz,
+  fetchQuestions,
+  deleteQuestion,
+  updateQuestion as updateQuestionThunk
+} from '../../store/slices/questionSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import RegeneratePromptModal from '../RegeneratePromptModal';
 import ChapterEditorPanel from './ChapterEditorPanel';
@@ -188,8 +193,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       setCoverageMap(null);
       if (evidenceQuestionId === questionId) setEvidenceQuestionId(null);
       showNotification('success', 'Question Deleted', 'Question has been removed');
-      publish(PUBSUB_EVENTS.QUESTIONS_DELETED, {
-        quizId, deletedQuestionId: questionId, remainingCount: updatedQuestions.length, timestamp: Date.now()
+      publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
+        quizId, reason: 'deleted', questionCount: updatedQuestions.length, timestamp: Date.now()
       });
     } catch (error) {
       console.error('Failed to delete question:', error);
@@ -308,6 +313,12 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       const result = await dispatch(fetchQuestions(quizId)).unwrap();
       if (result.questions.length > initialQuestionCount) {
         const generatedQuestion = result.questions.find(question => !existingQuestionIds.has(question._id));
+        publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
+          quizId,
+          reason: 'added',
+          questionCount: result.questions.length,
+          timestamp: Date.now()
+        });
         showNotification('success', 'Question Added', 'AI generated a new question successfully');
         if (generatedQuestion) {
           window.setTimeout(() => {
@@ -662,7 +673,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           quizId={quizId}
           learningObjectives={learningObjectives}
           availableQuestionTypes={availableQuestionTypes}
-          onQuestionAdded={(q) => setQuestions([...questions, q])}
+          onQuestionAdded={(question) => {
+            dispatch(addQuestionForQuiz({ quizId, question }));
+            publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
+              quizId,
+              reason: 'added',
+              questionCount: questions.length + 1,
+              timestamp: Date.now()
+            });
+          }}
           onGenerateAI={handleGenerateAIQuestion}
           showNotification={showNotification}
         />

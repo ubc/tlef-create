@@ -105,6 +105,32 @@ test('deleting a learning objective removes linked questions and refreshes every
     await expect(objectiveFilter.locator('option')).toHaveCount(2);
     await expect(objectiveFilter.locator('option').filter({ hasText: 'Unknown' })).toHaveCount(0);
 
+    await page.getByRole('button', { name: 'Generate Questions' }).click();
+    await expect(page.getByRole('heading', { name: 'Questions Generated' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to AI Plan Configuration' }).click();
+    await expect(page.locator('.plan-editor-row')).toHaveCount(1);
+    await expect(page.locator('.plan-editor-row .count-input')).toHaveValue('1');
+
+    await page.getByRole('button', { name: 'Coverage Map' }).click();
+    await expect(page.locator('.knowledge-explorer-canvas')).toBeVisible();
+    await expect(page.locator('.knowledge-explorer-canvas .react-flow__node').first()).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => {
+      const canvas = document.querySelector('.knowledge-explorer-canvas');
+      if (!canvas) return false;
+
+      const canvasBounds = canvas.getBoundingClientRect();
+      const visibleNodes = [...canvas.querySelectorAll<HTMLElement>('.react-flow__node')]
+        .map(node => node.getBoundingClientRect())
+        .filter(bounds => bounds.width > 0 && bounds.height > 0);
+
+      return visibleNodes.length > 0 && visibleNodes.every(bounds => (
+        bounds.left >= canvasBounds.left
+        && bounds.top >= canvasBounds.top
+        && bounds.right <= canvasBounds.right
+        && bounds.bottom <= canvasBounds.bottom
+      ));
+    })).toBe(true);
+
     const questionsResponse = await request.get(`${apiBaseUrl}/questions/quiz/${quizId}`);
     expect(questionsResponse.ok()).toBeTruthy();
     const questionsBody = await questionsResponse.json();

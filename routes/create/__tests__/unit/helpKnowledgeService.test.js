@@ -86,6 +86,32 @@ describe('CREATE Guide knowledge retrieval', () => {
     ))).toBe(true);
   });
 
+  test('retrieves cross-tab question-count synchronization guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why did my Question Plan count change after I added or deleted questions in Review & Edit?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Generate Questions' },
+      4
+    );
+
+    expect(sources.some(source => (
+      source.title === 'AI Blueprint and Question Generation'
+      && source.section === 'Read and edit Blueprint rows'
+    ))).toBe(true);
+  });
+
+  test('retrieves Coverage Map viewport recovery guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I center the Coverage Map and fit every node back into view?',
+      { route: '/course/course-1/quiz/quiz-1?tab=coverage', activeTab: 'Coverage Map' },
+      4
+    );
+
+    expect(sources.some(source => (
+      source.title === 'Coverage Map and Source References'
+      && source.section === 'Coverage Map'
+    ))).toBe(true);
+  });
+
   test('retrieves source-type material preview guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'Does the material eye icon open the PDF and show extracted text for a URL?',

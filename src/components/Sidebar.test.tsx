@@ -6,15 +6,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Sidebar from './Sidebar';
 import appReducer from '../store/slices/appSlice';
 import quizReducer, { createQuiz } from '../store/slices/quizSlice';
+import { PUBSUB_EVENTS } from '../services/pubsubService';
 
 const mocks = vi.hoisted(() => ({
   getFolders: vi.fn(),
+  subscribe: vi.fn().mockReturnValue('subscription-token'),
 }));
 
 vi.mock('../hooks/usePubSub', () => ({
   usePubSub: () => ({
     publish: vi.fn(),
-    subscribe: vi.fn().mockReturnValue('subscription-token'),
+    subscribe: mocks.subscribe,
   }),
 }));
 
@@ -128,5 +130,26 @@ describe('Sidebar Redux quiz synchronization', () => {
       expect(screen.getByText('Quiz 2')).toBeInTheDocument();
     });
     expect(mocks.getFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it('subscribes to question-count changes from Review & Edit', async () => {
+    const store = configureStore({
+      reducer: { app: appReducer, quiz: quizReducer },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/']}>
+          <Sidebar />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mocks.subscribe).toHaveBeenCalledWith(
+        PUBSUB_EVENTS.QUESTIONS_CHANGED,
+        expect.any(Function)
+      );
+    });
   });
 });

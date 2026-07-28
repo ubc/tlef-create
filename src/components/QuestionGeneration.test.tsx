@@ -6,7 +6,8 @@ import { configureStore } from '@reduxjs/toolkit';
 import QuestionGeneration from './generation';
 import planSlice from '../store/slices/planSlice';
 import appSlice from '../store/slices/appSlice';
-import questionSlice from '../store/slices/questionSlice';
+import questionSlice, { setQuestionsForQuiz } from '../store/slices/questionSlice';
+import { quizApi, type Question } from '../services/api';
 
 // Mock the API module
 vi.mock('../services/api', () => ({
@@ -66,6 +67,11 @@ vi.mock('../hooks/useSSE', () => ({
     disconnect: vi.fn(),
   }),
 }));
+
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: vi.fn(),
+});
 
 describe('QuestionGeneration Component - Redux Integration', () => {
   let store: any;
@@ -180,6 +186,59 @@ describe('QuestionGeneration Component - Redux Integration', () => {
 
     // Should show the generate button after plan items are initialized
     expect(await screen.findByText(/Generate \d+ Questions/)).toBeTruthy();
+  });
+
+  it('reconciles the Question Plan with the current Redux questions when returning from results', async () => {
+    const existingQuestion = {
+      _id: 'question-1',
+      quiz: defaultProps.quizId,
+      learningObjective: 'lo-1',
+      type: 'multiple-choice',
+      difficulty: 'moderate',
+      questionText: 'Current question',
+      content: { selectionMode: 'single' },
+      correctAnswer: 'A',
+      order: 0,
+      reviewStatus: 'pending',
+      createdBy: 'user-1',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      updatedAt: '2026-07-27T00:00:00.000Z',
+    } as Question;
+    store.dispatch(setQuestionsForQuiz({
+      quizId: defaultProps.quizId,
+      questions: [existingQuestion]
+    }));
+    vi.mocked(quizApi.getQuiz).mockResolvedValueOnce({
+      quiz: {
+        _id: defaultProps.quizId,
+        settings: {
+          planMode: 'manual',
+          targetFormat: 'column',
+          deliveryTarget: 'h5p-package',
+          planItems: [{
+            type: 'multiple-choice',
+            learningObjective: 'lo-1',
+            count: 5,
+            difficulty: 'moderate',
+            selectionMode: 'single'
+          }]
+        }
+      }
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <QuestionGeneration {...defaultProps} />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Back to AI Plan Configuration'
+    }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.count-input')).toHaveValue(1);
+    });
   });
 
   it('should clean up state on unmount during generation', async () => {
