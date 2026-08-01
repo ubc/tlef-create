@@ -183,6 +183,19 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(sources.some(source => source.section === 'A search result is no longer available')).toBe(true);
   });
 
+  test('retrieves in-app dialog and destructive confirmation guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What happens when a destructive confirmation dialog opens instead of a browser alert?',
+      { route: '/course/course-1', activeTab: 'Materials' },
+      4
+    );
+
+    expect(sources.some(source => (
+      source.title === 'Troubleshooting and Recovery'
+      && source.section === 'Dialogs and confirmations'
+    ))).toBe(true);
+  });
+
   test('retrieves the individual AI Enrich tutorial guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'Why does the sparkle button tutorial appear after I manually add an LO, and how do I use Enrich this LO?',

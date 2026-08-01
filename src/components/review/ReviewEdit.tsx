@@ -23,6 +23,7 @@ import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { filterQuestionsByLearningObjectiveId } from '../../utils/questionLearningObjective';
+import { useSystemDialog } from '../system-dialog/SystemDialogProvider';
 import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
 import {
   DELIVERY_TARGETS,
@@ -50,6 +51,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
   const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
+  const { showConfirm } = useSystemDialog();
 
   const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
   const [showManualAdd, setShowManualAdd] = useState(false);
@@ -353,11 +355,14 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       const unsupportedText = unsupported.length > 0
         ? `\n\nUnsupported in ${h5pCheckFormat}: ${unsupported.map(type => type.label).join(', ')}`
         : '';
-      const shouldContinue = window.confirm(
-        `This learning object is configured for ${deliveryTarget === 'canvas-lti' ? 'Canvas LTI / Mixed Activity' : targetFormatLabel}. ` +
-        `A downloaded H5P package must follow official H5P container rules.${unsupportedText}\n\n` +
-        'Continue exporting to H5P anyway?'
-      );
+      const shouldContinue = await showConfirm({
+        title: 'Export using H5P container rules?',
+        description:
+          `This learning object is configured for ${deliveryTarget === 'canvas-lti' ? 'Canvas LTI / Mixed Activity' : targetFormatLabel}. ` +
+          `A downloaded H5P package must follow official H5P container rules.${unsupportedText}`,
+        confirmLabel: 'Continue export',
+        tone: 'warning'
+      });
 
       if (!shouldContinue) {
         return;

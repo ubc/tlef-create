@@ -23,10 +23,10 @@ describe('learning-objective question impact', () => {
       .toEqual(['q1', 'q2']);
   });
 
-  it('explains that Cancel keeps questions rather than cancelling the LO update', () => {
+  it('explains that the instructor can keep questions without cancelling the LO update', () => {
     const prompt = buildLinkedQuestionRegenerationPrompt(2, 'edit');
-    expect(prompt).toContain('Select OK to regenerate the 2 linked questions');
-    expect(prompt).toContain('Select Cancel to keep the existing questions unchanged.');
+    expect(prompt).toContain('regenerate the 2 linked questions');
+    expect(prompt).toContain('keep the existing questions unchanged');
   });
 
   it('continues regenerating remaining linked questions after one fails', async () => {

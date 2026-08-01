@@ -2,6 +2,10 @@
 
 Start with the smallest safe recovery step: preserve your work, read the visible message, retry once, and then report a reproducible failure. Repeatedly clicking generation or export can create duplicate work.
 
+## Dialogs and confirmations
+
+CREATE uses in-app dialogs for warnings, errors, success messages, and destructive confirmations instead of the browser's default alert boxes. A confirmation names the affected action and provides explicit action and cancel buttons. Select **Cancel**, press Escape, or close the dialog to leave the affected content unchanged. Destructive actions use a red warning style; warnings, information, and success messages use distinct styles so the result is easier to recognize.
+
 ## A workflow tab is disabled
 
 Complete the prerequisite in the previous tab. Assign processed materials before grounded objective generation, create at least one learning objective before the Blueprint, and generate at least one question before export. Refresh if the prerequisite was just saved but the tab has not updated.

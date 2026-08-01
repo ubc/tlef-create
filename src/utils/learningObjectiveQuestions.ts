@@ -16,8 +16,7 @@ export function buildLinkedQuestionRegenerationPrompt(questionCount: number, act
     '',
     `If you ${verb}, the existing question content may no longer match the objective.`,
     '',
-    `Select OK to regenerate the ${questionCount} linked question${questionCount === 1 ? '' : 's'} after the objective is updated.`,
-    'Select Cancel to keep the existing questions unchanged.'
+    `You can regenerate the ${questionCount} linked question${questionCount === 1 ? '' : 's'} after the objective is updated, or keep the existing questions unchanged.`
   ].join('\n');
 }
 

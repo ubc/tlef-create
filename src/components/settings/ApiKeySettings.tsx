@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Key, Plus, Trash2, Eye, EyeOff, Loader } from 'lucide-react';
 import { apiKeyApi, ApiKey } from '../../services/api';
+import { useSystemDialog } from '../system-dialog/SystemDialogProvider';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
@@ -9,6 +10,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const ApiKeySettings = () => {
+  const { showConfirm } = useSystemDialog();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [envKey, setEnvKey] = useState<{ provider: string; modelName: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +95,13 @@ const ApiKeySettings = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this API key?')) return;
+    const confirmed = await showConfirm({
+      title: 'Delete this API key?',
+      description: 'AI features using this key will stop working until another active key is available.',
+      confirmLabel: 'Delete API key',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await apiKeyApi.deleteKey(id);
       setKeys(prev => prev.filter(k => k._id !== id));

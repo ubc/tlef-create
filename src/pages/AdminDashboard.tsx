@@ -7,6 +7,7 @@ import AdminActivityPanel from '../components/admin/AdminActivityPanel';
 import AdminGuideInsightsPanel from '../components/admin/AdminGuideInsightsPanel';
 import AdminUserExplorer from '../components/admin/AdminUserExplorer';
 import { RootState } from '../store';
+import { useSystemDialog } from '../components/system-dialog/SystemDialogProvider';
 import '../styles/components/AdminDashboard.css';
 
 interface PlatformStats {
@@ -55,6 +56,7 @@ interface ManagedUser {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const { showAlert, showConfirm } = useSystemDialog();
   const user = useSelector((state: RootState) => state.app.user);
   const [platform, setPlatform] = useState<PlatformStats | null>(null);
   const [users, setUsers] = useState<UserStat[]>([]);
@@ -102,17 +104,31 @@ const AdminDashboard = () => {
       await adminApi.updateEnvKeyPermission(userId, !current);
       setManagedUsers(prev => prev.map(u => u._id === userId ? { ...u, canUseEnvKey: !current } : u));
     } catch {
-      alert('Failed to update permission');
+      await showAlert({
+        title: 'Permission update failed',
+        description: 'CREATE could not update this user\'s environment-key permission. Please try again.',
+        tone: 'danger'
+      });
     }
   };
 
   const handleToggleAll = async (canUseEnvKey: boolean) => {
-    if (!confirm(`${canUseEnvKey ? 'Allow' : 'Revoke'} env key access for ALL users?`)) return;
+    const confirmed = await showConfirm({
+      title: `${canUseEnvKey ? 'Allow' : 'Revoke'} access for all users?`,
+      description: `This will ${canUseEnvKey ? 'allow' : 'revoke'} environment-key access for every user on the platform.`,
+      confirmLabel: canUseEnvKey ? 'Allow access' : 'Revoke access',
+      tone: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await adminApi.updateAllEnvKeyPermission(canUseEnvKey);
       setManagedUsers(prev => prev.map(u => ({ ...u, canUseEnvKey })));
     } catch {
-      alert('Failed to update permissions');
+      await showAlert({
+        title: 'Permission update failed',
+        description: 'CREATE could not update environment-key permissions for all users. Please try again.',
+        tone: 'danger'
+      });
     }
   };
 
@@ -121,7 +137,11 @@ const AdminDashboard = () => {
       await adminApi.updateReport(id, status);
       setReports(prev => prev.map(r => r._id === id ? { ...r, status } : r));
     } catch {
-      alert('Failed to update report');
+      await showAlert({
+        title: 'Report update failed',
+        description: 'CREATE could not update this report. Please try again.',
+        tone: 'danger'
+      });
     }
   };
 

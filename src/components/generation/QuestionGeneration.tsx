@@ -33,6 +33,7 @@ import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { getBlueprintGenerationError } from './blueprintErrorPresentation';
 import { reconcilePlanItemsWithQuestions } from '../../utils/questionPlanSync';
+import { useSystemDialog } from '../system-dialog/SystemDialogProvider';
 import '../../styles/components/QuestionGeneration.css';
 
 type GenerationView = 'plan' | 'results';
@@ -72,6 +73,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   const dispatch = useDispatch<AppDispatch>();
   const questions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
   const { showNotification } = usePubSub('QuestionGeneration');
+  const { showConfirm } = useSystemDialog();
   const hasUserSelectedViewRef = useRef(false);
 
   // Plan mode state
@@ -740,12 +742,15 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       .map(item => `${item.type} (${item.count})`)
       .join(', ');
 
-    const shouldReplace = window.confirm(
-      `This format does not support some question types in your plan.\n\n` +
-      `Incompatible plan items: ${incompatibleSummary}\n\n` +
-      `If you continue, these plan items will be changed to "${fallbackType}".\n\n` +
-      'Do you want to continue?'
-    );
+    const shouldReplace = await showConfirm({
+      title: 'Update incompatible plan items?',
+      description:
+        `This format does not support some question types in your plan.\n\n` +
+        `Incompatible plan items: ${incompatibleSummary}\n\n` +
+        `If you continue, these plan items will be changed to "${fallbackType}".`,
+      confirmLabel: 'Update plan',
+      tone: 'warning'
+    });
 
     if (!shouldReplace) {
       return false;
@@ -773,11 +778,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
     const unsupportedTypeValues = new Set(unsupported.map(type => type.value));
     const incompatibleQuestions = questions.filter(question => unsupportedTypeValues.has(question.type));
 
-    const shouldDelete = window.confirm(
-      `This format does not support ${unsupported.map(type => type.label).join(', ')}.\n\n` +
-      `${incompatibleQuestions.length} existing question${incompatibleQuestions.length === 1 ? '' : 's'} will be deleted if you continue.\n\n` +
-      'Do you want to switch formats and remove the incompatible questions?'
-    );
+    const shouldDelete = await showConfirm({
+      title: 'Remove incompatible questions?',
+      description:
+        `This format does not support ${unsupported.map(type => type.label).join(', ')}.\n\n` +
+        `${incompatibleQuestions.length} existing question${incompatibleQuestions.length === 1 ? '' : 's'} will be permanently deleted if you continue.`,
+      confirmLabel: 'Switch and delete',
+      tone: 'danger'
+    });
 
     if (!shouldDelete) {
       return false;

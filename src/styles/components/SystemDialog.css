@@ -1,0 +1,76 @@
+.system-dialog {
+  width: min(92vw, 31rem);
+  max-width: 31rem;
+  gap: 1.4rem;
+  border-radius: 16px;
+  border-top: 4px solid var(--system-dialog-accent, #334155);
+  padding: 1.6rem;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.system-dialog-info { --system-dialog-accent: #2878b5; --system-dialog-icon-bg: #e7f2fb; }
+.system-dialog-success { --system-dialog-accent: #278557; --system-dialog-icon-bg: #e5f6ed; }
+.system-dialog-warning { --system-dialog-accent: #b7791f; --system-dialog-icon-bg: #fff5d8; }
+.system-dialog-danger { --system-dialog-accent: #c93c32; --system-dialog-icon-bg: #fdeceb; }
+
+.system-dialog-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+
+.system-dialog-heading .dialog-header {
+  gap: 0.55rem;
+  text-align: left;
+}
+
+.system-dialog-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--system-dialog-icon-bg);
+  color: var(--system-dialog-accent);
+}
+
+.system-dialog .dialog-title {
+  padding-right: 1.5rem;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.system-dialog .dialog-description {
+  color: #526174;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.system-dialog .dialog-footer {
+  gap: 0.65rem;
+}
+
+.system-dialog-button {
+  min-width: 7.5rem;
+  min-height: 2.55rem;
+  padding: 0.55rem 1rem;
+}
+
+@media (max-width: 520px) {
+  .system-dialog {
+    padding: 1.25rem;
+  }
+
+  .system-dialog-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .system-dialog .dialog-footer {
+    flex-direction: column-reverse;
+  }
+
+  .system-dialog-button {
+    width: 100%;
+  }
+}

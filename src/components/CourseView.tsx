@@ -7,6 +7,7 @@ import { foldersApi, materialsApi, Material, Quiz, ApiError } from '../services/
 import { usePubSub } from '../hooks/usePubSub';
 import { useAppDispatch } from '../hooks/redux';
 import { createQuiz } from '../store/slices/quizSlice';
+import { useSystemDialog } from './system-dialog/SystemDialogProvider';
 import '../styles/components/CourseView.css';
 
 interface QuizData {
@@ -26,6 +27,7 @@ const CourseView = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { showNotification, publish, subscribe } = usePubSub('CourseView');
+  const { showAlert } = useSystemDialog();
 
   const [course, setCourse] = useState<CourseData | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -259,14 +261,27 @@ const CourseView = () => {
 
       if (err instanceof ApiError) {
         if (err.isAuthError()) {
-          alert('Your session has expired. Please log in again.');
+          await showAlert({
+            title: 'Session expired',
+            description: 'Your session has expired. Sign in again to continue.',
+            confirmLabel: 'Go to sign in',
+            tone: 'warning'
+          });
           // Redirect to login page
           window.location.href = '/login';
         } else {
-          alert(`Failed to add material: ${err.message}\n\nStatus: ${err.status}\nCode: ${err.code || 'Unknown'}`);
+          await showAlert({
+            title: 'Material upload failed',
+            description: `${err.message}\n\nStatus: ${err.status}\nCode: ${err.code || 'Unknown'}`,
+            tone: 'danger'
+          });
         }
       } else {
-        alert('Failed to add material. Please try again.');
+        await showAlert({
+          title: 'Material upload failed',
+          description: 'CREATE could not add this material. Please try again.',
+          tone: 'danger'
+        });
       }
     }
   };
@@ -281,11 +296,13 @@ const CourseView = () => {
       }
     } catch (err) {
       console.error('Failed to delete material:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to delete material: ${err.message}`);
-      } else {
-        alert('Failed to delete material. Please try again.');
-      }
+      await showAlert({
+        title: 'Material deletion failed',
+        description: err instanceof ApiError
+          ? `CREATE could not delete this material: ${err.message}`
+          : 'CREATE could not delete this material. Please try again.',
+        tone: 'danger'
+      });
     }
   };
 
@@ -339,11 +356,13 @@ const CourseView = () => {
       navigate(`/course/${courseId}/quiz/${createdQuiz._id}`);
     } catch (err) {
       console.error('Failed to create quiz:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to create quiz: ${err.message}`);
-      } else {
-        alert('Failed to create quiz. Please try again.');
-      }
+      await showAlert({
+        title: 'Learning object creation failed',
+        description: err instanceof ApiError
+          ? `CREATE could not create the learning object: ${err.message}`
+          : 'CREATE could not create the learning object. Please try again.',
+        tone: 'danger'
+      });
     } finally {
       setIsCreatingQuiz(false);
     }
@@ -371,13 +390,26 @@ const CourseView = () => {
 
       if (err instanceof ApiError) {
         if (err.isAuthError()) {
-          alert('Your session has expired. Please log in again.');
+          await showAlert({
+            title: 'Session expired',
+            description: 'Your session has expired. Sign in again to continue.',
+            confirmLabel: 'Go to sign in',
+            tone: 'warning'
+          });
           window.location.href = '/login';
         } else {
-          alert(`Failed to delete course: ${err.message}`);
+          await showAlert({
+            title: 'Course deletion failed',
+            description: `CREATE could not delete this course: ${err.message}`,
+            tone: 'danger'
+          });
         }
       } else {
-        alert('Failed to delete course. Please try again.');
+        await showAlert({
+          title: 'Course deletion failed',
+          description: 'CREATE could not delete this course. Please try again.',
+          tone: 'danger'
+        });
       }
     }
   };

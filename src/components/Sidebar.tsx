@@ -10,6 +10,7 @@ import { foldersApi, materialsApi, Folder, ApiError } from '../services/api';
 import { API_URL } from '../config/api';
 import { usePubSub } from '../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../services/pubsubService';
+import { useSystemDialog } from './system-dialog/SystemDialogProvider';
 import '../styles/components/Sidebar.css';
 
 interface SidebarProps {
@@ -24,6 +25,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   const { activeCourse, activeQuiz, user: reduxUser } = useAppSelector((state) => state.app);
   const { quizzes: reduxQuizzes, selectedFolderId } = useAppSelector((state) => state.quiz);
   const { subscribe, publish } = usePubSub('Sidebar');
+  const { showAlert } = useSystemDialog();
   const [expandedCourses, setExpandedCourses] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -240,11 +242,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
 
     } catch (err) {
       console.error('❌ Sidebar: Failed to create folder:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to create folder: ${err.message}`);
-      } else {
-        alert('Failed to create folder. Please try again.');
-      }
+      await showAlert({
+        title: 'Course creation failed',
+        description: err instanceof ApiError
+          ? `CREATE could not create the course: ${err.message}`
+          : 'CREATE could not create the course. Please try again.',
+        tone: 'danger'
+      });
     }
   };
 
@@ -293,11 +297,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
       
     } catch (err) {
       console.error('❌ Sidebar: Failed to create quiz:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to create quiz: ${err.message}`);
-      } else {
-        alert('Failed to create quiz. Please try again.');
-      }
+      await showAlert({
+        title: 'Learning object creation failed',
+        description: err instanceof ApiError
+          ? `CREATE could not create the learning object: ${err.message}`
+          : 'CREATE could not create the learning object. Please try again.',
+        tone: 'danger'
+      });
     } finally {
       setCreatingQuizForFolder(null);
     }

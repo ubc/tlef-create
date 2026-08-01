@@ -8,6 +8,7 @@ import { setUser } from '../store/slices/appSlice';
 import type { RootState } from '../store';
 import { Bug, User, ArrowLeft, Settings, HelpCircle, LogOut, Shield, RotateCcw } from 'lucide-react';
 import { restartOnboarding } from '../utils/onboarding';
+import { useSystemDialog } from './system-dialog/SystemDialogProvider';
 import '../styles/components/UserAccount.css';
 
 type AccountUser = NonNullable<RootState['app']['user']>;
@@ -16,6 +17,7 @@ const UserAccount = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useDispatch();
+  const { showAlert } = useSystemDialog();
   const reduxUser = useSelector((state: RootState) => state.app.user);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showApiKeySettings, setShowApiKeySettings] = useState(false);
@@ -77,9 +79,18 @@ const UserAccount = () => {
       await adminApi.submitReport(reportData.type, reportData.description, reportData.email || undefined);
       closeReportModal();
       setReportData({ type: 'bug', description: '', email: '' });
-      alert('Report submitted successfully! We will review it and get back to you.');
+      await showAlert({
+        title: 'Report submitted',
+        description: 'Thank you. We will review your report and follow up if needed.',
+        confirmLabel: 'Done',
+        tone: 'success'
+      });
     } catch {
-      alert('Failed to submit report. Please try again.');
+      await showAlert({
+        title: 'Report submission failed',
+        description: 'CREATE could not submit your report. Please try again.',
+        tone: 'danger'
+      });
     } finally {
       setReportSubmitting(false);
     }

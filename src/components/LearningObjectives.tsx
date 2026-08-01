@@ -35,6 +35,7 @@ import {
 } from '../utils/learningObjectiveQuestions';
 import { normalizeLearningObjectiveData } from '../utils/learningObjectiveState';
 import FeatureCoachmark from './onboarding/FeatureCoachmark';
+import { useSystemDialog } from './system-dialog/SystemDialogProvider';
 import '../styles/components/LearningObjectives.css';
 
 interface LearningObjectivesProps {
@@ -87,6 +88,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   
   // PubSub hook for event subscriptions
   const { subscribe, showNotification, publish } = usePubSub('LearningObjectives');
+  const { showAlert, showConfirm } = useSystemDialog();
   
   const [textInput, setTextInput] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -478,14 +480,22 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   const handleGenerateObjectives = async (promptOverride?: string) => {
     if (assignedMaterials.length === 0) {
-      alert('Please assign materials to this quiz first.');
+      await showAlert({
+        title: 'Materials required',
+        description: 'Assign at least one course material to this learning object before generating learning objectives.',
+        tone: 'warning'
+      });
       return;
     }
 
     const count = typeof targetObjectiveCount === 'number' ? targetObjectiveCount : parseInt(targetObjectiveCount.toString());
     
     if (!autoRecommendObjectiveCount && (Number.isNaN(count) || count < 1 || count > 20)) {
-      alert('Please enter a number between 1 and 20 for learning objectives.');
+      await showAlert({
+        title: 'Check the objective count',
+        description: 'Enter a whole number between 1 and 20 for learning objectives.',
+        tone: 'warning'
+      });
       return;
     }
 
@@ -493,13 +503,17 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       const replaceExisting = currentObjectives.length > 0;
       if (replaceExisting) {
         const questionCount = (questionsByQuiz[quizId] || []).length;
-        const shouldReplace = window.confirm(
-          `Generate from Materials will replace the existing ${currentObjectives.length} learning objective(s).` +
-          (questionCount > 0
-            ? `\n\nThis will also delete ${questionCount} question(s) linked to the current learning objectives.`
-            : '') +
-          '\n\nDo you want to continue?'
-        );
+        const shouldReplace = await showConfirm({
+          title: 'Replace existing learning objectives?',
+          description:
+            `Generate from Materials will replace the existing ${currentObjectives.length} learning objective(s).` +
+            (questionCount > 0
+              ? `\n\nThis will also permanently delete ${questionCount} question(s) linked to the current learning objectives.`
+              : ''),
+          confirmLabel: 'Replace objectives',
+          cancelLabel: 'Keep existing',
+          tone: 'danger'
+        });
 
         if (!shouldReplace) {
           return;
@@ -615,10 +629,15 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return { linkedQuestions, regenerate: false };
     }
 
-    return {
-      linkedQuestions,
-      regenerate: window.confirm(buildLinkedQuestionRegenerationPrompt(linkedQuestions.length, action))
-    };
+    const regenerate = await showConfirm({
+      title: 'Regenerate linked questions?',
+      description: buildLinkedQuestionRegenerationPrompt(linkedQuestions.length, action),
+      confirmLabel: 'Regenerate questions',
+      cancelLabel: 'Keep existing questions',
+      tone: 'warning'
+    });
+
+    return { linkedQuestions, regenerate };
   };
 
   const regenerateLinkedQuestions = async (linkedQuestions: Question[]) => {
@@ -875,7 +894,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }, 100);
   };
 
-  const handleRegenerateAll = () => {
+  const handleRegenerateAll = async () => {
     // Guard: Prevent regeneration while questions are being generated
     if (questionsGenerating) {
       showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
@@ -883,12 +902,20 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
     
     if (currentObjectives.length === 0) {
-      alert('No learning objectives to regenerate.');
+      await showAlert({
+        title: 'No learning objectives',
+        description: 'Add or generate at least one learning objective before using Regenerate All.',
+        tone: 'warning'
+      });
       return;
     }
 
     if (!assignedMaterials || assignedMaterials.length === 0) {
-      alert('Please assign materials to this quiz first to regenerate learning objectives.');
+      await showAlert({
+        title: 'Materials required',
+        description: 'Assign course materials before regenerating learning objectives.',
+        tone: 'warning'
+      });
       return;
     }
 
@@ -922,7 +949,11 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       setRegenerateAllModalOpen(false);
     } catch (error) {
       console.error('Failed to regenerate all objectives:', error);
-      alert('Failed to regenerate learning objectives. Please try again.');
+      await showAlert({
+        title: 'Regeneration failed',
+        description: 'CREATE could not regenerate the learning objectives. Please try again.',
+        tone: 'danger'
+      });
     } finally {
       setRegenerateAllLoading(false);
     }
@@ -967,7 +998,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     setDeleteAllConfirmation(null);
   };
 
-  const openRegenerateModal = (index: number) => {
+  const openRegenerateModal = async (index: number) => {
     // Guard: Prevent regeneration while questions are being generated
     if (questionsGenerating) {
       showNotification('warning', 'Action Blocked', 'Cannot modify learning objectives while questions are being generated.');
@@ -975,7 +1006,11 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
     }
     
     if (!assignedMaterials || assignedMaterials.length === 0) {
-      alert('Please assign materials to this quiz first to regenerate learning objectives.');
+      await showAlert({
+        title: 'Materials required',
+        description: 'Assign course materials before regenerating this learning objective.',
+        tone: 'warning'
+      });
       return;
     }
 

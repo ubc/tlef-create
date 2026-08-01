@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { API_URL } from './config/api';
 import { apiKeyApi } from './services/api';
 import { AUTH_EXPIRED_EVENT } from './utils/authEvents';
+import { SystemDialogProvider } from './components/system-dialog/SystemDialogProvider';
 
 interface AuthenticatedUser {
   canUseEnvKey?: boolean;
@@ -94,10 +95,11 @@ const App = () => {
   return (
     <Provider store={store}>
       <BrowserRouter>
-        {isAuthenticated && showFirstUseModal && (
-          <FirstUseApiKeyModal onDismiss={() => setShowFirstUseModal(false)} />
-        )}
-        <Routes>
+        <SystemDialogProvider>
+          {isAuthenticated && showFirstUseModal && (
+            <FirstUseApiKeyModal onDismiss={() => setShowFirstUseModal(false)} />
+          )}
+          <Routes>
           {/* Public route */}
           <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login onAuthChange={checkAuth} />} />
 
@@ -120,7 +122,8 @@ const App = () => {
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
-        </Routes>
+          </Routes>
+        </SystemDialogProvider>
       </BrowserRouter>
     </Provider>
   );

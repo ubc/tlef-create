@@ -13,6 +13,15 @@ import { pubsubService, PUBSUB_EVENTS } from '../services/pubsubService';
 import { objectivesApi, questionsApi, quizApi, type LearningObjective, type Question } from '../services/api';
 import { completeOnboardingStep, ONBOARDING_STORAGE_KEY, readOnboardingState } from '../utils/onboarding';
 
+const dialogMocks = vi.hoisted(() => ({
+  showAlert: vi.fn(),
+  showConfirm: vi.fn()
+}));
+
+vi.mock('./system-dialog/SystemDialogProvider', () => ({
+  useSystemDialog: () => dialogMocks
+}));
+
 // Mock the usePubSub hook
 const mockShowNotification = vi.fn();
 const mockPublish = vi.fn();
@@ -60,6 +69,8 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
 
     // Clear all mocks before each test
     vi.clearAllMocks();
+    dialogMocks.showAlert.mockResolvedValue(undefined);
+    dialogMocks.showConfirm.mockResolvedValue(false);
     window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
   });
 
@@ -253,7 +264,7 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       .mockResolvedValue({ objective: { ...objective, text: 'Analyze revised evidence' } });
     const regenerateQuestionSpy = vi.spyOn(questionsApi, 'regenerateQuestion')
       .mockResolvedValue({ question: linkedQuestion });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    dialogMocks.showConfirm.mockResolvedValueOnce(true);
 
     render(
       <Provider store={store}>
@@ -274,7 +285,12 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       'question-1',
       expect.stringContaining('linked learning objective was revised')
     ));
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Select Cancel to keep the existing questions unchanged.'));
+    expect(dialogMocks.showConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Regenerate linked questions?',
+      description: expect.stringContaining('keep the existing questions unchanged'),
+      confirmLabel: 'Regenerate questions',
+      cancelLabel: 'Keep existing questions'
+    }));
     expect(getQuestionsSpy).toHaveBeenCalled();
   });
 
@@ -296,7 +312,7 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       .mockResolvedValue({ objective: { ...objective, text: 'Analyze revised evidence' } });
     const regenerateQuestionSpy = vi.spyOn(questionsApi, 'regenerateQuestion')
       .mockResolvedValue({ question: linkedQuestion });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    dialogMocks.showConfirm.mockResolvedValueOnce(false);
 
     render(
       <Provider store={store}>
@@ -314,9 +330,10 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       objective._id,
       expect.objectContaining({ text: 'Analyze revised evidence' })
     ));
-    expect(confirmSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Select Cancel to keep the existing questions unchanged.')
-    );
+    expect(dialogMocks.showConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Regenerate linked questions?',
+      description: expect.stringContaining('keep the existing questions unchanged')
+    }));
     expect(regenerateQuestionSpy).not.toHaveBeenCalled();
   });
 
@@ -342,7 +359,7 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       .mockResolvedValue({ objective: regeneratedObjective });
     const regenerateQuestionSpy = vi.spyOn(questionsApi, 'regenerateQuestion')
       .mockResolvedValue({ question: linkedQuestion });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    dialogMocks.showConfirm.mockResolvedValueOnce(true);
 
     render(
       <Provider store={store}>
@@ -366,9 +383,10 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       expect.stringContaining('linked learning objective was revised')
     ));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      expect.stringContaining('If you regenerate this learning objective')
-    );
+    expect(dialogMocks.showConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Regenerate linked questions?',
+      description: expect.stringContaining('If you regenerate this learning objective')
+    }));
     expect(regenerateObjectiveSpy.mock.invocationCallOrder[0])
       .toBeLessThan(regenerateQuestionSpy.mock.invocationCallOrder[0]);
   });
