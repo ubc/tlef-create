@@ -24,7 +24,7 @@ The teaching purpose limits the question types initially proposed by AI. Deliver
 
 ## Delivery target and format
 
-Choose **H5P Package** to download a standard `.h5p` package for a compatible player, or **Canvas LTI** to publish through CREATE's Canvas player. H5P Package then offers Column, Interactive Book, Question Set, or Standalone. Canvas LTI uses Mixed Activity.
+Choose **H5P Package** to download a standard `.h5p` package for a compatible player, or **Canvas LTI** to publish through CREATE's Canvas player. H5P Package offers Question Set, Interactive Book, Column, and Standalone, in that order. **Question Set** is a scored quiz format which combines different types of questions in a sequence with text or video feedback. Canvas LTI uses Mixed Activity.
 
 Formats support different question types. Changing target or format can make current Blueprint rows or existing questions incompatible. Read the warning before confirming a change because incompatible content may be removed.
 

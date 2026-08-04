@@ -35,9 +35,9 @@ export const DELIVERY_TARGETS: DeliveryTargetOption[] = [
 
 export const H5P_PACKAGE_FORMATS: TargetFormatOption[] = [
   {
-    value: 'column',
-    label: 'Column',
-    description: 'Flexible page layout with mixed content.'
+    value: 'question-set',
+    label: 'Question Set',
+    description: 'Scored quiz format which combines different types of questions in a sequence with text or video feedback'
   },
   {
     value: 'interactive-book',
@@ -45,9 +45,9 @@ export const H5P_PACKAGE_FORMATS: TargetFormatOption[] = [
     description: 'Chapter-based learning object with Column pages.'
   },
   {
-    value: 'question-set',
-    label: 'Question Set',
-    description: 'Scored quiz format with a smaller question set.'
+    value: 'column',
+    label: 'Column',
+    description: 'Flexible page layout with mixed content.'
   },
   {
     value: 'standalone',
@@ -167,7 +167,7 @@ export function getFormatsForDeliveryTarget(deliveryTarget: DeliveryTarget): Tar
 }
 
 export function getDefaultFormatForDeliveryTarget(deliveryTarget: DeliveryTarget): TargetFormat {
-  return getFormatsForDeliveryTarget(deliveryTarget)[0].value;
+  return deliveryTarget === 'canvas-lti' ? 'mixed-activity' : 'column';
 }
 
 export function getDeliveryTargetForFormat(targetFormat: TargetFormat): DeliveryTarget {

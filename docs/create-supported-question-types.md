@@ -42,9 +42,9 @@ Question Set is a container export format rather than a normal single question t
 The Generate Questions page now separates delivery/runtime from H5P package structure:
 
 1. H5P Package
-   - Column
-   - Interactive Book
    - Question Set
+   - Interactive Book
+   - Column
    - Standalone
 2. Canvas LTI
    - Mixed Activity

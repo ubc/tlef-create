@@ -99,6 +99,21 @@ describe('CREATE Guide knowledge retrieval', () => {
     ))).toBe(true);
   });
 
+  test('retrieves the H5P package format order and Question Set description', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How are H5P Package formats ordered in the Generate Questions Delivery target and format section?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Generate Questions' },
+      4
+    );
+
+    const deliverySource = sources.find(source => (
+      source.title === 'AI Blueprint and Question Generation'
+      && source.section === 'Delivery target and format'
+    ));
+    expect(deliverySource?.content).toContain('Question Set, Interactive Book, Column, and Standalone, in that order');
+    expect(deliverySource?.content).toContain('text or video feedback');
+  });
+
   test('retrieves Coverage Map viewport recovery guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I center the Coverage Map and fit every node back into view?',
