@@ -55,12 +55,23 @@ const H5PStudio = () => {
     loadContents();
   }, [loadContents]);
 
-  const selectContent = (contentId: string) => {
+  const selectContent = (contentId: string, forceReload = false) => {
+    // Clicking the already-selected item must not reset the loading flags. The
+    // H5P editor only reloads when its React key changes; resetting the flags
+    // without remounting leaves the loading overlay visible indefinitely.
+    if (contentId === selectedContentId && !forceReload) {
+      setShowPreview(false);
+      return;
+    }
+
     setSelectedContentId(contentId);
     setEditorModelLoaded(false);
     setEditorReady(false);
     setEditorError(null);
     setShowPreview(false);
+    if (forceReload) {
+      setEditorAttempt(attempt => attempt + 1);
+    }
     if (contentId === 'new') {
       setSearchParams({});
     } else {
@@ -223,7 +234,7 @@ const H5PStudio = () => {
             {importing ? <Loader2 className="spin" size={17} /> : <Upload size={17} />}
             {importing ? 'Importing…' : 'Upload .h5p'}
           </button>
-          <button className="btn btn-primary" onClick={() => selectContent('new')}>
+          <button className="btn btn-primary" onClick={() => selectContent('new', true)}>
             <FilePlus2 size={17} /> New content
           </button>
         </div>
