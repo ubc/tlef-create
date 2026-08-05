@@ -28,7 +28,10 @@ const H5PStudio = () => {
   const [contents, setContents] = useState<H5PStudioContent[]>([]);
   const [selectedContentId, setSelectedContentId] = useState(searchParams.get('contentId') || 'new');
   const [loadingList, setLoadingList] = useState(true);
+  const [editorModelLoaded, setEditorModelLoaded] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [editorAttempt, setEditorAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -54,7 +57,9 @@ const H5PStudio = () => {
 
   const selectContent = (contentId: string) => {
     setSelectedContentId(contentId);
+    setEditorModelLoaded(false);
     setEditorReady(false);
+    setEditorError(null);
     setShowPreview(false);
     if (contentId === 'new') {
       setSearchParams({});
@@ -64,16 +69,34 @@ const H5PStudio = () => {
   };
 
   const loadEditorModel = useCallback(async (contentId: string) => {
-    const response = await h5pEditorApi.getEditorModel(contentId || 'new');
-    if (!response.data?.model) {
-      throw new Error('CREATE did not receive a valid H5P editor model.');
+    try {
+      const response = await h5pEditorApi.getEditorModel(contentId || 'new');
+      if (!response.data?.model) {
+        throw new Error('CREATE did not receive a valid H5P editor model.');
+      }
+      setEditorError(null);
+      setEditorModelLoaded(true);
+      return response.data.model as unknown as IEditorModel & {
+        library?: string;
+        metadata?: IContentMetadata;
+        params?: unknown;
+      };
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'The H5P editor model could not be loaded.';
+      setEditorError(message);
+      setEditorModelLoaded(true);
+      throw error;
     }
-    return response.data.model as unknown as IEditorModel & {
-      library?: string;
-      metadata?: IContentMetadata;
-      params?: unknown;
-    };
   }, []);
+
+  const retryEditor = () => {
+    setEditorModelLoaded(false);
+    setEditorReady(false);
+    setEditorError(null);
+    setEditorAttempt(attempt => attempt + 1);
+  };
 
   const saveEditorContent = useCallback(async (
     contentId: string | undefined,
@@ -272,14 +295,21 @@ const H5PStudio = () => {
               />
             ) : (
               <>
-                {!editorReady && (
+                {!editorModelLoaded && (
                   <div className="h5p-studio-loading">
                     <Loader2 className="spin" size={26} />
                     <span>Loading the official H5P editor…</span>
                   </div>
                 )}
+                {editorError && (
+                  <div className="h5p-studio-loading h5p-studio-load-error" role="alert">
+                    <strong>H5P editor could not load</strong>
+                    <span>{editorError}</span>
+                    <button className="btn btn-outline" onClick={retryEditor}>Try again</button>
+                  </div>
+                )}
                 <H5PEditorUI
-                  key={selectedContentId}
+                  key={`${selectedContentId}-${editorAttempt}`}
                   ref={editorRef}
                   contentId={selectedContentId}
                   loadContentCallback={loadEditorModel}

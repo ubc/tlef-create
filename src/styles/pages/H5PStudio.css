@@ -214,6 +214,26 @@
   color: #64748b;
 }
 
+.h5p-studio-load-error {
+  flex-direction: column;
+  padding: 32px;
+  border-color: #fecaca;
+  background: #fffafa;
+  color: #991b1b;
+  text-align: center;
+}
+
+.h5p-studio-load-error strong {
+  color: #7f1d1d;
+  font-size: 1rem;
+}
+
+.h5p-studio-load-error span {
+  max-width: 620px;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
 .h5p-studio-preview {
   width: 100%;
   min-height: 680px;
