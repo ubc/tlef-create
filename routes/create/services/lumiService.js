@@ -24,6 +24,44 @@ let h5pPlayer = null;
 const pendingContentOwners = new Map();
 
 /**
+ * The vendored H5P Core keeps jQuery and H5P separate. H5P's browser runtime
+ * expects H5P.jQuery to exist before h5p.js and every editor widget execute.
+ * Lumi returns both the top-level editor scripts and the scripts copied into
+ * the editor iframe, so the bridge must be inserted into both ordered lists.
+ */
+function insertH5PJQueryBridge(scripts = []) {
+  const jqueryIndex = scripts.findIndex(script => /\/core\/js\/jquery\.js(?:\?|$)/.test(script));
+  if (jqueryIndex < 0) return scripts;
+
+  const jqueryUrl = scripts[jqueryIndex];
+  const bridgeUrl = jqueryUrl.replace(/jquery\.js(?=\?|$)/, 'h5p-jquery-bridge.js');
+  if (scripts.includes(bridgeUrl)) return scripts;
+
+  return [
+    ...scripts.slice(0, jqueryIndex + 1),
+    bridgeUrl,
+    ...scripts.slice(jqueryIndex + 1)
+  ];
+}
+
+function prepareEditorModel(model) {
+  return {
+    ...model,
+    scripts: insertH5PJQueryBridge(model.scripts),
+    integration: {
+      ...model.integration,
+      editor: {
+        ...model.integration?.editor,
+        assets: {
+          ...model.integration?.editor?.assets,
+          js: insertH5PJQueryBridge(model.integration?.editor?.assets?.js)
+        }
+      }
+    }
+  };
+}
+
+/**
  * Simple in-memory key-value storage for Lumi cache
  */
 class InMemoryStorage {
@@ -161,7 +199,9 @@ export async function initializeLumi() {
     { permissionSystem: new CreateH5PPermissionSystem() }
   );
   // The React/web-component integration consumes the editor model directly.
-  h5pEditor.setRenderer(model => model);
+  // Include the jQuery bridge in both the host page and editor iframe before
+  // the H5P core scripts initialize.
+  h5pEditor.setRenderer(prepareEditorModel);
 
   // Create H5P Player (needed for rendering content)
   h5pPlayer = new H5PServer.H5PPlayer(

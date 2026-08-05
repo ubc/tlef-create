@@ -45,6 +45,19 @@ describe('H5P Studio runtime assets', () => {
       expect(assetPath).not.toBeNull();
       expect(fs.existsSync(assetPath)).toBe(true);
     }
+
+    const expectBridgeBeforeCore = scripts => {
+      const jqueryIndex = scripts.findIndex(url => /\/core\/js\/jquery\.js(?:\?|$)/.test(url));
+      const bridgeIndex = scripts.findIndex(url => /\/core\/js\/h5p-jquery-bridge\.js(?:\?|$)/.test(url));
+      const coreIndex = scripts.findIndex(url => /\/core\/js\/h5p\.js(?:\?|$)/.test(url));
+
+      expect(jqueryIndex).toBeGreaterThanOrEqual(0);
+      expect(bridgeIndex).toBe(jqueryIndex + 1);
+      expect(coreIndex).toBe(bridgeIndex + 1);
+    };
+
+    expectBridgeBeforeCore(model.scripts);
+    expectBridgeBeforeCore(model.integration.editor.assets.js);
   });
 
   test('authors receive installed types without Hub installation permission', async () => {
@@ -59,4 +72,5 @@ describe('H5P Studio runtime assets', () => {
     expect(cache.libraries.every(library => library.installed)).toBe(true);
     expect(cache.libraries.every(library => library.canInstall === false)).toBe(true);
   });
+
 });
