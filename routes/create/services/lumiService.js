@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import fs from 'fs/promises';
+import H5PContent from '../models/H5PContent.js';
 
 // Use createRequire for CJS packages
 const require = createRequire(import.meta.url);
@@ -13,11 +14,14 @@ const __dirname = path.dirname(__filename);
 
 const BASE_DIR = path.resolve(__dirname, '..');
 const H5P_LIBS_DIR = path.join(BASE_DIR, 'h5p-libs');
+const H5P_CORE_DIR = path.join(BASE_DIR, 'h5p-core');
+const H5P_EDITOR_CORE_DIR = path.join(BASE_DIR, 'h5p-editor-core');
 const H5P_CONTENT_DIR = path.join(BASE_DIR, 'uploads', 'h5p-content');
 const H5P_TEMP_DIR = path.join(BASE_DIR, 'uploads', 'h5p-temp');
 
 let h5pEditor = null;
 let h5pPlayer = null;
+const pendingContentOwners = new Map();
 
 /**
  * Simple in-memory key-value storage for Lumi cache
@@ -45,6 +49,85 @@ const systemUser = {
 };
 
 /**
+ * Convert CREATE's authenticated user shape into Lumi's IUser contract.
+ * The H5P user id deliberately matches the Mongo User id used for ownership.
+ */
+export function toLumiUser(user) {
+  const fullUser = user?.fullUser || user || {};
+  const id = user?.id || fullUser?._id || fullUser?.id;
+
+  if (!id) {
+    throw new Error('An authenticated CREATE user is required for H5P editing.');
+  }
+
+  return {
+    id: id.toString(),
+    name: fullUser.displayName || fullUser.cwlId || user?.cwlId || 'CREATE author',
+    email: fullUser.email || undefined,
+    type: 'local'
+  };
+}
+
+/**
+ * Lumi's file storage does not know about Mongo ownership. This permission
+ * adapter makes the H5PContent record the authorization boundary while still
+ * allowing the internal system account to import generated packages.
+ */
+class CreateH5PPermissionSystem {
+  async checkForUserData(actingUser, _permission, contentId, affectedUserId) {
+    if (!actingUser) return false;
+    if (actingUser.id === systemUser.id) return true;
+    if (affectedUserId && affectedUserId !== actingUser.id) return false;
+    return this.checkForContent(actingUser, H5PServer.ContentPermission.View, contentId);
+  }
+
+  async checkForGeneralAction(actingUser, permission) {
+    if (actingUser?.id === systemUser.id) return true;
+    // Authors can use restricted libraries that are already installed, but
+    // they cannot install or update executable H5P libraries from the Hub.
+    return permission === H5PServer.GeneralPermission.CreateRestricted;
+  }
+
+  async checkForContent(actingUser, permission, contentId) {
+    if (!actingUser) return false;
+    if (actingUser.id === systemUser.id) return true;
+    if (permission === H5PServer.ContentPermission.Create && !contentId) return true;
+    if (!contentId) return false;
+
+    if (pendingContentOwners.get(contentId.toString()) === actingUser.id.toString()) {
+      return true;
+    }
+
+    return Boolean(await H5PContent.exists({
+      owner: actingUser.id,
+      lumiContentId: contentId.toString()
+    }));
+  }
+
+  async checkForTemporaryFile(actingUser) {
+    return Boolean(actingUser?.id);
+  }
+}
+
+class CreateFileContentStorage extends H5PServer.fsImplementations.FileContentStorage {
+  async addContent(metadata, content, user, contentId) {
+    const savedContentId = await super.addContent(metadata, content, user, contentId);
+    if (!contentId && user?.id && user.id !== systemUser.id) {
+      pendingContentOwners.set(savedContentId.toString(), user.id.toString());
+    }
+    return savedContentId;
+  }
+
+  async deleteContent(contentId, user) {
+    try {
+      return await super.deleteContent(contentId, user);
+    } finally {
+      pendingContentOwners.delete(contentId.toString());
+    }
+  }
+}
+
+/**
  * Initialize the Lumi H5P server
  */
 export async function initializeLumi() {
@@ -55,13 +138,14 @@ export async function initializeLumi() {
   // Create config
   // baseUrl is prepended to librariesUrl/contentFilesUrl, so keep it short
   const config = new H5PServer.H5PConfig();
-  config.baseUrl = '/api/create/h5p';
+  config.baseUrl = '/api/create/h5p-editor/runtime';
   config.contentFilesUrlPlayerOverride = '/content';
   config.librariesUrl = '/libraries';
+  config.sendUsageStatistics = false;
 
   // File-based storage implementations
   const libraryStorage = new H5PServer.fsImplementations.FileLibraryStorage(H5P_LIBS_DIR);
-  const contentStorage = new H5PServer.fsImplementations.FileContentStorage(H5P_CONTENT_DIR);
+  const contentStorage = new CreateFileContentStorage(H5P_CONTENT_DIR);
   const temporaryStorage = new H5PServer.fsImplementations.DirectoryTemporaryFileStorage(H5P_TEMP_DIR);
   const cache = new InMemoryStorage();
 
@@ -71,8 +155,13 @@ export async function initializeLumi() {
     config,
     libraryStorage,
     contentStorage,
-    temporaryStorage
+    temporaryStorage,
+    undefined,
+    undefined,
+    { permissionSystem: new CreateH5PPermissionSystem() }
   );
+  // The React/web-component integration consumes the editor model directly.
+  h5pEditor.setRenderer(model => model);
 
   // Create H5P Player (needed for rendering content)
   h5pPlayer = new H5PServer.H5PPlayer(
@@ -93,14 +182,14 @@ export async function initializeLumi() {
  * @param {string} h5pFilePath - Full path to the .h5p file
  * @returns {string} contentId
  */
-export async function importH5PContent(h5pFilePath) {
+export async function importH5PContent(h5pFilePath, user = systemUser) {
   if (!h5pEditor) {
     throw new Error('Lumi H5P server not initialized. Call initializeLumi() first.');
   }
 
   const result = await h5pEditor.packageImporter.addPackageLibrariesAndContent(
     h5pFilePath,
-    systemUser
+    user
   );
 
   console.log(`✅ H5P content imported: ${result.id}`);
@@ -112,12 +201,12 @@ export async function importH5PContent(h5pFilePath) {
  * @param {string} contentId - Lumi content ID
  * @returns {string} HTML string
  */
-export async function renderContent(contentId) {
+export async function renderContent(contentId, user = systemUser) {
   if (!h5pPlayer) {
     throw new Error('Lumi H5P player not initialized. Call initializeLumi() first.');
   }
 
-  let html = await h5pPlayer.render(contentId, systemUser, 'en');
+  let html = await h5pPlayer.render(contentId, user, 'en');
 
   if (typeof html === 'string') {
     // When rendered inside Canvas LTI iframe, relative paths go to :7737 instead of :8051
@@ -161,9 +250,17 @@ export function getH5PExpressRouter() {
 
   return H5PExpress.h5pAjaxExpressRouter(
     h5pEditor,
-    path.join(H5P_CONTENT_DIR),
-    path.join(H5P_LIBS_DIR)
+    H5P_CORE_DIR,
+    H5P_EDITOR_CORE_DIR
   );
+}
+
+export function getSystemUser() {
+  return systemUser;
+}
+
+export function finalizeContentOwnership(contentId) {
+  if (contentId) pendingContentOwners.delete(contentId.toString());
 }
 
 /**

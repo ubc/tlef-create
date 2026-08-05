@@ -44,6 +44,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^3.9.0",
     "@lumieducation/h5p-express": "^10.0.5",
+    "@lumieducation/h5p-react": "^10.0.4",
     "@lumieducation/h5p-server": "^10.0.4",
     "@reduxjs/toolkit": "^2.8.2",
     "@tanstack/react-query": "^5.56.2",

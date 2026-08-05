@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Edit, Plus, Play, Download, Upload, BookMarked } from 'lucide-react';
-import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi } from '../../services/api';
+import { Edit, Plus, Play, Download, Upload, BookMarked, Boxes } from 'lucide-react';
+import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
 import { RootState, AppDispatch } from '../../store';
@@ -38,12 +38,14 @@ import '../../styles/components/ReviewEdit.css';
 
 const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const reduxQuestions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
   const currentQuiz = useSelector((state: RootState) => state.quiz.currentQuiz);
   const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState(false);
+  const [h5pStudioLoading, setH5PStudioLoading] = useState(false);
   const [pdfExportModalOpen, setPdfExportModalOpen] = useState(false);
   const [markdownExportModalOpen, setMarkdownExportModalOpen] = useState(false);
   const [canvasExportModalOpen, setCanvasExportModalOpen] = useState(false);
@@ -464,6 +466,25 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     }
   };
 
+  const handleOpenH5PStudio = async () => {
+    if (questions.length === 0 || h5pStudioLoading) return;
+    setH5PStudioLoading(true);
+    try {
+      showNotification('info', 'Preparing H5P editor', 'CREATE is creating an editable H5P copy of this Learning Object…');
+      const response = await h5pEditorApi.createFromQuiz(quizId);
+      const contentId = response.data?.content.contentId;
+      if (!contentId) throw new Error('CREATE did not return editable H5P content.');
+      if (response.data?.sourceOutdated) {
+        showNotification('warning', 'Existing H5P draft opened', 'This draft has independent H5P edits and may not include recent question changes.');
+      }
+      navigate(`/h5p-studio?contentId=${encodeURIComponent(contentId)}`);
+    } catch (error) {
+      showNotification('error', 'H5P editor could not open', error instanceof Error ? error.message : 'Could not prepare this Learning Object for advanced editing.');
+    } finally {
+      setH5PStudioLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="review-edit">
@@ -523,6 +544,12 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 {viewMode === 'edit' ? <Play size={16} /> : <Edit size={16} />}
                 {viewMode === 'edit' ? 'Interact' : 'Edit'}
               </button>
+              {deliveryTarget === 'h5p-package' && questions.length > 0 && (
+                <button className="btn btn-outline" onClick={handleOpenH5PStudio} disabled={h5pStudioLoading}>
+                  {h5pStudioLoading ? <span className="spinner-mini" /> : <Boxes size={16} />}
+                  {h5pStudioLoading ? 'Preparing…' : 'Advanced H5P Editor'}
+                </button>
+              )}
               {viewMode === 'edit' && (
                 <button className="btn btn-outline" onClick={() => setShowManualAdd(true)}>
                   <Plus size={16} /> Add Question

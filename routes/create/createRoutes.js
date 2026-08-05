@@ -17,6 +17,7 @@ import exportController from './controllers/exportController.js';
 import streamingController from './controllers/streamingController.js';
 import searchController from './controllers/searchController.js';
 import h5pPreviewController from './controllers/h5pPreviewController.js';
+import h5pEditorController from './controllers/h5pEditorController.js';
 import canvasController from './controllers/canvasController.js';
 import adminController from './controllers/adminController.js';
 import apiKeyController from './controllers/apiKeyController.js'
@@ -79,7 +80,7 @@ router.use('/auth/saml/login', authLimiter);
 router.use('/materials/upload', uploadLimiter);
 // Apply API rate limiting to all routes except config and streaming endpoints
 router.use((req, res, next) => {
-  if (req.path === '/auth/config' || req.path === '/canvas/config' || req.path.startsWith('/streaming/') || req.path.startsWith('/h5p-preview/') || req.path.startsWith('/canvas/oauth/')) {
+  if (req.path === '/auth/config' || req.path === '/canvas/config' || req.path.startsWith('/streaming/') || req.path.startsWith('/h5p-preview/') || req.path.startsWith('/h5p-editor/runtime/') || req.path.startsWith('/canvas/oauth/')) {
     return next(); // Skip rate limiting for config, streaming, and h5p-preview endpoints
   }
   return apiLimiter(req, res, next);
@@ -110,6 +111,7 @@ router.use('/export', exportController);
 router.use('/streaming', streamingController);
 router.use('/search', searchController);
 router.use('/h5p-preview', h5pPreviewController);
+router.use('/h5p-editor', h5pEditorController);
 router.use('/canvas', canvasController);
 router.use('/admin', adminController);
 router.use('/apiKey', apiKeyController);

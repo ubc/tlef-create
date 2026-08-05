@@ -114,6 +114,19 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(deliverySource?.content).toContain('text or video feedback');
   });
 
+  test('retrieves H5P Studio advanced-editor guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I upload an H5P package and edit it with the advanced official editor?',
+      { route: '/h5p-studio', activeTab: 'H5P Studio' },
+      4
+    );
+
+    expect(sources.some(source => (
+      source.title === 'H5P Studio'
+      && ['Upload an H5P package', 'Create new H5P content'].includes(source.section)
+    ))).toBe(true);
+  });
+
   test('retrieves Coverage Map viewport recovery guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I center the Coverage Map and fit every node back into view?',

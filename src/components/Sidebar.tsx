@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz, setUser } from '../store/slices/appSlice';
 import { createQuiz } from '../store/slices/quizSlice';
-import { Plus, Search, ChevronDown, ChevronRight, User, X } from 'lucide-react';
+import { Plus, Search, ChevronDown, ChevronRight, User, X, Boxes } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
 import SearchModal from './SearchModal';
 import { foldersApi, materialsApi, Folder, ApiError } from '../services/api';
@@ -343,6 +343,17 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
               <Search size={16} />
               <span>Search...</span>
               <kbd className="search-kbd">⌘K</kbd>
+            </button>
+            <button
+                className={`studio-trigger-button ${location.pathname === '/h5p-studio' ? 'active' : ''}`}
+                onClick={() => {
+                  navigate('/h5p-studio');
+                  onClose?.();
+                }}
+            >
+              <Boxes size={17} />
+              <span>H5P Studio</span>
+              <span className="studio-trigger-badge">Advanced</span>
             </button>
           </div>
 

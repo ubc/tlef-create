@@ -16,6 +16,7 @@ const DOCUMENT_ORDER = [
   'quiz-blueprint',
   'question-types',
   'review-and-export',
+  'h5p-studio',
   'coverage-and-references',
   'course-prompts',
   'account-and-support',

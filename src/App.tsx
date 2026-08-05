@@ -12,11 +12,15 @@ import H5PPreview from "./pages/H5PPreview";
 import AdminDashboard from "./pages/AdminDashboard";
 import HelpManual from './components/help/HelpManual';
 import FirstUseApiKeyModal from './components/FirstUseApiKeyModal';
-import { useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { API_URL } from './config/api';
 import { apiKeyApi } from './services/api';
 import { AUTH_EXPIRED_EVENT } from './utils/authEvents';
 import { SystemDialogProvider } from './components/system-dialog/SystemDialogProvider';
+
+// The native H5P editor carries its own editor runtime. Keep it out of the
+// normal instructor bundle until an author opens H5P Studio.
+const H5PStudio = lazy(() => import('./pages/H5PStudio'));
 
 interface AuthenticatedUser {
   canUseEnvKey?: boolean;
@@ -109,6 +113,13 @@ const App = () => {
           <Route path="/course/:courseId/quiz/:quizId" element={isAuthenticated ? <Layout><QuizView /></Layout> : <Navigate to="/login" />} />
           <Route path="/account" element={isAuthenticated ? <Layout><UserAccount /></Layout> : <Navigate to="/login" />} />
           <Route path="/help" element={isAuthenticated ? <Layout><HelpManual /></Layout> : <Navigate to="/login" />} />
+          <Route path="/h5p-studio" element={isAuthenticated ? (
+            <Layout>
+              <Suspense fallback={<div style={{ padding: '32px' }}>Loading H5P Studio…</div>}>
+                <H5PStudio />
+              </Suspense>
+            </Layout>
+          ) : <Navigate to="/login" />} />
           <Route path="/admin" element={isAuthenticated ? <Layout><AdminDashboard /></Layout> : <Navigate to="/login" />} />
 
           {/* H5P Preview — no auth required (dev tool) */}

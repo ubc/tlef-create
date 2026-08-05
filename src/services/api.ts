@@ -1424,6 +1424,75 @@ export interface Question {
   updatedAt: string;
 }
 
+export interface H5PStudioContent {
+  id: string;
+  contentId: string;
+  title: string;
+  mainLibrary?: string | null;
+  source: 'editor' | 'import' | 'generated';
+  status: 'draft' | 'ready';
+  folderId?: string | null;
+  quizId?: string | null;
+  sourceQuizUpdatedAt?: string | null;
+  lastEditedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface H5PStudioSaveRequest {
+  library: string;
+  params: {
+    metadata: Record<string, unknown>;
+    params: unknown;
+  };
+}
+
+export interface H5PStudioSaveResult {
+  contentId: string;
+  metadata: Record<string, unknown>;
+  content: H5PStudioContent;
+}
+
+export const h5pEditorApi = {
+  listContents: async (): Promise<ApiResponse<{ contents: H5PStudioContent[] }>> => {
+    return await apiClient.get('/h5p-editor/contents');
+  },
+
+  getEditorModel: async (contentId: string): Promise<ApiResponse<{ model: Record<string, unknown> }>> => {
+    return await apiClient.get(`/h5p-editor/editor-model/${encodeURIComponent(contentId)}`);
+  },
+
+  createContent: async (request: H5PStudioSaveRequest): Promise<ApiResponse<H5PStudioSaveResult>> => {
+    return await apiClient.post('/h5p-editor/contents', request);
+  },
+
+  updateContent: async (contentId: string, request: H5PStudioSaveRequest): Promise<ApiResponse<H5PStudioSaveResult>> => {
+    return await apiClient.patch(`/h5p-editor/contents/${encodeURIComponent(contentId)}`, request);
+  },
+
+  importContent: async (file: File): Promise<ApiResponse<{ content: H5PStudioContent }>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return await apiClient.upload('/h5p-editor/contents/import', formData);
+  },
+
+  createFromQuiz: async (quizId: string, forceNew = false): Promise<ApiResponse<{
+    content: H5PStudioContent;
+    reused: boolean;
+    sourceOutdated: boolean;
+  }>> => {
+    return await apiClient.post(`/h5p-editor/contents/from-quiz/${encodeURIComponent(quizId)}`, { forceNew });
+  },
+
+  downloadContent: async (contentId: string): Promise<Blob> => {
+    return await apiClient.getBlob(`/h5p-editor/contents/${encodeURIComponent(contentId)}/download`);
+  },
+
+  deleteContent: async (contentId: string): Promise<ApiResponse<{ contentId: string }>> => {
+    return await apiClient.delete(`/h5p-editor/contents/${encodeURIComponent(contentId)}`);
+  }
+};
+
 // Export API
 export const exportApi = {
   exportToH5P: async (quizId: string): Promise<ApiResponse<{ exportId: string; filename: string; downloadUrl: string }>> => {

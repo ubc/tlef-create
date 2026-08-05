@@ -15,6 +15,7 @@ const DOCUMENT_METADATA = {
   'quiz-blueprint.md': { routes: ['/quiz'], keywords: ['blueprint', 'plan', 'question count', 'automatic', 'delivery target', 'package format', 'generate'] },
   'question-types.md': { routes: ['/quiz'], keywords: ['question type', 'format', 'column', 'standalone', 'canvas', 'h5p', 'compatibility'] },
   'review-and-export.md': { routes: ['/quiz'], keywords: ['review', 'edit', 'feedback', 'hint', 'export', 'multiple answer', 'canvas'] },
+  'h5p-studio.md': { routes: ['/h5p-studio', '/quiz'], keywords: ['h5p studio', 'advanced editor', 'upload h5p', 'native h5p', 'semantics', 'content type'] },
   'coverage-and-references.md': { routes: ['/quiz'], keywords: ['coverage', 'graph', 'reference', 'citation', 'evidence', 'highlight', 'source'] },
   'course-prompts.md': { routes: ['/course'], keywords: ['prompt', 'validate', 'reset', 'history', 'course setting', 'instruction'] },
   'account-and-support.md': { routes: ['/account', '/help'], keywords: ['account', 'api key', 'help', 'support', 'report', 'bug', 'feedback'] },
