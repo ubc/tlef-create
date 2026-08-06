@@ -1,3 +1,5 @@
+import { getH5PTypeDependencies } from './h5pTypeAdapterRegistry.js';
+
 /**
  * H5P Library Registry — maps machineName to version info and directory name.
  * Used by createH5PPackage to selectively include only needed library directories.
@@ -64,97 +66,10 @@ export function getNeededLibraries(questionTypes, flags = {}) {
     needed.add('H5P.Column');
   }
 
-  if (questionTypes.has('flashcard')) {
-    needed.add('H5P.Dialogcards');
-    needed.add('H5P.Audio');
-  }
-  if (questionTypes.has('multiple-choice')) {
-    needed.add('H5P.MultiChoice');
-    needed.add('H5P.Question');
-  }
-  if (questionTypes.has('true-false')) {
-    needed.add('H5P.TrueFalse');
-    needed.add('H5P.Question');
-  }
-  if (questionTypes.has('ordering') || questionTypes.has('matching')) {
-    needed.add('H5P.DragText');
-    needed.add('H5P.Question');
-    needed.add('jQuery.ui');
-    needed.add('H5P.TextUtilities');
-  }
-  if (questionTypes.has('cloze')) {
-    needed.add('H5P.Blanks');
-    needed.add('H5P.Question');
-    needed.add('H5P.TextUtilities');
-  }
-  if (questionTypes.has('summary')) {
-    needed.add('H5P.Accordion');
-    needed.add('H5P.AdvancedText');
-  }
-  if (questionTypes.has('discussion')) {
-    needed.add('H5P.AdvancedText');
-  }
-  if (questionTypes.has('mark-the-words')) {
-    needed.add('H5P.MarkTheWords');
-    needed.add('H5P.Question');
-  }
-  if (questionTypes.has('single-choice-set')) {
-    needed.add('H5P.SingleChoiceSet');
-    needed.add('H5P.Question');
-    needed.add('H5P.Transition');
-  }
-  if (questionTypes.has('essay')) {
-    needed.add('H5P.Essay');
-    needed.add('H5P.Question');
-    needed.add('H5P.TextUtilities');
-  }
-  if (questionTypes.has('question-set')) {
-    needed.add('H5P.QuestionSet');
-    needed.add('H5P.Video');
-  }
-  if (questionTypes.has('free-text')) {
-    needed.add('H5P.FreeTextQuestion');
-    needed.add('H5P.CKEditor');
-  }
-  if (questionTypes.has('open-ended')) {
-    needed.add('H5P.OpenEndedQuestion');
-  }
-  if (questionTypes.has('simple-multi-choice')) {
-    needed.add('H5P.SimpleMultiChoice');
-  }
-  if (questionTypes.has('sort-paragraphs')) {
-    needed.add('H5P.SortParagraphs');
-    needed.add('H5P.Question');
-  }
-  if (questionTypes.has('crossword')) {
-    needed.add('H5P.Crossword');
-    needed.add('H5P.Question');
-    needed.add('H5P.Image');
-    needed.add('H5P.MaterialDesignIcons');
-    needed.add('jQuery.ui');
-  }
-  if (questionTypes.has('dictation')) {
-    needed.add('H5P.Dictation');
-    needed.add('H5P.Question');
-    needed.add('H5P.Audio');
-    needed.add('H5P.TextUtilities');
-  }
-  if (questionTypes.has('arithmetic-quiz')) {
-    needed.add('H5P.ArithmeticQuiz');
-  }
-  if (questionTypes.has('branching-scenario')) {
-    needed.add('H5P.BranchingScenario');
-    needed.add('H5P.BranchingQuestion');
-    needed.add('H5P.AdvancedText');
-  }
-  if (questionTypes.has('documentation-tool')) {
-    needed.add('H5P.DocumentationTool');
-    needed.add('H5P.StandardPage');
-    needed.add('H5P.GoalsPage');
-    needed.add('H5P.GoalsAssessmentPage');
-    needed.add('H5P.DocumentExportPage');
-    needed.add('H5P.TextInputField');
-    needed.add('H5P.Text');
+  for (const questionType of questionTypes) {
+    for (const dependency of getH5PTypeDependencies(questionType)) {
+      needed.add(dependency);
+    }
   }
 
   return needed;

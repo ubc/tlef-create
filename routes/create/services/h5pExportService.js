@@ -10,6 +10,10 @@ import { createWriteStream } from 'fs';
 import { fileURLToPath } from 'url';
 
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
+import {
+  getDirectStandaloneQuestionTypes,
+  listH5PTypeAdapters
+} from '../config/h5pTypeAdapterRegistry.js';
 import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
 import { normalizeMarkTheWordsText } from './questionContentService.js';
 
@@ -173,7 +177,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     // This produces files identical to official H5P exports, maximizing compatibility.
     const uniqueNonFlashcardTypes = new Set(nonFlashcardQuestions.map(q => q.type));
     // Types that should be exported standalone (without Column wrapper)
-    const standaloneTypes = new Set(['sort-paragraphs', 'mark-the-words', 'essay', 'arithmetic-quiz', 'crossword', 'branching-scenario', 'documentation-tool']);
+    const standaloneTypes = getDirectStandaloneQuestionTypes();
     const singleType = uniqueNonFlashcardTypes.size === 1 ? [...uniqueNonFlashcardTypes][0] : null;
     const isSingleType = !hasMixedContent && singleType && standaloneTypes.has(singleType) && flashcardQuestions.length === 0;
 
@@ -839,7 +843,7 @@ export function generateH5PDialogCards(flashcardQuestions) {
  * @param {Object} quiz - Quiz document (used for summary fallback)
  * @returns {Object|null} H5P content object, or null for unsupported types
  */
-export function convertQuestionToH5P(question, quiz) {
+function convertQuestionToH5PLegacy(question, quiz) {
   if (question.type === 'multiple-choice') {
     const selectionMode = getMultipleChoiceSelectionMode(question);
     return {
@@ -1876,6 +1880,33 @@ export function convertQuestionToH5P(question, quiz) {
   }
 
   return null;
+}
+
+/**
+ * Runtime adapter registry. Keeping conversion behind the adapter boundary
+ * lets new native H5P types provide an isolated converter without adding more
+ * branching to package/container code. The existing converter remains intact
+ * in phase one so exported content is byte-structure compatible apart from
+ * intentionally random subContentIds.
+ */
+export const H5P_QUESTION_ADAPTERS = Object.freeze(Object.fromEntries(
+  listH5PTypeAdapters().map(metadata => [
+    metadata.type,
+    Object.freeze({
+      ...metadata,
+      toH5P: metadata.convertible
+        ? (question, quiz) => question?.type === metadata.type
+          ? convertQuestionToH5PLegacy(question, quiz)
+          : null
+        : null
+    })
+  ])
+));
+
+export function convertQuestionToH5P(question, quiz) {
+  const adapter = H5P_QUESTION_ADAPTERS[question?.type];
+  if (!adapter?.toH5P) return null;
+  return adapter.toH5P(question, quiz);
 }
 
 // Question Set is a quiz container with a narrow child library list.
