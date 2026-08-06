@@ -1,7 +1,9 @@
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 import {
   buildLumiSaveResult,
   normalizeEditorPayload,
+  saveNativeH5PDocument,
+  saveNativeH5PDocumentAndRecord,
   serializeH5PContent
 } from '../../services/h5pEditorService.js';
 
@@ -71,5 +73,65 @@ describe('h5pEditorService', () => {
     expect(result.contentId).toBe('content-1');
     expect(result.metadata.title).toBe('Quiz');
     expect(result.content.id).toBe('record-1');
+  });
+
+  test('saves generated native documents through the official Lumi save API', async () => {
+    const save = jest.fn().mockResolvedValue({ id: 'native-1', metadata: { title: 'Quiz' } });
+    const editor = { saveOrUpdateContentReturnMetaData: save };
+    const document = {
+      library: 'H5P.Column 1.18',
+      metadata: { title: 'Quiz', mainLibrary: 'H5P.Column' },
+      parameters: { content: [] }
+    };
+    const user = { id: 'user-1', name: 'Instructor', type: 'local' };
+
+    await expect(saveNativeH5PDocument(editor, document, user))
+      .resolves.toEqual({ id: 'native-1', metadata: { title: 'Quiz' } });
+    expect(save).toHaveBeenCalledWith(
+      undefined,
+      document.parameters,
+      document.metadata,
+      document.library,
+      user
+    );
+  });
+
+  test('rejects malformed generated documents before calling Lumi', async () => {
+    const save = jest.fn();
+
+    await expect(saveNativeH5PDocument(
+      { saveOrUpdateContentReturnMetaData: save },
+      { library: '', metadata: {}, parameters: {} },
+      { id: 'user-1' }
+    )).rejects.toMatchObject({ code: 'INVALID_NATIVE_H5P_DOCUMENT' });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  test('rolls back Lumi content when the application record cannot be created', async () => {
+    const databaseError = new Error('Database unavailable');
+    const editor = {
+      saveOrUpdateContentReturnMetaData: jest.fn().mockResolvedValue({
+        id: 'native-rollback',
+        metadata: { title: 'Quiz' }
+      }),
+      deleteContent: jest.fn().mockResolvedValue(undefined)
+    };
+    const document = {
+      library: 'H5P.Column 1.18',
+      metadata: { title: 'Quiz', mainLibrary: 'H5P.Column' },
+      parameters: { content: [] }
+    };
+    const user = { id: 'user-1' };
+    const cleanupUser = { id: 'system' };
+
+    await expect(saveNativeH5PDocumentAndRecord({
+      editor,
+      document,
+      user,
+      cleanupUser,
+      createRecord: jest.fn().mockRejectedValue(databaseError)
+    })).rejects.toBe(databaseError);
+
+    expect(editor.deleteContent).toHaveBeenCalledWith('native-rollback', cleanupUser);
   });
 });

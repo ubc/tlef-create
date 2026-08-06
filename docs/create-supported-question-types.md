@@ -186,6 +186,7 @@ For example, Sort Paragraphs may not be valid inside a standard H5P Column packa
 - The delivery target and format matrix is defined in `src/constants/questionTypeCapabilities.ts`.
 - Native H5P library, dependency, container, AI-enabled, and direct-export metadata is defined in `routes/create/config/h5pTypeAdapterRegistry.js`.
 - `h5pExportService.js` routes question conversion through the adapter registry. Hidden historical types remain registered as legacy adapters so existing content can still export.
+- `buildNativeH5PDocument()` is shared by downloadable package export and H5P Studio. H5P Studio saves this document directly through Lumi instead of creating and re-importing a temporary package.
 - The Generate Questions dropdown is defined in `src/components/generation/PlanEditor.tsx`.
 - The Review & Edit Add Question modal dropdown is defined in `src/components/AddQuestionModal.tsx`.
 - Default system prompt templates are initialized from:

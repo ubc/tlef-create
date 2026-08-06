@@ -42,32 +42,15 @@ function mapMultipleChoiceAnswers(options = []) {
 }
 
 /**
- * Create an H5P ZIP package from a quiz.
+ * Build the native H5P document shared by package export and Lumi storage.
+ * No archive or temporary file is created here.
+ *
  * @param {Object} quiz - Populated quiz document
- * @param {string} outputPath - Destination file path
  * @param {Object} [options] - Optional config
  * @param {string} [options.libraryPath] - Override library directory (useful for tests)
+ * @returns {Promise<{library: string, metadata: Object, parameters: Object, packaging: Object}>}
  */
-export async function createH5PPackage(quiz, outputPath, options = {}) {
-  const uploadsDir = path.dirname(outputPath);
-  await fs.mkdir(uploadsDir, { recursive: true });
-
-  return new Promise(async (resolve, reject) => {
-    const output = createWriteStream(outputPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
-
-    output.on('close', () => {
-      console.log(`H5P package created: ${archive.pointer()} bytes`);
-      resolve();
-    });
-
-    archive.on('error', (err) => {
-      console.error('Archive error:', err);
-      reject(err);
-    });
-
-    archive.pipe(output);
-
+export async function buildNativeH5PDocument(quiz, options = {}) {
     // Classify questions
     const containerMode = quiz.containerMode || 'column';
     const flashcardQuestions = quiz.questions.filter(q => q.type === 'flashcard');
@@ -303,7 +286,7 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
         license: "U",
         preloadedDependencies
       };
-      contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
+      contentJson = generateH5PDialogCards(flashcardQuestions);
     } else {
       // Multiple types or mixed — use Column wrapper
       h5pJson = {
@@ -318,53 +301,104 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
       contentJson = generateH5PColumn(quiz, flashcardQuestions, nonFlashcardQuestions);
     }
 
-    // Add files to archive
+    const mainDependency = h5pJson.preloadedDependencies.find(
+      dependency => dependency.machineName === h5pJson.mainLibrary
+    );
+    if (!mainDependency) {
+      throw new Error(`Missing main H5P library dependency for ${h5pJson.mainLibrary}.`);
+    }
+
+    return {
+      library: `${mainDependency.machineName} ${mainDependency.majorVersion}.${mainDependency.minorVersion}`,
+      metadata: h5pJson,
+      parameters: contentJson,
+      packaging: {
+        allLibs,
+        containerMode,
+        libraryPath,
+        questionTypes
+      }
+    };
+}
+
+/**
+ * Create an H5P ZIP package from the same native document used by Lumi.
+ * @param {Object} quiz - Populated quiz document
+ * @param {string} outputPath - Destination file path
+ * @param {Object} [options] - Optional config
+ * @param {string} [options.libraryPath] - Override library directory (useful for tests)
+ * @param {Object} [options.document] - Previously built native document
+ */
+export async function createH5PPackage(quiz, outputPath, options = {}) {
+  const uploadsDir = path.dirname(outputPath);
+  await fs.mkdir(uploadsDir, { recursive: true });
+
+  const document = options.document || await buildNativeH5PDocument(quiz, options);
+  const {
+    metadata: h5pJson,
+    parameters: contentJson,
+    packaging: { allLibs, containerMode, libraryPath, questionTypes }
+  } = document;
+
+  return new Promise((resolve, reject) => {
+    const output = createWriteStream(outputPath);
+    const archive = archiver('zip', { zlib: { level: 6 } });
+
+    output.on('close', () => {
+      console.log(`H5P package created: ${archive.pointer()} bytes`);
+      resolve();
+    });
+    output.on('error', reject);
+
+    archive.on('error', (error) => {
+      console.error('Archive error:', error);
+      reject(error);
+    });
+
+    archive.pipe(output);
     archive.append(JSON.stringify(h5pJson), { name: 'h5p.json' });
     archive.append(JSON.stringify(contentJson), { name: 'content/content.json' });
 
-    // Add library directories to archive.
-    // Standard H5P platform libraries (Column, jQuery.ui) are expected to already
-    // exist on the target platform, so we don't package their directories.
-    // Libraries listed in preloadedDependencies where the platform should already
-    // have that exact version are also skipped.
-    // Interactive Book exports must be self-contained for players like Lumi.
+    // Standard platform libraries are omitted for the historical Column export
+    // path. Interactive Book exports remain self-contained for Lumi.
     const skipDirLibs = new Set(containerMode === 'column' ? ['H5P.Column', 'jQuery.ui'] : []);
-    // Also skip packaging the "primary" version of Question if a secondary version exists
-    // (e.g., skip Question 1.5 dir if Question 1.4 is also in allLibs as transitive dep)
-    const questionVersions = [...allLibs.keys()].filter(k => k.startsWith('H5P.Question-'));
+    const questionVersions = [...allLibs.keys()].filter(key => key.startsWith('H5P.Question-'));
     if (containerMode === 'column' && questionVersions.length > 1) {
-      // Find the version that's in neededLibNames (primary) — skip its dir
       const primaryKey = `H5P.Question-${LIBRARY_REGISTRY['H5P.Question']?.majorVersion}.${LIBRARY_REGISTRY['H5P.Question']?.minorVersion}`;
       if (primaryKey) skipDirLibs.add(primaryKey);
     }
 
-    try {
-      await fs.access(libraryPath);
-      for (const [key, lib] of allLibs) {
-        if (skipDirLibs.has(lib.machineName) || skipDirLibs.has(key)) continue;
-        const libDir = path.join(libraryPath, lib.dirName);
-        try {
-          await fs.access(libDir);
-          // Use glob to add only files (no directory entries) — matches official H5P format
-          archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
-        } catch {
-          // Library directory not found, skip
+    const appendLibraries = async () => {
+      try {
+        await fs.access(libraryPath);
+        for (const [key, lib] of allLibs) {
+          if (skipDirLibs.has(lib.machineName) || skipDirLibs.has(key)) continue;
+          const libDir = path.join(libraryPath, lib.dirName);
+          try {
+            await fs.access(libDir);
+            archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
+          } catch {
+            // Missing library directories are handled by target-platform validation.
+          }
         }
-      }
-      // Also package directory-only dependencies that aren't in allLibs
-      // but are needed by certain content types (e.g., AdvancedText for Crossword extraClue)
-      if (questionTypes.has('crossword')) {
-        const advTextDir = path.join(libraryPath, 'H5P.AdvancedText-1.1');
-        try {
-          await fs.access(advTextDir);
-          archive.glob('**/*', { cwd: advTextDir, nodir: true }, { prefix: 'H5P.AdvancedText-1.1' });
-        } catch { /* skip */ }
-      }
-    } catch (error) {
-      console.warn('H5P library files not found, creating minimal export:', error.message);
-    }
 
-    archive.finalize();
+        if (questionTypes.has('crossword')) {
+          const advancedTextDir = path.join(libraryPath, 'H5P.AdvancedText-1.1');
+          try {
+            await fs.access(advancedTextDir);
+            archive.glob('**/*', { cwd: advancedTextDir, nodir: true }, { prefix: 'H5P.AdvancedText-1.1' });
+          } catch {
+            // Optional compatibility dependency is unavailable.
+          }
+        }
+      } catch (error) {
+        console.warn('H5P library files not found, creating minimal export:', error.message);
+      }
+
+      await archive.finalize();
+    };
+
+    appendLibraries().catch(reject);
   });
 }
 

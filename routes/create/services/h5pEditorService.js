@@ -48,3 +48,65 @@ export function buildLumiSaveResult(result, record) {
     content: serializeH5PContent(record)
   };
 }
+
+/**
+ * Persist a generated native H5P document through the same Lumi API used by
+ * the official editor. The caller remains responsible for the Mongo record
+ * and rollback so ownership can be committed atomically at the application
+ * boundary.
+ */
+export async function saveNativeH5PDocument(editor, document, user) {
+  if (
+    !editor?.saveOrUpdateContentReturnMetaData
+    || typeof document?.library !== 'string'
+    || !document.library.trim()
+    || !document.metadata
+    || typeof document.metadata !== 'object'
+    || document.parameters === undefined
+  ) {
+    const error = new Error('The generated native H5P document is malformed.');
+    error.code = 'INVALID_NATIVE_H5P_DOCUMENT';
+    throw error;
+  }
+
+  return editor.saveOrUpdateContentReturnMetaData(
+    undefined,
+    document.parameters,
+    document.metadata,
+    document.library,
+    user
+  );
+}
+
+/**
+ * Save a native document and create its application record as one logical
+ * operation. If record creation fails, the new Lumi content is removed and the
+ * original database error is preserved.
+ */
+export async function saveNativeH5PDocumentAndRecord({
+  editor,
+  document,
+  user,
+  cleanupUser = user,
+  createRecord
+}) {
+  if (typeof createRecord !== 'function') {
+    const error = new Error('A native H5P record factory is required.');
+    error.code = 'INVALID_NATIVE_H5P_RECORD_FACTORY';
+    throw error;
+  }
+
+  const result = await saveNativeH5PDocument(editor, document, user);
+
+  try {
+    const record = await createRecord(result, document);
+    return { result, record };
+  } catch (error) {
+    try {
+      await editor.deleteContent(result.id, cleanupUser);
+    } catch (cleanupError) {
+      console.error('Failed to roll back generated H5P content:', cleanupError.message);
+    }
+    throw error;
+  }
+}

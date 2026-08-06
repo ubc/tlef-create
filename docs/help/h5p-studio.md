@@ -4,7 +4,7 @@ H5P Studio provides advanced authoring with H5P's official semantics-based edito
 
 ## Open a Learning Object in H5P Studio
 
-In **Review & Edit**, choose **Advanced H5P Editor**. CREATE builds an editable H5P copy and opens it in H5P Studio. This copy becomes an independent H5P draft so later question changes in Review & Edit are not automatically merged into it.
+In **Review & Edit**, choose **Advanced H5P Editor**. CREATE converts the Learning Object to a native H5P document, saves it through the same Lumi storage used by the official editor, and opens it in H5P Studio. This copy becomes an independent H5P draft so later question changes in Review & Edit are not automatically merged into it.
 
 If an H5P draft already exists for the Learning Object, CREATE reopens that draft to preserve advanced edits. A warning appears when the original Learning Object has changed since the draft was created.
 

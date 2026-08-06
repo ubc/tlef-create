@@ -10,7 +10,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { errorResponse, notFoundResponse, successResponse } from '../utils/responseFormatter.js';
-import { createH5PPackage } from '../services/h5pExportService.js';
+import { buildNativeH5PDocument } from '../services/h5pExportService.js';
 import {
   getEditor,
   getH5PExpressRouter,
@@ -23,6 +23,7 @@ import {
 import {
   buildLumiSaveResult,
   normalizeEditorPayload,
+  saveNativeH5PDocumentAndRecord,
   serializeH5PContent
 } from '../services/h5pEditorService.js';
 
@@ -282,38 +283,36 @@ router.post('/contents/from-quiz/:quizId', asyncHandler(async (req, res) => {
     }
   }
 
-  await fs.mkdir(EDITOR_IMPORT_DIR, { recursive: true });
-  const temporaryPath = path.join(EDITOR_IMPORT_DIR, `${crypto.randomBytes(16).toString('hex')}.h5p`);
-  let contentId;
+  const editor = getEditor();
+  if (!editor) {
+    return errorResponse(res, 'The H5P editor is still starting.', 'H5P_EDITOR_NOT_READY', HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
 
-  try {
-    await createH5PPackage(quiz, temporaryPath);
-    contentId = await importH5PContent(temporaryPath, getSystemUser());
-    const imported = await getEditor().getContent(contentId, getSystemUser());
-    const record = await H5PContent.create({
+  const nativeDocument = await buildNativeH5PDocument(quiz);
+  const { result, record } = await saveNativeH5PDocumentAndRecord({
+    editor,
+    document: nativeDocument,
+    user: toLumiUser(req.user),
+    cleanupUser: getSystemUser(),
+    createRecord: saved => H5PContent.create({
       owner: req.user.id,
       folder: quiz.folder,
       quiz: quiz._id,
-      lumiContentId: contentId,
-      title: (imported.h5p.title || quiz.name).slice(0, 255),
-      mainLibrary: imported.h5p.mainLibrary || imported.library.split(' ')[0],
+      lumiContentId: saved.id,
+      title: (saved.metadata.title || quiz.name).slice(0, 255),
+      mainLibrary: saved.metadata.mainLibrary || nativeDocument.library.split(' ')[0],
       source: 'generated',
       sourceQuizUpdatedAt: quiz.updatedAt,
       lastEditedAt: new Date()
-    });
-    finalizeContentOwnership(contentId);
+    })
+  });
+  finalizeContentOwnership(result.id);
 
-    return successResponse(res, {
-      content: serializeH5PContent(record),
-      reused: false,
-      sourceOutdated: false
-    }, 'Learning Object opened in H5P Studio', HTTP_STATUS.CREATED);
-  } catch (error) {
-    await removeImportedContentOnFailure(contentId);
-    throw error;
-  } finally {
-    await fs.unlink(temporaryPath).catch(() => {});
-  }
+  return successResponse(res, {
+    content: serializeH5PContent(record),
+    reused: false,
+    sourceOutdated: false
+  }, 'Learning Object opened in H5P Studio', HTTP_STATUS.CREATED);
 }));
 
 router.get('/contents/:contentId/preview', asyncHandler(async (req, res) => {
