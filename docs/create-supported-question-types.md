@@ -9,18 +9,19 @@ The Generate Questions page and Review & Edit Add Question modal currently allow
 1. Multiple Choice (`multiple-choice`)
 2. True/False (`true-false`)
 3. Flashcard (`flashcard`)
-4. Summary (`summary`)
-5. Discussion (`discussion`)
-6. Matching (`matching`)
-7. Ordering (`ordering`)
-8. Fill in the Blank / Cloze (`cloze`)
-9. Mark the Words (`mark-the-words`)
-10. Single Choice Set (`single-choice-set`)
-11. Essay (`essay`)
-12. Sort Paragraphs (`sort-paragraphs`)
-13. Crossword (`crossword`)
-14. Branching Scenario (`branching-scenario`)
-15. Documentation Tool (`documentation-tool`)
+4. Guess the Answer (`guess-the-answer`)
+5. Summary (`summary`)
+6. Discussion (`discussion`)
+7. Matching (`matching`)
+8. Ordering (`ordering`)
+9. Fill in the Blank / Cloze (`cloze`)
+10. Mark the Words (`mark-the-words`)
+11. Single Choice Set (`single-choice-set`)
+12. Essay (`essay`)
+13. Sort Paragraphs (`sort-paragraphs`)
+14. Crossword (`crossword`)
+15. Branching Scenario (`branching-scenario`)
+16. Documentation Tool (`documentation-tool`)
 
 ## Temporarily Hidden from Generate Questions
 
@@ -166,18 +167,19 @@ Canvas LTI / Mixed Activity currently exposes all CREATE-supported user-facing t
 1. Multiple Choice (`multiple-choice`)
 2. True/False (`true-false`)
 3. Flashcard (`flashcard`)
-4. Summary (`summary`)
-5. Discussion (`discussion`)
-6. Matching (`matching`)
-7. Ordering (`ordering`)
-8. Fill in the Blank / Cloze (`cloze`)
-9. Mark the Words (`mark-the-words`)
-10. Single Choice Set (`single-choice-set`)
-11. Essay (`essay`)
-12. Sort Paragraphs (`sort-paragraphs`)
-13. Crossword (`crossword`)
-14. Branching Scenario (`branching-scenario`)
-15. Documentation Tool (`documentation-tool`)
+4. Guess the Answer (`guess-the-answer`)
+5. Summary (`summary`)
+6. Discussion (`discussion`)
+7. Matching (`matching`)
+8. Ordering (`ordering`)
+9. Fill in the Blank / Cloze (`cloze`)
+10. Mark the Words (`mark-the-words`)
+11. Single Choice Set (`single-choice-set`)
+12. Essay (`essay`)
+13. Sort Paragraphs (`sort-paragraphs`)
+14. Crossword (`crossword`)
+15. Branching Scenario (`branching-scenario`)
+16. Documentation Tool (`documentation-tool`)
 
 For example, Sort Paragraphs may not be valid inside a standard H5P Column package opened in Lumi, but it can still render in Canvas when delivered through CREATE's LTI player.
 
@@ -187,6 +189,7 @@ For example, Sort Paragraphs may not be valid inside a standard H5P Column packa
 - Native H5P library, dependency, container, AI-enabled, and direct-export metadata is defined in `routes/create/config/h5pTypeAdapterRegistry.js`.
 - `h5pExportService.js` routes question conversion through the adapter registry. Hidden historical types remain registered as legacy adapters so existing content can still export.
 - `buildNativeH5PDocument()` is shared by downloadable package export and H5P Studio. H5P Studio saves this document directly through Lumi instead of creating and re-importing a temporary package.
+- Guess the Answer is the first phase-three adapter expansion: CREATE generates its normalized fields, converts them through an isolated adapter to official `H5P.GuessTheAnswer 1.5` parameters, and can continue editing the saved native document in H5P Studio. Future phase-three types should use the same isolated adapter boundary instead of extending the legacy converter.
 - The Generate Questions dropdown is defined in `src/components/generation/PlanEditor.tsx`.
 - The Review & Edit Add Question modal dropdown is defined in `src/components/AddQuestionModal.tsx`.
 - Default system prompt templates are initialized from:

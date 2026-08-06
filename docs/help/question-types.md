@@ -1,6 +1,6 @@
 # Question Types and Compatibility
 
-CREATE currently exposes 15 question types. Availability depends on both the teaching purpose used by AI planning and the selected delivery target/format. Manual selection still cannot bypass format compatibility.
+CREATE currently exposes 16 question types. Availability depends on both the teaching purpose used by AI planning and the selected delivery target/format. Manual selection still cannot bypass format compatibility.
 
 ## Question type catalogue
 
@@ -9,6 +9,7 @@ CREATE currently exposes 15 question types. Availability depends on both the tea
 | Multiple Choice | One or several defensible correct options with distractors |
 | True/False | A focused claim that is clearly verifiable |
 | Flashcard | Recall, terminology, and low-stakes practice |
+| Guess the Answer | Predicting or recalling a response before revealing a self-check answer |
 | Summary | Selecting or assembling the key statements in a concept |
 | Discussion | Reflection or facilitated open response |
 | Matching | Pairing related concepts, examples, or definitions |
@@ -26,11 +27,11 @@ CREATE currently exposes 15 question types. Availability depends on both the tea
 
 | Target and format | Supported types |
 | --- | --- |
-| H5P Package — Column | Multiple Choice, True/False, Fill in the Blank, Mark the Words, Ordering, Matching, Single Choice Set, Essay, Flashcard, Summary, Discussion, Documentation Tool |
+| H5P Package — Column | Multiple Choice, True/False, Fill in the Blank, Mark the Words, Ordering, Matching, Single Choice Set, Essay, Flashcard, Guess the Answer, Summary, Discussion, Documentation Tool |
 | H5P Package — Interactive Book | The same mixed-content types as Column |
 | H5P Package — Question Set | Multiple Choice, True/False, Fill in the Blank, Mark the Words, Essay |
 | H5P Package — Standalone | Branching Scenario, Crossword, Sort Paragraphs |
-| Canvas LTI — Mixed Activity | All 15 CREATE question types |
+| Canvas LTI — Mixed Activity | All 16 CREATE question types |
 
 Standalone is intentionally narrow: it represents one complex H5P activity rather than a mixed list. Column and Interactive Book are the broadest downloadable H5P choices. Mixed Activity is rendered by CREATE's Canvas LTI player and is not equivalent to a standard mixed H5P package.
 

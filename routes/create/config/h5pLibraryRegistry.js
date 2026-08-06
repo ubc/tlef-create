@@ -15,6 +15,7 @@ const LIBRARY_REGISTRY = {
   'H5P.Video':          { majorVersion: 1, minorVersion: 6, dirName: 'H5P.Video-1.6' },
   'jQuery.ui':          { majorVersion: 1, minorVersion: 10, dirName: 'jQuery.ui-1.10' },
   'H5P.Dialogcards':    { majorVersion: 1, minorVersion: 9, dirName: 'H5P.Dialogcards-1.9' },
+  'H5P.GuessTheAnswer': { majorVersion: 1, minorVersion: 5, dirName: 'H5P.GuessTheAnswer-1.5' },
   'H5P.MultiChoice':    { majorVersion: 1, minorVersion: 16, dirName: 'H5P.MultiChoice-1.16' },
   'H5P.TrueFalse':      { majorVersion: 1, minorVersion: 8, dirName: 'H5P.TrueFalse-1.8' },
   'H5P.DragText':       { majorVersion: 1, minorVersion: 10, dirName: 'H5P.DragText-1.10' },

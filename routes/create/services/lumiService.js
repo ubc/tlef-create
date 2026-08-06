@@ -21,6 +21,7 @@ const H5P_TEMP_DIR = path.join(BASE_DIR, 'uploads', 'h5p-temp');
 
 let h5pEditor = null;
 let h5pPlayer = null;
+let lumiInitializationPromise = null;
 const pendingContentOwners = new Map();
 
 /**
@@ -168,7 +169,7 @@ class CreateFileContentStorage extends H5PServer.fsImplementations.FileContentSt
 /**
  * Initialize the Lumi H5P server
  */
-export async function initializeLumi() {
+async function createLumiRuntime() {
   // Ensure directories exist
   await fs.mkdir(H5P_CONTENT_DIR, { recursive: true });
   await fs.mkdir(H5P_TEMP_DIR, { recursive: true });
@@ -218,6 +219,41 @@ export async function initializeLumi() {
 }
 
 /**
+ * Initialize Lumi exactly once. Express begins accepting requests while its
+ * optional services start, so callers can arrive before the player exists.
+ * Sharing the in-flight promise prevents a second runtime from being created
+ * and gives preview requests a stable readiness boundary to await.
+ */
+export function initializeLumi() {
+  if (h5pEditor && h5pPlayer) {
+    return Promise.resolve({ h5pEditor, h5pPlayer });
+  }
+
+  if (!lumiInitializationPromise) {
+    lumiInitializationPromise = createLumiRuntime().catch(error => {
+      h5pEditor = null;
+      h5pPlayer = null;
+      lumiInitializationPromise = null;
+      throw error;
+    });
+  }
+
+  return lumiInitializationPromise;
+}
+
+async function waitForLumiRuntime() {
+  try {
+    return await initializeLumi();
+  } catch (cause) {
+    const error = new Error('The H5P editor is still starting. Please try again.');
+    error.code = 'H5P_EDITOR_NOT_READY';
+    error.httpStatusCode = 503;
+    error.cause = cause;
+    throw error;
+  }
+}
+
+/**
  * Import a .h5p file into Lumi's content storage
  * @param {string} h5pFilePath - Full path to the .h5p file
  * @returns {string} contentId
@@ -242,11 +278,9 @@ export async function importH5PContent(h5pFilePath, user = systemUser) {
  * @returns {string} HTML string
  */
 export async function renderContent(contentId, user = systemUser) {
-  if (!h5pPlayer) {
-    throw new Error('Lumi H5P player not initialized. Call initializeLumi() first.');
-  }
+  const { h5pPlayer: readyPlayer } = await waitForLumiRuntime();
 
-  let html = await h5pPlayer.render(contentId, user, 'en');
+  let html = await readyPlayer.render(contentId, user, 'en');
 
   if (typeof html === 'string') {
     // When rendered inside Canvas LTI iframe, relative paths go to :7737 instead of :8051

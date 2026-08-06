@@ -247,6 +247,10 @@ export function addQuestionContent(doc, question) {
     doc.fontSize(10).font('Helvetica').text('Front:', { underline: true });
     doc.moveDown(0.3);
     doc.fontSize(10).text(front, { indent: 20 });
+  } else if (question.type === 'guess-the-answer') {
+    doc.fontSize(10).font('Helvetica').text('Self-check prompt:', { underline: true });
+    doc.moveDown(0.3);
+    doc.fontSize(10).text(question.questionText, { indent: 20 });
   } else if (question.type === 'mark-the-words') {
     const statement = question.content?.text || question.text || '';
     doc.fontSize(10).font('Helvetica').text('Statement:', { underline: true });
@@ -370,6 +374,9 @@ export function addAnswerContent(doc, question) {
     doc.fontSize(10).text('Back:', { underline: true });
     doc.moveDown(0.3);
     doc.fontSize(10).text(back, { indent: 20 });
+  } else if (question.type === 'guess-the-answer') {
+    const solution = question.content?.solutionText || question.correctAnswer;
+    doc.fontSize(10).text(solution || 'N/A', { indent: 20 });
   } else if (question.type === 'mark-the-words') {
     const answers = question.correctAnswer
       || markedWords(question.content?.text || question.text || '').join(', ');

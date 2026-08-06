@@ -220,6 +220,23 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                 })
               }
 
+              {question.type === 'guess-the-answer' && (
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setShowAnswer(value => !value)}
+                  >
+                    {showAnswer ? 'Hide answer' : (question.content?.solutionLabel || 'Reveal answer')}
+                  </button>
+                  {showAnswer && (
+                    <div className="question-answer" style={{ marginTop: 12 }}>
+                      {question.content?.solutionText || question.correctAnswer}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {question.type === 'summary' && (
                 <div className="summary-question accordion-style">
                   <div className="summary-content">
@@ -857,7 +874,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
               </div>
             )}
 
-            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && question.type !== 'documentation-tool' && (
+            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'guess-the-answer' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && question.type !== 'documentation-tool' && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>

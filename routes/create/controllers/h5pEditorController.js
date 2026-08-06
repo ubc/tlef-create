@@ -357,7 +357,8 @@ router.delete('/contents/:contentId', asyncHandler(async (req, res) => {
 // Translate Lumi's stable error ids into safe, actionable author messages.
 // Raw debug details can contain filesystem paths and must not reach clients.
 router.use((error, _req, res, next) => {
-  if (!error?.errorId) return next(error);
+  const errorCode = error?.errorId || error?.code;
+  if (!errorCode) return next(error);
 
   const knownMessages = {
     'install-missing-libraries': 'This package requires H5P libraries that are not installed in CREATE. Ask an administrator to review and add the missing libraries.',
@@ -367,13 +368,16 @@ router.use((error, _req, res, next) => {
     'h5p-server:content-missing-delete-permission': 'You do not have permission to delete this H5P content.'
   };
 
-  const message = knownMessages[error.errorId]
+  const message = knownMessages[errorCode]
+    || (errorCode === 'H5P_EDITOR_NOT_READY'
+      ? 'The H5P editor is still starting. Please try again.'
+      : null)
     || 'H5P could not complete this operation. Check the content fields or package and try again.';
   const status = Number.isInteger(error.httpStatusCode)
     ? error.httpStatusCode
     : HTTP_STATUS.BAD_REQUEST;
 
-  return errorResponse(res, message, error.errorId, status);
+  return errorResponse(res, message, errorCode, status);
 });
 
 export default router;

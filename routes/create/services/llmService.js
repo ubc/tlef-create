@@ -949,6 +949,18 @@ IMPORTANT REQUIREMENTS FOR TRUE/FALSE QUESTIONS:
   "explanation": "Additional context about why this concept is important and how it connects to the learning objective"
 }`,
 
+      'guess-the-answer': `{
+  "questionText": "A concise prompt that asks the learner to predict or recall the answer before revealing it",
+  "content": {
+    "solutionLabel": "Click to reveal the answer",
+    "solutionText": "A clear, grounded answer to the prompt"
+  },
+  "correctAnswer": "The same clear answer shown in solutionText",
+  "explanation": "Brief teaching context that explains why this answer matters"
+}
+
+IMPORTANT: This is a self-check activity, not a scored multiple-choice question. The prompt must be answerable from the supplied evidence. Keep solutionText concise and do not include answer choices.`,
+
       'summary': `{
   "questionText": "Study Guide: Essential Knowledge Points",
   "explanation": "This study guide covers the key concepts and knowledge points that students should understand to master this learning objective",
@@ -1526,6 +1538,15 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
         if (!parsed.content || !parsed.content.front || !parsed.content.back) {
           throw new Error('Flashcard missing front/back content');
         }
+      }
+
+      if (questionType === QUESTION_TYPES.GUESS_THE_ANSWER) {
+        if (!parsed.content?.solutionText) {
+          throw new Error('Guess the Answer content is missing solutionText');
+        }
+        parsed.content.solutionLabel = parsed.content.solutionLabel?.trim()
+          || 'Click to reveal the answer';
+        parsed.correctAnswer = parsed.content.solutionText;
       }
 
       if (questionType === 'cloze') {

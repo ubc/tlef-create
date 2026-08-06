@@ -109,6 +109,20 @@ describe('native H5P document pipeline', () => {
           }]
         }),
         library: 'H5P.Dialogcards 1.9'
+      },
+      {
+        quiz: createQuiz({
+          questions: [{
+            _id: 'guess-1',
+            type: 'guess-the-answer',
+            questionText: 'Which pattern is this?',
+            content: {
+              solutionLabel: 'Reveal answer',
+              solutionText: 'The adapter pattern'
+            }
+          }]
+        }),
+        library: 'H5P.Column 1.18'
       }
     ];
 

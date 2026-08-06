@@ -30,6 +30,13 @@ function runtimeUrlToFile(url) {
 }
 
 describe('H5P Studio runtime assets', () => {
+  test('shares one Lumi runtime across concurrent startup callers', async () => {
+    const [first, second] = await Promise.all([initializeLumi(), initializeLumi()]);
+
+    expect(first.h5pEditor).toBe(second.h5pEditor);
+    expect(first.h5pPlayer).toBe(second.h5pPlayer);
+  });
+
   test('the official editor model only references committed core assets', async () => {
     await initializeLumi();
     const model = await getEditor().render(undefined, 'en', {

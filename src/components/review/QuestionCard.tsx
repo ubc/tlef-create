@@ -679,6 +679,15 @@ const QuestionCard = ({
           <div className="question-answer"><strong>Back:</strong> {question.content?.back || question.correctAnswer}</div>
           {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
         </div>
+      ) : question.type === 'guess-the-answer' ? (
+        <div className="question-display">
+          <div className="question-text">{question.questionText}</div>
+          <div className="question-answer">
+            <strong>{question.content?.solutionLabel || 'Answer'}:</strong>{' '}
+            {question.content?.solutionText || question.correctAnswer}
+          </div>
+          {question.explanation && (<div className="question-explanation"><strong>Explanation:</strong> {question.explanation}</div>)}
+        </div>
       ) : question.type === 'documentation-tool' ? (
         <div className="question-display">
           <div className="question-text"><strong>{question.content?.title || question.questionText}</strong></div>

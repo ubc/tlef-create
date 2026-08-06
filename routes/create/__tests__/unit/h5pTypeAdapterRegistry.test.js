@@ -15,6 +15,7 @@ const AI_TYPES = [
   'multiple-choice',
   'true-false',
   'flashcard',
+  'guess-the-answer',
   'summary',
   'discussion',
   'matching',
@@ -36,6 +37,10 @@ const fixtures = {
   },
   'true-false': { questionText: 'True or false?', correctAnswer: 'true' },
   flashcard: { questionText: 'Front', content: { front: 'Front', back: 'Back' } },
+  'guess-the-answer': {
+    questionText: 'What concept is being described?',
+    content: { solutionLabel: 'Reveal answer', solutionText: 'The adapter pattern' }
+  },
   summary: {
     questionText: 'Summarize.',
     content: { keyPoints: [{ title: 'Point', explanation: 'Explanation' }] }
@@ -138,6 +143,25 @@ describe('H5P type adapter registry', () => {
       'crossword',
       'branching-scenario'
     ]);
+  });
+
+  test('converts Guess the Answer with parameters accepted by its official semantics', () => {
+    const result = convertQuestionToH5P({
+      type: 'guess-the-answer',
+      questionText: 'Which pattern separates a type from its H5P converter?',
+      content: {
+        solutionLabel: 'Reveal the pattern',
+        solutionText: 'The adapter pattern'
+      }
+    });
+
+    expect(result).toMatchObject({
+      library: 'H5P.GuessTheAnswer 1.5',
+      params: {
+        solutionLabel: 'Reveal the pattern',
+        solutionText: 'The adapter pattern'
+      }
+    });
   });
 
   test('preserves the existing direct standalone package behavior', () => {

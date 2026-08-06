@@ -27,6 +27,8 @@ interface ManualQuestionFormState {
   correctAnswer: string;
   front: string;
   back: string;
+  solutionLabel: string;
+  solutionText: string;
   keyPoints: KeyPoint[];
   // Matching
   leftItems: string[];
@@ -64,6 +66,8 @@ const createDefaultFormState = (defaultType: string): ManualQuestionFormState =>
   correctAnswer: 'true',
   front: '',
   back: '',
+  solutionLabel: 'Click to reveal the answer',
+  solutionText: '',
   keyPoints: [{ title: '', explanation: '' }],
   leftItems: ['', ''],
   rightItems: ['', ''],
@@ -159,6 +163,14 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
           questionText = newQuestion.front;
           content = { front: newQuestion.front, back: newQuestion.back };
           correctAnswer = newQuestion.back;
+          break;
+        case 'guess-the-answer':
+          questionText = newQuestion.question;
+          content = {
+            solutionLabel: newQuestion.solutionLabel,
+            solutionText: newQuestion.solutionText
+          };
+          correctAnswer = newQuestion.solutionText;
           break;
         case 'summary':
           questionText = newQuestion.question;
@@ -262,6 +274,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
     }
     if (newQuestion.type === 'true-false') return newQuestion.question.trim();
     if (newQuestion.type === 'flashcard') return newQuestion.front.trim() && newQuestion.back.trim();
+    if (newQuestion.type === 'guess-the-answer') return newQuestion.question.trim() && newQuestion.solutionText.trim();
     if (newQuestion.type === 'summary') return newQuestion.question.trim() && newQuestion.keyPoints.some((kp: KeyPoint) => kp.title.trim());
     if (newQuestion.type === 'matching') {
       return newQuestion.question.trim() &&
@@ -588,6 +601,40 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                       value={newQuestion.back}
                       onChange={(e) => setNewQuestion({...newQuestion, back: e.target.value})}
                       rows={3}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* GUESS THE ANSWER */}
+              {newQuestion.type === 'guess-the-answer' && (
+                <>
+                  <div className="form-field">
+                    <label>Prompt</label>
+                    <textarea
+                      className="textarea"
+                      placeholder="Ask the learner to predict or recall the answer..."
+                      value={newQuestion.question}
+                      onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Reveal button label</label>
+                    <input
+                      className="input"
+                      value={newQuestion.solutionLabel}
+                      onChange={(e) => setNewQuestion({ ...newQuestion, solutionLabel: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Answer to reveal</label>
+                    <textarea
+                      className="textarea"
+                      placeholder="Enter the answer learners see after revealing it..."
+                      value={newQuestion.solutionText}
+                      onChange={(e) => setNewQuestion({ ...newQuestion, solutionText: e.target.value })}
+                      rows={4}
                     />
                   </div>
                 </>

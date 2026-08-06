@@ -73,6 +73,7 @@ export const QUESTION_TYPES: QuestionTypeOption[] = [
   { value: 'multiple-choice', label: 'Multiple Choice' },
   { value: 'true-false', label: 'True/False' },
   { value: 'flashcard', label: 'Flashcard' },
+  { value: 'guess-the-answer', label: 'Guess the Answer' },
   { value: 'summary', label: 'Summary' },
   { value: 'discussion', label: 'Discussion' },
   { value: 'matching', label: 'Matching' },
@@ -98,6 +99,7 @@ export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
     'single-choice-set',
     'essay',
     'flashcard',
+    'guess-the-answer',
     'summary',
     'discussion',
     'documentation-tool'
@@ -112,6 +114,7 @@ export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
     'single-choice-set',
     'essay',
     'flashcard',
+    'guess-the-answer',
     'summary',
     'discussion',
     'documentation-tool'
@@ -138,6 +141,7 @@ export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
     'single-choice-set',
     'essay',
     'flashcard',
+    'guess-the-answer',
     'summary',
     'discussion',
     'documentation-tool',

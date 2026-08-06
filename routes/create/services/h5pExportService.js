@@ -16,6 +16,7 @@ import {
 } from '../config/h5pTypeAdapterRegistry.js';
 import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
 import { normalizeMarkTheWordsText } from './questionContentService.js';
+import { convertGuessTheAnswerToH5P } from './h5pTypeAdapters/guessTheAnswerAdapter.js';
 
 const SERVICE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_H5P_LIBRARY_PATH = path.resolve(SERVICE_DIR, '../h5p-libs');
@@ -1923,15 +1924,23 @@ function convertQuestionToH5PLegacy(question, quiz) {
  * in phase one so exported content is byte-structure compatible apart from
  * intentionally random subContentIds.
  */
+const nativeTypeConverters = Object.freeze({
+  'guess-the-answer': convertGuessTheAnswerToH5P
+});
+
 export const H5P_QUESTION_ADAPTERS = Object.freeze(Object.fromEntries(
   listH5PTypeAdapters().map(metadata => [
     metadata.type,
     Object.freeze({
       ...metadata,
       toH5P: metadata.convertible
-        ? (question, quiz) => question?.type === metadata.type
-          ? convertQuestionToH5PLegacy(question, quiz)
-          : null
+        ? (question, quiz) => {
+          if (question?.type !== metadata.type) return null;
+          const nativeConverter = nativeTypeConverters[metadata.type];
+          return nativeConverter
+            ? nativeConverter(question, quiz)
+            : convertQuestionToH5PLegacy(question, quiz);
+        }
         : null
     })
   ])

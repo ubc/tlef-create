@@ -18,7 +18,7 @@ Choose **Upload .h5p** to import an existing package. Instructor uploads may use
 
 ## Preview and download
 
-After saving, choose **Preview** to run the activity or **Download** to obtain a standard `.h5p` package. Choose **Back to editor** to continue authoring.
+After saving, choose **Preview** to run the activity or **Download** to obtain a standard `.h5p` package. Choose **Back to editor** to continue authoring. If Preview is opened while the H5P runtime is still starting after a server restart, CREATE waits for that shared runtime instead of returning a broken preview.
 
 ## Important editing boundary
 
@@ -27,3 +27,5 @@ H5P Studio stores the complete native H5P document. Advanced changes are not con
 ## Content type availability
 
 H5P Studio can author locally installed, open H5P libraries. H5P.com premium or server-backed multiplayer activities are not made available merely by embedding the editor.
+
+CREATE's AI workflow can also generate **Guess the Answer** as a native `H5P.GuessTheAnswer 1.5` activity inside Column or Interactive Book. After generation, choose **Advanced H5P Editor** to fine-tune the official reveal label, answer, and other library fields in H5P Studio.

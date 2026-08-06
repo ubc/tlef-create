@@ -32,6 +32,14 @@ const adapterDefinitions = [
     aiEnabled: true
   },
   {
+    type: 'guess-the-answer',
+    label: 'Guess the Answer',
+    mainLibrary: 'H5P.GuessTheAnswer 1.5',
+    dependencies: ['H5P.GuessTheAnswer', 'FontAwesome'],
+    containers: ['column', 'interactive-book', 'mixed-activity'],
+    aiEnabled: true
+  },
+  {
     type: 'summary',
     label: 'Summary',
     mainLibrary: 'H5P.Accordion 1.0',

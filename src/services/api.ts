@@ -1364,7 +1364,7 @@ export interface Question {
   quiz: string;
   learningObjective: string | LearningObjective;
   generationPlan?: string;
-  type: 'multiple-choice' | 'true-false' | 'flashcard' | 'summary' | 'discussion' | 'matching' | 'ordering' | 'cloze';
+  type: 'multiple-choice' | 'true-false' | 'flashcard' | 'guess-the-answer' | 'summary' | 'discussion' | 'matching' | 'ordering' | 'cloze';
   difficulty: 'easy' | 'moderate' | 'hard';
   questionText: string;
   content: {
@@ -1379,6 +1379,8 @@ export interface Question {
     selectionMode?: 'single' | 'multiple';
     front?: string;
     back?: string;
+    solutionLabel?: string;
+    solutionText?: string;
     leftItems?: string[];
     rightItems?: string[];
     matchingPairs?: string[][];

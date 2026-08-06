@@ -44,6 +44,7 @@ export const QUESTION_TYPES = {
   MULTIPLE_CHOICE: 'multiple-choice',
   TRUE_FALSE: 'true-false',
   FLASHCARD: 'flashcard',
+  GUESS_THE_ANSWER: 'guess-the-answer',
   SUMMARY: 'summary',
   DISCUSSION: 'discussion',
   MATCHING: 'matching',

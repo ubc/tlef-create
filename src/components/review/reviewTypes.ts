@@ -14,6 +14,7 @@ export const questionTypes = [
   { id: 'multiple-choice', label: 'Multiple Choice' },
   { id: 'true-false', label: 'True/False' },
   { id: 'flashcard', label: 'Flashcard' },
+  { id: 'guess-the-answer', label: 'Guess the Answer' },
   { id: 'summary', label: 'Summary' },
   { id: 'discussion', label: 'Discussion' },
   { id: 'matching', label: 'Matching' },

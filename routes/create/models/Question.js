@@ -67,6 +67,10 @@ const questionSchema = new mongoose.Schema({
     // For Flashcard
     front: { type: String }, // Question side
     back: { type: String },  // Answer side
+
+    // For Guess the Answer
+    solutionLabel: { type: String },
+    solutionText: { type: String },
     
     // For Matching
     leftItems: [{ type: String }],  // [A, B, C, D]
