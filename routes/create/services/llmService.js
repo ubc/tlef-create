@@ -18,6 +18,7 @@ import {
   extractBalancedJson,
   extractResponsesOutputText,
   getLearningObjectiveCompletionOptions,
+  getQuestionCompletionOptions,
   isGpt5Family,
   isOpenAIOutputBudgetError,
   parseCoursePromptReviewResponse
@@ -27,6 +28,7 @@ export {
   buildOpenAIStreamingRequest,
   extractResponsesOutputText,
   getLearningObjectiveCompletionOptions,
+  getQuestionCompletionOptions,
   isGpt5Family,
   isOpenAIOutputBudgetError,
   parseCoursePromptReviewResponse
@@ -122,15 +124,16 @@ class QuizLLMService {
       this.provider = process.env.LLM_PROVIDER || 'ollama';
 
       if (this.provider === 'openai') {
+        const defaultModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
         // Initialize with OpenAI
         this.llm = new LLMModule({
           provider: 'openai',
           apiKey: process.env.OPENAI_API_KEY,
           endpoint: process.env.OPENAI_API_ENDPOINT || 'https://api.openai.com/v1',
-          defaultModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          defaultModel,
           logger: this.logger,
           defaultOptions: {
-            temperature: 0.7,
+            ...(!isGpt5Family(defaultModel) ? { temperature: 0.7 } : {}),
             max_completion_tokens: 2000 // Use correct OpenAI parameter
           }
         });
@@ -217,7 +220,14 @@ class QuizLLMService {
       defaultModel: config.model,
       endpoint: config.endpoint,
       logger: this.logger,
-      defaultOptions: { temperature: 0.7, max_completion_tokens: 2000 }
+      defaultOptions: {
+        ...(config.provider !== 'openai' || !isGpt5Family(config.model)
+          ? { temperature: 0.7 }
+          : {}),
+        ...(config.provider === 'openai'
+          ? { max_completion_tokens: 2000 }
+          : { maxTokens: 2000 })
+      }
     });
   }
 
@@ -227,7 +237,7 @@ class QuizLLMService {
    * @param {number} maxTokens - Max tokens setting
    * @returns {Object} Options object with correct parameter names
    */
-  getSendMessageOptions(temperature, maxTokens, config = this.getEnvLLMConfig()) {
+  getSendMessageOptions(temperature, maxTokens, config = this.getEnvLLMConfig(), reasoningEffort = null) {
     const provider = config.provider;
     const model = config.model;
     
@@ -239,6 +249,7 @@ class QuizLLMService {
       // Some GPT-5-family models only support the default temperature.
       if (isGpt5Family(model)) {
         console.log(`⚠️ ${model} model detected - using default temperature (1.0)`);
+        if (reasoningEffort) options.reasoning_effort = reasoningEffort;
       } else {
         // Other OpenAI models support custom temperature
         options.temperature = temperature;
@@ -440,145 +451,21 @@ class QuizLLMService {
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
       const isLongFormQuestion = ['branching-scenario', 'documentation-tool'].includes(questionType);
-      const maxTokens = isGpt5Family(model)
-        ? (isLongFormQuestion ? 6000 : 4000)
-        : (isLongFormQuestion ? 4000 : 2000);
+      const { maxTokens, reasoningEffort } = getQuestionCompletionOptions(model, isLongFormQuestion);
       
       let accumulatedContent = '';
       let responseModel = model;
       
-      const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig);
-      
-      // Add streaming option
-      options.stream = true;
-      
       console.log(`🌊 Starting streaming generation...`);
-
-      let response;
-
-      // Use direct OpenAI API for better streaming control
-      if (provider === 'openai') {
-        console.log('Using direct OpenAI streaming API');
-
-        try {
-          const OpenAI = (await import('openai')).default;
-          console.log('OpenAI package imported successfully');
-
-          const endpoint = llmConfig.endpoint || 'https://api.openai.com/v1';
-          const openai = new OpenAI({ apiKey: llmConfig.apiKey, baseURL: endpoint });
-          console.log('OpenAI client created');
-
-          const useResponsesApi = isGpt5Family(model)
-            && endpoint.replace(/\/$/, '') === 'https://api.openai.com/v1';
-          console.log(`Sending request to OpenAI: model=${model}, endpoint=${endpoint}, api=${useResponsesApi ? 'responses' : 'chat-completions'}, maxTokens=${maxTokens}`);
-          
-          // Add timeout for OpenAI streaming to prevent hanging
-          const OPENAI_STREAM_TIMEOUT = 90000; // 90 seconds
-          let streamTimeoutId;
-          
-          const streamPromise = (async () => {
-            const request = buildOpenAIStreamingRequest({
-              model,
-              prompt,
-              temperature,
-              maxTokens,
-              useResponsesApi
-            });
-            const stream = useResponsesApi
-              ? await openai.responses.create(request)
-              : await openai.chat.completions.create(request);
-            console.log('OpenAI stream created, starting to receive chunks...');
-
-            let chunkCount = 0;
-            
-            for await (const chunk of stream) {
-              const textChunk = useResponsesApi
-                ? (chunk.type === 'response.output_text.delta' ? chunk.delta : '')
-                : chunk.choices?.[0]?.delta?.content;
-              if (textChunk) {
-                chunkCount++;
-                accumulatedContent += textChunk;
-
-                // Call the streaming callback if provided
-                if (onStreamChunk) {
-                  onStreamChunk(textChunk, {
-                    totalLength: accumulatedContent.length,
-                    partial: true
-                  });
-                }
-              }
-              
-              // Check for finish reason
-              if (!useResponsesApi && chunk.choices?.[0]?.finish_reason) {
-                console.log(`OpenAI stream finished with reason: ${chunk.choices[0].finish_reason}`);
-                break;
-              }
-
-              if (useResponsesApi && chunk.type === 'response.failed') {
-                throw new Error(chunk.response?.error?.message || 'OpenAI Responses API reported a failed response');
-              }
-            }
-
-            console.log(`Streaming completed: ${chunkCount} chunks, ${accumulatedContent.length} total chars`);
-            if (!accumulatedContent.trim()) {
-              throw new Error(`Model ${model} completed without returning output text`);
-            }
-            return { content: accumulatedContent, model: model };
-          })();
-          
-          const timeoutPromise = new Promise((_, reject) => {
-            streamTimeoutId = setTimeout(() => {
-              reject(new Error(`OpenAI streaming timeout after ${OPENAI_STREAM_TIMEOUT/1000}s`));
-            }, OPENAI_STREAM_TIMEOUT);
-          });
-          
-          try {
-            response = await Promise.race([streamPromise, timeoutPromise]);
-          } finally {
-            clearTimeout(streamTimeoutId);
-          }
-          
-          responseModel = model;
-        } catch (openaiError) {
-          console.error('OpenAI streaming error:', openaiError.message);
-          throw new Error(`OpenAI streaming failed: ${openaiError.message}`);
-        }
-      } else {
-        // Use streamConversation for Ollama to get real streaming
-        const messages = [{ role: 'user', content: prompt }];
-        if (options.systemPrompt) {
-          messages.unshift({ role: 'system', content: options.systemPrompt });
-        }
-
-        const requestLLM = this.createLLMForConfig(llmConfig);
-        response = await requestLLM.streamConversation(
-          messages,
-          (chunk) => {
-            try {
-              // Handle streaming chunks from Ollama
-              const textChunk = typeof chunk === 'string' ? chunk : chunk.content || '';
-
-              if (textChunk) {
-                accumulatedContent += textChunk;
-
-                // Call the streaming callback if provided
-                if (onStreamChunk) {
-                  onStreamChunk(textChunk, {
-                    totalLength: accumulatedContent.length,
-                    partial: true
-                  });
-                }
-              }
-
-            } catch (chunkError) {
-              console.error('❌ Error processing stream chunk:', chunkError);
-            }
-          },
-          options
-        );
-
-        responseModel = response.model;
-      }
+      const response = await this.streamCompletion({
+        prompt,
+        llmConfig,
+        temperature,
+        maxTokens,
+        reasoningEffort
+      }, onStreamChunk);
+      accumulatedContent = response.content;
+      responseModel = response.model || model;
 
       const processingTime = Date.now() - startTime;
       console.log(`⏱️ Streaming completed in ${processingTime}ms`);
@@ -586,15 +473,6 @@ class QuizLLMService {
       // Use accumulated content if streaming worked, otherwise fallback to response content
       const finalContent = accumulatedContent || response.content || '';
       console.log(`🔍 Final content length: ${finalContent.length} chars`);
-
-      // Final streaming callback
-      if (onStreamChunk) {
-        onStreamChunk('', { 
-          totalLength: finalContent.length, 
-          partial: false, 
-          completed: true 
-        });
-      }
 
       // Parse and validate response
       const questionData = this.parseAndValidateResponse(finalContent, questionType, selectionMode);
@@ -728,9 +606,10 @@ class QuizLLMService {
       // Call LLM with default settings from .env
       const startTime = Date.now();
       const temperature = this.getTemperatureForQuestionType(questionType);
-      const maxTokens = ['branching-scenario', 'documentation-tool'].includes(questionType) ? 4000 : 2000;
+      const isLongFormQuestion = ['branching-scenario', 'documentation-tool'].includes(questionType);
+      const { maxTokens, reasoningEffort } = getQuestionCompletionOptions(llmConfig.model, isLongFormQuestion);
 
-      const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig);
+      const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig, reasoningEffort);
       const response = await llm.sendMessage(prompt, options);
       const responseContent = normalizeOptionalText(response?.content);
       if (!responseContent) {

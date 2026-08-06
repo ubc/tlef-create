@@ -271,14 +271,14 @@ describe('CREATE Guide knowledge retrieval', () => {
     ));
     expect(compatibilitySource?.content).toContain('standalone: branching-scenario, crossword, sort-paragraphs');
     expect(compatibilitySource?.navigationPath).toBe('/help?doc=question-types&section=delivery-target-compatibility');
-    expect(catalogueSource?.content).toContain('CREATE currently exposes 15 question types.');
+    expect(catalogueSource?.content).toContain('CREATE currently exposes 16 question types.');
   });
 
   test('retrieves the question catalogue for a natural Chinese count question', async () => {
     const sources = await helpKnowledgeService.retrieve('请问，我们现在支持多少种题目？', {}, 3);
 
     expect(sources.some(source => source.section === 'Question type catalogue')).toBe(true);
-    expect(sources.some(source => source.content.includes('15 question types'))).toBe(true);
+    expect(sources.some(source => source.content.includes('16 question types'))).toBe(true);
   });
 
   test('retrieves export instructions for Chinese and mixed-language queries', async () => {
@@ -293,7 +293,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     const typeFacts = await helpKnowledgeService.getVerifiedFacts('支持多少种题型？');
     const exportFacts = await helpKnowledgeService.getVerifiedFacts('如何 export');
 
-    expect(typeFacts[0]).toContain('15 种题型');
+    expect(typeFacts[0]).toContain('16 种题型');
     expect(exportFacts[0]).toContain('H5P Package、PDF、Markdown 和 Canvas LTI');
   });
 
@@ -308,7 +308,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     });
 
     expect(result.model).toBe('verified-product-facts');
-    expect(result.answer).toContain('15 种题型');
+    expect(result.answer).toContain('16 种题型');
     expect(chunks.join('')).toContain('Multiple Choice');
   });
 });

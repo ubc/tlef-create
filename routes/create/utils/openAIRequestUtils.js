@@ -105,6 +105,23 @@ export function getBlueprintCompletionOptions(model, retry = false) {
   };
 }
 
+export function getQuestionCompletionOptions(model, isLongForm = false) {
+  if (!isGpt5Family(model)) {
+    return {
+      maxTokens: isLongForm ? 4000 : 2000,
+      reasoningEffort: null
+    };
+  }
+
+  return {
+    // Responses API output budgets include both reasoning and the visible
+    // question JSON. The previous 4,000-token budget could finish before any
+    // visible output was emitted by GPT-5 nano.
+    maxTokens: isLongForm ? 12000 : 8000,
+    reasoningEffort: model.toLowerCase().startsWith('gpt-5.4-nano') ? 'none' : 'low'
+  };
+}
+
 export function isOpenAIOutputBudgetError(error) {
   return error?.code === 'OPENAI_MAX_OUTPUT_TOKENS';
 }

@@ -1,9 +1,11 @@
 import { describe, expect, test } from '@jest/globals';
+import llmService from '../../services/llmService.js';
 import {
   buildOpenAIIncompleteResponseError,
   buildOpenAIStreamingRequest,
   extractResponsesOutputText,
   getLearningObjectiveCompletionOptions,
+  getQuestionCompletionOptions,
   isOpenAIOutputBudgetError,
   isGpt5Family,
   parseCoursePromptReviewResponse
@@ -47,6 +49,38 @@ describe('OpenAI streaming request configuration', () => {
     expect(getLearningObjectiveCompletionOptions('gpt-4o-mini')).toEqual({
       maxTokens: 2600,
       reasoningEffort: null
+    });
+  });
+
+  test('allocates visible-output room and low reasoning for GPT-5 nano questions', () => {
+    expect(getQuestionCompletionOptions('gpt-5-nano')).toEqual({
+      maxTokens: 8000,
+      reasoningEffort: 'low'
+    });
+    expect(getQuestionCompletionOptions('gpt-5-nano', true)).toEqual({
+      maxTokens: 12000,
+      reasoningEffort: 'low'
+    });
+    expect(getQuestionCompletionOptions('gpt-4o-mini')).toEqual({
+      maxTokens: 2000,
+      reasoningEffort: null
+    });
+  });
+
+  test('does not restore a custom temperature through toolkit defaults for GPT-5 nano', () => {
+    const config = {
+      provider: 'openai',
+      model: 'gpt-5-nano',
+      apiKey: 'test-key',
+      endpoint: 'https://api.openai.com/v1'
+    };
+    const requestLLM = llmService.createLLMForConfig(config);
+    const options = llmService.getSendMessageOptions(0.7, 8000, config, 'low');
+
+    expect(requestLLM.config.defaultOptions.temperature).toBeUndefined();
+    expect(options).toEqual({
+      max_completion_tokens: 8000,
+      reasoning_effort: 'low'
     });
   });
 

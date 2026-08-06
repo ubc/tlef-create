@@ -68,4 +68,43 @@ describe('question generation null safety', () => {
       llmService.createLLMForConfig = originalCreateLLMForConfig;
     }
   });
+
+  test('streams GPT-5 nano questions with a reasoning-safe output budget', async () => {
+    const originalStreamCompletion = llmService.streamCompletion;
+    let completionOptions;
+    const content = JSON.stringify({
+      questionText: 'What force balances gravity in this diagram?',
+      content: {
+        solutionLabel: 'Reveal the force',
+        solutionText: 'The upward normal force.'
+      },
+      correctAnswer: 'The upward normal force.',
+      explanation: 'A stationary object has zero net vertical force.'
+    });
+
+    llmService.streamCompletion = async options => {
+      completionOptions = options;
+      return { content, model: options.llmConfig.model };
+    };
+
+    try {
+      const result = await llmService.generateQuestionStreaming({
+        learningObjective: 'Construct a free-body diagram for a stationary object.',
+        questionType: 'guess-the-answer',
+        relevantContent: [],
+        llmConfig: {
+          provider: 'openai',
+          model: 'gpt-5-nano',
+          apiKey: 'test-key',
+          endpoint: 'https://api.openai.com/v1'
+        }
+      });
+
+      expect(completionOptions.maxTokens).toBe(8000);
+      expect(completionOptions.reasoningEffort).toBe('low');
+      expect(result.questionData.content.solutionText).toBe('The upward normal force.');
+    } finally {
+      llmService.streamCompletion = originalStreamCompletion;
+    }
+  });
 });
