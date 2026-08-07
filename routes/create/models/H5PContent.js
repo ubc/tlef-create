@@ -52,6 +52,11 @@ const h5pContentSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  sourceFingerprint: {
+    type: String,
+    default: null,
+    maxlength: 80
+  },
   lastEditedAt: {
     type: Date,
     default: Date.now

@@ -13,8 +13,7 @@ export function convertGuessTheAnswerToH5P(question) {
   return {
     params: {
       taskDescription: `<p>${escapeHtml(question.questionText || '')}</p>`,
-      media: {},
-      solutionLabel: question.content?.solutionLabel || 'Click to reveal the answer',
+      solutionLabel: escapeHtml(question.content?.solutionLabel || 'Click to reveal the answer'),
       solutionText: escapeHtml(solutionText)
     },
     library: 'H5P.GuessTheAnswer 1.5',

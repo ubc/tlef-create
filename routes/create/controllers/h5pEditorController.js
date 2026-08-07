@@ -21,7 +21,10 @@ import {
   toLumiUser
 } from '../services/lumiService.js';
 import {
+  buildH5PSourceFingerprint,
   buildLumiSaveResult,
+  getH5PSourceUpdatedAt,
+  isGeneratedH5PDraftOutdated,
   normalizeEditorPayload,
   saveNativeH5PDocumentAndRecord,
   serializeH5PContent
@@ -97,7 +100,7 @@ async function loadQuizForEditor(quizId, userId) {
       populate: { path: 'learningObjective', select: 'text order' },
       options: { sort: { order: 1 } }
     })
-    .populate('learningObjectives', 'text order');
+    .populate('learningObjectives', 'text order updatedAt');
 }
 
 async function removeImportedContentOnFailure(contentId) {
@@ -278,7 +281,7 @@ router.post('/contents/from-quiz/:quizId', asyncHandler(async (req, res) => {
       return successResponse(res, {
         content: serializeH5PContent(existing),
         reused: true,
-        sourceOutdated: Boolean(existing.sourceQuizUpdatedAt && quiz.updatedAt > existing.sourceQuizUpdatedAt)
+        sourceOutdated: isGeneratedH5PDraftOutdated(existing, quiz)
       });
     }
   }
@@ -289,6 +292,8 @@ router.post('/contents/from-quiz/:quizId', asyncHandler(async (req, res) => {
   }
 
   const nativeDocument = await buildNativeH5PDocument(quiz);
+  const sourceUpdatedAt = getH5PSourceUpdatedAt(quiz);
+  const sourceFingerprint = buildH5PSourceFingerprint(quiz);
   const { result, record } = await saveNativeH5PDocumentAndRecord({
     editor,
     document: nativeDocument,
@@ -302,7 +307,8 @@ router.post('/contents/from-quiz/:quizId', asyncHandler(async (req, res) => {
       title: (saved.metadata.title || quiz.name).slice(0, 255),
       mainLibrary: saved.metadata.mainLibrary || nativeDocument.library.split(' ')[0],
       source: 'generated',
-      sourceQuizUpdatedAt: quiz.updatedAt,
+      sourceQuizUpdatedAt: sourceUpdatedAt,
+      sourceFingerprint,
       lastEditedAt: new Date()
     })
   });

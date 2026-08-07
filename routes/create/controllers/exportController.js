@@ -69,6 +69,14 @@ router.post('/h5p/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
     }, 'H5P export generated successfully', HTTP_STATUS.CREATED);
   } catch (error) {
     console.error('H5P export error:', error);
+    if (error?.code === 'INVALID_STANDALONE_H5P_SOURCE') {
+      return errorResponse(
+        res,
+        error.message,
+        error.code,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
     return errorResponse(res, 'Failed to generate H5P export', 'EXPORT_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
 }));

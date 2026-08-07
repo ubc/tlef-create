@@ -127,6 +127,23 @@ describe('CREATE Guide knowledge retrieval', () => {
     ))).toBe(true);
   });
 
+  test('retrieves H5P Studio fresh-draft and Preview synchronization guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Should I open the existing H5P Studio draft or create a fresh draft, and does Preview use the export version?',
+      { route: '/course/course-1/quiz/quiz-1?tab=review', activeTab: 'Review & Edit' },
+      5
+    );
+
+    expect(sources.some(source => (
+      source.title === 'H5P Studio'
+      && source.content.includes('Create fresh draft')
+    ))).toBe(true);
+    expect(sources.some(source => (
+      source.title === 'Review, Edit, and Export'
+      && source.content.includes('same native H5P builder')
+    ))).toBe(true);
+  });
+
   test('retrieves Coverage Map viewport recovery guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I center the Coverage Map and fit every node back into view?',

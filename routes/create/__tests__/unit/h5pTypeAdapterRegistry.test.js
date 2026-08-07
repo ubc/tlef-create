@@ -162,6 +162,7 @@ describe('H5P type adapter registry', () => {
         solutionText: 'The adapter pattern'
       }
     });
+    expect(result.params).not.toHaveProperty('media');
   });
 
   test('preserves the existing direct standalone package behavior', () => {

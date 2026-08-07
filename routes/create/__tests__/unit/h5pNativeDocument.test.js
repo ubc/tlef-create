@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, test } from '@jest/globals';
 import {
   buildNativeH5PDocument,
+  convertQuestionToH5P,
   createH5PPackage
 } from '../../services/h5pExportService.js';
 import { saveNativeH5PDocument } from '../../services/h5pEditorService.js';
@@ -50,6 +51,133 @@ describe('native H5P document pipeline', () => {
     });
     expect(document.parameters.content).toHaveLength(1);
     expect(document.parameters.content[0].content.library).toBe('H5P.MultiChoice 1.16');
+  });
+
+  test('supports a preview container override without mutating the Learning Object', async () => {
+    const quiz = createQuiz({ containerMode: 'column' });
+    const document = await buildNativeH5PDocument(quiz, { containerMode: 'question-set' });
+
+    expect(document.library).toBe('H5P.QuestionSet 1.20');
+    expect(quiz.containerMode).toBe('column');
+  });
+
+  test('rejects multiple questions for the Standalone target instead of emitting an invalid Column', async () => {
+    const quiz = createQuiz({
+      containerMode: 'standalone',
+      questions: [
+        {
+          _id: 'sort-1',
+          type: 'sort-paragraphs',
+          questionText: 'Sort the first sequence.',
+          content: { paragraphs: ['First', 'Second'] }
+        },
+        {
+          _id: 'sort-2',
+          type: 'sort-paragraphs',
+          questionText: 'Sort the second sequence.',
+          content: { paragraphs: ['Alpha', 'Beta'] }
+        }
+      ]
+    });
+
+    await expect(buildNativeH5PDocument(quiz)).rejects.toMatchObject({
+      code: 'INVALID_STANDALONE_H5P_SOURCE'
+    });
+  });
+
+  test('uses a stable non-answer ordering across separate native document builds', async () => {
+    const quiz = createQuiz({
+      questions: [{
+        _id: 'ordering-1',
+        type: 'ordering',
+        questionText: 'Put these steps in order.',
+        content: {
+          items: ['First', 'Second', 'Third'],
+          correctOrder: ['First', 'Second', 'Third']
+        }
+      }]
+    });
+
+    const first = await buildNativeH5PDocument(quiz);
+    const second = await buildNativeH5PDocument(quiz);
+    const firstText = first.parameters.content[0].content.params.textField;
+    const secondText = second.parameters.content[0].content.params.textField;
+
+    expect(firstText).toBe(secondText);
+    expect(firstText).not.toBe('*1*. First\n*2*. Second\n*3*. Third\n');
+  });
+
+  test('omits an empty optional media group from native Guess the Answer parameters', async () => {
+    const document = await buildNativeH5PDocument(createQuiz({
+      questions: [{
+        _id: 'guess-1',
+        type: 'guess-the-answer',
+        questionText: 'Which force balances gravity?',
+        content: {
+          solutionLabel: 'Reveal answer',
+          solutionText: 'The normal force'
+        }
+      }]
+    }));
+    const params = document.parameters.content[0].content.params;
+
+    expect(params.taskDescription).toContain('Which force balances gravity?');
+    expect(params.solutionText).toBe('The normal force');
+    expect(params).not.toHaveProperty('media');
+  });
+
+  test('escapes plain authored text before H5P runtimes insert it as HTML', () => {
+    const essay = convertQuestionToH5P({
+      type: 'essay',
+      questionText: 'Explain the result.',
+      content: { sampleAnswer: '<img src=x onerror="window.top.hacked=true">' }
+    });
+    const branching = convertQuestionToH5P({
+      type: 'branching-scenario',
+      content: {
+        introText: 'Start',
+        nodes: [
+          { index: 0 },
+          {
+            index: 1,
+            question: 'Choose',
+            alternatives: [{
+              text: '<img src=x onerror="window.top.hacked=true">',
+              nextContentId: -1
+            }]
+          }
+        ]
+      }
+    });
+    const guess = convertQuestionToH5P({
+      type: 'guess-the-answer',
+      questionText: 'Reveal the answer.',
+      content: {
+        solutionLabel: '<img src=x onerror="window.top.hacked=true">',
+        solutionText: 'Safe answer'
+      }
+    });
+    const summaryKeyPoint = convertQuestionToH5P({
+      type: 'summary',
+      content: {
+        keyPoints: [{
+          title: '<img src=x onerror="window.top.hacked=true">',
+          explanation: 'Safe explanation'
+        }]
+      }
+    });
+    const summaryFallback = convertQuestionToH5P({
+      type: 'summary',
+      explanation: 'Safe summary',
+      content: { title: '<img src=x onerror="window.top.hacked=true">' }
+    }, { learningObjectives: [] });
+
+    expect(essay.params.solution.sample).toContain('&lt;img');
+    expect(branching.params.branchingScenario.content[1]
+      .type.params.branchingQuestion.alternatives[0].text).toContain('&lt;img');
+    expect(guess.params.solutionLabel).toContain('&lt;img');
+    expect(summaryKeyPoint.params.panels[0].title).toContain('&lt;img');
+    expect(summaryFallback.params.panels[0].title).toContain('&lt;img');
   });
 
   test('packages the exact same metadata and parameters returned by the builder', async () => {

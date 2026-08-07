@@ -116,7 +116,8 @@
 }
 
 .h5p-studio-content-title,
-.h5p-studio-content-meta {
+.h5p-studio-content-meta,
+.h5p-studio-content-time {
   display: block;
 }
 
@@ -138,7 +139,17 @@
   white-space: nowrap;
 }
 
-.h5p-studio-content-item.active .h5p-studio-content-meta {
+.h5p-studio-content-time {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h5p-studio-content-item.active .h5p-studio-content-meta,
+.h5p-studio-content-item.active .h5p-studio-content-time {
   color: #cbd5e1;
 }
 

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Edit, Plus, Play, Download, Upload, BookMarked, Boxes } from 'lucide-react';
+import { Edit, Plus, Eye, Download, Upload, BookMarked, Boxes } from 'lucide-react';
 import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi } from '../../services/api';
+import type { H5PStudioContent } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
 import { RootState, AppDispatch } from '../../store';
@@ -19,6 +20,7 @@ import PdfExportModal from '../PdfExportModal';
 import CanvasExportModal from './CanvasExportModal';
 import ManualQuestionForm from './ManualQuestionForm';
 import QuestionCard from './QuestionCard';
+import H5PStudioDraftDialog from './H5PStudioDraftDialog';
 import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
@@ -28,6 +30,7 @@ import { ReviewEditProps, ExtendedQuestion } from './reviewTypes';
 import {
   DELIVERY_TARGETS,
   DeliveryTarget,
+  H5PPackageFormat,
   TARGET_FORMATS,
   TargetFormat,
   getDeliveryTargetForFormat,
@@ -55,10 +58,19 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
   const { showConfirm } = useSystemDialog();
 
-  const [viewMode, setViewMode] = useState<'edit' | 'interact'>('edit');
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [h5pDraftChoice, setH5PDraftChoice] = useState<{
+    draft: H5PStudioContent;
+    sourceOutdated: boolean;
+    sourceQuizId: string;
+  } | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const activeQuizIdRef = useRef(quizId);
+  const h5pStudioRequestRef = useRef(0);
+  activeQuizIdRef.current = quizId;
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [filterByLOId, setFilterByLOId] = useState<string | null>(null);
-  const [containerMode, setContainerMode] = useState<'column' | 'question-set' | 'interactive-book'>('column');
+  const [containerMode, setContainerMode] = useState<H5PPackageFormat>('column');
   const [deliveryTarget, setDeliveryTarget] = useState<DeliveryTarget>('h5p-package');
   const [targetFormat, setTargetFormat] = useState<TargetFormat>('column');
   const [showChapterEditor, setShowChapterEditor] = useState(false);
@@ -86,15 +98,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
     setDeliveryTarget(nextDeliveryTarget);
     setTargetFormat(nextTargetFormat);
 
-    if (currentQuiz?.settings?.targetFormat) {
-      if (currentQuiz.settings.targetFormat === 'mixed-activity') {
-        setContainerMode('column');
-      } else if (currentQuiz.settings.targetFormat !== 'standalone') {
-        setContainerMode(currentQuiz.settings.targetFormat as 'column' | 'question-set' | 'interactive-book');
-      }
-    } else if (currentQuiz?.containerMode) {
-      setContainerMode(currentQuiz.containerMode as 'column' | 'question-set' | 'interactive-book');
-    }
+    setContainerMode(nextTargetFormat === 'mixed-activity' ? 'column' : nextTargetFormat);
   }, [currentQuiz?.containerMode, currentQuiz?.settings?.deliveryTarget, currentQuiz?.settings?.targetFormat]);
 
   const handlers = useQuestionEditHandlers(questions, setQuestions);
@@ -177,6 +181,34 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
       setFilterByLOId(null);
     }
   }, [filterByLOId, learningObjectives]);
+
+  useEffect(() => {
+    h5pStudioRequestRef.current += 1;
+    setH5PDraftChoice(null);
+    setH5PStudioLoading(false);
+  }, [quizId]);
+
+  useEffect(() => {
+    if (viewMode !== 'preview') return undefined;
+
+    const handlePreviewMessage = (event: MessageEvent) => {
+      const iframe = previewIframeRef.current;
+      if (
+        event.source !== iframe?.contentWindow
+        || event.data?.type !== 'tlef:h5p-preview-height'
+        || typeof event.data.height !== 'number'
+        || !Number.isFinite(event.data.height)
+      ) {
+        return;
+      }
+
+      const nextHeight = Math.min(20000, Math.max(320, Math.ceil(event.data.height)));
+      iframe.style.height = `${nextHeight}px`;
+    };
+
+    window.addEventListener('message', handlePreviewMessage);
+    return () => window.removeEventListener('message', handlePreviewMessage);
+  }, [viewMode]);
 
   const filteredQuestions = filterQuestionsByLearningObjectiveId(
     questions,
@@ -468,20 +500,78 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
 
   const handleOpenH5PStudio = async () => {
     if (questions.length === 0 || h5pStudioLoading) return;
+    const sourceQuizId = quizId;
+    const requestId = ++h5pStudioRequestRef.current;
     setH5PStudioLoading(true);
     try {
-      showNotification('info', 'Preparing H5P editor', 'CREATE is creating an editable H5P copy of this Learning Object…');
-      const response = await h5pEditorApi.createFromQuiz(quizId);
-      const contentId = response.data?.content.contentId;
+      showNotification('info', 'Checking H5P Studio', 'CREATE is checking for an existing editable draft…');
+      const response = await h5pEditorApi.createFromQuiz(sourceQuizId);
+      if (
+        h5pStudioRequestRef.current !== requestId
+        || activeQuizIdRef.current !== sourceQuizId
+      ) {
+        return;
+      }
+      const content = response.data?.content;
+      const contentId = content?.contentId;
       if (!contentId) throw new Error('CREATE did not return editable H5P content.');
-      if (response.data?.sourceOutdated) {
-        showNotification('warning', 'Existing H5P draft opened', 'This draft has independent H5P edits and may not include recent question changes.');
+      if (response.data?.reused && content) {
+        setH5PDraftChoice({
+          draft: content,
+          sourceOutdated: Boolean(response.data.sourceOutdated),
+          sourceQuizId
+        });
+        return;
       }
       navigate(`/h5p-studio?contentId=${encodeURIComponent(contentId)}`);
     } catch (error) {
       showNotification('error', 'H5P editor could not open', error instanceof Error ? error.message : 'Could not prepare this Learning Object for advanced editing.');
     } finally {
-      setH5PStudioLoading(false);
+      if (h5pStudioRequestRef.current === requestId) {
+        setH5PStudioLoading(false);
+      }
+    }
+  };
+
+  const handleOpenExistingH5PDraft = () => {
+    const contentId = h5pDraftChoice?.draft.contentId;
+    if (!contentId) return;
+    setH5PDraftChoice(null);
+    navigate(`/h5p-studio?contentId=${encodeURIComponent(contentId)}`);
+  };
+
+  const handleCreateFreshH5PDraft = async () => {
+    const sourceQuizId = h5pDraftChoice?.sourceQuizId;
+    if (h5pStudioLoading || !sourceQuizId) return;
+    const requestId = ++h5pStudioRequestRef.current;
+    setH5PStudioLoading(true);
+    try {
+      showNotification(
+        'info',
+        'Creating fresh H5P draft',
+        'CREATE is converting the current questions into a separate H5P Studio draft…'
+      );
+      const response = await h5pEditorApi.createFromQuiz(sourceQuizId, true);
+      if (
+        h5pStudioRequestRef.current !== requestId
+        || activeQuizIdRef.current !== sourceQuizId
+      ) {
+        return;
+      }
+      const contentId = response.data?.content.contentId;
+      if (!contentId) throw new Error('CREATE did not return the new H5P draft.');
+      setH5PDraftChoice(null);
+      navigate(`/h5p-studio?contentId=${encodeURIComponent(contentId)}`);
+    } catch (error) {
+      showNotification(
+        'error',
+        'Fresh H5P draft could not be created',
+        error instanceof Error ? error.message : 'Could not create a new draft from this Learning Object.'
+      );
+    } finally {
+      if (h5pStudioRequestRef.current === requestId) {
+        setH5PStudioLoading(false);
+      }
     }
   };
 
@@ -538,11 +628,12 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
               </div>
 
               <button
-                className={`btn ${viewMode === 'interact' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setViewMode(viewMode === 'edit' ? 'interact' : 'edit')}
+                className={`btn ${viewMode === 'preview' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setViewMode(viewMode === 'edit' ? 'preview' : 'edit')}
+                aria-pressed={viewMode === 'preview'}
               >
-                {viewMode === 'edit' ? <Play size={16} /> : <Edit size={16} />}
-                {viewMode === 'edit' ? 'Interact' : 'Edit'}
+                {viewMode === 'edit' ? <Eye size={16} /> : <Edit size={16} />}
+                {viewMode === 'edit' ? 'Preview' : 'Back to edit'}
               </button>
               {deliveryTarget === 'h5p-package' && questions.length > 0 && (
                 <button className="btn btn-outline" onClick={handleOpenH5PStudio} disabled={h5pStudioLoading}>
@@ -593,9 +684,10 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 </button>
               )}
             </div>
-          ) : viewMode === 'interact' ? (
+          ) : viewMode === 'preview' ? (
             <div className="questions-interactive">
               <iframe
+                ref={previewIframeRef}
                 key={`h5p-preview-${quizId}-${filterByLOId ?? 'all'}-${containerMode}`}
                 src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${containerMode}${filterByLOId !== null ? `&lo=${filterByLOId}` : ''}`}
                 style={{
@@ -605,25 +697,9 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                   borderRadius: '8px',
                   background: '#f9fafb'
                 }}
-                title="H5P Quiz Preview"
-                onLoad={(e) => {
-                  // H5P content renders after iframe load, so poll briefly to catch final height
-                  const iframe = e.target as HTMLIFrameElement;
-                  let attempts = 0;
-                  const resize = () => {
-                    try {
-                      const body = iframe.contentDocument?.body;
-                      if (body) {
-                        const contentHeight = body.scrollHeight;
-                        if (contentHeight > 100) {
-                          iframe.style.height = `${contentHeight + 48}px`;
-                        }
-                      }
-                    } catch { /* cross-origin */ }
-                    if (++attempts < 10) setTimeout(resize, 500);
-                  };
-                  resize();
-                }}
+                title="H5P Learning Object Preview"
+                allow="fullscreen"
+                sandbox="allow-scripts"
               />
             </div>
           ) : (
@@ -729,6 +805,15 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           historyKey="question"
         />
       )}
+
+      <H5PStudioDraftDialog
+        draft={h5pDraftChoice?.draft || null}
+        sourceOutdated={Boolean(h5pDraftChoice?.sourceOutdated)}
+        loading={h5pStudioLoading}
+        onOpenExisting={handleOpenExistingH5PDraft}
+        onCreateFresh={() => { void handleCreateFreshH5PDraft(); }}
+        onCancel={() => setH5PDraftChoice(null)}
+      />
 
       <PdfExportModal
         isOpen={pdfExportModalOpen}

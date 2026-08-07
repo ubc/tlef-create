@@ -2309,3 +2309,105 @@
         align-self: flex-end;
     }
 }
+.h5p-draft-dialog {
+  width: min(94vw, 42rem);
+  max-width: 42rem;
+  gap: 1.25rem;
+  border-radius: 16px;
+  padding: 1.6rem;
+}
+
+.h5p-draft-dialog .dialog-header {
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.h5p-draft-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid;
+  border-radius: 12px;
+}
+
+.h5p-draft-status.is-current {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.h5p-draft-status.is-outdated {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.h5p-draft-status strong,
+.h5p-draft-status p {
+  display: block;
+  margin: 0;
+}
+
+.h5p-draft-status p {
+  margin-top: 0.25rem;
+  color: #526174;
+  line-height: 1.45;
+}
+
+.h5p-draft-details {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.h5p-draft-details > div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.h5p-draft-details dt {
+  color: #64748b;
+}
+
+.h5p-draft-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #172033;
+  font-weight: 600;
+}
+
+.h5p-draft-explanation {
+  margin: 0;
+  color: #526174;
+  line-height: 1.55;
+}
+
+.h5p-draft-loading-note {
+  margin: 0;
+  color: #526174;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.h5p-draft-dialog.is-loading .dialog-close {
+  display: none;
+}
+
+.h5p-draft-actions {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+@media (max-width: 650px) {
+  .h5p-draft-actions {
+    flex-direction: column-reverse;
+  }
+
+  .h5p-draft-actions .btn {
+    width: 100%;
+  }
+}

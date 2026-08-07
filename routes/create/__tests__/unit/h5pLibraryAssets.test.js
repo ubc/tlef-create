@@ -80,6 +80,7 @@ describe('vendored H5P library assets', () => {
       'H5P.CoursePresentation-1.26',
       'H5P.Crossword-0.5',
       'H5P.ExportableTextArea-1.3',
+      'H5P.InteractiveBook-1.11',
       'H5P.InteractiveVideo-1.27',
       'H5P.MultiMediaChoice-0.3',
       'H5P.OpenEndedQuestion-1.0',

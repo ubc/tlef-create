@@ -1,5 +1,94 @@
+import crypto from 'node:crypto';
+import { resolveNativeH5PContainerMode } from './h5pNativeDocumentConfig.js';
+
 const MAX_LIBRARY_LENGTH = 200;
 const MAX_TITLE_LENGTH = 255;
+
+function asValidTimestamp(value) {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+/**
+ * Return the newest source timestamp that can change a generated H5P draft.
+ * Questions and Learning Objectives are separate Mongo documents, so relying on
+ * Quiz.updatedAt alone misses edits, regenerations, and reorder operations.
+ */
+export function getH5PSourceUpdatedAt(quiz) {
+  const timestamps = [
+    quiz?.updatedAt,
+    ...(quiz?.questions || []).map(question => question?.updatedAt),
+    ...(quiz?.learningObjectives || []).map(objective => objective?.updatedAt)
+  ]
+    .map(asValidTimestamp)
+    .filter(timestamp => timestamp !== null);
+
+  if (timestamps.length === 0) return null;
+  return new Date(Math.max(...timestamps));
+}
+
+function normalizeFingerprintValue(value) {
+  if (value === undefined || typeof value === 'function') return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value.toHexString === 'function') return value.toHexString();
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeFingerprintValue(item));
+  }
+
+  const source = typeof value.toObject === 'function'
+    ? value.toObject({ getters: false, virtuals: false })
+    : value;
+  return Object.keys(source)
+    .sort()
+    .reduce((normalized, key) => {
+      const nextValue = normalizeFingerprintValue(source[key]);
+      if (nextValue !== undefined) normalized[key] = nextValue;
+      return normalized;
+    }, {});
+}
+
+/**
+ * Hash only fields that can change the generated native H5P document. This
+ * avoids marking a Studio draft stale when export history, download counters,
+ * progress, or other unrelated Quiz metadata updates the parent timestamp.
+ */
+export function buildH5PSourceFingerprint(quiz) {
+  const source = {
+    name: quiz?.name || '',
+    containerMode: resolveNativeH5PContainerMode(quiz),
+    chapters: (quiz?.chapters || []).map(chapter => ({
+      title: chapter?.title || '',
+      questionIds: (chapter?.questionIds || []).map(id => id?.toString?.() || String(id)),
+      containerType: chapter?.containerType || 'column',
+      passPercentage: chapter?.passPercentage ?? 50,
+      disableBackwardsNavigation: Boolean(chapter?.disableBackwardsNavigation),
+      randomizeQuestions: Boolean(chapter?.randomizeQuestions)
+    })),
+    learningObjectives: (quiz?.learningObjectives || []).map(objective => ({
+      id: objective?._id?.toString?.() || '',
+      order: objective?.order ?? 0,
+      text: objective?.text || ''
+    })),
+    questions: (quiz?.questions || []).map(question => ({
+      id: question?._id?.toString?.() || '',
+      order: question?.order ?? 0,
+      type: question?.type || '',
+      questionText: question?.questionText || '',
+      content: question?.content || {},
+      correctAnswer: question?.correctAnswer ?? null,
+      explanation: question?.explanation || ''
+    }))
+  };
+  const serialized = JSON.stringify(normalizeFingerprintValue(source));
+  return `v1:${crypto.createHash('sha256').update(serialized).digest('hex')}`;
+}
+
+export function isGeneratedH5PDraftOutdated(content, quiz) {
+  if (!content?.sourceFingerprint) return true;
+  return content.sourceFingerprint !== buildH5PSourceFingerprint(quiz);
+}
 
 export function normalizeEditorPayload(body = {}) {
   const library = typeof body.library === 'string' ? body.library.trim() : '';
@@ -35,6 +124,7 @@ export function serializeH5PContent(content) {
     folderId: content.folder?.toString() || null,
     quizId: content.quiz?.toString() || null,
     sourceQuizUpdatedAt: content.sourceQuizUpdatedAt || null,
+    sourceFingerprint: content.sourceFingerprint || null,
     lastEditedAt: content.lastEditedAt,
     createdAt: content.createdAt,
     updatedAt: content.updatedAt

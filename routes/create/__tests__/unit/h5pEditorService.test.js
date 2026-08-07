@@ -1,6 +1,9 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import {
+  buildH5PSourceFingerprint,
   buildLumiSaveResult,
+  getH5PSourceUpdatedAt,
+  isGeneratedH5PDraftOutdated,
   normalizeEditorPayload,
   saveNativeH5PDocument,
   saveNativeH5PDocumentAndRecord,
@@ -8,6 +11,64 @@ import {
 } from '../../services/h5pEditorService.js';
 
 describe('h5pEditorService', () => {
+  test('tracks question and Learning Objective edits in the generated H5P source revision', () => {
+    const quiz = {
+      name: 'Week 1',
+      containerMode: 'column',
+      updatedAt: new Date('2026-08-01T00:00:00Z'),
+      questions: [{
+        _id: 'question-1',
+        order: 1,
+        type: 'multiple-choice',
+        questionText: 'Original question',
+        content: { options: [] },
+        updatedAt: new Date('2026-08-03T00:00:00Z')
+      }],
+      learningObjectives: [{
+        _id: 'objective-1',
+        order: 1,
+        text: 'Original objective',
+        updatedAt: new Date('2026-08-02T00:00:00Z')
+      }]
+    };
+    const fingerprint = buildH5PSourceFingerprint(quiz);
+
+    expect(getH5PSourceUpdatedAt(quiz)).toEqual(new Date('2026-08-03T00:00:00Z'));
+    expect(isGeneratedH5PDraftOutdated({ sourceFingerprint: fingerprint }, quiz)).toBe(false);
+
+    quiz.questions[0].questionText = 'Edited question';
+    expect(isGeneratedH5PDraftOutdated({ sourceFingerprint: fingerprint }, quiz)).toBe(true);
+  });
+
+  test('ignores unrelated Quiz timestamp changes and marks legacy drafts out of date', () => {
+    const quiz = {
+      name: 'Week 1',
+      containerMode: 'column',
+      updatedAt: new Date('2026-08-01T00:00:00Z'),
+      questions: [],
+      learningObjectives: []
+    };
+    const sourceFingerprint = buildH5PSourceFingerprint(quiz);
+
+    quiz.updatedAt = new Date('2026-08-05T00:00:00Z');
+    expect(isGeneratedH5PDraftOutdated({ sourceFingerprint }, quiz)).toBe(false);
+    expect(isGeneratedH5PDraftOutdated({ sourceFingerprint: null }, quiz)).toBe(true);
+  });
+
+  test('marks a generated draft out of date when the effective H5P target format changes', () => {
+    const quiz = {
+      name: 'Week 1',
+      containerMode: 'column',
+      settings: { targetFormat: 'column' },
+      questions: [],
+      learningObjectives: []
+    };
+    const sourceFingerprint = buildH5PSourceFingerprint(quiz);
+
+    quiz.settings.targetFormat = 'standalone';
+    expect(isGeneratedH5PDraftOutdated({ sourceFingerprint }, quiz)).toBe(true);
+  });
+
   test('normalizes the official editor save payload', () => {
     expect(normalizeEditorPayload({
       library: 'H5P.MultiChoice 1.16',

@@ -1436,6 +1436,7 @@ export interface H5PStudioContent {
   folderId?: string | null;
   quizId?: string | null;
   sourceQuizUpdatedAt?: string | null;
+  sourceFingerprint?: string | null;
   lastEditedAt: string;
   createdAt: string;
   updatedAt: string;

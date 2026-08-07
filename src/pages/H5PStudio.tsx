@@ -21,6 +21,12 @@ import { usePubSub } from '../hooks/usePubSub';
 import { useSystemDialog } from '../components/system-dialog/SystemDialogProvider';
 import '../styles/pages/H5PStudio.css';
 
+function formatStudioTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown edit time';
+  return `Edited ${date.toLocaleString()}`;
+}
+
 const H5PStudio = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const editorRef = useRef<H5PEditorUI | null>(null);
@@ -260,8 +266,9 @@ const H5PStudio = () => {
                 >
                   <span className="h5p-studio-content-title">{content.title}</span>
                   <span className="h5p-studio-content-meta">
-                    {content.mainLibrary || 'H5P content'} · {content.source === 'generated' ? 'From CREATE' : content.source}
+                    {content.mainLibrary || 'H5P content'} · {content.source === 'generated' ? 'Studio draft' : content.source}
                   </span>
+                  <span className="h5p-studio-content-time">{formatStudioTimestamp(content.lastEditedAt)}</span>
                 </button>
               ))}
             </div>

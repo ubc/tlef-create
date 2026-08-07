@@ -12,11 +12,13 @@ import { fileURLToPath } from 'url';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 import {
   getDirectStandaloneQuestionTypes,
+  getH5PTypeAdapter,
   listH5PTypeAdapters
 } from '../config/h5pTypeAdapterRegistry.js';
 import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
 import { normalizeMarkTheWordsText } from './questionContentService.js';
 import { convertGuessTheAnswerToH5P } from './h5pTypeAdapters/guessTheAnswerAdapter.js';
+import { resolveNativeH5PContainerMode } from './h5pNativeDocumentConfig.js';
 
 const SERVICE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_H5P_LIBRARY_PATH = path.resolve(SERVICE_DIR, '../h5p-libs');
@@ -42,22 +44,60 @@ function mapMultipleChoiceAnswers(options = []) {
   }));
 }
 
+function getDeterministicOrderingItems(question, items) {
+  if (items.length < 2) return [...items];
+
+  const seed = question?._id?.toString?.() || question?.questionText || 'ordering';
+  const shuffled = items
+    .map((item, index) => ({
+      item,
+      index,
+      key: crypto.createHash('sha256')
+        .update(`${seed}:${index}:${String(item)}`)
+        .digest('hex')
+    }))
+    .sort((left, right) => left.key.localeCompare(right.key) || left.index - right.index)
+    .map(entry => entry.item);
+
+  // Avoid presenting an already-correct sequence while keeping repeated builds
+  // deterministic for Preview, Studio, and Download.
+  if (shuffled.every((item, index) => item === items[index])) {
+    shuffled.push(shuffled.shift());
+  }
+  return shuffled;
+}
+
 /**
- * Build the native H5P document shared by package export and Lumi storage.
+ * Build the native H5P document shared by Review Preview, package export, and
+ * Lumi storage.
  * No archive or temporary file is created here.
  *
  * @param {Object} quiz - Populated quiz document
  * @param {Object} [options] - Optional config
  * @param {string} [options.libraryPath] - Override library directory (useful for tests)
+ * @param {string} [options.containerMode] - Override the saved container for temporary previews
  * @returns {Promise<{library: string, metadata: Object, parameters: Object, packaging: Object}>}
  */
 export async function buildNativeH5PDocument(quiz, options = {}) {
     // Classify questions
-    const containerMode = quiz.containerMode || 'column';
+    const containerMode = resolveNativeH5PContainerMode(quiz, options.containerMode);
     const flashcardQuestions = quiz.questions.filter(q => q.type === 'flashcard');
     const nonFlashcardQuestions = quiz.questions.filter(q => q.type !== 'flashcard');
     const hasMixedContent = flashcardQuestions.length > 0 && nonFlashcardQuestions.length > 0;
     const isFlashcardOnly = flashcardQuestions.length > 0 && nonFlashcardQuestions.length === 0;
+
+    if (containerMode === 'standalone') {
+      const standaloneQuestion = quiz.questions[0];
+      const adapter = standaloneQuestion ? getH5PTypeAdapter(standaloneQuestion.type) : null;
+      if (
+        quiz.questions.length !== 1
+        || !adapter?.containers.includes('standalone')
+      ) {
+        const error = new Error('Standalone H5P requires exactly one Standalone-compatible question.');
+        error.code = 'INVALID_STANDALONE_H5P_SOURCE';
+        throw error;
+      }
+    }
 
     // Determine needed libraries
     const questionTypes = new Set(quiz.questions.map(q => q.type));
@@ -163,7 +203,11 @@ export async function buildNativeH5PDocument(quiz, options = {}) {
     // Types that should be exported standalone (without Column wrapper)
     const standaloneTypes = getDirectStandaloneQuestionTypes();
     const singleType = uniqueNonFlashcardTypes.size === 1 ? [...uniqueNonFlashcardTypes][0] : null;
-    const isSingleType = !hasMixedContent && singleType && standaloneTypes.has(singleType) && flashcardQuestions.length === 0;
+    const isSingleType = !hasMixedContent
+      && nonFlashcardQuestions.length === 1
+      && singleType
+      && standaloneTypes.has(singleType)
+      && flashcardQuestions.length === 0;
 
     let h5pJson;
     let contentJson;
@@ -691,11 +735,7 @@ export function generateH5PQuestionSet(questions) {
       const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
       const correctOrder = question.content?.correctOrder || items;
 
-      const shuffledItems = [...items];
-      for (let i = shuffledItems.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledItems[i], shuffledItems[j]] = [shuffledItems[j], shuffledItems[i]];
-      }
+      const shuffledItems = getDeterministicOrderingItems(question, items);
 
       let textField = "";
       shuffledItems.forEach((item, index) => {
@@ -1052,11 +1092,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
     const items = question.content?.items || ['Item 1', 'Item 2', 'Item 3'];
     const correctOrder = question.content?.correctOrder || items;
 
-    const shuffledItems = [...items];
-    for (let i = shuffledItems.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledItems[i], shuffledItems[j]] = [shuffledItems[j], shuffledItems[i]];
-    }
+    const shuffledItems = getDeterministicOrderingItems(question, items);
 
     let textField = "";
     shuffledItems.forEach((item, index) => {
@@ -1357,7 +1393,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
         "overallFeedback": [{ "from": 0, "to": 100 }],
         "solution": {
           "introduction": "Sample answer:",
-          "sample": question.content?.sampleAnswer || ''
+          "sample": escapeHtml(question.content?.sampleAnswer || '')
         },
         "keywords": keywords,
         "behaviour": {
@@ -1696,7 +1732,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
 
       // Branching Question node
       let alternatives = (node.alternatives || []).map(alt => ({
-        "text": alt.text || '',
+        "text": escapeHtml(alt.text || ''),
         "nextContentId": alt.nextContentId ?? -1,
         "feedback": {
           "title": alt.feedback ? `<p>${escapeHtml(alt.feedback)}</p>` : '',
@@ -1850,7 +1886,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
               "title": "Key Learning Point"
             }
           },
-          "title": keyPoint.title
+          "title": escapeHtml(keyPoint.title)
         });
       });
     } else {
@@ -1894,7 +1930,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
               "title": "Summary Text"
             }
           },
-          "title": question.content?.title || "Summary"
+          "title": escapeHtml(question.content?.title || "Summary")
         });
       }
     }
