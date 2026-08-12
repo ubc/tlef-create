@@ -16,6 +16,10 @@ File upload and content processing are separate stages. After a file reaches 100
 
 If processing remains pending, refresh once before retrying. Re-uploading the same source repeatedly can create duplicate evidence and should be avoided.
 
+If an administrator changes CREATE's retrieval model, previously completed
+materials may need to be reprocessed once before they can supply evidence from
+the new vector index. The original material does not need to be uploaded again.
+
 ## Assign materials to a learning object
 
 Open the learning object's Materials tab and select the course materials that should ground that object. Assignment does not copy the source; it connects the existing course material to the learning object.

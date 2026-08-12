@@ -143,8 +143,9 @@ export const RATE_LIMITS = {
 export const QDRANT_CONFIG = {
   URL: process.env.QDRANT_URL || 'http://localhost:6333',
   API_KEY: process.env.QDRANT_API_KEY || 'tlef-qdrant-2024',
-  COLLECTION_NAME: 'course-materials',
-  VECTOR_SIZE: 384, // sentence-transformers/all-MiniLM-L6-v2 dimension
+  COLLECTION_NAME: process.env.EMBEDDINGS_COLLECTION_NAME
+    || 'quiz-materials-openai-text-embedding-3-small-1536',
+  VECTOR_SIZE: parseInt(process.env.EMBEDDINGS_DIMENSIONS, 10) || 1536,
   DISTANCE: 'Cosine'
 };
 

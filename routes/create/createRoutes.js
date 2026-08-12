@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { RATE_LIMITS, HTTP_STATUS, ERROR_CODES } from './config/constants.js';
+import { resolveEmbeddingConfig } from './config/embeddingConfig.js';
 import { errorResponse } from './utils/responseFormatter.js';
 import { auditMutations } from './middleware/audit.js';
 
@@ -239,7 +240,8 @@ router.post('/debug/qdrant-clear', async (req, res) => {
 
     const qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333';
     const qdrantApiKey = process.env.QDRANT_API_KEY;
-    const collectionName = 'quiz-materials';
+    const embeddingConfig = resolveEmbeddingConfig();
+    const collectionName = embeddingConfig.collectionName;
 
     const headers = {
       'Content-Type': 'application/json'
@@ -273,7 +275,7 @@ router.post('/debug/qdrant-clear', async (req, res) => {
       headers: headers,
       body: JSON.stringify({
         vectors: {
-          size: 384, // sentence-transformers/all-MiniLM-L6-v2 embedding size
+          size: embeddingConfig.dimensions,
           distance: 'Cosine'
         }
       })

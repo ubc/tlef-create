@@ -4,10 +4,15 @@
  */
 
 import { RAGModule } from 'ubc-genai-toolkit-rag';
-import { EmbeddingsModule } from 'ubc-genai-toolkit-embeddings';
 import { DocumentParsingModule } from 'ubc-genai-toolkit-document-parsing';
 import { ConsoleLogger } from 'ubc-genai-toolkit-core';
 import Material from '../models/Material.js';
+import {
+  createToolkitEmbeddingsConfig,
+  getUnnamedQdrantVectorSize,
+  resolveEmbeddingConfig
+} from '../config/embeddingConfig.js';
+import OpenAIEmbeddingProvider from './openAIEmbeddingProvider.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { execFile } from 'child_process';
@@ -171,40 +176,41 @@ export class QuizRAGService {
     try {
       console.log('🚀 Initializing QuizRAGService...');
 
+      this.embeddingConfig = resolveEmbeddingConfig();
+      console.log('📊 Embedding configuration:', {
+        provider: this.embeddingConfig.provider,
+        model: this.embeddingConfig.model,
+        dimensions: this.embeddingConfig.dimensions,
+        collectionName: this.embeddingConfig.collectionName
+      });
+
       // fastembed skips download when the cache dir exists, even if the .onnx
       // file is missing (e.g. after an interrupted download). Delete the dir so
       // fastembed re-downloads the full archive on the next init call.
-      const modelCacheDir = path.join(process.cwd(), 'local_cache', 'fast-bge-small-en-v1.5');
-      const requiredModelFiles = [
-        'model_optimized.onnx',
-        'tokenizer.json',
-        'config.json'
-      ];
+      if (this.embeddingConfig.provider === 'fastembed') {
+        const modelCacheDir = path.join(process.cwd(), 'local_cache', this.embeddingConfig.model);
+        const requiredModelFiles = [
+          'model_optimized.onnx',
+          'tokenizer.json',
+          'config.json'
+        ];
 
-      let isModelCacheComplete = true;
-      for (const filename of requiredModelFiles) {
-        try {
-          await fs.access(path.join(modelCacheDir, filename));
-        } catch {
-          isModelCacheComplete = false;
-          console.log(`⚠️  FastEmbed cache missing required file: ${filename}`);
-          break;
+        let isModelCacheComplete = true;
+        for (const filename of requiredModelFiles) {
+          try {
+            await fs.access(path.join(modelCacheDir, filename));
+          } catch {
+            isModelCacheComplete = false;
+            console.log(`⚠️  FastEmbed cache missing required file: ${filename}`);
+            break;
+          }
+        }
+
+        if (!isModelCacheComplete) {
+          console.log('⚠️  FastEmbed model cache is incomplete — clearing and re-downloading...');
+          await fs.rm(modelCacheDir, { recursive: true, force: true });
         }
       }
-
-      if (!isModelCacheComplete) {
-        console.log('⚠️  FastEmbed model cache is incomplete — clearing and re-downloading...');
-        await fs.rm(modelCacheDir, { recursive: true, force: true });
-      }
-
-      // Initialize embeddings module using the static create method
-      console.log('📊 Initializing EmbeddingsModule...');
-      this.embeddings = await EmbeddingsModule.create({
-        providerType: 'fastembed',
-        model: 'sentence-transformers/all-MiniLM-L6-v2',
-        logger: this.logger
-      });
-      console.log('✅ EmbeddingsModule initialized');
 
       // Initialize document parser
       console.log('📄 Initializing DocumentParsingModule...');
@@ -218,7 +224,7 @@ export class QuizRAGService {
       console.log('🔍 Initializing RAGModule...');
       const qdrantConfig = {
         url: process.env.QDRANT_URL || 'http://localhost:6333',
-        collectionName: 'quiz-materials'
+        collectionName: this.embeddingConfig.collectionName
       };
       
       // Add API key if available
@@ -234,25 +240,37 @@ export class QuizRAGService {
         console.log('❌ No QDRANT_API_KEY found in environment');
         console.log('🔍 Available env vars:', Object.keys(process.env).filter(k => k.includes('QDRANT')));
       }
+
+      await this.assertQdrantCollectionDimensions(qdrantConfig);
       
       // Create RAG module instance using static create method
       const originalRagModule = await RAGModule.create({
         provider: 'qdrant',
         qdrantConfig: {
           ...qdrantConfig,
-          vectorSize: 384, // Correct size for fast-bge-small-en-v1.5 embeddings
+          vectorSize: this.embeddingConfig.dimensions,
           distanceMetric: 'Cosine'
         },
-        embeddingsConfig: {
-          providerType: 'fastembed',
-          model: 'fast-bge-small-en-v1.5',
-          logger: this.logger
-        },
+        embeddingsConfig: createToolkitEmbeddingsConfig(this.embeddingConfig, this.logger),
         logger: this.logger
       });
-      
-      // Apply vector format fix proactively to the embeddings module
-      if (originalRagModule.embeddingsModule && originalRagModule.embeddingsModule.embed) {
+
+      if (this.embeddingConfig.provider === 'openai') {
+        const openAIEmbeddings = new OpenAIEmbeddingProvider({
+          apiKey: this.embeddingConfig.apiKey,
+          endpoint: this.embeddingConfig.apiEndpoint,
+          model: this.embeddingConfig.model,
+          dimensions: this.embeddingConfig.dimensions,
+          batchSize: this.embeddingConfig.batchSize
+        });
+
+        // The toolkit creates its Qdrant provider internally. Replace its
+        // embedding dependency so the OpenAI v3 `dimensions` option is honored.
+        originalRagModule.embeddingsModule = openAIEmbeddings;
+        originalRagModule.ragProvider.embeddings = openAIEmbeddings;
+        this.embeddings = openAIEmbeddings;
+      } else if (originalRagModule.embeddingsModule?.embed) {
+        // Apply vector format fix proactively to the FastEmbed module.
         const originalEmbed = originalRagModule.embeddingsModule.embed.bind(originalRagModule.embeddingsModule);
         
         originalRagModule.embeddingsModule.embed = async function(texts) {
@@ -264,6 +282,7 @@ export class QuizRAGService {
         };
         
         console.log('🔧 Proactive vector format conversion applied to embeddings module');
+        this.embeddings = originalRagModule.embeddingsModule;
       }
       
       // Wrap with our vector format fixer (as additional safety)
@@ -282,6 +301,39 @@ export class QuizRAGService {
       this.embeddings = null;
       this.documentParser = null;
       this.ragModule = null;
+    }
+  }
+
+  async assertQdrantCollectionDimensions({ url, apiKey, collectionName }) {
+    const collectionUrl = new URL(
+      `/collections/${encodeURIComponent(collectionName)}`,
+      url
+    );
+    const headers = apiKey ? { 'api-key': apiKey } : {};
+    const response = await fetch(collectionUrl, { headers });
+
+    if (response.status === 404) return;
+    if (!response.ok) {
+      throw new Error(
+        `Could not inspect Qdrant collection ${collectionName}: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const payload = await response.json();
+    const existingSize = getUnnamedQdrantVectorSize(payload);
+
+    if (existingSize === undefined) {
+      throw new Error(
+        `Qdrant collection ${collectionName} does not expose a single unnamed vector size`
+      );
+    }
+
+    if (existingSize !== this.embeddingConfig.dimensions) {
+      throw new Error(
+        `Qdrant collection ${collectionName} uses ${existingSize}-dimension vectors, but `
+        + `${this.embeddingConfig.model} is configured for ${this.embeddingConfig.dimensions}. `
+        + 'Use a new EMBEDDINGS_COLLECTION_NAME or reindex the collection.'
+      );
     }
   }
 
@@ -1240,7 +1292,11 @@ export class QuizRAGService {
         pageCount: parsedPages.length || material.processingMetadata?.pageCount,
         chunkCount: chunks.length,
         parserVersion: parsedPages.length ? 'page-aware-v1' : 'section-aware-v1',
-        processedAt: new Date()
+        processedAt: new Date(),
+        embeddingProvider: this.embeddingConfig.provider,
+        embeddingModel: this.embeddingConfig.model,
+        embeddingDimensions: this.embeddingConfig.dimensions,
+        embeddingCollection: this.embeddingConfig.collectionName
       };
       await material.save();
       
@@ -1278,7 +1334,7 @@ export class QuizRAGService {
       try {
         const qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333';
         const qdrantApiKey = process.env.QDRANT_API_KEY;
-        const collectionName = 'quiz-materials';
+        const collectionName = this.embeddingConfig?.collectionName || 'quiz-materials';
         
         console.log(`🔧 Attempting direct Qdrant cleanup via REST API`);
         

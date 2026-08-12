@@ -106,6 +106,38 @@ After copying, if the user wants to use OpenAI:
    ollama pull llama3.1:8b
    ```
 
+### 3a.1 Embeddings
+
+CREATE uses OpenAI `text-embedding-3-small` by default for course-material
+retrieval. The default output is 1536 dimensions and is stored in a dedicated
+Qdrant collection:
+
+```dotenv
+EMBEDDINGS_PROVIDER=openai
+EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_DIMENSIONS=1536
+EMBEDDINGS_COLLECTION_NAME=quiz-materials-openai-text-embedding-3-small-1536
+```
+
+`EMBEDDINGS_API_KEY` and `EMBEDDINGS_API_ENDPOINT` are optional; when omitted,
+CREATE reuses `OPENAI_API_KEY`/`LLM_API_KEY` and the corresponding endpoint.
+FastEmbed remains available as a local fallback by setting
+`EMBEDDINGS_PROVIDER=fastembed`, which uses the legacy 384-dimension
+`quiz-materials` collection.
+
+OpenAI embeddings send the extracted course-material chunks and retrieval
+queries to the configured OpenAI-compatible endpoint. Confirm that the selected
+endpoint and deployment satisfy UBC privacy, residency, and retention
+requirements before enabling it for instructor content.
+
+Do not point a new embedding model at an existing collection with a different
+dimension. CREATE checks the existing Qdrant collection at startup and rejects
+the mismatch. A provider, model, or dimension change creates a new collection,
+so existing materials must be reprocessed through
+`POST /api/create/materials/:materialId/reprocess` before retrieval uses the new
+vectors. Keep the old collection until the reindex has been verified, then
+remove it through the normal Qdrant administration process.
+
 ### 3b. MongoDB
 
 If `tlef-mongodb-docker/.env` does not exist, create it with the dev defaults that

@@ -77,7 +77,11 @@ const materialSchema = new mongoose.Schema({
     pageCount: { type: Number },
     chunkCount: { type: Number },
     parserVersion: { type: String },
-    processedAt: { type: Date }
+    processedAt: { type: Date },
+    embeddingProvider: { type: String },
+    embeddingModel: { type: String },
+    embeddingDimensions: { type: Number },
+    embeddingCollection: { type: String }
   },
   
   // Qdrant Integration
