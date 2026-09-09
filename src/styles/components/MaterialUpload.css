@@ -211,6 +211,11 @@
     box-shadow: var(--shadow-sm);
 }
 
+.material-card-failed {
+    border-color: color-mix(in srgb, var(--color-destructive) 45%, var(--color-border));
+    background: color-mix(in srgb, var(--color-destructive) 4%, var(--color-background));
+}
+
 .material-info {
     display: flex;
     align-items: center;
@@ -359,12 +364,29 @@
     text-transform: uppercase;
 }
 
+.processing-badge.failed-badge {
+    background: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+}
+
+.material-processing-error {
+    margin-top: 4px;
+    color: var(--color-destructive);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+
 /* Material Actions */
 .material-actions {
     display: flex;
     gap: var(--spacing-xs);
     align-items: center;
     flex-shrink: 0;
+}
+
+.material-retry {
+    gap: 4px;
+    color: var(--color-destructive);
 }
 
 .material-preview {

@@ -3,25 +3,41 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { LearningObjectiveData } from './generationTypes';
 
 interface PromptAnalysisSectionProps {
-  questions: any[];
+  questions: PromptAnalysisQuestion[];
   learningObjectives: LearningObjectiveData[];
 }
 
+interface PromptAnalysisQuestion {
+  _id?: string;
+  type?: string;
+  order: number;
+  learningObjective?: string | { _id: string } | null;
+  learningObjectiveId?: string;
+  generationMetadata?: {
+    generationMethod?: string;
+    complexity?: string;
+    subObjective?: string;
+    focusArea?: string;
+    generationPrompt?: string;
+  };
+}
+
 export default function PromptAnalysisSection({ questions, learningObjectives }: PromptAnalysisSectionProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   // Group questions by LO
-  const questionsByLO = questions.reduce((acc, q) => {
-    const loId = q.learningObjective?._id || q.learningObjectiveId;
+  const questionsByLO = questions.reduce<Record<string, PromptAnalysisQuestion[]>>((acc, q) => {
+    const loId = (typeof q.learningObjective === 'string' ? q.learningObjective : q.learningObjective?._id) || q.learningObjectiveId;
+    if (!loId) return acc;
     if (!acc[loId]) {
       acc[loId] = [];
     }
     acc[loId].push(q);
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {});
 
   // Calculate method usage statistics
-  const methodUsage = questions.reduce((acc, q) => {
+  const methodUsage = questions.reduce<Record<string, number>>((acc, q) => {
     const method = q.generationMetadata?.generationMethod || 'template-based';
     acc[method] = (acc[method] || 0) + 1;
     return acc;
@@ -34,6 +50,7 @@ export default function PromptAnalysisSection({ questions, learningObjectives }:
         <p>See exactly how each question was generated and what prompts were used:</p>
         <button
           className="btn btn-ghost btn-sm"
+          aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
           {expanded ? (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Edit, Plus, Eye, Download, Upload, BookMarked, Boxes } from 'lucide-react';
+import { Plus, Download, Upload, BookMarked, Boxes } from 'lucide-react';
 import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi } from '../../services/api';
 import type { H5PStudioContent } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
@@ -39,7 +39,7 @@ import {
 } from '../../constants/questionTypeCapabilities';
 import '../../styles/components/ReviewEdit.css';
 
-const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
+const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: ReviewEditProps) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -58,7 +58,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
   const { showConfirm } = useSystemDialog();
 
-  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const viewMode = workflowMode === 'preview-export' ? 'preview' : 'edit';
   const [h5pDraftChoice, setH5PDraftChoice] = useState<{
     draft: H5PStudioContent;
     sourceOutdated: boolean;
@@ -84,7 +84,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
   );
   const exportTutorial = useFeatureOnboarding(
     'export',
-    questions.length > 0 && evidenceTutorial.isCompleted
+    questions.length > 0 && workflowMode === 'preview-export' && evidenceTutorial.isCompleted
   );
 
   // Sync containerMode from Redux once currentQuiz loads
@@ -605,9 +605,13 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
         <div className="card-header">
           <div className="review-header">
             <div>
-              <h3 className="card-title">Review & Edit Questions</h3>
+              <h3 className="card-title">
+                {workflowMode === 'preview-export' ? 'Preview & Export' : 'Review Questions'}
+              </h3>
               <p className="card-description">
-                Review generated questions and make final adjustments ({questions.length} questions loaded)
+                {workflowMode === 'preview-export'
+                  ? `Preview the current Quiz and choose a delivery option (${questions.length} question${questions.length === 1 ? '' : 's'})`
+                  : `Check, edit, regenerate, and reorder questions before delivery (${questions.length} question${questions.length === 1 ? '' : 's'} loaded)`}
               </p>
             </div>
             <div className="review-actions">
@@ -627,21 +631,13 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                 )}
               </div>
 
-              <button
-                className={`btn ${viewMode === 'preview' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setViewMode(viewMode === 'edit' ? 'preview' : 'edit')}
-                aria-pressed={viewMode === 'preview'}
-              >
-                {viewMode === 'edit' ? <Eye size={16} /> : <Edit size={16} />}
-                {viewMode === 'edit' ? 'Preview' : 'Back to edit'}
-              </button>
-              {deliveryTarget === 'h5p-package' && questions.length > 0 && (
+              {workflowMode === 'preview-export' && deliveryTarget === 'h5p-package' && questions.length > 0 && (
                 <button className="btn btn-outline" onClick={handleOpenH5PStudio} disabled={h5pStudioLoading}>
                   {h5pStudioLoading ? <span className="spinner-mini" /> : <Boxes size={16} />}
                   {h5pStudioLoading ? 'Preparing…' : 'Advanced H5P Editor'}
                 </button>
               )}
-              {viewMode === 'edit' && (
+              {workflowMode === 'review' && (
                 <button className="btn btn-outline" onClick={() => setShowManualAdd(true)}>
                   <Plus size={16} /> Add Question
                 </button>
@@ -670,7 +666,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
             </select>
           </div>
           <div className="questions-count">
-            {filteredQuestions.length} questions {filterByLOId !== null ? 'in this objective' : 'total'}
+            {filteredQuestions.length} question{filteredQuestions.length === 1 ? '' : 's'} {filterByLOId !== null ? 'in this objective' : 'total'}
           </div>
         </div>
 
@@ -697,7 +693,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
                   borderRadius: '8px',
                   background: '#f9fafb'
                 }}
-                title="H5P Learning Object Preview"
+                title="H5P Quiz Preview"
                 allow="fullscreen"
                 sandbox="allow-scripts"
               />
@@ -726,7 +722,7 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           )}
         </div>
 
-        {filteredQuestions.length > 0 && (
+        {workflowMode === 'preview-export' && filteredQuestions.length > 0 && (
           <FeatureCoachmark
             isOpen={exportTutorial.isActive}
             title="Publish in the format you need"
@@ -740,8 +736,8 @@ const ReviewEdit = ({ quizId, learningObjectives }: ReviewEditProps) => {
           >
             <div className="export-section">
               <div className="export-header">
-                <h4>Export Learning Object</h4>
-                <p>Export your completed learning object for use in other platforms</p>
+                <h4>Export Quiz</h4>
+                <p>Export your completed quiz for use in other platforms</p>
               </div>
 
               {/* Standalone-type warning */}

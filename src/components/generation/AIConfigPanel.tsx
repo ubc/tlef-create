@@ -1,50 +1,28 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Target, Trophy } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { AIConfig, LearningObjectiveData } from './generationTypes';
-import { getQuestionTypesForApproach } from '../../constants/questionTypeCapabilities';
 
 interface AIConfigPanelProps {
   aiConfig: AIConfig;
   onConfigChange: (config: AIConfig) => void;
   onGeneratePlan: () => void;
   isGenerating: boolean;
+  disabled?: boolean;
   learningObjectives: LearningObjectiveData[];
 }
-
-const APPROACH_CARDS = [
-  {
-    value: 'support' as const,
-    label: 'Support Learning',
-    icon: Sparkles,
-    description: 'Emphasize flashcards and summaries to help students memorize and understand key concepts',
-    color: '#3b82f6'
-  },
-  {
-    value: 'assess' as const,
-    label: 'Assess Understanding',
-    icon: Target,
-    description: 'Emphasize multiple-choice and discussion questions to evaluate comprehension',
-    color: '#8b5cf6'
-  },
-  {
-    value: 'gamify' as const,
-    label: 'Gamify Learning',
-    icon: Trophy,
-    description: 'Emphasize matching and ordering questions to create engaging, game-like experiences',
-    color: '#f59e0b'
-  }
-];
 
 export default function AIConfigPanel({
   aiConfig,
   onConfigChange,
   onGeneratePlan,
   isGenerating,
+  disabled = false,
   learningObjectives
 }: AIConfigPanelProps) {
   const [inputValue, setInputValue] = useState(aiConfig.totalQuestions.toString());
   const minQuestions = learningObjectives.length; // At least 1 per LO
   const maxQuestions = 100;
+  const isBusy = isGenerating || disabled;
 
   // Sync input value when aiConfig changes externally
   useEffect(() => {
@@ -72,10 +50,6 @@ export default function AIConfigPanel({
     }
   };
 
-  const handleApproachSelect = (approach: 'support' | 'assess' | 'gamify') => {
-    onConfigChange({ ...aiConfig, approach });
-  };
-
   const handleInstructionsChange = (value: string) => {
     onConfigChange({ ...aiConfig, additionalInstructions: value });
   };
@@ -83,14 +57,14 @@ export default function AIConfigPanel({
   return (
     <div className="ai-config-panel">
       <div className="ai-config-header">
-        <h3>AI Plan Configuration</h3>
+        <h3>Set quiz length and instructions</h3>
         <p className="ai-config-subtitle">
-          Configure how the AI should generate your question distribution plan
+          Generate an editable Blueprint using the teaching purpose and layout above. Existing questions are not changed by generating a plan.
         </p>
       </div>
 
       <div className="ai-config-section">
-        <label className="ai-config-label">
+        <label className="ai-config-label" htmlFor="ai-question-count">
           How many questions do you want to generate?
         </label>
         <label className="auto-count-toggle">
@@ -102,12 +76,13 @@ export default function AIConfigPanel({
               autoRecommendTotalQuestions: e.target.checked,
               autoRecommendTotalQuestionsUserSet: true
             })}
-            disabled={isGenerating}
+            disabled={isBusy}
           />
           Let CREATE recommend the quiz length based on LO complexity and materials
         </label>
         <div className="total-questions-input">
           <input
+            id="ai-question-count"
             type="text"
             inputMode={aiConfig.autoRecommendTotalQuestions ? 'text' : 'numeric'}
             pattern={aiConfig.autoRecommendTotalQuestions ? undefined : '[0-9]*'}
@@ -123,7 +98,7 @@ export default function AIConfigPanel({
                 onConfigChange({ ...aiConfig, totalQuestions: minQuestions });
               }
             }}
-            disabled={isGenerating || aiConfig.autoRecommendTotalQuestions}
+            disabled={isBusy || aiConfig.autoRecommendTotalQuestions}
             className={`question-count-input ${aiConfig.autoRecommendTotalQuestions ? 'auto-value' : ''}`}
             placeholder={`${minQuestions}-${maxQuestions}`}
           />
@@ -141,53 +116,14 @@ export default function AIConfigPanel({
       </div>
 
       <div className="ai-config-section">
-        <label className="ai-config-label">
-          What pedagogical approach should the AI use?
-        </label>
-        <div className="approach-cards">
-          {APPROACH_CARDS.map(card => {
-            const Icon = card.icon;
-            const isSelected = aiConfig.approach === card.value;
-
-            return (
-              <button
-                key={card.value}
-                className={`approach-card ${isSelected ? 'selected' : ''}`}
-                onClick={() => handleApproachSelect(card.value)}
-                disabled={isGenerating}
-                style={{
-                  borderColor: isSelected ? card.color : undefined,
-                  backgroundColor: isSelected ? `${card.color}10` : undefined
-                }}
-              >
-                <div className="approach-card-icon" style={{ color: card.color }}>
-                  <Icon size={24} />
-                </div>
-                <div className="approach-card-content">
-                  <h4 className="approach-card-title">{card.label}</h4>
-                  <p className="approach-card-description">{card.description}</p>
-                  <div className="approach-card-types">
-                    {getQuestionTypesForApproach(card.value).map(type => (
-                      <span key={type.value} className="approach-type-badge">
-                        {type.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="ai-config-section">
-        <label className="ai-config-label">
+        <label className="ai-config-label" htmlFor="ai-plan-instructions">
           Additional Instructions (Optional)
         </label>
         <textarea
+          id="ai-plan-instructions"
           value={aiConfig.additionalInstructions || ''}
           onChange={(e) => handleInstructionsChange(e.target.value)}
-          disabled={isGenerating}
+          disabled={isBusy}
           className="additional-instructions-textarea"
           placeholder="e.g., Focus more on LO3, include more matching questions, avoid true/false..."
           rows={4}
@@ -201,7 +137,7 @@ export default function AIConfigPanel({
       <div className="ai-config-action">
         <button
           onClick={onGeneratePlan}
-          disabled={isGenerating}
+          disabled={isBusy}
           className="btn btn-primary generate-plan-btn"
         >
           {isGenerating ? (

@@ -7,7 +7,10 @@ import QuestionGeneration from './generation';
 import planSlice from '../store/slices/planSlice';
 import appSlice from '../store/slices/appSlice';
 import questionSlice, { setQuestionsForQuiz } from '../store/slices/questionSlice';
-import { quizApi, type Question } from '../services/api';
+import { quizApi, questionsApi, plansApi, type Question } from '../services/api';
+
+const dialogMocks = vi.hoisted(() => ({ confirm: vi.fn(), notify: vi.fn() }));
+vi.mock('./system-dialog/SystemDialogProvider', () => ({ useSystemDialog: () => ({ showConfirm: dialogMocks.confirm }) }));
 
 // Mock the API module
 vi.mock('../services/api', () => ({
@@ -52,7 +55,7 @@ vi.mock('../services/api', () => ({
 // Mock the hooks
 vi.mock('../hooks/usePubSub', () => ({
   usePubSub: () => ({
-    showNotification: vi.fn(),
+    showNotification: dialogMocks.notify,
     subscribe: vi.fn().mockReturnValue('mock-token'),
     unsubscribe: vi.fn(),
     publish: vi.fn(),
@@ -79,6 +82,7 @@ describe('QuestionGeneration Component - Redux Integration', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    dialogMocks.confirm.mockReset().mockResolvedValue(false);
     store = configureStore({
       reducer: {
         plan: planSlice,
@@ -213,8 +217,9 @@ describe('QuestionGeneration Component - Redux Integration', () => {
         _id: defaultProps.quizId,
         settings: {
           planMode: 'manual',
-          targetFormat: 'column',
+          targetFormat: 'interactive-book',
           deliveryTarget: 'h5p-package',
+          aiConfig: { approach: 'gamify', totalQuestions: 12, additionalInstructions: 'Keep my saved teaching instructions.' },
           planItems: [{
             type: 'multiple-choice',
             learningObjective: 'lo-1',
@@ -232,13 +237,58 @@ describe('QuestionGeneration Component - Redux Integration', () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole('button', {
+    const backToPlan = await screen.findByRole('button', {
       name: 'Back to AI Plan Configuration'
-    }));
+    });
+    expect(screen.getByRole('button', { name: 'Show Details' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to Review' }));
+    expect(defaultProps.onQuestionsGenerated).toHaveBeenCalledOnce();
+    fireEvent.click(backToPlan);
 
     await waitFor(() => {
       expect(container.querySelector('.count-input')).toHaveValue(1);
     });
+    expect(screen.getByRole('radio', { name: 'GAMIFY' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Interactive Book', exact: true })).toBeChecked();
+    expect(screen.getByLabelText('Additional Instructions (Optional)')).toHaveValue('Keep my saved teaching instructions.');
+    await waitFor(() => expect(container.querySelector('.generation-setup-start')).toHaveFocus());
+    expect(questionsApi.deleteQuestion).not.toHaveBeenCalled();
+    expect(plansApi.generateAIPlan).not.toHaveBeenCalled();
+    expect(quizApi.updateQuiz).not.toHaveBeenCalled();
+  });
+
+  it('keeps unsaved purpose and layout choices when the objective props refresh', async () => {
+    const view = render(<Provider store={store}><QuestionGeneration {...defaultProps} /></Provider>);
+    await screen.findByText(/Generate \d+ Questions/);
+    fireEvent.click(screen.getByRole('radio', { name: 'ASSESS' }));
+    screen.getByRole('radio', { name: 'Interactive Book', exact: true }).focus();
+    fireEvent.click(screen.getByRole('radio', { name: 'Interactive Book', exact: true }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Interactive Book', exact: true })).toBeChecked());
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Interactive Book', exact: true })).toHaveFocus());
+    const loads = vi.mocked(quizApi.getQuiz).mock.calls.length;
+    view.rerender(<Provider store={store}><QuestionGeneration {...defaultProps} learningObjectives={defaultProps.learningObjectives.map(lo => ({ ...lo }))} /></Provider>);
+    expect(screen.getByRole('radio', { name: 'ASSESS' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Interactive Book', exact: true })).toBeChecked();
+    expect(quizApi.getQuiz).toHaveBeenCalledTimes(loads);
+    fireEvent.click(screen.getByRole('radio', { name: 'H5P Package', exact: true }));
+    expect(screen.getByRole('radio', { name: 'Interactive Book', exact: true })).toBeChecked();
+    expect(dialogMocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('does not remove questions when a layout confirmation is cancelled (approve plan: %s)', async approvePlan => {
+    store.dispatch(setQuestionsForQuiz({ quizId: defaultProps.quizId, questions: [{ _id: 'flashcard-1', quiz: defaultProps.quizId, learningObjective: 'lo-1', type: 'flashcard', questionText: 'Keep this card', content: {}, order: 0 } as Question] }));
+    vi.mocked(quizApi.getQuiz).mockResolvedValueOnce({ quiz: { _id: defaultProps.quizId, settings: { targetFormat: 'column', planItems: [{ type: 'flashcard', learningObjective: 'lo-1', count: 1 }] } } } as never);
+    render(<Provider store={store}><QuestionGeneration {...defaultProps} /></Provider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to AI Plan Configuration' }));
+    await screen.findByText('Set quiz length and instructions');
+    dialogMocks.confirm.mockResolvedValueOnce(approvePlan).mockResolvedValueOnce(false);
+    fireEvent.click(screen.getByRole('radio', { name: 'Question Set', exact: true }));
+    await waitFor(() => expect(dialogMocks.confirm).toHaveBeenCalledTimes(approvePlan ? 2 : 1));
+    expect(dialogMocks.confirm.mock.calls[0][0].title).toBe('Update incompatible plan items?');
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Column', exact: true })).toBeEnabled());
+    expect(screen.getByRole('radio', { name: 'Column', exact: true })).toBeChecked();
+    expect(questionsApi.deleteQuestion).not.toHaveBeenCalled();
+    expect(store.getState().question.questionsByQuiz[defaultProps.quizId]).toHaveLength(1);
   });
 
   it('should clean up state on unmount during generation', async () => {

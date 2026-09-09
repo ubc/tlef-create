@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,7 +20,9 @@ vi.mock('../hooks/usePubSub', () => ({
   }),
 }));
 
-vi.mock('./CreateCourseModal', () => ({ default: () => null }));
+vi.mock('./CreateCourseModal', () => ({
+  default: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div>Create course modal</div> : null
+}));
 vi.mock('./SearchModal', () => ({ default: () => null }));
 
 vi.mock('../services/api', () => {
@@ -151,5 +153,22 @@ describe('Sidebar Redux quiz synchronization', () => {
         expect.any(Function)
       );
     });
+  });
+
+  it('opens course creation when the Dashboard empty-state requests it', async () => {
+    const store = configureStore({ reducer: { app: appReducer, quiz: quizReducer } });
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/']}>
+          <Sidebar />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledWith('open-create-course', expect.any(Function)));
+    const openCallback = mocks.subscribe.mock.calls.find(([event]) => event === 'open-create-course')?.[1];
+    act(() => openCallback?.());
+
+    expect(screen.getByText('Create course modal')).toBeInTheDocument();
   });
 });

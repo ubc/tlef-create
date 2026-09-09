@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import fs from 'fs/promises';
 import multer from 'multer';
 import path from 'path';
@@ -11,6 +13,10 @@ import { HTTP_STATUS } from '../config/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { errorResponse, notFoundResponse, successResponse } from '../utils/responseFormatter.js';
 import { buildNativeH5PDocument } from '../services/h5pExportService.js';
+import { getStudioCatalog } from '../services/h5pStudioCatalog.js';
+import { generateStudioActivity } from '../services/h5pStudioAIService.js';
+import { studioMediaPaths, validateStudioMediaTemplate } from '../services/h5pStudioSemantics.js';
+import llmService from '../services/llmService.js';
 import {
   getEditor,
   getH5PExpressRouter,
@@ -114,6 +120,101 @@ async function removeImportedContentOnFailure(contentId) {
 
 router.use(authenticateToken);
 
+router.get('/ai/catalog', (_req, res) => successResponse(res, { types: getStudioCatalog().types }));
+
+const aiLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 10,
+  keyGenerator: req => String(req.user.id),
+  handler: (_req, res) => errorResponse(res, 'Please wait before generating more Studio drafts.', 'H5P_AI_RATE_LIMIT', 429)
+});
+const activeGenerations = new Set();
+
+// Lumi's new-content web component always opens the Hub. A saved empty draft
+// lets the official editor open an exact compatible version for media setup.
+router.post('/ai/template', aiLimiter, asyncHandler(async (req, res) => {
+  const type = getStudioCatalog().types.find(item => item.library === req.body?.library && item.mode === 'template');
+  if (!type) return errorResponse(res, 'Choose an available media/template type.', 'H5P_AI_INPUT', 400);
+  const editor = getEditor();
+  if (!editor) return errorResponse(res, 'The H5P editor is still starting.', 'H5P_EDITOR_NOT_READY', 503);
+  try {
+    const saved = await saveNativeH5PDocumentAndRecord({
+      editor, user: toLumiUser(req.user), cleanupUser: getSystemUser(),
+      document: { library: type.library, parameters: {}, metadata: { title: `${type.title} template`, license: 'U' } },
+      createRecord: result => H5PContent.create({ owner: req.user.id, lumiContentId: result.id, title: `${type.title} template`, mainLibrary: type.machineName, source: 'editor', status: 'draft' })
+    });
+    finalizeContentOwnership(saved.result.id);
+    return successResponse(res, { content: serializeH5PContent(saved.record) }, 'Add your media and complete the required fields before using this template.', 201);
+  } catch {
+    return errorResponse(res, 'The template could not be prepared. Your existing content is unchanged.', 'H5P_TEMPLATE_FAILED', 502);
+  }
+}));
+
+router.post('/ai/generate', aiLimiter, asyncHandler(async (req, res) => {
+  const owner = String(req.user.id);
+  if (activeGenerations.has(owner)) return errorResponse(res, 'A Studio draft is already being generated. Please wait.', 'H5P_AI_BUSY', 409);
+  const editor = getEditor();
+  if (!editor) return errorResponse(res, 'The H5P editor is still starting.', 'H5P_EDITOR_NOT_READY', 503);
+  const { library, instructions, templateContentId, quizId } = req.body || {};
+  let template;
+  let quiz;
+  if (templateContentId) {
+    if (typeof templateContentId !== 'string' || templateContentId.length > 200) return errorResponse(res, 'Invalid template.', 'H5P_AI_INPUT', 400);
+    const owned = await getOwnedContent(templateContentId, owner);
+    if (!owned) return notFoundResponse(res, 'H5P template');
+    template = await editor.getContent(templateContentId, toLumiUser(req.user));
+  }
+  if (quizId) {
+    if (!mongoose.isValidObjectId(quizId)) return errorResponse(res, 'Invalid Quiz.', 'H5P_AI_INPUT', 400);
+    quiz = await loadQuizForEditor(quizId, owner);
+    if (!quiz) return notFoundResponse(res, 'Quiz');
+  }
+  if (activeGenerations.has(owner)) return errorResponse(res, 'A Studio draft is already being generated. Please wait.', 'H5P_AI_BUSY', 409);
+  activeGenerations.add(owner);
+  let record;
+  try {
+    const context = quiz ? JSON.stringify({
+      title: quiz.name,
+      objectives: quiz.learningObjectives.map(objective => objective.text),
+      questions: quiz.questions.slice(0, 20).map(question => ({ text: question.questionText, content: question.content, explanation: question.explanation }))
+    }) : '';
+    const generated = await generateStudioActivity({
+      library, instructions, template, templateContentId, context, userId: owner,
+      complete: options => llmService.streamCompletion(options)
+    });
+    const expectedMediaCount = studioMediaPaths(generated.document.parameters).length;
+    const saved = await saveNativeH5PDocumentAndRecord({
+      editor, document: generated.document, user: toLumiUser(req.user), cleanupUser: getSystemUser(),
+      createRecord: result => H5PContent.create({
+        owner, lumiContentId: result.id, title: generated.document.metadata.title,
+        mainLibrary: library.split(' ')[0], source: 'ai-studio', status: 'draft',
+        folder: quiz?.folder || null, quiz: quiz?._id || null,
+        aiGeneration: { ...generated.provenance, templateContentId: templateContentId || undefined }
+      })
+    });
+    record = saved.record;
+    finalizeContentOwnership(saved.result.id);
+    // Lumi can silently strip a failed media copy. Do not return a successful
+    // AI draft unless every retained media reference survived and exists.
+    const persisted = await editor.getContent(saved.result.id, toLumiUser(req.user));
+    const copiedMedia = studioMediaPaths(persisted.params.params);
+    if (copiedMedia.length !== expectedMediaCount) throw new Error('Media copy was incomplete.');
+    for (const file of copiedMedia) {
+      if (/^https:\/\//.test(file)) continue;
+      if (!file || file.split('/').includes('..') || !(await editor.contentManager.contentFileExists(saved.result.id, file))) throw new Error('Media copy was incomplete.');
+    }
+    return successResponse(res, { content: serializeH5PContent(record) }, 'AI draft created. Review it in the editor before use.', 201);
+  } catch (error) {
+    if (record) {
+      await removeImportedContentOnFailure(record.lumiContentId);
+      await H5PContent.deleteOne({ _id: record._id, owner });
+    }
+    const expected = ['H5P_AI_INVALID', 'H5P_AI_INPUT', 'H5P_AI_TEMPLATE_REQUIRED', 'NO_API_KEY'].includes(error.code);
+    return errorResponse(res, expected ? error.message : 'The AI draft could not be created. Check your AI model/key and try a smaller activity. Your original content is unchanged.', expected ? error.code : 'H5P_AI_FAILED', expected ? (error.status || 422) : 502);
+  } finally {
+    activeGenerations.delete(owner);
+  }
+}));
+
 // H5P Core AJAX, library, temporary-file, and editor asset routes.
 router.use('/runtime', handleRuntimeUpload, attachLumiUser, delegateToLumiRuntime);
 
@@ -167,6 +268,7 @@ router.post('/contents', asyncHandler(async (req, res) => {
   let normalized;
   try {
     normalized = normalizeEditorPayload(req.body);
+    validateStudioMediaTemplate(normalized.library, normalized.parameters, getStudioCatalog());
   } catch (error) {
     return errorResponse(res, error.message, error.code, HTTP_STATUS.BAD_REQUEST);
   }
@@ -204,6 +306,7 @@ router.patch('/contents/:contentId', asyncHandler(async (req, res) => {
   let normalized;
   try {
     normalized = normalizeEditorPayload(req.body);
+    validateStudioMediaTemplate(normalized.library, normalized.parameters, getStudioCatalog());
   } catch (error) {
     return errorResponse(res, error.message, error.code, HTTP_STATUS.BAD_REQUEST);
   }

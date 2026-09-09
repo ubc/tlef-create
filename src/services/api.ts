@@ -29,13 +29,26 @@ export interface FolderQuizSummary {
   _id: string;
   name?: string;
   questions?: string[];
+  materials?: string[];
+  learningObjectives?: string[];
+  status?: Quiz['status'];
+  progress?: Quiz['progress'];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FolderMaterialSummary {
+  _id: string;
+  name?: string;
+  processingStatus?: Material['processingStatus'];
+  updatedAt?: string;
 }
 
 export interface Folder {
   _id: string;
   name: string;
   instructor: string;
-  materials: string[];
+  materials: Array<string | FolderMaterialSummary>;
   quizzes: Array<string | FolderQuizSummary>;
   stats: {
     totalQuizzes: number;
@@ -844,6 +857,12 @@ export const materialsApi = {
     return response.data;
   },
 
+  // POST /api/create/materials/:id/reprocess - Retry parsing and embedding
+  reprocessMaterial: async (id: string): Promise<{ material: Material }> => {
+    const response = await apiClient.post<{ success: boolean; data: { material: Material }; message: string }>(`/materials/${id}/reprocess`, {});
+    return response.data;
+  },
+
   // GET /api/create/materials/allowed-domains - Get allowed URL domains
   getAllowedDomains: async (): Promise<{ domains: string[] | null }> => {
     const response = await apiClient.get<{ success: boolean; data: { domains: string[] | null }; message: string }>('/materials/allowed-domains');
@@ -1431,7 +1450,7 @@ export interface H5PStudioContent {
   contentId: string;
   title: string;
   mainLibrary?: string | null;
-  source: 'editor' | 'import' | 'generated';
+  source: 'editor' | 'import' | 'generated' | 'ai-studio';
   status: 'draft' | 'ready';
   folderId?: string | null;
   quizId?: string | null;
@@ -1456,7 +1475,35 @@ export interface H5PStudioSaveResult {
   content: H5PStudioContent;
 }
 
+export interface H5PStudioActivityType {
+  library: string;
+  machineName: string;
+  title: string;
+  version: string;
+  category: string;
+  mode: 'generate' | 'template' | 'unavailable';
+  guidance: string;
+  problems: string[];
+}
+
+export interface H5PStudioAIRequest {
+  library: string;
+  instructions: string;
+  templateContentId?: string;
+  quizId?: string;
+}
+
 export const h5pEditorApi = {
+  getActivityCatalog: async (): Promise<ApiResponse<{ types: H5PStudioActivityType[] }>> => {
+    return await apiClient.get('/h5p-editor/ai/catalog');
+  },
+
+  generateActivity: async (request: H5PStudioAIRequest): Promise<ApiResponse<{ content: H5PStudioContent }>> => {
+    return await apiClient.post('/h5p-editor/ai/generate', request);
+  },
+  prepareTemplate: async (library: string): Promise<ApiResponse<{ content: H5PStudioContent }>> => {
+    return await apiClient.post('/h5p-editor/ai/template', { library });
+  },
   listContents: async (): Promise<ApiResponse<{ contents: H5PStudioContent[] }>> => {
     return await apiClient.get('/h5p-editor/contents');
   },

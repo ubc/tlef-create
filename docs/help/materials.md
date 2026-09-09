@@ -14,7 +14,7 @@ Cloud-storage sharing links, direct image/audio/video files, and archive files a
 
 File upload and content processing are separate stages. After a file reaches 100% upload, CREATE parses its content, creates retrievable chunks, and indexes them. URL and pasted-text materials are also processed before use. Do not generate grounded objectives or questions from a material until it reports a completed or ready state.
 
-If processing remains pending, refresh once before retrying. Re-uploading the same source repeatedly can create duplicate evidence and should be avoided.
+If processing remains pending, refresh once before retrying. If a source shows **Processing failed**, read the visible reason and select **Retry** on its material card. Re-uploading the same source repeatedly can create duplicate evidence and should be avoided. Learning-objective generation stays unavailable while an assigned source is pending or failed, but objectives can still be imported or entered manually.
 
 If an administrator changes CREATE's retrieval model, previously completed
 materials may need to be reprocessed once before they can supply evidence from
@@ -22,7 +22,7 @@ the new vector index. The original material does not need to be uploaded again.
 
 ## Assign materials to a learning object
 
-Open the learning object's Materials tab and select the course materials that should ground that object. Assignment does not copy the source; it connects the existing course material to the learning object.
+Open Step 1, **Materials**, in the Learning Object workflow and select the course materials that should ground that object. Assignment does not copy the source; it connects the existing course material to the learning object.
 
 Choose the smallest relevant set. Unrelated, outdated, or duplicate materials can make retrieval less focused. If two sources conflict, remove the obsolete source or make the intended priority explicit in the one-time generation instructions.
 

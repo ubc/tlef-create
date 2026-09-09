@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Link, FileText, X, Plus, Loader2, Eye } from 'lucide-react';
+import { Upload, Link, FileText, X, Plus, Loader2, Eye, RotateCcw } from 'lucide-react';
 import { usePubSub } from '../hooks/usePubSub';
 import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
 import { materialsApi } from '../services/api';
@@ -16,6 +16,7 @@ interface Material {
   uploadProgress?: number;
   isUploading?: boolean;
   processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  processingError?: string;
   parserVersion?: string;
 }
 
@@ -26,15 +27,24 @@ interface MaterialUploadProps {
     onProgress?: (progress: number) => void
   ) => void;
   onRemoveMaterial: (id: string) => void;
+  onMaterialReprocessed?: () => void | Promise<void>;
+  embedded?: boolean;
 }
 
-const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: MaterialUploadProps) => {
+const MaterialUpload = ({
+  materials,
+  onAddMaterial,
+  onRemoveMaterial,
+  onMaterialReprocessed,
+  embedded = false
+}: MaterialUploadProps) => {
   const [urlInput, setUrlInput] = useState('');
   const [textInput, setTextInput] = useState('');
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [showTextForm, setShowTextForm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [reprocessingMaterialIds, setReprocessingMaterialIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Track upload progress for each file
@@ -52,6 +62,30 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
       // silently ignore — fallback UI will show static list
     });
   }, []);
+
+  const handleReprocessMaterial = async (material: Material) => {
+    setReprocessingMaterialIds(previous => new Set(previous).add(material.id));
+    try {
+      await materialsApi.reprocessMaterial(material.id);
+      await onMaterialReprocessed?.();
+      showNotification('success', 'Material Ready', `${material.name} was processed successfully.`);
+    } catch (error) {
+      showNotification(
+        'error',
+        'Retry Failed',
+        error instanceof Error
+          ? error.message
+          : `CREATE could not process ${material.name}. Check the embedding configuration and try again.`
+      );
+      await onMaterialReprocessed?.();
+    } finally {
+      setReprocessingMaterialIds(previous => {
+        const next = new Set(previous);
+        next.delete(material.id);
+        return next;
+      });
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -208,14 +242,16 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
   const allMaterials = materials;
 
   return (
-      <div className="material-upload">
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Course Materials</h3>
-            <p className="card-description">
-              Upload files or add links to your course content
-            </p>
-          </div>
+      <div className={`material-upload ${embedded ? 'material-upload-embedded' : ''}`}>
+        <div className={embedded ? 'material-upload-content' : 'card'}>
+          {!embedded && (
+            <div className="card-header">
+              <h3 className="card-title">Course Materials</h3>
+              <p className="card-description">
+                Upload files or add links to your course content
+              </p>
+            </div>
+          )}
 
           {/* Upload Actions */}
           <div className="upload-actions">
@@ -378,9 +414,11 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                 <div className="materials-grid">
                   {allMaterials.map((material) => {
                     const isProcessing = material.processingStatus === 'pending' || material.processingStatus === 'processing';
+                    const isFailed = material.processingStatus === 'failed';
+                    const isRetrying = reprocessingMaterialIds.has(material.id);
 
                     return (
-                      <div key={material.id} className="material-card">
+                      <div key={material.id} className={`material-card ${isFailed ? 'material-card-failed' : ''}`}>
                         <div className="material-info">
                           {getFileIcon(material.type)}
                           <div className="material-details">
@@ -392,17 +430,36 @@ const MaterialUpload = ({ materials, onAddMaterial, onRemoveMaterial }: Material
                                   Processing...
                                 </span>
                               )}
+                              {isFailed && (
+                                <span className="processing-badge failed-badge">
+                                  Processing failed
+                                </span>
+                              )}
                             </div>
+                            {isFailed && material.processingError && (
+                              <div className="material-processing-error">{material.processingError}</div>
+                            )}
                           </div>
                         </div>
-                        {isProcessing ? (
+                        {isProcessing || isRetrying ? (
                           <div className="material-processing">
                             <Loader2 size={16} className="spinner" />
                           </div>
                         ) : (
                           <div className="material-actions">
+                            {isFailed && (
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm material-retry"
+                                onClick={() => void handleReprocessMaterial(material)}
+                                title="Retry material processing"
+                              >
+                                <RotateCcw size={14} />
+                                Retry
+                              </button>
+                            )}
                             {/* Only show preview for uploaded materials (MongoDB ObjectId is 24 chars) */}
-                            {material.id.length === 24 && (
+                            {material.id.length === 24 && !isFailed && (
                               <button
                                   className="btn btn-ghost material-preview"
                                   onClick={() => handlePreview(material)}

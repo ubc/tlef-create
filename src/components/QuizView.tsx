@@ -1,7 +1,7 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { ArrowLeft, FileText, Target, Wand2, Settings, Trash2, Pencil, Map } from 'lucide-react';
+import { ArrowLeft, Trash2, Pencil, Map, ArrowRight } from 'lucide-react';
 import LearningObjectives from './LearningObjectives';
 import MaterialAssignment from './MaterialAssignment';
 import CoverageMapPanel from './CoverageMapPanel';
@@ -14,31 +14,40 @@ import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
 import { LearningObjectiveData } from './generation/generationTypes';
 import { normalizeLearningObjectiveData } from '../utils/learningObjectiveState';
+import WorkflowStepper, { WorkflowStep } from './workflow/WorkflowStepper';
 import '../styles/components/QuizView.css';
 
-type TabType = 'materials' | 'objectives' | 'coverage' | 'generation' | 'review';
+type WorkflowTab = 'materials' | 'objectives' | 'generation' | 'review' | 'preview';
+type TabType = WorkflowTab | 'coverage';
 
 const QuizView = () => {
   const { courseId, quizId } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showNotification, publish } = usePubSub('QuizView');
 
   const { currentQuiz, loading, error } = useSelector((state: RootState) => state.quiz);
   const { materials } = useSelector((state: RootState) => state.material);
   const { objectives: reduxObjectives } = useSelector((state: RootState) => state.learningObjective);
+  const questionCountFromStore = useSelector((state: RootState) =>
+    quizId ? state.question?.questionsByQuiz?.[quizId]?.length : undefined
+  );
 
   // Check URL params for initial tab
   const getInitialTab = (): TabType => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'objectives' || tabParam === 'coverage' || tabParam === 'generation' || tabParam === 'review') {
+    if (tabParam === 'objectives' || tabParam === 'coverage' || tabParam === 'generation' || tabParam === 'review' || tabParam === 'preview') {
       return tabParam as TabType;
     }
     return 'materials';
   };
 
   const [activeTab, setActiveTab] = useState<TabType>(getInitialTab());
+  const [lastWorkflowTab, setLastWorkflowTab] = useState<WorkflowTab>(() => {
+    const initialTab = getInitialTab();
+    return initialTab === 'coverage' ? 'materials' : initialTab;
+  });
   const [learningObjectives, setLearningObjectives] = useState<LearningObjectiveData[]>([]);
   const [assignedMaterials, setAssignedMaterials] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -57,13 +66,12 @@ const QuizView = () => {
     coverageScrollPositionRef.current = null;
   }, [activeTab]);
 
-  // Update active tab when URL params change
+  const requestedTab = getInitialTab();
+  // Include Materials and the default URL so browser Back restores step 1 too.
   useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'objectives' || tabParam === 'coverage' || tabParam === 'generation' || tabParam === 'review') {
-      setActiveTab(tabParam as TabType);
-    }
-  }, [searchParams]);
+    setActiveTab(requestedTab);
+    if (requestedTab !== 'coverage') setLastWorkflowTab(requestedTab);
+  }, [requestedTab]);
 
   useEffect(() => {
     if (quizId) {
@@ -93,7 +101,7 @@ const QuizView = () => {
 
     if (currentQuiz) {
       // Raw ObjectIds can appear briefly after an unpopulated quiz update.
-      // Never turn them into empty objectives because Review & Edit would show
+      // Never turn them into empty objectives because Review would show
       // those entries as "Unknown"; the objectives request will provide the
       // complete records.
       const quizObjectives = (currentQuiz.learningObjectives || []) as Array<string | LearningObjectiveData>;
@@ -162,24 +170,24 @@ const QuizView = () => {
     setIsEditingName(false);
   };
 
-  const tabs = [
-    { id: 'materials' as TabType, label: 'Materials', icon: FileText },
-    { id: 'objectives' as TabType, label: 'Learning Objectives', icon: Target },
-    { id: 'generation' as TabType, label: 'Generate Questions', icon: Wand2 },
-    { id: 'review' as TabType, label: 'Review & Edit', icon: Settings },
-    { id: 'coverage' as TabType, label: 'Coverage Map', icon: Map },
-  ];
+  const questionCount = questionCountFromStore ?? currentQuiz.questions?.length ?? 0;
+  const questionCountLabel = `${questionCount} question${questionCount === 1 ? '' : 's'}`;
+  const readyAssignedCount = assignedMaterials.filter(id => materials.some(material => material._id === id && material.processingStatus === 'completed')).length;
+  const failedAssignedCount = assignedMaterials.filter(id => materials.some(material => material._id === id && material.processingStatus === 'failed')).length;
+  const materialsReady = assignedMaterials.length > 0 && readyAssignedCount === assignedMaterials.length;
 
   const canProceed = (tab: TabType) => {
     switch (tab) {
       case 'objectives':
-        return assignedMaterials.length > 0;
+        return assignedMaterials.length > 0 || learningObjectives.length > 0;
       case 'generation':
         return assignedMaterials.length > 0 && learningObjectives.length > 0;
       case 'coverage':
         return assignedMaterials.length > 0 && learningObjectives.length > 0;
       case 'review':
-        return assignedMaterials.length > 0 && learningObjectives.length > 0;
+        return questionCount > 0 || (assignedMaterials.length > 0 && learningObjectives.length > 0);
+      case 'preview':
+        return questionCount > 0;
       default:
         return true;
     }
@@ -189,13 +197,94 @@ const QuizView = () => {
     if (!canProceed(tab)) return;
     if (tab === 'coverage') {
       coverageScrollPositionRef.current = window.scrollY;
+    } else {
+      setLastWorkflowTab(tab);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     setActiveTab(tab);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tab);
+    if (tab !== 'review') nextParams.delete('questionId');
+    setSearchParams(nextParams);
   };
+
+  const workflowSteps: WorkflowStep[] = [
+    {
+      id: 'materials',
+      label: 'Materials',
+      detail: materialsReady ? `Ready · ${readyAssignedCount} assigned` : failedAssignedCount > 0 ? `${failedAssignedCount} failed · check sources` : assignedMaterials.length > 0 ? 'Checking or processing sources' : 'Start here · assign sources',
+      state: materialsReady ? 'complete' : failedAssignedCount > 0 ? 'attention' : 'available'
+    },
+    {
+      id: 'objectives',
+      label: 'Learning Objectives',
+      detail: learningObjectives.length > 0 ? `Ready · ${learningObjectives.length} LOs` : 'Create measurable outcomes',
+      state: learningObjectives.length > 0 ? 'complete' : assignedMaterials.length > 0 ? 'available' : 'blocked',
+      disabled: !canProceed('objectives')
+    },
+    {
+      id: 'generation',
+      label: 'Blueprint & Generate',
+      detail: questionCount > 0
+        ? `Complete · ${questionCountLabel}`
+        : currentQuiz.progress?.planGenerated
+          ? 'Blueprint ready · generate next'
+          : 'Plan the activity mix',
+      state: questionCount > 0 ? 'complete' : canProceed('generation') ? 'available' : 'blocked',
+      disabled: !canProceed('generation')
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      detail: questionCount > 0 ? `${questionCountLabel} to check` : 'Waiting for questions',
+      state: questionCount > 0 && currentQuiz.progress?.reviewCompleted
+        ? 'complete'
+        : questionCount > 0
+          ? 'attention'
+          : canProceed('review') ? 'available' : 'blocked',
+      disabled: !canProceed('review')
+    },
+    {
+      id: 'preview',
+      label: 'Preview & Export',
+      detail: questionCount > 0 ? 'Preview and choose delivery' : 'Waiting for questions',
+      state: questionCount > 0 ? 'available' : 'blocked',
+      disabled: !canProceed('preview')
+    }
+  ];
+
+  const activeWorkflowStep = activeTab === 'coverage' ? lastWorkflowTab : activeTab;
+  const activeStepNumber = workflowSteps.findIndex(step => step.id === activeWorkflowStep) + 1;
+  const activeStepCopy = activeTab === 'coverage'
+    ? {
+        eyebrow: 'Quality tool',
+        title: 'Coverage Map',
+        description: 'Inspect how materials, evidence, objectives, and questions connect without losing your place in the main workflow.'
+      }
+    : {
+        eyebrow: `Step ${activeStepNumber} of 5`,
+        title: workflowSteps[activeStepNumber - 1]?.label || 'Quiz workflow',
+        description: {
+          materials: 'Choose the course sources that should ground this Quiz.',
+          objectives: 'Generate, import, or write the measurable outcomes this Quiz should address.',
+          generation: 'Choose ASSESS, SUPPORT or GAMIFY, compare activity layouts, then build your Blueprint and generate questions.',
+          review: 'Check accuracy, feedback, evidence, and ordering before learners see the content.',
+          preview: 'Experience the final activity, then export it to H5P, PDF, Markdown, or Canvas.'
+        }[activeWorkflowStep]
+      };
 
   const coverageRefreshKey = learningObjectives
     .map(objective => `${objective._id}:${objective.text}`)
     .join('|');
+  const assignedMaterialReadiness = assignedMaterials.map(materialId => {
+    const material = materials.find(candidate => candidate._id === materialId);
+    return {
+      id: materialId,
+      name: material?.name || 'Assigned material',
+      processingStatus: material?.processingStatus || 'processing' as const,
+      processingError: material?.processingError?.message
+    };
+  });
 
   return (
       <div className="quiz-view">
@@ -241,25 +330,39 @@ const QuizView = () => {
             )}
           </div>
           <p className="quiz-description">
-            {currentQuiz.folder?.name || 'Course'} • {currentQuiz.questions?.length || 0} questions
+            {currentQuiz.folder?.name || 'Course'} • {questionCountLabel}
           </p>
         </div>
 
-        <div className="quiz-tabs">
-          {tabs.map((tab) => (
-              <button
-                  key={tab.id}
-                  className={`quiz-tab ${activeTab === tab.id ? 'active' : ''} ${!canProceed(tab.id) ? 'disabled' : ''}`}
-                  onClick={() => handleTabChange(tab.id)}
-                  disabled={!canProceed(tab.id)}
-                  aria-label={tab.label}
-                  title={canProceed(tab.id) ? tab.label : `${tab.label} is not available yet`}
-              >
-                <tab.icon size={20} />
-                <span>{tab.label}</span>
-                {!canProceed(tab.id) && <span className="tab-lock">🔒</span>}
-              </button>
-          ))}
+        <WorkflowStepper
+          steps={workflowSteps}
+          activeStepId={activeWorkflowStep}
+          ariaLabel="Quiz creation steps"
+          onStepSelect={(stepId) => handleTabChange(stepId as WorkflowTab)}
+        />
+
+        <div className={`quiz-workflow-context ${activeTab === 'coverage' ? 'is-coverage' : ''}`}>
+          <div>
+            <span>{activeStepCopy.eyebrow}</span>
+            <strong>{activeStepCopy.title}</strong>
+            <p>{activeStepCopy.description}</p>
+          </div>
+          {activeTab === 'coverage' ? (
+            <button className="btn btn-outline" onClick={() => handleTabChange(lastWorkflowTab)}>
+              Return to {workflowSteps.find(step => step.id === lastWorkflowTab)?.label}
+              <ArrowRight size={16} />
+            </button>
+          ) : (
+            <button
+              className={`btn ${activeTab === 'coverage' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => handleTabChange('coverage')}
+              disabled={!canProceed('coverage')}
+              title={canProceed('coverage') ? 'Open Coverage Map' : 'Create learning objectives before opening Coverage Map'}
+            >
+              <Map size={16} />
+              Coverage Map
+            </button>
+          )}
         </div>
 
         <div className="quiz-content">
@@ -277,7 +380,7 @@ const QuizView = () => {
                 }}
                 courseMaterials={materials}
                 onNavigateNext={() => {
-                  setActiveTab('objectives');
+                  handleTabChange('objectives');
                   setTimeout(() => {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }, 100);
@@ -288,12 +391,13 @@ const QuizView = () => {
           <div style={{ display: activeTab === 'objectives' ? 'block' : 'none' }}>
             <LearningObjectives
                 assignedMaterials={assignedMaterials}
+                materialReadiness={assignedMaterialReadiness}
                 objectives={learningObjectives}
                 onObjectivesChange={setLearningObjectives}
                 quizId={quizId!}
                 courseId={courseId}
                 onNavigateNext={() => {
-                  setActiveTab('generation');
+                  handleTabChange('generation');
                   setTimeout(() => {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }, 100);
@@ -306,7 +410,8 @@ const QuizView = () => {
               quizId={quizId!}
               refreshKey={coverageRefreshKey}
               isActive={activeTab === 'coverage'}
-              onNavigateToGeneration={() => setActiveTab('generation')}
+              canBuild={learningObjectives.length > 0}
+              onNavigateToGeneration={() => handleTabChange('generation')}
             />
           </div>
 
@@ -317,7 +422,7 @@ const QuizView = () => {
                 quizId={quizId!}
                 courseId={courseId}
                 onQuestionsGenerated={() => {
-                  setActiveTab('review');
+                  handleTabChange('review');
                   window.setTimeout(() => {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }, 100);
@@ -325,10 +430,11 @@ const QuizView = () => {
             />
           </div>
 
-          <div style={{ display: activeTab === 'review' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'review' || activeTab === 'preview' ? 'block' : 'none' }}>
             <ReviewEdit
                 quizId={quizId!}
                 learningObjectives={learningObjectives}
+                workflowMode={activeTab === 'preview' ? 'preview-export' : 'review'}
             />
           </div>
         </div>

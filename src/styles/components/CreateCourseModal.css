@@ -23,6 +23,26 @@
     overflow-y: auto;
 }
 
+.create-course-modal {
+    max-width: 760px;
+    max-height: min(90vh, 840px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-card);
+}
+
+.create-course-modal .modal-header {
+    flex: 0 0 auto;
+}
+
+.create-course-modal .modal-body {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -68,6 +88,16 @@
     border-top: 1px solid var(--color-border);
 }
 
+.create-course-modal .modal-actions {
+    position: sticky;
+    bottom: calc(-1 * var(--spacing-lg));
+    z-index: 2;
+    margin-right: calc(-1 * var(--spacing-lg));
+    margin-left: calc(-1 * var(--spacing-lg));
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-card);
+}
+
 @media (max-width: 768px) {
     .modal-overlay {
         padding: var(--spacing-md);
@@ -84,6 +114,13 @@
 
     .modal-actions {
         flex-direction: column;
+    }
+
+    .create-course-modal .modal-actions {
+        bottom: calc(-1 * var(--spacing-md));
+        margin-right: calc(-1 * var(--spacing-md));
+        margin-left: calc(-1 * var(--spacing-md));
+        padding: var(--spacing-md);
     }
 }
 
@@ -157,41 +194,6 @@
     background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
     border-radius: var(--radius-full);
     transition: width 0.3s ease;
-}
-
-/* Step Indicator */
-.step-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    margin: 0 auto var(--spacing-lg) auto;
-}
-
-.step-dot {
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-    background: var(--color-muted);
-    color: var(--color-muted-foreground);
-}
-
-.step-dot.active {
-    background: var(--color-primary);
-    color: white;
-}
-
-.step-line {
-    width: 32px;
-    height: 2px;
-    background: var(--color-border);
-    margin: 0 4px;
 }
 
 /* Canvas Linked Card */

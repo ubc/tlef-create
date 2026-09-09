@@ -93,6 +93,13 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     // Cleanup is automatically handled by usePubSub hook
   }, [subscribe]);
 
+  useEffect(() => {
+    subscribe('open-create-course', () => {
+      setShowCreateModal(true);
+      onClose?.();
+    });
+  }, [onClose, subscribe]);
+
   // Listen for quiz deletion events
   useEffect(() => {
     subscribe<{ quizId: string; courseId: string }>('quiz-deleted', () => {
@@ -399,7 +406,7 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span>{quizName}</span>
                                     <span style={{ fontSize: 'var(--font-size-sm)', opacity: 0.7 }}>
-                                      {questionCount} questions
+                                      {questionCount} question{questionCount === 1 ? '' : 's'}
                                     </span>
                                   </div>
                                 </div>

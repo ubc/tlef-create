@@ -90,7 +90,6 @@ export function resolveEmbeddingConfig(env = process.env) {
     apiEndpoint: provider === 'openai'
       ? env.EMBEDDINGS_API_ENDPOINT
         || env.OPENAI_API_ENDPOINT
-        || (env.LLM_PROVIDER === 'openai' ? env.LLM_API_ENDPOINT : undefined)
       : undefined,
     batchSize: parsePositiveInteger(env.EMBEDDINGS_BATCH_SIZE, 256, 'EMBEDDINGS_BATCH_SIZE')
   });

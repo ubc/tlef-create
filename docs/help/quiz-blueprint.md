@@ -2,6 +2,10 @@
 
 The AI Blueprint converts learning objectives into an editable generation plan. Planning first makes question count, purpose, type compatibility, and coverage visible before the model creates full questions.
 
+Open Step 3, **Blueprint & Generate**, after the Learning Object has assigned materials and at least one learning objective.
+
+Start with **Choose your teaching purpose**, then **Choose the student-facing layout**. Below these choices, use **AI Auto Mode** for an AI-proposed plan or **Manual Mode** to build your own Blueprint rows. Reusable prompt settings are collapsed under **Advanced: course prompts** so they do not interrupt the main setup.
+
 ## Automatic question count
 
 Automatic length is the default. CREATE begins with at least one question for every learning objective. It estimates additional coverage from each objective's subpoint breadth, Bloom level, and the selected teaching purpose. One question usually samples one or two closely related subpoints, and the automatic estimator caps its initial recommendation at five questions per objective and 100 questions overall.
@@ -16,9 +20,9 @@ If the learning object already contains questions, the Blueprint also receives a
 
 ## Teaching purposes
 
-- **Support Learning:** practice, recall, scaffolding, and feedback. Automatic budgeting can add practice interactions for objectives with several subpoints.
-- **Assess Understanding:** scored evidence that learners achieved the objectives, with assessment-oriented types.
-- **Gamify Learning:** interaction and variety. Automatic budgeting can add an interaction where an objective has multiple subpoints.
+- **ASSESS — Assess understanding:** scored evidence that learners achieved the objectives, with assessment-oriented types.
+- **SUPPORT — Support learning:** practice, recall, scaffolding, and feedback. Automatic budgeting can add practice interactions for objectives with several subpoints.
+- **GAMIFY — Gamify learning:** interaction and variety. Automatic budgeting can add an interaction where an objective has multiple subpoints.
 
 The teaching purpose limits the question types initially proposed by AI. Delivery format compatibility is a separate constraint; a type must satisfy both.
 
@@ -28,6 +32,23 @@ Choose **H5P Package** to download a standard `.h5p` package for a compatible pl
 
 Formats support different question types. Changing target or format can make current Blueprint rows or existing questions incompatible. Read the warning before confirming a change because incompatible content may be removed.
 
+## Visual layout previews
+
+The **Choose the student-facing layout** cards provide a simple layout preview before generation:
+
+1. **Question Set — A sequence of questions:** students move through questions, then see their score and feedback.
+2. **Interactive Book — Chapters and pages:** a chapter menu organizes a structured, multi-page activity.
+3. **Column — One scrolling page:** text and mixed activities are stacked vertically.
+4. **Standalone — One focused activity:** a dedicated player for an activity such as a crossword or paragraph-sorting task.
+
+The black outline and check identify the selected card. These sketches explain navigation and structure; they are not screenshots of generated questions. Use Step 5, **Preview & Export**, to experience the actual saved content. Canvas LTI has a separate **Mixed Activity** layout and does not use the four H5P package layouts.
+
+## Back to AI Plan Configuration
+
+After questions have been generated, **Back to AI Plan Configuration** returns to the top of setup: **ASSESS / SUPPORT / GAMIFY**, followed by the visual layout selection. It opens AI Auto Mode and preserves the selected teaching purpose, layout, additional instructions, and existing questions. Blueprint rows are reconciled with the current saved question inventory, including edits made in Review.
+
+Returning to configuration does not call AI, regenerate questions, or delete content. Generate a new plan only when you want new recommendations. A layout change is separate: CREATE first asks about incompatible plan rows, then asks before removing incompatible existing questions. Cancel either confirmation to leave the current layout and questions unchanged. Save the Blueprint to persist your configuration changes.
+
 ## Read and edit Blueprint rows
 
 Each row normally connects a question type, learning objective, count, pedagogical intent, Bloom level, difficulty, focus area, and rationale. Expand Blueprint details to see why the row was recommended. Edit rows when the type is unsuitable, the focus duplicates another row, or the difficulty does not match the learners.
@@ -36,7 +57,7 @@ Choose **No Learning Objective** only for an intentionally custom activity. That
 
 The sum of row counts is the number of questions to generate. Keep at least one planned question per objective. A row count represents repeated generation from that row's configuration; subpoint alignment can split one recommendation into more focused rows.
 
-After adding or deleting questions in **Review & Edit**, the left sidebar and Generate Questions results use the current saved question inventory. Selecting **Back to AI Plan Configuration** reconciles the Question Plan counts and rows with those current questions while preserving matching row details such as focus and difficulty. Review the reconciled plan before generating again.
+After adding or deleting questions in **Review**, the left sidebar and Blueprint & Generate results use the current saved question inventory. Selecting **Back to AI Plan Configuration** reconciles the Question Plan counts and rows with those current questions while preserving matching row details such as focus and difficulty. Review the reconciled plan before generating again.
 
 ## One-time instructions
 
@@ -48,8 +69,14 @@ After approving the Blueprint, start generation and keep the page open while pro
 
 CREATE saves the current Blueprint before starting generation. If that save fails, generation stops before existing questions are replaced or new generation begins. Correct the incomplete row or the validation message, save again, and then retry generation.
 
-Generation can still produce incorrect or weak content. Always complete Review & Edit before using or exporting the result.
+Generation can still produce incorrect or weak content. Always complete Step 4, Review, before using or exporting the result.
+
+On the results page, choose **Continue to Review** for the next step, or **Back to AI Plan Configuration** to revisit setup. **Generation Prompt Analysis** is collapsed by default; **Show Details** opens the technical information when needed.
 
 ## Regenerate without duplication
 
 Regeneration should target a different subpoint or framing and receives recent question history. Add a concise instruction when the desired difference is specific, such as a new scenario, a higher Bloom level, or a misconception that has not been tested. Verify the result; duplication avoidance reduces repetition but cannot guarantee uniqueness.
+
+## Explore more native H5P activities
+
+Choose **Explore AI activities** below the Blueprint workflow to open Studio's **Create with AI** flow with this Quiz's saved objectives and questions as context. Use it for charts, presentations, media templates and other native types beyond the standard Quiz question picker. It creates an independent Studio draft, not additional Blueprint rows. Review and download that activity in Studio; the original Quiz, evidence references and question counts remain unchanged.

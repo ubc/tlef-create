@@ -3,6 +3,32 @@
     width: 100%;
 }
 
+.objective-material-readiness {
+    margin: var(--spacing-lg);
+    padding: var(--spacing-md);
+    border: 1px solid #e7c77e;
+    border-radius: var(--radius-md);
+    color: #714c00;
+    background: #fff8e6;
+}
+
+.objective-material-readiness.is-failed {
+    border-color: #f3c7c7;
+    color: #8f1d1d;
+    background: #fff3f3;
+}
+
+.objective-material-readiness strong,
+.objective-material-readiness p {
+    margin: 0;
+}
+
+.objective-material-readiness p {
+    margin-top: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
 .objectives-setup {
     padding: var(--spacing-lg);
 }

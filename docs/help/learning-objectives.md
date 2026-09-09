@@ -2,6 +2,8 @@
 
 Learning objectives describe what students should be able to do after completing the learning object. They also define the minimum units of coverage used by the AI Blueprint.
 
+Learning Objectives are Step 2 of the Learning Object workflow. The step becomes available after at least one course material is assigned to the object.
+
 ## Generate objectives from materials
 
 Assign and finish processing the relevant materials first. Leave the instruction box blank to ask CREATE for a complete, non-overlapping set, or add a focus, constraints, audience, desired level, or objectives that must be retained. CREATE analyzes document structure, evidence breadth, and Bloom's taxonomy before recommending objectives.

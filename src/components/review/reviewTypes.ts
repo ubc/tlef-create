@@ -4,6 +4,7 @@ import { LearningObjectiveData } from '../generation/generationTypes';
 export interface ReviewEditProps {
   quizId: string;
   learningObjectives: LearningObjectiveData[];
+  workflowMode?: 'review' | 'preview-export';
 }
 
 export interface ExtendedQuestion extends Question {

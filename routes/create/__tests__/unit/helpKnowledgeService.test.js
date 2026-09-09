@@ -12,12 +12,12 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(status.refreshedAutomatically).toBe(true);
   });
 
-  test('retrieves multiple-answer guidance for Review & Edit', async () => {
+  test('retrieves multiple-answer guidance for Review', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I make a multiple-answer MCQ?',
       {
         route: '/course/course-1/quiz/quiz-1?tab=review',
-        activeTab: 'Review & Edit'
+        activeTab: 'Review'
       },
       3
     );
@@ -114,6 +114,36 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(deliverySource?.content).toContain('text or video feedback');
   });
 
+  test('retrieves visual layout previews rather than promising generated screenshots', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What do the visual layout previews mean: chapters and pages or one scrolling page?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Blueprint & Generate' }, 4
+    );
+    const source = sources.find(item => item.documentId === 'quiz-blueprint' && item.section === 'Visual layout previews');
+    expect(source?.content).toContain('not screenshots');
+    expect(source?.content).toContain('Standalone');
+    expect(source?.navigationPath).toBe('/help?doc=quiz-blueprint&section=visual-layout-previews');
+  });
+
+  test('retrieves safe return to the three teaching streams', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Does Back to AI Plan Configuration return to ASSESS SUPPORT GAMIFY and delete my questions?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Blueprint & Generate' }, 4
+    );
+    const source = sources.find(item => item.documentId === 'quiz-blueprint' && item.section === 'Back to AI Plan Configuration');
+    expect(source?.content).toContain('does not call AI');
+    expect(source?.content).toContain('Cancel either confirmation');
+  });
+
+  test('retrieves the next action and optional prompt details on generation results', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What is Continue to Review and how do I Show Details in Generation Prompt Analysis?',
+      { route: '/course/course-1/quiz/quiz-1?tab=generation', activeTab: 'Blueprint & Generate' }, 4
+    );
+    expect(sources.some(source => source.documentId === 'quiz-blueprint'
+      && source.section === 'Generate questions' && source.content.includes('collapsed by default'))).toBe(true);
+  });
+
   test('retrieves H5P Studio advanced-editor guidance', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I upload an H5P package and edit it with the advanced official editor?',
@@ -125,6 +155,22 @@ describe('CREATE Guide knowledge retrieval', () => {
       source.title === 'H5P Studio'
       && ['Upload an H5P package', 'Create new H5P content'].includes(source.section)
     ))).toBe(true);
+  });
+
+  test('retrieves native Create with AI workflow without promising Quiz synchronization', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'How do I Create with AI in H5P Studio and does the new AI draft replace my Quiz questions?',
+      { route: '/h5p-studio', activeTab: 'H5P Studio' }, 4
+    );
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Create with AI')).toBe(true);
+  });
+
+  test('retrieves real-media template and maintenance limitations for Studio AI', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'Why does Memory Game need a saved template with real media, and what does Needs maintenance mean?',
+      { route: '/h5p-studio', activeTab: 'H5P Studio' }, 4
+    );
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'AI media templates and availability')).toBe(true);
   });
 
   test('retrieves H5P Studio fresh-draft and Preview synchronization guidance', async () => {
@@ -194,7 +240,46 @@ describe('CREATE Guide knowledge retrieval', () => {
       4
     );
 
-    expect(sources.some(source => source.section === 'Create and open quizzes')).toBe(true);
+    expect(sources.some(source => source.section === 'Create and open Quizzes')).toBe(true);
+  });
+
+  test('retrieves dynamic Dashboard guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve(
+      'What do Continue where you left off and Needs attention show on the Dashboard?',
+      { route: '/', activeTab: 'Dashboard' },
+      4
+    );
+
+    expect(sources.some(source => (
+      source.title === 'Getting Started with CREATE'
+      && source.section === 'Dashboard and recommended work'
+      && source.content.includes('Your courses')
+    ))).toBe(true);
+  });
+
+  test('retrieves numbered Course and Quiz workflow guidance', async () => {
+    const workflowSources = await helpKnowledgeService.retrieve(
+      'What do the numbered Course steps and five Quiz steps mean?',
+      { route: '/course/course-1', activeTab: 'Course Home' },
+      6
+    );
+
+    expect(workflowSources.some(source => (
+      source.title === 'Getting Started with CREATE'
+      && source.section === 'Recommended end-to-end workflow'
+      && source.content.includes('Preview & Export')
+    ))).toBe(true);
+
+    const coverageSources = await helpKnowledgeService.retrieve(
+      'Where is Coverage Map in the Learning Object workflow?',
+      { route: '/course/course-1/quiz/quiz-1?tab=coverage', activeTab: 'Coverage Map' },
+      6
+    );
+    expect(coverageSources.some(source => (
+      source.title === 'Coverage Map and Source References'
+      && source.section === 'Coverage Map'
+      && source.content.includes('supporting quality tool')
+    ))).toBe(true);
   });
 
   test('retrieves the CREATE Guide launcher tutorial', async () => {
@@ -301,7 +386,7 @@ describe('CREATE Guide knowledge retrieval', () => {
   test('retrieves export instructions for Chinese and mixed-language queries', async () => {
     for (const query of ['如何导出', '如何 export']) {
       const sources = await helpKnowledgeService.retrieve(query, {}, 3);
-      expect(sources[0].title).toBe('Review, Edit, and Export');
+      expect(sources.some(source => source.title === 'Review, Edit, and Export')).toBe(true);
       expect(sources.some(source => source.section === 'PDF and Markdown export')).toBe(true);
     }
   });

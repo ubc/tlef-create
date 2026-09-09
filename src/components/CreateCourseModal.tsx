@@ -3,6 +3,7 @@ import { X, ArrowLeft, ArrowRight, ExternalLink, Loader2, Link2, Link2Off, LogOu
 import MaterialUpload from './MaterialUpload';
 import { usePubSub } from '../hooks/usePubSub';
 import { canvasApi } from '../services/api';
+import WorkflowStepper, { WorkflowStep } from './workflow/WorkflowStepper';
 import '../styles/components/CreateCourseModal.css';
 
 interface Material {
@@ -239,33 +240,67 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     setCanvasCourses([]);
   };
 
+  const creationSteps: WorkflowStep[] = [
+    {
+      id: '1',
+      label: 'Course details',
+      detail: currentStep > 1 ? courseName : 'Name your course',
+      state: currentStep > 1 ? 'complete' : 'current'
+    },
+    {
+      id: '2',
+      label: 'Course materials',
+      detail: materials.length > 0 ? `${materials.length} added` : 'Optional · add now or later',
+      state: currentStep > 2 ? 'complete' : currentStep === 2 ? 'current' : 'available',
+      disabled: currentStep < 2
+    },
+    ...(canvasEnabled && canvasConnected ? [{
+      id: '3',
+      label: 'Canvas',
+      detail: selectedCourse ? selectedCourse.name : 'Optional connection',
+      state: currentStep === 3 ? 'current' as const : 'available' as const,
+      disabled: currentStep < 3
+    }] : [])
+  ];
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div
+        className="modal-content create-course-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-course-title"
+      >
         <div className="modal-header">
-          <h2>Create New Course</h2>
-          <button className="btn btn-ghost modal-close" onClick={() => { resetModal(); onClose(); }}>
+          <h2 id="create-course-title">Create New Course</h2>
+          <button
+            className="btn btn-ghost modal-close"
+            aria-label="Close create course dialog"
+            onClick={() => { resetModal(); onClose(); }}
+          >
             <X size={20} />
           </button>
         </div>
 
         <div className="modal-body">
-          {/* Step indicator */}
-          <div className="step-indicator">
-            <span className={`step-dot ${currentStep >= 1 ? 'active' : ''}`}>1</span>
-            <span className="step-line" />
-            <span className={`step-dot ${currentStep >= 2 ? 'active' : ''}`}>2</span>
-            {canvasEnabled && canvasConnected && (
-              <>
-                <span className="step-line" />
-                <span className={`step-dot ${currentStep >= 3 ? 'active' : ''}`}>3</span>
-              </>
-            )}
-          </div>
+          <WorkflowStepper
+            steps={creationSteps}
+            activeStepId={String(currentStep)}
+            ariaLabel="Create course steps"
+            compact
+            onStepSelect={(stepId) => {
+              const nextStep = Number(stepId);
+              if (nextStep <= currentStep) setCurrentStep(nextStep);
+            }}
+          />
 
           {/* Step 1: Course Name */}
           {currentStep === 1 && (
             <div className="step-content">
+              <div className="step-header">
+                <h3>Name your course</h3>
+                <p>Create the shared workspace that will hold materials and Learning Objects.</p>
+              </div>
               <div className="form-group">
                 <label htmlFor="courseName">Course Name</label>
                 <input

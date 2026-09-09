@@ -40,6 +40,12 @@ import '../styles/components/LearningObjectives.css';
 
 interface LearningObjectivesProps {
   assignedMaterials: string[];
+  materialReadiness?: Array<{
+    id: string;
+    name: string;
+    processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+    processingError?: string;
+  }>;
   objectives: LearningObjectiveData[];
   onObjectivesChange: (objectives: LearningObjectiveData[]) => void;
   quizId: string;
@@ -80,7 +86,15 @@ function formatWorkflowMessage(value: unknown, fallback: string) {
   return fallback;
 }
 
-const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange, quizId, courseId, onNavigateNext }: LearningObjectivesProps) => {
+const LearningObjectives = ({
+  assignedMaterials,
+  materialReadiness,
+  objectives,
+  onObjectivesChange,
+  quizId,
+  courseId,
+  onNavigateNext
+}: LearningObjectivesProps) => {
   const dispatch = useDispatch<AppDispatch>();
   const { objectives: reduxObjectives, loading, generating, classifying, enriching, error } = useSelector((state: RootState) => state.learningObjective);
   const questionsGenerating = useSelector((state: RootState) => selectIsGenerating(state, quizId));
@@ -167,6 +181,32 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   const detectedCommandIntent = commandText && (/learning objectives?:|^lo\s*\d+/im.test(commandText) || objectiveLikeLineCount >= 2)
     ? 'Import pasted learning objectives'
     : 'Generate from assigned materials';
+  const assignedMaterialReadiness = materialReadiness
+    ?? assignedMaterials.map(id => ({ id, name: 'Assigned material', processingStatus: 'completed' as const }));
+  const failedAssignedMaterials = assignedMaterialReadiness.filter(material => material.processingStatus === 'failed');
+  const pendingAssignedMaterials = assignedMaterialReadiness.filter(material => (
+    material.processingStatus === 'pending' || material.processingStatus === 'processing'
+  ));
+  const materialsReadyForAI = assignedMaterials.length > 0
+    && assignedMaterialReadiness.length === assignedMaterials.length
+    && assignedMaterialReadiness.every(material => material.processingStatus === 'completed');
+
+  const ensureMaterialsReadyForAI = async (action: string) => {
+    if (materialsReadyForAI) return true;
+
+    const description = failedAssignedMaterials.length > 0
+      ? `${failedAssignedMaterials.map(material => material.name).join(', ')} could not be processed${failedAssignedMaterials[0]?.processingError ? `: ${failedAssignedMaterials[0].processingError}` : '.'} Retry the failed course material before ${action}.`
+      : pendingAssignedMaterials.length > 0
+        ? `${pendingAssignedMaterials.length} assigned material${pendingAssignedMaterials.length === 1 ? ' is' : 's are'} still processing. Wait until processing finishes before ${action}.`
+        : `Assign at least one successfully processed course material before ${action}.`;
+
+    await showAlert({
+      title: failedAssignedMaterials.length > 0 ? 'Material processing failed' : 'Materials are not ready',
+      description,
+      tone: failedAssignedMaterials.length > 0 ? 'danger' : 'warning'
+    });
+    return false;
+  };
 
   useSSE(loWorkflowUrl, {
     onQuestionProgress: (_questionId, data: { status?: string; message?: unknown; metadata?: Record<string, unknown> }) => {
@@ -390,7 +430,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
         return;
       }
 
-      if (enrichManualAfterSave && assignedMaterials.length > 0 && savedObjectives.length > 0) {
+      if (enrichManualAfterSave && materialsReadyForAI && savedObjectives.length > 0) {
         try {
           await dispatch(enrichObjectives({
             quizId,
@@ -418,6 +458,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
 
   const handleEnrichMissingObjectives = async () => {
     if (objectivesMissingDetails.length === 0) return;
+    if (!await ensureMaterialsReadyForAI('linking objectives to materials')) return;
     try {
       await dispatch(enrichObjectives({
         quizId,
@@ -444,14 +485,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleEnrichObjective = async (objectiveId: string, index: number) => {
-    if (assignedMaterials.length === 0) {
-      showNotification(
-        'warning',
-        'Materials Required',
-        'Assign at least one processed material before enriching this learning objective.'
-      );
-      return;
-    }
+    if (!await ensureMaterialsReadyForAI('enriching this learning objective')) return;
 
     setEnrichingObjectiveId(objectiveId);
     try {
@@ -479,14 +513,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
   };
 
   const handleGenerateObjectives = async (promptOverride?: string) => {
-    if (assignedMaterials.length === 0) {
-      await showAlert({
-        title: 'Materials required',
-        description: 'Assign at least one course material to this learning object before generating learning objectives.',
-        tone: 'warning'
-      });
-      return;
-    }
+    if (!await ensureMaterialsReadyForAI('generating learning objectives')) return;
 
     const count = typeof targetObjectiveCount === 'number' ? targetObjectiveCount : parseInt(targetObjectiveCount.toString());
     
@@ -544,6 +571,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       }
     } catch (error) {
       console.error('Failed to generate objectives:', error);
+      await showAlert({
+        title: 'Learning objective generation failed',
+        description: formatWorkflowMessage(
+          error,
+          'CREATE could not generate learning objectives. Check the assigned materials and AI configuration, then try again.'
+        ),
+        tone: 'danger'
+      });
     }
   };
 
@@ -910,20 +945,14 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return;
     }
 
-    if (!assignedMaterials || assignedMaterials.length === 0) {
-      await showAlert({
-        title: 'Materials required',
-        description: 'Assign course materials before regenerating learning objectives.',
-        tone: 'warning'
-      });
-      return;
-    }
+    if (!await ensureMaterialsReadyForAI('regenerating learning objectives')) return;
 
     // Open the regenerate all modal
     setRegenerateAllModalOpen(true);
   };
 
   const handleRegenerateAllWithPrompt = async (customPrompt?: string) => {
+    if (!await ensureMaterialsReadyForAI('regenerating learning objectives')) return;
     setRegenerateAllLoading(true);
 
     try {
@@ -1005,14 +1034,7 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
       return;
     }
     
-    if (!assignedMaterials || assignedMaterials.length === 0) {
-      await showAlert({
-        title: 'Materials required',
-        description: 'Assign course materials before regenerating this learning objective.',
-        tone: 'warning'
-      });
-      return;
-    }
+    if (!await ensureMaterialsReadyForAI('regenerating this learning objective')) return;
 
     const currentObjective = currentObjectives[index];
     setObjectiveToRegenerate({ index, text: currentObjective });
@@ -1095,6 +1117,23 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
               Define what students should achieve after completing this quiz
             </p>
           </div>
+
+          {!materialsReadyForAI && (
+            <div className={`objective-material-readiness ${failedAssignedMaterials.length > 0 ? 'is-failed' : ''}`} role="status">
+              <strong>
+                {failedAssignedMaterials.length > 0
+                  ? 'An assigned material could not be processed'
+                  : 'Assigned materials are not ready for AI yet'}
+              </strong>
+              <p>
+                {failedAssignedMaterials.length > 0
+                  ? `${failedAssignedMaterials.map(material => material.name).join(', ')}${failedAssignedMaterials[0]?.processingError ? `: ${failedAssignedMaterials[0].processingError}` : '.'} Return to Materials and retry it. You can still import or add objectives manually.`
+                  : pendingAssignedMaterials.length > 0
+                    ? `${pendingAssignedMaterials.length} assigned material${pendingAssignedMaterials.length === 1 ? ' is' : 's are'} still processing. AI generation will become available when processing finishes.`
+                    : 'Assign at least one successfully processed material. You can still import or add objectives manually.'}
+              </p>
+            </div>
+          )}
 
           {courseId && (
             <div className="step-prompt-settings">
@@ -1207,11 +1246,19 @@ const LearningObjectives = ({ assignedMaterials, objectives, onObjectivesChange,
                             type="submit"
                             className="btn btn-primary"
                             disabled={
-                              !autoRecommendObjectiveCount &&
-                              detectedCommandIntent !== 'Import pasted learning objectives' &&
+                              isGenerating ||
                               (
-                                targetObjectiveCount === '' ||
-                                (typeof targetObjectiveCount === 'number' && (targetObjectiveCount < 1 || targetObjectiveCount > 20))
+                                detectedCommandIntent !== 'Import pasted learning objectives' &&
+                                (
+                                  !materialsReadyForAI ||
+                                  (
+                                    !autoRecommendObjectiveCount &&
+                                    (
+                                      targetObjectiveCount === '' ||
+                                      (typeof targetObjectiveCount === 'number' && (targetObjectiveCount < 1 || targetObjectiveCount > 20))
+                                    )
+                                  )
+                                )
                               )
                             }
                           >
@@ -1259,7 +1306,7 @@ Students will be able to apply those concepts to a new example..."
                         type="checkbox"
                         checked={enrichManualAfterSave}
                         onChange={(event) => setEnrichManualAfterSave(event.target.checked)}
-                        disabled={assignedMaterials.length === 0}
+                        disabled={!materialsReadyForAI}
                       />
                       <span>
                         Use AI to add subpoints and link these objectives to assigned materials after saving
@@ -1330,8 +1377,10 @@ Students will be able to apply those concepts to a new example..."
                       <button
                         className="btn btn-outline"
                         onClick={handleEnrichMissingObjectives}
-                        disabled={questionsGenerating || enriching}
-                        title="Use AI to add subpoints and material references to objectives that need details"
+                        disabled={questionsGenerating || enriching || !materialsReadyForAI}
+                        title={materialsReadyForAI
+                          ? 'Use AI to add subpoints and material references to objectives that need details'
+                          : 'Wait for assigned materials to finish processing'}
                       >
                         <Link2 size={16} />
                         {enriching ? 'Linking...' : `AI Link Missing (${objectivesMissingDetails.length})`}
@@ -1349,8 +1398,12 @@ Students will be able to apply those concepts to a new example..."
                     <button 
                       className="btn btn-outline" 
                       onClick={handleRegenerateAll}
-                      disabled={questionsGenerating || enriching}
-                      title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate all learning objectives'}
+                      disabled={questionsGenerating || enriching || !materialsReadyForAI}
+                      title={questionsGenerating
+                        ? 'Cannot regenerate while generating questions'
+                        : materialsReadyForAI
+                          ? 'Regenerate all learning objectives'
+                          : 'Wait for assigned materials to finish processing'}
                     >
                       <RotateCcw size={16} />
                       Regenerate All
@@ -1562,10 +1615,10 @@ Students will be able to apply those concepts to a new example..."
                                         type="button"
                                         className="btn btn-ghost"
                                         onClick={enrichThisObjective}
-                                        disabled={questionsGenerating || enriching || assignedMaterials.length === 0 || !objectiveData?._id}
+                                        disabled={questionsGenerating || enriching || !materialsReadyForAI || !objectiveData?._id}
                                         aria-label={`AI enrich learning objective ${index + 1}`}
-                                        title={assignedMaterials.length === 0
-                                          ? 'Assign processed materials before using AI Enrich'
+                                        title={!materialsReadyForAI
+                                          ? 'Wait for assigned materials to finish processing before using AI Enrich'
                                           : enrichingObjectiveId === objectiveData?._id
                                             ? 'Enriching this learning objective...'
                                             : 'Use AI to enrich this objective with metadata and source evidence'}
@@ -1577,9 +1630,13 @@ Students will be able to apply those concepts to a new example..."
                                   <button 
                                     className="btn btn-ghost" 
                                     onClick={() => openRegenerateModal(index)}
-                                    disabled={questionsGenerating || enriching}
+                                    disabled={questionsGenerating || enriching || !materialsReadyForAI}
                                     aria-label={`Regenerate learning objective ${index + 1}`}
-                                    title={questionsGenerating ? 'Cannot regenerate while generating questions' : 'Regenerate learning objective'}
+                                    title={questionsGenerating
+                                      ? 'Cannot regenerate while generating questions'
+                                      : materialsReadyForAI
+                                        ? 'Regenerate learning objective'
+                                        : 'Wait for assigned materials to finish processing'}
                                   >
                                     <RotateCcw size={16} />
                                   </button>

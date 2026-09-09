@@ -79,6 +79,28 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
     vi.clearAllMocks();
   });
 
+  it('explains failed assigned materials and blocks AI generation until they are ready', () => {
+    render(
+      <Provider store={store}>
+        <LearningObjectives
+          {...defaultProps}
+          assignedMaterials={['material-1']}
+          materialReadiness={[{
+            id: 'material-1',
+            name: 'Lecture notes',
+            processingStatus: 'failed',
+            processingError: 'Failed to embed any chunks'
+          }]}
+          objectives={[]}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByText('An assigned material could not be processed')).toBeInTheDocument();
+    expect(screen.getByText(/Failed to embed any chunks/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Complete Learning Objectives' })).toBeDisabled();
+  });
+
   it('should read questionsGenerating from Redux state', () => {
     // Arrange - set questionsGenerating to true in store
     store.dispatch({ 

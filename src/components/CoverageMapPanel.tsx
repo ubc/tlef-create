@@ -8,6 +8,7 @@ interface CoverageMapPanelProps {
   quizId: string;
   refreshKey?: string;
   isActive?: boolean;
+  canBuild?: boolean;
   onNavigateToGeneration?: () => void;
 }
 
@@ -15,6 +16,7 @@ const CoverageMapPanel = ({
   quizId,
   refreshKey,
   isActive = true,
+  canBuild = true,
   onNavigateToGeneration
 }: CoverageMapPanelProps) => {
   const [coverageMap, setCoverageMap] = useState<CoverageMap | null>(null);
@@ -23,6 +25,8 @@ const CoverageMapPanel = ({
   const [viewMode, setViewMode] = useState<'graph' | 'list'>('graph');
 
   useEffect(() => {
+    if (!isActive || !canBuild) return;
+
     const loadCoverageMap = async () => {
       setLoading(true);
       setError(null);
@@ -39,7 +43,19 @@ const CoverageMapPanel = ({
     };
 
     loadCoverageMap();
-  }, [quizId, refreshKey]);
+  }, [quizId, refreshKey, isActive, canBuild]);
+
+  if (!canBuild) {
+    return (
+      <div className="coverage-map-panel">
+        <div className="coverage-map-empty">
+          Create at least one learning objective before building the Coverage Map.
+        </div>
+      </div>
+    );
+  }
+
+  if (!isActive) return null;
 
   if (loading) {
     return (

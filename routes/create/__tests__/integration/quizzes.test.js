@@ -301,6 +301,37 @@ describe('Quiz Management API Integration Tests', () => {
       expect(quizInDb.settings.pedagogicalApproach).toBe('assess');
     });
 
+    test('should replace a saved Blueprint with a shorter planItems array', async () => {
+      const objectiveIds = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
+      await Quiz.findByIdAndUpdate(quizId, {
+        $set: {
+          'settings.planItems': objectiveIds.map(learningObjective => ({
+            type: 'multiple-choice',
+            learningObjective,
+            count: 3
+          }))
+        }
+      });
+
+      const replacement = [{
+        type: 'multiple-choice',
+        learningObjective: objectiveIds[0].toString(),
+        count: 1,
+        selectionMode: 'single'
+      }];
+      const response = await request(app)
+        .put(`/api/quizzes/${quizId}`)
+        .send({ settings: { planItems: replacement } })
+        .expect(200);
+
+      expect(response.body.data.quiz.settings.planItems).toHaveLength(1);
+      expect(response.body.data.quiz.settings.planItems[0].count).toBe(1);
+
+      const quizInDb = await Quiz.findById(quizId);
+      expect(quizInDb.settings.planItems).toHaveLength(1);
+      expect(quizInDb.settings.planItems[0].count).toBe(1);
+    });
+
     test('should reject update with empty name', async () => {
       const response = await request(app)
         .put(`/api/quizzes/${quizId}`)

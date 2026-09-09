@@ -7,6 +7,7 @@ import H5PStudio from './H5PStudio';
 const mocks = vi.hoisted(() => ({
   getEditorModel: vi.fn(),
   listContents: vi.fn(),
+  save: vi.fn(),
   showNotification: vi.fn()
 }));
 
@@ -19,7 +20,7 @@ vi.mock('@lumieducation/h5p-react', () => ({
     const { contentId, loadContentCallback } = props;
     const onLoadedRef = useRef(props.onLoaded);
     onLoadedRef.current = props.onLoaded;
-    useImperativeHandle(ref, () => ({ save: vi.fn() }));
+    useImperativeHandle(ref, () => ({ save: mocks.save }));
 
     useEffect(() => {
       void loadContentCallback(contentId).then(() => onLoadedRef.current());
@@ -70,6 +71,7 @@ describe('H5PStudio', () => {
       }
     });
     mocks.getEditorModel.mockResolvedValue({ data: { model: { library: 'H5P.MultiChoice 1.16' } } });
+    mocks.save.mockResolvedValue({ contentId: 'content-1' });
   });
 
   it('keeps the loaded editor active when the selected content is clicked again', async () => {
@@ -88,6 +90,32 @@ describe('H5PStudio', () => {
 
     expect(mocks.getEditorModel).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Loading the official H5P editor…')).not.toBeInTheDocument();
+    expect(screen.getByTestId('h5p-editor')).toBeInTheDocument();
+  });
+
+  it('saves before preview and keeps the active preview step stable', async () => {
+    render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1']}><H5PStudio /></MemoryRouter>);
+    const preview = await screen.findByRole('button', { name: 'Save & preview' });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+    await screen.findByTitle('Preview Example activity');
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: /Preview & download Save/ }));
+    expect(screen.getByTitle('Preview Example activity')).toBeInTheDocument();
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to editor' }));
+    await screen.findByTestId('h5p-editor');
+    expect(screen.queryByTitle('Preview Example activity')).not.toBeInTheDocument();
+  });
+
+  it('does not preview a stale saved copy when current editor validation fails', async () => {
+    mocks.save.mockResolvedValue(undefined);
+    render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1']}><H5PStudio /></MemoryRouter>);
+    const preview = await screen.findByRole('button', { name: 'Save & preview' });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTitle('Preview Example activity')).not.toBeInTheDocument();
     expect(screen.getByTestId('h5p-editor')).toBeInTheDocument();
   });
 });

@@ -76,9 +76,11 @@ function expectDeclaredAssetsToExist(machineName) {
 describe('vendored H5P library assets', () => {
   test('H5P Studio libraries include their version-matched browser bundles', () => {
     const studioLibraryDirectories = [
+      'H5P.Agamotto-1.6',
       'H5P.AudioRecorder-1.0',
       'H5P.CoursePresentation-1.26',
       'H5P.Crossword-0.5',
+      'H5P.Dictation-1.3',
       'H5P.ExportableTextArea-1.3',
       'H5P.InteractiveBook-1.11',
       'H5P.InteractiveVideo-1.27',

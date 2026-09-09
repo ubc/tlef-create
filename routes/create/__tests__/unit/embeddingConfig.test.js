@@ -31,6 +31,25 @@ describe('embedding configuration', () => {
     expect(config.apiKey).toBe('embedding-key');
   });
 
+  test('does not inherit a chat-only LLM endpoint for OpenAI embeddings', () => {
+    const config = resolveEmbeddingConfig({
+      OPENAI_API_KEY: 'test-key',
+      LLM_PROVIDER: 'openai',
+      LLM_API_ENDPOINT: 'http://localhost:11434/v1'
+    });
+
+    expect(config.apiEndpoint).toBeUndefined();
+  });
+
+  test('uses an explicit embeddings endpoint when configured', () => {
+    const config = resolveEmbeddingConfig({
+      OPENAI_API_KEY: 'test-key',
+      EMBEDDINGS_API_ENDPOINT: 'https://embeddings.example.test/v1'
+    });
+
+    expect(config.apiEndpoint).toBe('https://embeddings.example.test/v1');
+  });
+
   test('preserves the legacy FastEmbed collection for the existing model', () => {
     const config = resolveEmbeddingConfig({ EMBEDDINGS_PROVIDER: 'fastembed' });
 

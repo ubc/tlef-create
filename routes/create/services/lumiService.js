@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import fs from 'fs/promises';
 import H5PContent from '../models/H5PContent.js';
+import { getStudioCatalog } from './h5pStudioCatalog.js';
 
 // Use createRequire for CJS packages
 const require = createRequire(import.meta.url);
@@ -203,6 +204,20 @@ async function createLumiRuntime() {
   // Include the jQuery bridge in both the host page and editor iframe before
   // the H5P core scripts initialize.
   h5pEditor.setRenderer(prepareEditorModel);
+
+  // The Hub must agree with AI authoring about usable versions. Otherwise its
+  // automatic save-time upgrade can move a healthy draft onto missing assets
+  // or a library that needs a newer core (e.g. Dictation 1.3 -> 1.4).
+  const getContentTypes = h5pEditor.contentTypeRepository.get.bind(h5pEditor.contentTypeRepository);
+  h5pEditor.contentTypeRepository.get = async (...args) => {
+    const result = await getContentTypes(...args);
+    const available = new Map(getStudioCatalog().types.filter(type => type.mode !== 'unavailable').map(type => [type.machineName, type]));
+    return { ...result, libraries: result.libraries.filter(library => available.has(library.machineName)).map(library => {
+      const type = available.get(library.machineName);
+      const [majorVersion, minorVersion, patchVersion] = type.version.split('.').map(Number);
+      return { ...library, majorVersion, minorVersion, patchVersion, localMajorVersion: majorVersion, localMinorVersion: minorVersion, localPatchVersion: patchVersion, installed: true, isUpToDate: true, canInstall: false };
+    }) };
+  };
 
   // Create H5P Player (needed for rendering content)
   h5pPlayer = new H5PServer.H5PPlayer(

@@ -60,6 +60,14 @@ const existingQuiz = {
   _id: 'quiz-1',
   name: 'Quiz 1',
   questions: ['question-1'],
+  progress: {
+    materialsAssigned: true,
+    objectivesSet: true,
+    planGenerated: true,
+    planApproved: false,
+    questionsGenerated: true,
+    reviewCompleted: false,
+  },
 };
 
 const createdQuiz = {
@@ -115,6 +123,8 @@ describe('CourseView quiz creation', () => {
     );
 
     expect(await screen.findByText('Quizzes (1)')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Course setup steps' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Add your first course material' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Quiz' }));
 
@@ -130,5 +140,62 @@ describe('CourseView quiz creation', () => {
       quiz: createdQuiz,
     });
     expect(mocks.navigate).toHaveBeenCalledWith('/course/course-1/quiz/quiz-2');
+  });
+
+  it('offers one next action that resumes the Quiz at the correct step', async () => {
+    mocks.getMaterials.mockResolvedValue({
+      materials: [{
+        _id: 'material-1',
+        name: 'Lecture notes',
+        type: 'pdf',
+        createdAt: '2026-07-20T00:00:00.000Z',
+        processingStatus: 'completed',
+      }],
+    });
+    const store = configureStore({ reducer: { quiz: quizReducer } });
+
+    render(
+      <Provider store={store}>
+        <CourseView />
+      </Provider>
+    );
+
+    const nextAction = await screen.findByRole('heading', { name: 'Review generated questions in Quiz 1' });
+    expect(nextAction).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue Quiz/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/course/course-1/quiz/quiz-1?tab=review');
+  });
+
+  it('places materials before quizzes and gives each selected setup step different guidance', async () => {
+    mocks.getMaterials.mockResolvedValue({
+      materials: [{
+        _id: 'material-1',
+        name: 'Lecture notes',
+        type: 'pdf',
+        createdAt: '2026-07-20T00:00:00.000Z',
+        processingStatus: 'completed',
+      }],
+    });
+    const store = configureStore({ reducer: { quiz: quizReducer } });
+
+    render(
+      <Provider store={store}>
+        <CourseView />
+      </Provider>
+    );
+
+    const materials = await screen.findByText('Materials');
+    const quizzes = screen.getByRole('heading', { name: 'Quizzes (1)' });
+    expect(materials.compareDocumentPosition(quizzes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Course materials/ }));
+    expect(screen.getByRole('heading', { name: '1 course source is ready' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Quizzes/ })[0]);
+    expect(screen.getByRole('heading', { name: 'Review generated questions in Quiz 1' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Course details/ }));
+    expect(screen.getByRole('heading', { name: 'Test Course is ready' })).toBeInTheDocument();
   });
 });

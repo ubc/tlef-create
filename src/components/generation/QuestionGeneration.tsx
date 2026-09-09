@@ -13,7 +13,6 @@ import { QuestionGenerationProps, PlanItem, AIConfig, StreamingState } from './g
 import {
   DeliveryTarget,
   TargetFormat,
-  DELIVERY_TARGETS,
   getDefaultFormatForDeliveryTarget,
   getDeliveryTargetForFormat,
   getFallbackQuestionType,
@@ -25,6 +24,7 @@ import {
 import ModeToggle from './ModeToggle';
 import PlanEditor from './PlanEditor';
 import AIConfigPanel from './AIConfigPanel';
+import GenerationSetup from './GenerationSetup';
 import AIPlanGenerationTrace from './AIPlanGenerationTrace';
 import StreamingProgress from './StreamingProgress';
 import PromptAnalysisSection from './PromptAnalysisSection';
@@ -75,6 +75,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   const { showNotification } = usePubSub('QuestionGeneration');
   const { showConfirm } = useSystemDialog();
   const hasUserSelectedViewRef = useRef(false);
+  const restoredSettingsForRef = useRef<string | null>(null);
+  const pendingDefaultPlanRef = useRef(false);
 
   // Plan mode state
   const [planMode, setPlanMode] = useState<'manual' | 'ai-auto'>('manual');
@@ -100,6 +102,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   const [planStreamModel, setPlanStreamModel] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isChangingFormat, setIsChangingFormat] = useState(false);
+  const formatChangeRef = useRef(false);
+  const formatFocusRef = useRef<HTMLElement | null>(null);
+  const configurationStartRef = useRef<HTMLDivElement>(null);
+  const focusConfigurationRef = useRef(false);
   const [currentView, setCurrentView] = useState<GenerationView>('plan');
   const [showGenerationModeModal, setShowGenerationModeModal] = useState(false);
   const [isPreparingGeneration, setIsPreparingGeneration] = useState(false);
@@ -304,9 +311,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
   // Restore settings on mount
   useEffect(() => {
+    if (restoredSettingsForRef.current === quizId) return;
+    let active = true;
     const restoreSettings = async () => {
       try {
         const { quiz } = await quizApi.getQuiz(quizId);
+        if (!active) return;
+        restoredSettingsForRef.current = quizId;
+        pendingDefaultPlanRef.current = false;
         const restoredTargetFormat = (quiz.settings?.targetFormat as TargetFormat | undefined) || quiz.containerMode || 'column';
         const restoredDeliveryTarget = (quiz.settings?.deliveryTarget as DeliveryTarget | undefined)
           || getDeliveryTargetForFormat(restoredTargetFormat);
@@ -342,6 +354,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
           setPlanItems(items);
         } else {
           // Initialize with default plan
+          pendingDefaultPlanRef.current = learningObjectives.length === 0;
           initializeDefaultPlan(normalizedTargetFormat);
         }
 
@@ -362,13 +375,25 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
           });
         }
       } catch (error) {
+        if (!active) return;
+        restoredSettingsForRef.current = quizId;
+        pendingDefaultPlanRef.current = learningObjectives.length === 0;
         console.error('Failed to restore settings:', error);
         initializeDefaultPlan('column');
       }
     };
 
     restoreSettings();
+    return () => { active = false; };
   }, [initializeDefaultPlan, learningObjectives.length, quizId]);
+
+  // Objectives may arrive after settings. Initialize missing rows once without
+  // reloading saved settings over a teacher's in-progress layout/purpose edits.
+  useEffect(() => {
+    if (restoredSettingsForRef.current !== quizId || !pendingDefaultPlanRef.current || !learningObjectives.length) return;
+    pendingDefaultPlanRef.current = false;
+    initializeDefaultPlan(targetFormat);
+  }, [initializeDefaultPlan, learningObjectives.length, quizId, targetFormat]);
 
   const reloadQuestions = async () => {
     try {
@@ -756,12 +781,6 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       return false;
     }
 
-    showNotification(
-      'warning',
-      'Plan Updated For New Format',
-      `Unsupported plan items were converted to ${fallbackType}.`
-    );
-
     return true;
   };
 
@@ -805,34 +824,45 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
     return true;
   };
 
-  const handleDeliveryTargetChange = async (target: DeliveryTarget) => {
-    const nextFormat = getDefaultFormatForDeliveryTarget(target);
-    const canProceed = await removeIncompatibleQuestionsForFormat(nextFormat);
-    if (!canProceed) {
-      return;
+  // Disabling the controls during confirmation blurs native radio buttons.
+  // Restore the initiating control so keyboard users can keep navigating.
+  useEffect(() => {
+    if (isChangingFormat || !formatFocusRef.current) return;
+    const control = formatFocusRef.current;
+    formatFocusRef.current = null;
+    if (control.isConnected) control.focus({ preventScroll: true });
+  }, [isChangingFormat]);
+
+  const changeDeliveryFormat = async (target: DeliveryTarget, format: TargetFormat) => {
+    if (formatChangeRef.current || (target === deliveryTarget && format === targetFormat)) return;
+    formatChangeRef.current = true;
+    formatFocusRef.current = document.activeElement instanceof HTMLElement
+      && document.activeElement.matches('.generation-setup input') ? document.activeElement : null;
+    setIsChangingFormat(true);
+    try {
+      // Resolve every non-destructive decision before asking to delete content.
+      // Canceling a plan change must never follow an already-completed deletion.
+      if (!await confirmPlanItemCompatibilityForFormat(format)) return;
+      if (!await removeIncompatibleQuestionsForFormat(format)) return;
+      setDeliveryTarget(target);
+      setTargetFormat(format);
+      normalizePlanItemsForFormat(format);
+      setHasUnsavedChanges(true);
+    } catch {
+      await reloadQuestions();
+      showNotification('error', 'Layout change incomplete', 'The layout was not changed. Check your current questions before retrying; some confirmed removals may already have completed.');
+    } finally {
+      formatChangeRef.current = false;
+      setIsChangingFormat(false);
     }
-    const canUpdatePlan = await confirmPlanItemCompatibilityForFormat(nextFormat);
-    if (!canUpdatePlan) {
-      return;
-    }
-    setDeliveryTarget(target);
-    setTargetFormat(nextFormat);
-    normalizePlanItemsForFormat(nextFormat);
-    setHasUnsavedChanges(true);
   };
 
-  const handleTargetFormatChange = async (format: TargetFormat) => {
-    const canProceed = await removeIncompatibleQuestionsForFormat(format);
-    if (!canProceed) {
-      return;
-    }
-    const canUpdatePlan = await confirmPlanItemCompatibilityForFormat(format);
-    if (!canUpdatePlan) {
-      return;
-    }
-    setTargetFormat(format);
-    normalizePlanItemsForFormat(format);
-    setHasUnsavedChanges(true);
+  const handleDeliveryTargetChange = (target: DeliveryTarget) => {
+    if (target !== deliveryTarget) void changeDeliveryFormat(target, getDefaultFormatForDeliveryTarget(target));
+  };
+
+  const handleTargetFormatChange = (format: TargetFormat) => {
+    void changeDeliveryFormat(deliveryTarget, format);
   };
 
   // Render
@@ -856,8 +886,19 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
     return () => window.clearTimeout(scrollTimer);
   }, [showResultsView]);
 
+  useEffect(() => {
+    if (currentView !== 'plan' || !focusConfigurationRef.current) return;
+    const timer = window.setTimeout(() => {
+      configurationStartRef.current?.focus({ preventScroll: true });
+      configurationStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusConfigurationRef.current = false;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentView]);
+
   const handleGoBackToPlan = () => {
     hasUserSelectedViewRef.current = true;
+    focusConfigurationRef.current = true;
     const reconciledPlanItems = reconcilePlanItemsWithQuestions(planItems, questions);
     if (reconciledPlanItems.some((item, index) => (
       item.id !== planItems[index]?.id
@@ -866,6 +907,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       setPlanItems(reconciledPlanItems);
       setHasUnsavedChanges(true);
     }
+    // Reopen the AI settings, not just the manual row editor. Keep the saved
+    // purpose, layout, instructions and reconciled rows; do not regenerate.
+    if (planMode !== 'ai-auto') setHasUnsavedChanges(true);
+    setPlanMode('ai-auto');
     setCurrentView('plan');
   };
 
@@ -907,12 +952,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
               <h3>Questions Generated</h3>
               <p>{questions.length} questions have been generated and are ready for review</p>
             </div>
-            <button
-              onClick={handleGoBackToPlan}
-              className="btn btn-secondary"
-            >
-              Back to AI Plan Configuration
-            </button>
+            <div className="generation-results-actions">
+              <button onClick={handleGoBackToPlan} className="btn btn-secondary">
+                Back to AI Plan Configuration
+              </button>
+              {onQuestionsGenerated && <button onClick={onQuestionsGenerated} className="btn btn-primary">
+                Continue to Review
+              </button>}
+            </div>
           </div>
 
           {/* Generation Summary */}
@@ -949,12 +996,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
           {/* Prompt Analysis */}
           <PromptAnalysisSection questions={questions} learningObjectives={learningObjectives} />
 
-          <div className="results-actions">
-          </div>
-
           <div className="results-info">
             <p>
-              Switch to the <strong>Review & Edit</strong> tab to view and edit your generated questions.
+              Continue to Step 4, <strong>Review</strong>, to check and edit your generated questions.
             </p>
           </div>
         </div>
@@ -965,10 +1009,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   // Show generation form
   return (
     <div className="question-generation">
-      <div className="generation-header">
+      <div className="generation-header generation-setup-start" ref={configurationStartRef} tabIndex={-1}>
         <h2>Generate Questions</h2>
         <p className="generation-subtitle">
-          Create a plan for your quiz questions by choosing a mode and configuring the distribution
+          Start with your teaching purpose, choose a student-facing layout, then build your question plan.
         </p>
         {hasQuestions && (
           <div className="generation-header-actions">
@@ -988,80 +1032,36 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
         </div>
       ) : (
         <>
-          {courseId && (
-            <div className="step-prompt-settings">
-              <CoursePromptSettings
-                courseId={courseId}
-                defaultPromptType={planMode === 'ai-auto' ? 'quiz-blueprint' : 'question-generation'}
-                defaultApproach={aiConfig.approach}
-              />
-            </div>
-          )}
-
-          <ModeToggle
-            mode={planMode}
-            onChange={handleModeChange}
-            disabled={streamingState.isStreaming}
-          />
+          {hasQuestions && <p className="generation-preserved-note">Your {questions.length} saved questions are still available in Review. Returning here does not regenerate or replace them. Layout changes that require removing questions always ask for confirmation.</p>}
 
           <FeatureCoachmark
             isOpen={deliveryFormatTutorial.isActive}
-            title="Choose where this learning object will be used"
-            description="Delivery Target and Package Format determine which question types CREATE can generate and export. If you change them later, compatible questions are kept and CREATE will warn before removing incompatible ones."
+            title="Teaching purpose first, layout second"
+            description="Choose ASSESS, SUPPORT or GAMIFY, then compare the illustrated layouts. Your existing selection is preserved. Changing layout requires a compatibility check."
             eyebrow="Delivery and compatibility"
             block
             onPrimary={deliveryFormatTutorial.complete}
             onDismiss={deliveryFormatTutorial.complete}
             onSkip={deliveryFormatTutorial.skipAll}
           >
-            <section className="target-format-section" aria-labelledby="delivery-target-heading">
-              <div className="target-format-header">
-                <h3 id="delivery-target-heading">Delivery Target</h3>
-                <p>Choose where this learning object will be delivered so CREATE can offer compatible question types.</p>
-              </div>
-              <div className="target-format-options" role="radiogroup" aria-label="Delivery target">
-                {DELIVERY_TARGETS.map(target => (
-                  <button
-                    key={target.value}
-                    type="button"
-                    className={`target-format-option ${deliveryTarget === target.value ? 'active' : ''}`}
-                    onClick={() => handleDeliveryTargetChange(target.value)}
-                    disabled={streamingState.isStreaming}
-                    aria-pressed={deliveryTarget === target.value}
-                  >
-                    <span className="target-format-label">{target.label}</span>
-                    <span className="target-format-description">{target.description}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="target-format-subsection">
-                <div className="target-format-header compact">
-                  <h4>{deliveryTarget === 'canvas-lti' ? 'Canvas LTI Format' : 'H5P Package Format'}</h4>
-                  <p>
-                    {deliveryTarget === 'canvas-lti'
-                      ? 'Canvas LTI uses CREATE’s player, so it can render a broader mixed activity.'
-                      : 'H5P package formats follow official H5P container compatibility.'}
-                  </p>
-                </div>
-                <div className="target-format-options" role="radiogroup" aria-label="Target format">
-                  {getFormatsForDeliveryTarget(deliveryTarget).map(format => (
-                    <button
-                      key={format.value}
-                      type="button"
-                      className={`target-format-option ${targetFormat === format.value ? 'active' : ''}`}
-                      onClick={() => handleTargetFormatChange(format.value)}
-                      disabled={streamingState.isStreaming || getFormatsForDeliveryTarget(deliveryTarget).length === 1}
-                      aria-pressed={targetFormat === format.value}
-                    >
-                      <span className="target-format-label">{format.label}</span>
-                      <span className="target-format-description">{format.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
+            <GenerationSetup
+              approach={aiConfig.approach}
+              onApproachChange={approach => { setAIConfig(config => ({ ...config, approach })); setHasUnsavedChanges(true); }}
+              deliveryTarget={deliveryTarget}
+              targetFormat={targetFormat}
+              onDeliveryTargetChange={handleDeliveryTargetChange}
+              onTargetFormatChange={handleTargetFormatChange}
+              disabled={streamingState.isStreaming || isGeneratingPlan || isChangingFormat || isSaving || isPreparingGeneration}
+            />
           </FeatureCoachmark>
+
+          <ModeToggle mode={planMode} onChange={handleModeChange} disabled={isGeneratingPlan || isChangingFormat || isSaving || isPreparingGeneration} />
+          {planMode === 'manual' && <p className="generation-layout-note">Manual Mode keeps you in control of every row. Use AI Auto Mode to generate a plan from the selected teaching purpose.</p>}
+
+          {courseId && <details className="generation-advanced-options">
+            <summary>Advanced: course prompts</summary>
+            <CoursePromptSettings courseId={courseId} defaultPromptType={planMode === 'ai-auto' ? 'quiz-blueprint' : 'question-generation'} defaultApproach={aiConfig.approach} />
+          </details>}
 
           {planMode === 'ai-auto' && (
             <>
@@ -1073,6 +1073,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                 }}
                 onGeneratePlan={handleGenerateAIPlan}
                 isGenerating={isGeneratingPlan}
+                disabled={isChangingFormat || isSaving || isPreparingGeneration}
                 learningObjectives={learningObjectives}
               />
 
@@ -1152,7 +1153,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                   learningObjectives={learningObjectives}
                   onPlanItemsChange={handlePlanItemsChange}
                   targetFormat={targetFormat}
-                  readOnly={streamingState.isStreaming}
+                  readOnly={streamingState.isStreaming || isChangingFormat || isSaving || isPreparingGeneration}
                 />
               </FeatureCoachmark>
             </>
@@ -1163,7 +1164,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
               <div className="actions-left">
                 <button
                   onClick={handleSavePlan}
-                  disabled={isSaving || !hasUnsavedChanges}
+                  disabled={isSaving || isChangingFormat || isPreparingGeneration || !hasUnsavedChanges}
                   className="btn btn-secondary"
                 >
                   <Save size={18} />
@@ -1174,17 +1175,23 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
               <div className="actions-right">
                 <button
                   onClick={handleGenerateQuestions}
-                  disabled={streamingState.isStreaming || totalPlannedQuestions === 0 || isPreparingGeneration}
+                  disabled={streamingState.isStreaming || isChangingFormat || isSaving || totalPlannedQuestions === 0 || isPreparingGeneration}
                   className="btn btn-primary"
                 >
                   <Wand2 size={18} />
                   {isPreparingGeneration
                     ? 'Preparing Generation...'
-                    : `Generate ${totalPlannedQuestions} Questions`}
+                    : `Generate ${totalPlannedQuestions} Question${totalPlannedQuestions === 1 ? '' : 's'}`}
                 </button>
               </div>
             </div>
           )}
+
+          <aside className="generation-studio-shortcut">
+            <strong>Looking for more activity types?</strong>
+            <p>Create charts, presentations and other native H5P drafts in Studio. Your Quiz stays unchanged.</p>
+            <a className="btn btn-outline" href={`/h5p-studio?create=ai&quizId=${encodeURIComponent(quizId)}${courseId ? `&courseId=${encodeURIComponent(courseId)}` : ''}`}>Explore AI activities <Wand2 size={16} /></a>
+          </aside>
 
           {showGenerationModeModal && (
             <div className="modal-overlay" onClick={() => !isPreparingGeneration && setShowGenerationModeModal(false)}>

@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, test } from '@jest/globals';
+import { describe, expect, jest, test } from '@jest/globals';
 import { getEditor, initializeLumi } from '../../services/lumiService.js';
+import vm from 'node:vm';
 
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const CREATE_DIRECTORY = path.resolve(TEST_DIRECTORY, '../..');
@@ -69,6 +70,9 @@ describe('H5P Studio runtime assets', () => {
 
   test('authors receive installed types without Hub installation permission', async () => {
     await initializeLumi();
+    // Test local availability/permissions independently from H5P Hub uptime.
+    const hub = jest.spyOn(getEditor().contentTypeCache, 'get').mockResolvedValue([]);
+    try {
     const cache = await getEditor().getContentTypeCache({
       id: 'content-type-test',
       name: 'Content type test',
@@ -78,6 +82,21 @@ describe('H5P Studio runtime assets', () => {
     expect(cache.libraries.length).toBeGreaterThan(0);
     expect(cache.libraries.every(library => library.installed)).toBe(true);
     expect(cache.libraries.every(library => library.canInstall === false)).toBe(true);
+    expect(cache.libraries.find(library => library.machineName === 'H5P.Dictation')).toMatchObject({ majorVersion: 1, minorVersion: 3 });
+    expect(cache.libraries.some(library => library.machineName === 'H5P.BranchingScenario')).toBe(false);
+    } finally { hub.mockRestore(); }
+  });
+
+  test('official editor rejects invalid required fields before Lumi saves', () => {
+    const ns = {};
+    vm.runInNewContext(fs.readFileSync(path.join(CREATE_DIRECTORY, 'h5p-editor-core/scripts/h5peditor-library-selector.js'), 'utf8'), {
+      ns, H5P: { EventDispatcher: function () {} }, window: {}, document: {}
+    });
+    const validate = jest.fn().mockReturnValue(false);
+    const form = { metadataForm: { children: [] }, children: [{ validate }], params: { answer: '' } };
+    expect(ns.LibrarySelector.prototype.getParams.call({ form })).toBe(false);
+    validate.mockReturnValue(true);
+    expect(ns.LibrarySelector.prototype.getParams.call({ form })).toBe(form.params);
   });
 
 });

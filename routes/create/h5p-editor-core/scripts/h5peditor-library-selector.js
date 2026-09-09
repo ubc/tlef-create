@@ -306,12 +306,12 @@ ns.LibrarySelector.prototype.getParams = function () {
   }
 
   // Only return if all fields has validated.
-  //var valid = true;
+  var valid = true;
 
   if (this.form.metadataForm.children !== undefined) {
     for (var i = 0; i < this.form.metadataForm.children.length; i++) {
       if (this.form.metadataForm.children[i].validate() === false) {
-        //valid = false;
+        valid = false;
       }
     }
   }
@@ -319,13 +319,14 @@ ns.LibrarySelector.prototype.getParams = function () {
   if (this.form.children !== undefined) {
     for (var i = 0; i < this.form.children.length; i++) {
       if (this.form.children[i].validate() === false) {
-        //valid = false;
+        valid = false;
       }
     }
   }
 
-  //return valid ? this.form.params : false;
-  return this.form.params; // TODO: Switch to the line above when we are able to tell the user where the validation fails
+  // CREATE displays validation feedback and must not save or preview invalid
+  // media templates. Return the signal expected by Lumi's save wrapper.
+  return valid ? this.form.params : false;
 };
 
 /**

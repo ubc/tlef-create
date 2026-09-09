@@ -1,6 +1,6 @@
 # Review, Edit, and Export
 
-Review & Edit is the required human quality-control step after generation. A question can be grounded in a source and still be ambiguous, inaccurate, too easy, or unsuitable for the intended learners.
+Step 4, **Review**, is the required human quality-control stage after generation. A question can be grounded in a source and still be ambiguous, inaccurate, too easy, or unsuitable for the intended learners. Step 5, **Preview & Export**, separates the learner-facing experience and delivery actions from question editing.
 
 ## Review order and completeness
 
@@ -34,7 +34,7 @@ Open a question's evidence graph to trace the question to its learning objective
 
 H5P export creates a downloadable `.h5p` package. Column and Interactive Book support mixed content, Question Set supports a smaller assessment-oriented subset, and Standalone is for one complex activity type. A Canvas LTI/Mixed Activity learning object can contain types that are not valid in one downloadable H5P package; CREATE warns before an H5P export from that configuration.
 
-Choose **Preview** in Review & Edit to run the current questions through the same native H5P builder used by package export and H5P Studio. Preview is temporary and does not create a saved Studio item. **Advanced H5P Editor** creates or opens an independent Studio draft; Studio changes do not flow back into the CREATE questions automatically.
+Open **Preview & Export** to run the current questions through the same native H5P builder used by package export and H5P Studio. Preview is temporary and does not create a saved Studio item. **Advanced H5P Editor** creates or opens an independent Studio draft; Studio changes do not flow back into the CREATE questions automatically.
 
 ## PDF and Markdown export
 

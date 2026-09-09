@@ -40,7 +40,7 @@ const h5pContentSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['editor', 'import', 'generated'],
+    enum: ['editor', 'import', 'generated', 'ai-studio'],
     default: 'editor'
   },
   status: {
@@ -56,6 +56,14 @@ const h5pContentSchema = new mongoose.Schema({
     type: String,
     default: null,
     maxlength: 80
+  },
+  aiGeneration: {
+    model: { type: String, maxlength: 200 },
+    library: { type: String, maxlength: 200 },
+    contractVersion: Number,
+    validation: { type: String, enum: ['structural'] },
+    attempts: Number,
+    templateContentId: { type: String, maxlength: 200 }
   },
   lastEditedAt: {
     type: Date,

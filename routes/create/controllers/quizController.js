@@ -162,7 +162,10 @@ router.put('/:id', authenticateToken, validateUpdateQuiz, asyncHandler(async (re
       } else if (field === 'settings') {
         for (const [key, value] of Object.entries(updates.settings)) {
           if (value !== undefined) {
-            quiz.settings[key] = value;
+            // Dynamic assignment on a Mongoose nested path is not reliably
+            // tracked for arrays such as planItems. Use Document#set so a
+            // shorter edited Blueprint replaces the persisted array.
+            quiz.set(`settings.${key}`, value);
           }
         }
       } else {

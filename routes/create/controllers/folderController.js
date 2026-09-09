@@ -17,7 +17,8 @@ router.get('/', authenticateToken, attachUser, asyncHandler(async (req, res) => 
   console.log('🔍 GET /folders - User ID:', userId);
 
   const folders = await Folder.find({ instructor: userId })
-    .populate('quizzes', 'name status questions createdAt')
+    .populate('materials', 'name processingStatus updatedAt')
+    .populate('quizzes', 'name status progress questions materials learningObjectives createdAt updatedAt')
     .sort({ updatedAt: -1 });
 
   console.log('📁 Found folders for user:', folders.length);

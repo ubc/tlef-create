@@ -2,6 +2,45 @@
 
 This document records the question types currently exposed in the CREATE question creation flows.
 
+## Native Studio AI activities (September 2026)
+
+There are now **two authoring surfaces**. The 16 normalized question types below
+still drive Quiz blueprints, evidence links, the review list and multi-format
+exports. **H5P Studio → Create with AI** instead creates a standalone native H5P
+activity using installed semantics and Lumi's official save/export pipeline.
+Generate Questions links to it through **Explore AI activities**. A Studio draft
+does not automatically become a Quiz question or acquire source citations.
+
+The Studio catalog is discovered at runtime by `h5pStudioCatalog.js`; it is not
+the Quiz/container compatibility matrix. It currently lists 37 runnable types:
+
+| Availability | Types |
+| --- | --- |
+| AI draft from instructions (23) | Accordion, Arithmetic Quiz, Audio Recorder, Chart, Course Presentation, Crossword, Dialog Cards, Documentation Tool, Drag the Words, Essay, Fill in the Blanks, Guess the Answer, Interactive Book, Mark the Words, Multiple Choice, Page (Column), Question Set, Questionnaire, Single Choice Set, Sort the Paragraphs, Summary, Timeline, True/False |
+| AI adaptation of an owned saved template (13) | Agamotto, Audio, Collage, Dictation, Drag and Drop, Find the Hotspot, Iframe Embedder, Image Hotspots, Image Slider, Interactive Video, Memory Game, Multimedia Choice, Twitter User Feed |
+| Unavailable pending runtime maintenance (1) | Branching Scenario |
+
+This is **beta structural coverage, not certification of all 36 playable
+outputs**. AI output must pass installed-field validation before being saved;
+instructors must check answers, layout, accessibility and playback before use.
+Only supplied text is sent to the AI; it does not watch template videos or
+interpret images. Media templates must already contain usable owned files or
+approved external sources. External services can independently block embedding.
+
+Branching Scenario 1.10 has missing compiled assets in this checkout; its
+upstream 1.10.1 descriptor also requires core 1.28 despite the older local
+descriptor. CREATE's current Lumi runtime uses core 1.27. Native Branching
+Scenario is deliberately not offered as a successful AI-generation choice until
+the runtime/editor dependencies and real-player validation are completed. The older normalized Branching Scenario adapter below
+does not establish compatibility for native Studio authoring.
+
+Interactive Book selects the healthy installed 1.11 release, not incomplete
+1.13. Agamotto's missing 1.6.8 compiled assets were restored from its exact
+upstream tag. Dictation uses official 1.3.9 (core 1.27), installed alongside the
+incomplete 1.4 release; no version numbers were lowered. Preparing a template
+from the AI builder opens the selected compatible version directly.
+See [the implementation and verification record](plans/h5p-studio-ai-authoring.md).
+
 ## Currently Exposed to Users
 
 The Generate Questions page and Review & Edit Add Question modal currently allow users to select these question types:

@@ -6,9 +6,9 @@ Start with the smallest safe recovery step: preserve your work, read the visible
 
 CREATE uses in-app dialogs for warnings, errors, success messages, and destructive confirmations instead of the browser's default alert boxes. A confirmation names the affected action and provides explicit action and cancel buttons. Select **Cancel**, press Escape, or close the dialog to leave the affected content unchanged. Destructive actions use a red warning style; warnings, information, and success messages use distinct styles so the result is easier to recognize.
 
-## A workflow tab is disabled
+## A workflow step is unavailable
 
-Complete the prerequisite in the previous tab. Assign processed materials before grounded objective generation, create at least one learning objective before the Blueprint, and generate at least one question before export. Refresh if the prerequisite was just saved but the tab has not updated.
+Read the detail beneath the numbered step to identify its prerequisite. Assign processed materials before grounded objective generation, create at least one learning objective before the Blueprint, and generate at least one question before Preview & Export. A lock represents missing required content, not a system error. Refresh if the prerequisite was just saved but the step has not updated.
 
 ## A search result is no longer available
 
@@ -40,7 +40,7 @@ Preview the material, confirm its processing state, and verify it is assigned to
 
 ## Questions remain after deleting a learning objective
 
-Deleting a learning objective with linked questions shows the number of affected questions before confirmation. After confirmation, CREATE permanently deletes those linked questions and immediately refreshes the learning-object count, the left sidebar count, and the **Review & Edit** objective filter. Questions linked to other objectives remain.
+Deleting a learning objective with linked questions shows the number of affected questions before confirmation. After confirmation, CREATE permanently deletes those linked questions and immediately refreshes the learning-object count, the left sidebar count, and the **Review** objective filter. Questions linked to other objectives remain.
 
 If a linked question still appears or the filter shows an unknown objective, refresh once and report the issue with the learning-object name and deletion time. Do not delete unrelated objectives as a workaround.
 

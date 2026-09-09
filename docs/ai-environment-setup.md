@@ -119,8 +119,11 @@ EMBEDDINGS_DIMENSIONS=1536
 EMBEDDINGS_COLLECTION_NAME=quiz-materials-openai-text-embedding-3-small-1536
 ```
 
-`EMBEDDINGS_API_KEY` and `EMBEDDINGS_API_ENDPOINT` are optional; when omitted,
-CREATE reuses `OPENAI_API_KEY`/`LLM_API_KEY` and the corresponding endpoint.
+`EMBEDDINGS_API_KEY` and `EMBEDDINGS_API_ENDPOINT` are optional. When the key is
+omitted, CREATE reuses `OPENAI_API_KEY`/`LLM_API_KEY`. When the endpoint is
+omitted, the OpenAI SDK uses its official endpoint; CREATE does not inherit a
+chat-only `LLM_API_ENDPOINT`. Set `EMBEDDINGS_API_ENDPOINT` explicitly when an
+OpenAI-compatible deployment also supports the Embeddings API.
 FastEmbed remains available as a local fallback by setting
 `EMBEDDINGS_PROVIDER=fastembed`, which uses the legacy 384-dimension
 `quiz-materials` collection.

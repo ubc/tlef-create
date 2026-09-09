@@ -4,9 +4,9 @@ Coverage tools show how course evidence flows into objectives and questions. The
 
 ## Coverage Map
 
-Open the learning object's Coverage Map tab to inspect relationships among assigned materials, learning objectives, evidence, and generated questions. Use it after objectives are created and again after question generation.
+Choose **Coverage Map** beside the numbered Learning Object steps to inspect relationships among assigned materials, learning objectives, evidence, and generated questions. It is a supporting quality tool, not Step 5. Use it after objectives are created and again after question generation; **Return to** takes you back to the workflow step you were using.
 
-In Graph view, CREATE fits the complete map into the canvas when the Coverage Map tab becomes visible. Drag nodes to rearrange the map, pan or zoom the canvas, select a node to inspect its properties and direct relationships, and double-click a node to isolate its one-hop neighborhood. Use Node Labels and Relationship Types to filter the map, search for a visible entity, and choose **Show complete map** to reset exploration and fit all nodes back into view. Evidence nodes with a resolved material can open the cited source.
+In Graph view, CREATE fits the complete map into the canvas when Coverage Map becomes visible. Drag nodes to rearrange the map, pan or zoom the canvas, select a node to inspect its properties and direct relationships, and double-click a node to isolate its one-hop neighborhood. Use Node Labels and Relationship Types to filter the map, search for a visible entity, and choose **Show complete map** to reset exploration and fit all nodes back into view. Evidence nodes with a resolved material can open the cited source.
 
 The lines are generated from saved evidence and coverage relationships. CREATE does not let an instructor draw an arbitrary new line in this view because an unsaved line would falsely represent source support; update the objective, Blueprint, question, or source reference that owns the relationship instead.
 
@@ -18,7 +18,7 @@ Objective references point to excerpts used during objective generation or enric
 
 ## Question evidence graph
 
-In Review & Edit, open the evidence graph for one question. The graph uses the same drag, zoom, filter, selection, and relationship-line interactions as the full Coverage Map, but starts with only that question's relevant neighborhood. Select an evidence node and choose **Open cited source** to inspect the source preview.
+In Review, open the evidence graph for one question. The graph uses the same drag, zoom, filter, selection, and relationship-line interactions as the full Coverage Map, but starts with only that question's relevant neighborhood. Select an evidence node and choose **Open cited source** to inspect the source preview.
 
 The evidence graph is question-specific, while Coverage Map summarizes the learning object. Use the graph for close review and the map for balance across the whole design.
 
