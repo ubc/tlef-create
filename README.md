@@ -201,7 +201,7 @@ ollama serve
 ## 🎯 Application Features
 
 ### 🏠 Dashboard
-**What it does:** Central hub showing course overview and statistics
+**What it does:** Central hub showing course overview and statistics.
 - View all course folders created by the instructor
 - Real-time statistics (total quizzes, questions, materials)
 - Quick navigation to course management
