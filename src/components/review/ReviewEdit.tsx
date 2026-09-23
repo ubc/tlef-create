@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Plus, Download, Upload, BookMarked, Boxes } from 'lucide-react';
+import { Plus, Download, Upload, BookMarked, Boxes, CheckCircle2, RotateCcw } from 'lucide-react';
 import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi } from '../../services/api';
 import type { H5PStudioContent } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
@@ -13,6 +13,7 @@ import {
   deleteQuestion,
   updateQuestion as updateQuestionThunk
 } from '../../store/slices/questionSlice';
+import { setReviewStatus, clearReviewCompletedLocally } from '../../store/slices/quizSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import RegeneratePromptModal from '../RegeneratePromptModal';
 import ChapterEditorPanel from './ChapterEditorPanel';
@@ -40,7 +41,7 @@ import {
 import '../../styles/components/ReviewEdit.css';
 
 const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: ReviewEditProps) => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const reduxQuestions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
@@ -54,6 +55,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const [canvasExportModalOpen, setCanvasExportModalOpen] = useState(false);
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
+  const [reviewStatusSaving, setReviewStatusSaving] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
   const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
   const { showConfirm } = useSystemDialog();
@@ -272,6 +274,8 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         explanation: question.explanation
       };
       const result = await dispatch(updateQuestionThunk({ quizId, questionId, updates })).unwrap();
+      // The server reopens the review on any question edit
+      dispatch(clearReviewCompletedLocally(quizId));
       setQuestions(questions.map(q =>
         q._id === questionId ? { ...result.question, isEditing: false } : q
       ));
@@ -296,6 +300,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
     setRegenerateLoading(true);
     try {
       const result = await questionsApi.regenerateQuestion(questionToRegenerate._id, customPrompt);
+      dispatch(clearReviewCompletedLocally(quizId));
       setQuestions(questions.map(q =>
         q._id === questionToRegenerate._id ? { ...result.question, isEditing: false } : q
       ));
@@ -591,6 +596,28 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
     );
   }
 
+  const reviewCompleted = Boolean(currentQuiz?._id === quizId && currentQuiz?.progress?.reviewCompleted);
+
+  const handleSetReviewCompleted = async (completed: boolean) => {
+    setReviewStatusSaving(true);
+    try {
+      await dispatch(setReviewStatus({ id: quizId, completed })).unwrap();
+      if (completed) {
+        showNotification('success', 'Review Complete', 'Continue to Preview & Export');
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set('tab', 'preview');
+        nextParams.delete('questionId');
+        setSearchParams(nextParams);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (err) {
+      console.error('Failed to update review status:', err);
+      showNotification('error', 'Update Failed', 'Could not update the review status');
+    } finally {
+      setReviewStatusSaving(false);
+    }
+  };
+
   const deliveryTargetLabel = DELIVERY_TARGETS.find(target => target.value === deliveryTarget)?.label || deliveryTarget;
   const targetFormatLabel = TARGET_FORMATS.find(format => format.value === targetFormat)?.label || targetFormat;
   const h5pUnsupportedTypes = getUnsupportedQuestionTypesForTarget(
@@ -721,6 +748,25 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
             ))
           )}
         </div>
+
+        {workflowMode === 'review' && questions.length > 0 && (
+          <div className={`review-complete-bar${reviewCompleted ? ' is-complete' : ''}`}>
+            <div className="review-complete-text">
+              {reviewCompleted
+                ? <><CheckCircle2 size={18} /> Review complete. Editing, adding, or removing questions will reopen it.</>
+                : 'Finished checking these questions? Mark the review complete to move on to Preview & Export.'}
+            </div>
+            {reviewCompleted ? (
+              <button className="btn btn-outline" onClick={() => handleSetReviewCompleted(false)} disabled={reviewStatusSaving}>
+                <RotateCcw size={16} /> Reopen review
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={() => handleSetReviewCompleted(true)} disabled={reviewStatusSaving}>
+                <CheckCircle2 size={16} /> {reviewStatusSaving ? 'Saving...' : 'Mark review complete'}
+              </button>
+            )}
+          </div>
+        )}
 
         {workflowMode === 'preview-export' && filteredQuestions.length > 0 && (
           <FeatureCoachmark

@@ -2411,3 +2411,27 @@
     width: 100%;
   }
 }
+
+.review-complete-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    margin: 0 var(--spacing-lg) var(--spacing-lg);
+    padding: var(--spacing-lg);
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+}
+
+.review-complete-text {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--color-text-secondary, inherit);
+}
+
+.review-complete-bar.is-complete .review-complete-text svg {
+    color: var(--color-success, #16a34a);
+}

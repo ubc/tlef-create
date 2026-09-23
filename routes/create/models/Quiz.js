@@ -437,6 +437,11 @@ quizSchema.pre('save', function(next) {
     this.progress.planApproved = this.activePlan !== null;
     this.progress.questionsGenerated = this.questions.length > 0;
   }
+  // Adding or removing questions invalidates a completed review
+  // (question edits are handled in questionController)
+  if (this.isModified('questions') && !this.isNew) {
+    this.progress.reviewCompleted = false;
+  }
   next();
 });
 

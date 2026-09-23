@@ -26,6 +26,14 @@ export const updateQuiz = createAsyncThunk(
   }
 );
 
+export const setReviewStatus = createAsyncThunk(
+  'quiz/setReviewStatus',
+  async ({ id, completed }: { id: string; completed: boolean }) => {
+    const response = await quizApi.setReviewStatus(id, completed);
+    return response.quiz;
+  }
+);
+
 export const deleteQuiz = createAsyncThunk(
   'quiz/deleteQuiz',
   async (id: string) => {
@@ -109,6 +117,14 @@ const quizSlice = createSlice({
         state.currentQuiz = action.payload;
       }
     },
+    // Mirrors the server, which clears reviewCompleted when questions are added, removed, or edited
+    clearReviewCompletedLocally: (state, action: PayloadAction<string>) => {
+      for (const quiz of [state.currentQuiz, ...state.quizzes]) {
+        if (quiz && quiz._id === action.payload && quiz.progress) {
+          quiz.progress.reviewCompleted = false;
+        }
+      }
+    },
     removeQuizLocally: (state, action: PayloadAction<string>) => {
       state.quizzes = state.quizzes.filter(quiz => quiz._id !== action.payload);
       if (state.currentQuiz && state.currentQuiz._id === action.payload) {
@@ -163,6 +179,16 @@ const quizSlice = createSlice({
         }
         if (state.currentQuiz && state.currentQuiz._id === action.payload._id) {
           state.currentQuiz = action.payload;
+        }
+      })
+      // Only merge progress: the response is unpopulated and would drop
+      // populated materials/objectives from currentQuiz.
+      .addCase(setReviewStatus.fulfilled, (state, action) => {
+        const { _id, progress } = action.payload;
+        const listed = state.quizzes.find(quiz => quiz._id === _id);
+        if (listed) listed.progress = progress;
+        if (state.currentQuiz && state.currentQuiz._id === _id) {
+          state.currentQuiz.progress = progress;
         }
       })
       .addCase(updateQuiz.rejected, (state, action) => {
@@ -226,6 +252,7 @@ export const {
   clearError,
   addQuizLocally,
   updateQuizLocally,
+  clearReviewCompletedLocally,
   removeQuizLocally,
 } = quizSlice.actions;
 

@@ -12,6 +12,10 @@ import { formatContentForDatabase, normalizeMarkTheWordsText } from '../services
 
 const router = express.Router();
 
+// Any change to a question's content means the quiz needs reviewing again
+const reopenQuizReview = (quizId) =>
+  Quiz.updateOne({ _id: quizId }, { $set: { 'progress.reviewCompleted': false } });
+
 /**
  * GET /api/questions/quiz/:quizId
  * Get quiz questions
@@ -188,6 +192,7 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
 
   // Add to edit history
   await question.addEdit(userId, 'Manual update', previousData);
+  await reopenQuizReview(question.quiz);
 
   return successResponse(res, { question }, 'Question updated successfully');
 }));
@@ -295,6 +300,7 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
 
     // Add to edit history
     await question.addEdit(userId, 'AI regeneration with LLM', previousData);
+    await reopenQuizReview(question.quiz);
 
     return successResponse(res, { question }, 'Question regenerated successfully');
 
