@@ -365,6 +365,34 @@ router.get('/:id/progress', authenticateToken, validateMongoId, asyncHandler(asy
 }));
 
 /**
+ * PUT /api/quizzes/:id/review-status
+ * Mark the Review step complete (or reopen it)
+ */
+router.put('/:id/review-status', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
+  const quizId = req.params.id;
+  const userId = req.user.id;
+  const { completed } = req.body;
+
+  if (typeof completed !== 'boolean') {
+    return errorResponse(res, '`completed` must be a boolean', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
+  if (!quiz) {
+    return notFoundResponse(res, 'Quiz');
+  }
+
+  if (completed && quiz.questions.length === 0) {
+    return errorResponse(res, 'Cannot complete review for a quiz with no questions', 'NO_QUESTIONS', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  quiz.progress.reviewCompleted = completed;
+  await quiz.save();
+
+  return successResponse(res, { quiz }, completed ? 'Review marked complete' : 'Review reopened');
+}));
+
+/**
  * POST /api/quizzes/:id/duplicate
  * Duplicate quiz
  */

@@ -8,7 +8,7 @@ import CoverageMapPanel from './CoverageMapPanel';
 import QuestionGeneration from './generation';
 import ReviewEdit from './review';
 import { RootState, AppDispatch } from '../store';
-import { fetchQuizById, setCurrentQuiz, assignMaterials, updateQuiz } from '../store/slices/quizSlice';
+import { fetchQuizById, setCurrentQuiz, assignMaterials, updateQuiz, clearReviewCompletedLocally } from '../store/slices/quizSlice';
 import { fetchMaterials } from '../store/slices/materialSlice';
 import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
@@ -110,6 +110,23 @@ const QuizView = () => {
       setLearningObjectives(normalizeLearningObjectiveData(populatedObjectives));
     }
   }, [currentQuiz, reduxObjectives]);
+
+  // The server clears reviewCompleted when questions are added or removed;
+  // mirror that locally so the stepper doesn't show a stale checkmark.
+  const previousQuestionCountRef = useRef<{ quizId?: string; count?: number }>({});
+  useEffect(() => {
+    const previous = previousQuestionCountRef.current;
+    previousQuestionCountRef.current = { quizId, count: questionCountFromStore };
+    if (
+      quizId &&
+      previous.quizId === quizId &&
+      previous.count !== undefined &&
+      questionCountFromStore !== undefined &&
+      previous.count !== questionCountFromStore
+    ) {
+      dispatch(clearReviewCompletedLocally(quizId));
+    }
+  }, [questionCountFromStore, quizId, dispatch]);
 
   if (loading) {
     return (

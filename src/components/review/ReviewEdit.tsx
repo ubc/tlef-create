@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector, useDispatch, useStore } from 'react-redux';
-import { Plus, Download, Upload, BookMarked, Boxes, Check } from 'lucide-react';
+import { Plus, Download, Upload, BookMarked, Boxes, Check, RotateCcw } from 'lucide-react';
 import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi, quizApi } from '../../services/api';
 import type { H5PStudioContent } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
@@ -16,6 +16,7 @@ import {
   updateSavedQuestionForQuiz,
   selectReviewDrafts
 } from '../../store/slices/questionSlice';
+import { setReviewStatus } from '../../store/slices/quizSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import { updateQuizLocally } from '../../store/slices/quizSlice';
 import RegeneratePromptModal from '../RegeneratePromptModal';
@@ -95,6 +96,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const [canvasExportModalOpen, setCanvasExportModalOpen] = useState(false);
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
+  const [reviewStatusSaving, setReviewStatusSaving] = useState(false);
   const [questionToRegenerate, setQuestionToRegenerate] = useState<ExtendedQuestion | null>(null);
   const { showNotification, subscribe, unsubscribe, publish } = usePubSub('ReviewEdit');
   const { showConfirm } = useSystemDialog();
@@ -120,6 +122,23 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
       setReviewError(error instanceof Error ? error.message : 'Could not complete review.');
     } finally {
       if (activeQuizIdRef.current === quizId) setReviewSaving(false);
+    }
+  };
+  const reopenReview = async () => {
+    if (reviewStatusSaving) return;
+    setReviewStatusSaving(true);
+    setReviewError('');
+    try {
+      await dispatch(setReviewStatus({ id: quizId, completed: false })).unwrap();
+      if (activeQuizIdRef.current === quizId) {
+        showNotification('success', 'Review reopened', 'Check and edit the saved questions, then mark review complete again.');
+      }
+    } catch (error) {
+      if (activeQuizIdRef.current === quizId) {
+        setReviewError(error instanceof Error ? error.message : 'Could not reopen review.');
+      }
+    } finally {
+      if (activeQuizIdRef.current === quizId) setReviewStatusSaving(false);
     }
   };
   const ownerId = useSelector((state: RootState) => state.app.user?.id);
@@ -832,7 +851,12 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         {workflowMode === 'review' && questions.length > 0 && (
           <div className="review-completion" role="status">
             {currentQuiz?.progress?.reviewCompleted ? (
-              <p><Check size={17} /> Review complete. These saved questions are ready to preview.</p>
+              <>
+                <p><Check size={17} /> Review complete. These saved questions are ready to preview.</p>
+                <button type="button" className="btn btn-outline" disabled={reviewStatusSaving} onClick={() => void reopenReview()}>
+                  <RotateCcw size={16} /> {reviewStatusSaving ? 'Reopening…' : 'Reopen review'}
+                </button>
+              </>
             ) : (
               <>
                 <p>Check every question’s accuracy, answer, feedback, sources and order. When finished, confirm the full saved set.</p>

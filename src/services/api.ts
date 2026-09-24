@@ -932,6 +932,12 @@ export const quizApi = {
     return response.data;
   },
 
+  // PUT /api/create/quizzes/:id/review-status - Mark Review step complete or reopen it
+  setReviewStatus: async (id: string, completed: boolean): Promise<{ quiz: Quiz }> => {
+    const response = await apiClient.put<{ success: boolean; data: { quiz: Quiz }; message: string }>(`/quizzes/${id}/review-status`, { completed });
+    return response.data;
+  },
+
   // GET /api/create/quizzes/:id/progress - Get quiz progress
   getQuizProgress: async (id: string): Promise<{ progress: Quiz['progress'] }> => {
     const response = await apiClient.get<{ success: boolean; data: { progress: Quiz['progress'] }; message: string }>(`/quizzes/${id}/progress`);
