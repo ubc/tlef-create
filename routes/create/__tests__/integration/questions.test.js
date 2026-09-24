@@ -1,3 +1,4 @@
+import { createPublishedObjective, createPublishedQuestion } from '../helpers/publishedFixtures.js';
 import { describe, test, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
@@ -59,7 +60,7 @@ describe('Questions API Integration Tests', () => {
       createdBy: user._id,
       status: 'draft'
     });
-    lo = await LearningObjective.create({
+    lo = await createPublishedObjective({
       text: 'Understand basic concepts',
       quiz: quiz._id,
       order: 0,
@@ -73,12 +74,12 @@ describe('Questions API Integration Tests', () => {
   // ---- GET /api/questions/quiz/:quizId ----
   describe('GET /api/questions/quiz/:quizId', () => {
     test('should return questions sorted by order', async () => {
-      const q1 = await Question.create({
+      const q1 = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'Question B', order: 1
       });
-      const q0 = await Question.create({
+      const q0 = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Question A', order: 0
@@ -234,7 +235,7 @@ describe('Questions API Integration Tests', () => {
     let question;
 
     beforeEach(async () => {
-      question = await Question.create({
+      question = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'Original text', correctAnswer: 'A', order: 0
@@ -278,7 +279,7 @@ describe('Questions API Integration Tests', () => {
     });
 
     test('should return 404 for question owned by another user', async () => {
-      const otherQ = await Question.create({
+      const otherQ = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: otherUser._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Other question', order: 1
@@ -295,7 +296,7 @@ describe('Questions API Integration Tests', () => {
     let question;
 
     beforeEach(async () => {
-      question = await Question.create({
+      question = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'To be deleted', order: 0
@@ -325,7 +326,7 @@ describe('Questions API Integration Tests', () => {
     });
 
     test('should return 404 for question owned by another user', async () => {
-      const otherQ = await Question.create({
+      const otherQ = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: otherUser._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Not yours', order: 1
@@ -340,17 +341,17 @@ describe('Questions API Integration Tests', () => {
     let q0, q1, q2;
 
     beforeEach(async () => {
-      q0 = await Question.create({
+      q0 = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'First', order: 0
       });
-      q1 = await Question.create({
+      q1 = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Second', order: 1
       });
-      q2 = await Question.create({
+      q2 = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'flashcard', difficulty: 'easy',
         questionText: 'Third', order: 2
@@ -399,7 +400,7 @@ describe('Questions API Integration Tests', () => {
     let question;
 
     beforeEach(async () => {
-      question = await Question.create({
+      question = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'Review me', order: 0, reviewStatus: 'pending'
@@ -431,7 +432,7 @@ describe('Questions API Integration Tests', () => {
     });
 
     test('should return 404 for question owned by another user', async () => {
-      const otherQ = await Question.create({
+      const otherQ = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: otherUser._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Not yours', order: 1
@@ -446,12 +447,12 @@ describe('Questions API Integration Tests', () => {
   // ---- DELETE /api/questions/quiz/:quizId (delete all) ----
   describe('DELETE /api/questions/quiz/:quizId', () => {
     test('should delete all questions for a quiz', async () => {
-      await Question.create({
+      await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'Q1', order: 0
       });
-      await Question.create({
+      await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'true-false', difficulty: 'easy',
         questionText: 'Q2', order: 1
@@ -472,7 +473,7 @@ describe('Questions API Integration Tests', () => {
     });
 
     test('should clear quiz.questions array', async () => {
-      const q = await Question.create({
+      const q = await createPublishedQuestion({
         quiz: quiz._id, learningObjective: lo._id, createdBy: user._id,
         type: 'multiple-choice', difficulty: 'moderate',
         questionText: 'Q1', order: 0

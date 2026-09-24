@@ -1,3 +1,4 @@
+import { createPublishedObjective, createPublishedQuestion } from '../helpers/publishedFixtures.js';
 import { describe, test, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
@@ -60,7 +61,7 @@ describe('Objectives API Integration Tests', () => {
 
   describe('GET /api/objectives/quiz/:quizId', () => {
     test('should return objectives sorted by order', async () => {
-      await LearningObjective.create([
+      await createPublishedObjective([
         { text: 'Second', quiz: quiz._id, order: 1, createdBy: user._id },
         { text: 'First', quiz: quiz._id, order: 0, createdBy: user._id },
         { text: 'Third', quiz: quiz._id, order: 2, createdBy: user._id }
@@ -176,9 +177,9 @@ describe('Objectives API Integration Tests', () => {
       expect(res.body.data.summary.successful).toBe(3);
     });
 
-    test('should delete existing objectives before batch create', async () => {
+    test('should replace the published objectives after batch create', async () => {
       // Create initial objectives
-      await LearningObjective.create([
+      await createPublishedObjective([
         { text: 'Old 1', quiz: quiz._id, order: 0, createdBy: user._id },
         { text: 'Old 2', quiz: quiz._id, order: 1, createdBy: user._id }
       ]);
@@ -192,14 +193,15 @@ describe('Objectives API Integration Tests', () => {
       expect(res.status).toBe(201);
       expect(res.body.data.objectives).toHaveLength(1);
 
-      // Verify old objectives are gone
-      const remaining = await LearningObjective.find({ quiz: quiz._id });
+      // Atomic publication replaces the quiz links and retains historical records.
+      const publishedQuiz = await Quiz.findById(quiz._id);
+      const remaining = await LearningObjective.find({ quiz: quiz._id, _id: { $in: publishedQuiz.learningObjectives } });
       expect(remaining).toHaveLength(1);
       expect(remaining[0].text).toBe('New 1');
     });
 
     test('should append manual objectives without replacing AI objective metadata', async () => {
-      const existing = await LearningObjective.create({
+      const existing = await createPublishedObjective({
         text: 'Analyze force diagrams',
         quiz: quiz._id,
         order: 0,
@@ -282,7 +284,7 @@ describe('Objectives API Integration Tests', () => {
 
   describe('PUT /api/objectives/:id', () => {
     test('should update objective text', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Original text',
         quiz: quiz._id,
         order: 0,
@@ -307,7 +309,7 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should return 404 for objective owned by another user', async () => {
-      const otherObjective = await LearningObjective.create({
+      const otherObjective = await createPublishedObjective({
         text: 'Other text',
         quiz: quiz._id,
         order: 0,
@@ -322,7 +324,7 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should track edit history', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Original text',
         quiz: quiz._id,
         order: 0,
@@ -339,7 +341,7 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should update Bloom level and subpoints without removing other metadata', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Analyze force diagrams',
         quiz: quiz._id,
         order: 0,
@@ -376,9 +378,9 @@ describe('Objectives API Integration Tests', () => {
 
   describe('PUT /api/objectives/reorder', () => {
     test('should reorder objectives correctly', async () => {
-      const obj1 = await LearningObjective.create({ text: 'A', quiz: quiz._id, order: 0, createdBy: user._id });
-      const obj2 = await LearningObjective.create({ text: 'B', quiz: quiz._id, order: 1, createdBy: user._id });
-      const obj3 = await LearningObjective.create({ text: 'C', quiz: quiz._id, order: 2, createdBy: user._id });
+      const obj1 = await createPublishedObjective({ text: 'A', quiz: quiz._id, order: 0, createdBy: user._id });
+      const obj2 = await createPublishedObjective({ text: 'B', quiz: quiz._id, order: 1, createdBy: user._id });
+      const obj3 = await createPublishedObjective({ text: 'C', quiz: quiz._id, order: 2, createdBy: user._id });
 
       const res = await request(app)
         .put('/api/objectives/reorder')
@@ -415,7 +417,7 @@ describe('Objectives API Integration Tests', () => {
 
   describe('DELETE /api/objectives/quiz/:quizId/all', () => {
     test('should delete all objectives for a quiz', async () => {
-      await LearningObjective.create([
+      await createPublishedObjective([
         { text: 'A', quiz: quiz._id, order: 0, createdBy: user._id },
         { text: 'B', quiz: quiz._id, order: 1, createdBy: user._id }
       ]);
@@ -426,7 +428,7 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should clear quiz learningObjectives array', async () => {
-      const obj = await LearningObjective.create({
+      const obj = await createPublishedObjective({
         text: 'A', quiz: quiz._id, order: 0, createdBy: user._id
       });
       quiz.learningObjectives = [obj._id];
@@ -455,7 +457,7 @@ describe('Objectives API Integration Tests', () => {
 
   describe('DELETE /api/objectives/:id', () => {
     test('should delete objective with no questions', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Delete me', quiz: quiz._id, order: 0, createdBy: user._id
       });
 
@@ -468,10 +470,10 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should require confirmation when questions exist', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Has questions', quiz: quiz._id, order: 0, createdBy: user._id
       });
-      await Question.create({
+      await createPublishedQuestion({
         quiz: quiz._id,
         learningObjective: objective._id,
         type: 'multiple-choice',
@@ -495,10 +497,10 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should cascade delete questions when confirmed', async () => {
-      const objective = await LearningObjective.create({
+      const objective = await createPublishedObjective({
         text: 'Has questions', quiz: quiz._id, order: 0, createdBy: user._id
       });
-      await Question.create({
+      await createPublishedQuestion({
         quiz: quiz._id,
         learningObjective: objective._id,
         type: 'multiple-choice',
@@ -528,7 +530,7 @@ describe('Objectives API Integration Tests', () => {
     });
 
     test('should return 404 for objective owned by another user', async () => {
-      const otherObj = await LearningObjective.create({
+      const otherObj = await createPublishedObjective({
         text: 'Other', quiz: quiz._id, order: 0, createdBy: otherUser._id
       });
 

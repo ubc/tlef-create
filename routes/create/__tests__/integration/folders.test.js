@@ -4,6 +4,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import User from '../../models/User.js';
 import Folder from '../../models/Folder.js';
+import '../../models/Material.js';
 import Quiz from '../../models/Quiz.js';
 import Question from '../../models/Question.js';
 import folderController from '../../controllers/folderController.js';

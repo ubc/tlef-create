@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -6,6 +6,8 @@ import User from '../../models/User.js';
 import Folder from '../../models/Folder.js';
 import Quiz from '../../models/Quiz.js';
 import LearningObjective from '../../models/LearningObjective.js';
+import '../../models/Material.js';
+import questionGenerationJobs from '../../services/questionGenerationJobs.js';
 import streamingController from '../../controllers/streamingController.js';
 
 function createTestApp(userDoc) {
@@ -32,6 +34,8 @@ describe('Streaming API Integration Tests', () => {
   let unauthApp;
   let user;
   let quiz;
+
+  afterEach(() => jest.restoreAllMocks());
 
   beforeEach(async () => {
     await User.deleteMany({});
@@ -78,20 +82,20 @@ describe('Streaming API Integration Tests', () => {
         .post('/api/streaming/generate-questions')
         .send({ questionConfigs: [{ questionType: 'multiple-choice' }] });
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain('Missing required fields');
+      expect(res.body.error.code).toBe('INVALID_GENERATION_REQUEST');
     });
 
     test('should reject missing questionConfigs', async () => {
       const res = await request(app)
         .post('/api/streaming/generate-questions')
-        .send({ quizId: quiz._id.toString() });
+        .send({ quizId: quiz._id.toString(), requestId: 'test-generation-request-001' });
       expect(res.status).toBe(400);
     });
 
     test('should reject non-array questionConfigs', async () => {
       const res = await request(app)
         .post('/api/streaming/generate-questions')
-        .send({ quizId: quiz._id.toString(), questionConfigs: 'not-array' });
+        .send({ quizId: quiz._id.toString(), requestId: 'test-generation-request-001', questionConfigs: 'not-array' });
       expect(res.status).toBe(400);
     });
 
@@ -101,6 +105,7 @@ describe('Streaming API Integration Tests', () => {
         .post('/api/streaming/generate-questions')
         .send({
           quizId: fakeId.toString(),
+          requestId: 'test-generation-request-001',
           questionConfigs: [{ questionType: 'multiple-choice' }]
         });
       expect(res.status).toBe(404);
@@ -111,26 +116,31 @@ describe('Streaming API Integration Tests', () => {
         .post('/api/streaming/generate-questions')
         .send({
           quizId: quiz._id.toString(),
+          requestId: 'test-generation-request-001',
           questionConfigs: [{ questionType: 'multiple-choice' }]
         });
       expect(res.status).toBe(401);
     });
 
-    test('should return session info for valid input', async () => {
+    test('should accept a durable generation job for valid input', async () => {
+      const start = jest.spyOn(questionGenerationJobs, 'start').mockResolvedValue({
+        _id: new mongoose.Types.ObjectId(), quiz: quiz._id, requestId: 'test-generation-request-001',
+        sessionId: 'test-session-001', active: true, status: 'running', mode: 'append', items: []
+      });
       const res = await request(app)
         .post('/api/streaming/generate-questions')
         .send({
           quizId: quiz._id.toString(),
-          questionConfigs: [{ questionType: 'multiple-choice' }]
+          requestId: 'test-generation-request-001',
+          questionConfigs: [{ questionType: 'multiple-choice', customPrompt: 'Create one question about evaporation.', useCustomPromptOnly: true }]
         });
-      // Will succeed or fail based on questionStreamingService availability
-      // but should not be a 400/404 validation error
-      expect([200, 500]).toContain(res.status);
-      if (res.status === 200) {
-        expect(res.body.success).toBe(true);
-        expect(res.body.sessionId).toBeDefined();
-        expect(res.body.sseEndpoint).toContain('/api/streaming/questions/');
-      }
+      expect(res.status).toBe(202);
+      expect(res.body.success).toBe(true);
+      expect(res.body.sessionId).toBe('test-session-001');
+      expect(res.body.sseEndpoint).toContain('/api/create/streaming/questions/');
+      expect(start).toHaveBeenCalledWith(expect.objectContaining({
+        owner: user.id, quizId: quiz.id, requestId: 'test-generation-request-001'
+      }));
     });
   });
 });

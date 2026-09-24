@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import User from '../../models/User.js';
 import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
+import '../../models/Quiz.js';
 // Import Question model so mongoose.model('Question') works inside Folder.updateStats
 import '../../models/Question.js';
 import FileService from '../../services/fileService.js';

@@ -1,3 +1,4 @@
+import { createPublishedObjective } from '../helpers/publishedFixtures.js';
 import { beforeEach, describe, expect, test } from '@jest/globals';
 import express from 'express';
 import request from 'supertest';
@@ -36,13 +37,13 @@ describe('Search API ownership filtering', () => {
     const ownQuiz = await Quiz.create({ name: 'Own quiz', folder: ownFolder._id, createdBy: user._id });
     const otherQuiz = await Quiz.create({ name: 'Other quiz', folder: otherFolder._id, createdBy: otherUser._id });
 
-    const ownObjective = await LearningObjective.create({
+    const ownObjective = await createPublishedObjective({
       text: 'Analyze searchable vectors',
       quiz: ownQuiz._id,
       order: 0,
       createdBy: user._id
     });
-    await LearningObjective.create({
+    await createPublishedObjective({
       text: 'Analyze searchable vectors from another course',
       quiz: otherQuiz._id,
       order: 0,
@@ -61,7 +62,7 @@ describe('Search API ownership filtering', () => {
   test('ignores an objective whose parent quiz is no longer valid', async () => {
     const folder = await Folder.create({ name: 'Course', instructor: user._id });
     const removedQuiz = await Quiz.create({ name: 'Removed quiz', folder: folder._id, createdBy: user._id });
-    await LearningObjective.create({
+    await createPublishedObjective({
       text: 'Orphaned searchable objective',
       quiz: removedQuiz._id,
       order: 0,
