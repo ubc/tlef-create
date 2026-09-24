@@ -1,5 +1,6 @@
 import express from 'express';
 import Folder from '../models/Folder.js';
+import '../models/Material.js'; // registers the Material model for populate('materials')
 import { authenticateToken, attachUser } from '../middleware/auth.js';
 import { validateCreateFolder, validateUpdateFolder, validateMongoId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse, forbiddenResponse } from '../utils/responseFormatter.js';
