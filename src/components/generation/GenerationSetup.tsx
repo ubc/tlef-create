@@ -16,12 +16,12 @@ const LAYOUT_COPY: Record<TargetFormat, { caption: string; detail: string }> = {
   'question-set': { caption: 'A sequence of questions', detail: 'Students move through questions, then see their score and feedback.' },
   'interactive-book': { caption: 'Chapters and pages', detail: 'Students use a chapter menu to explore a structured, multi-page activity.' },
   column: { caption: 'One scrolling page', detail: 'Students scroll through text and mixed activities stacked vertically.' },
-  standalone: { caption: 'One focused activity', detail: 'A dedicated player for a complex activity such as a crossword or paragraph-sorting task.' },
+  standalone: { caption: 'One focused activity', detail: 'A dedicated player for a Branching Scenario, crossword, or paragraph-sorting task.' },
   'mixed-activity': { caption: 'CREATE’s Canvas player', detail: 'Students launch a mixed activity from Canvas through LTI, rather than a standard H5P container.' }
 };
 
 /** Schematic layout examples, not generated content or a live H5P player. */
-function LayoutPreview({ format }: { format: TargetFormat }) {
+export function LayoutPreview({ format }: { format: TargetFormat }) {
   return (
     <svg className="generation-layout-preview" viewBox="0 0 240 142" aria-hidden="true" focusable="false">
       <rect className="layout-frame" x="1" y="1" width="238" height="140" rx="8" />

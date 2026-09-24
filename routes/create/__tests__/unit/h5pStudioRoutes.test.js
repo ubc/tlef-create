@@ -4,10 +4,17 @@ import request from 'supertest';
 
 const owner = '507f1f77bcf86cd799439011';
 const findOne = jest.fn();
+const find = jest.fn();
 const create = jest.fn();
 const removeRecord = jest.fn();
 const complete = jest.fn();
 const deleteContent = jest.fn();
+const getJob = jest.fn();
+const renderContent = jest.fn();
+jest.unstable_mockModule('../../services/studioGenerationJobs.js', () => ({
+  default: { get: getJob, start: async (_owner, _id, work) => { await work(async () => {}); return {}; } },
+  serializeStudioJob: value => value
+}));
 let parameters;
 const editor = {
   render: jest.fn().mockResolvedValue({ scripts: [] }),
@@ -16,7 +23,7 @@ const editor = {
   deleteContent,
   contentManager: { contentFileExists: jest.fn().mockResolvedValue(true) }
 };
-jest.unstable_mockModule('../../models/H5PContent.js', () => ({ default: { findOne, create, deleteOne: removeRecord } }));
+jest.unstable_mockModule('../../models/H5PContent.js', () => ({ default: { find, findOne, create, deleteOne: removeRecord } }));
 jest.unstable_mockModule('../../models/Quiz.js', () => ({ default: { findOne } }));
 jest.unstable_mockModule('../../middleware/auth.js', () => ({ authenticateToken: (req, _res, next) => { req.user = { id: owner }; next(); } }));
 jest.unstable_mockModule('../../services/llmService.js', () => ({ default: { streamCompletion: complete } }));
@@ -24,7 +31,7 @@ jest.unstable_mockModule('../../services/h5pExportService.js', () => ({ buildNat
 jest.unstable_mockModule('../../services/lumiService.js', () => ({
   getEditor: () => editor, toLumiUser: user => user,
   getSystemUser: () => ({ id: 'system' }), finalizeContentOwnership: jest.fn(),
-  getH5PExpressRouter: jest.fn(), importH5PContent: jest.fn(), renderContent: jest.fn()
+  getH5PExpressRouter: jest.fn(), importH5PContent: jest.fn(), renderContent
 }));
 const { default: router } = await import('../../controllers/h5pEditorController.js');
 const app = express();
@@ -40,11 +47,80 @@ describe('Studio AI REST boundary', () => {
     create.mockImplementation(async value => ({ ...value, _id: 'record' }));
     editor.getContent.mockImplementation(async () => ({ params: { params: parameters } }));
   });
+  test('validates course filters and keeps every activity listing owner-scoped', async () => {
+    const folderId = '507f1f77bcf86cd799439012';
+    find.mockReturnValue({ sort: () => ({ limit: async () => [] }) });
+    const response = await request(app).get(`/contents?folderId=${folderId}`);
+    expect(response.status).toBe(200);
+    expect(find).toHaveBeenCalledWith({ owner, folder: folderId });
+    expect((await request(app).get('/contents?folderId=invalid')).status).toBe(400);
+    expect((await request(app).get('/contents?quizId[$ne]=x')).status).toBe(400);
+    expect(find).toHaveBeenCalledTimes(1);
+  });
   test('exposes installed catalog without content or account details', async () => {
     const response = await request(app).get('/ai/catalog');
     expect(response.status).toBe(200);
     expect(response.body.data.types.length).toBeGreaterThan(30);
     expect(response.body.data.types[0]).not.toHaveProperty('directory');
+  });
+  test('answers a prompt-helper question without saving H5P content or generating a draft', async () => {
+    complete.mockResolvedValueOnce({ content: JSON.stringify({ reply: 'What audience?', nextStep: 'continue', draft: '' }) });
+    const requestBody = { messages: [{ role: 'user', content: 'Help me ask about energy' }], kind: 'single', layout: 'column',
+      activityType: 'Multiple Choice', selectedQuestionTypes: [], evidenceSelected: false };
+    const result = await request(app).post('/ai/brief').send(requestBody);
+    expect(result.status).toBe(200);
+    expect(result.body.data).toMatchObject({ nextStep: 'continue', draft: '' });
+    expect(create).not.toHaveBeenCalled();
+    expect((await request(app).post('/ai/brief').send({ ...requestBody, messages: [{ role: 'assistant', content: 'No user message' }] })).status).toBe(400);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+  test('grounds prompt helper context in selected objectives of an owned Learning Object', async () => {
+    const quizId = '507f1f77bcf86cd799439012';
+    const objectiveId = '507f1f77bcf86cd799439013';
+    findOne.mockReturnValueOnce({ populate: () => ({ populate: async () => ({
+      name: 'Forces', folder: '507f1f77bcf86cd799439014',
+      learningObjectives: [{ _id: objectiveId, text: 'Explain net force' }]
+    }) }) });
+    complete.mockResolvedValueOnce({ content: JSON.stringify({ reply: 'I can see the selected objective.', nextStep: 'continue', draft: '' }) });
+    const response = await request(app).post('/ai/brief').send({
+      messages: [{ role: 'user', content: 'Help me teach forces' }], kind: 'single', layout: 'column',
+      activityType: 'Multiple Choice', selectedQuestionTypes: [], evidenceSelected: true,
+      quizId, objectiveIds: [objectiveId], materialIds: []
+    });
+    expect(response.status).toBe(200);
+    expect(findOne).toHaveBeenCalledWith({ _id: quizId, createdBy: owner });
+    expect(complete.mock.calls[0][0].prompt).toContain('Explain net force');
+  });
+  test('renders owned previews with the native toolbar and rejects non-owned content', async () => {
+    expect((await request(app).get('/contents/private/preview')).status).toBe(404);
+    expect(renderContent).not.toHaveBeenCalled();
+    findOne.mockResolvedValueOnce({ owner });
+    renderContent.mockResolvedValueOnce('<!doctype html><html></html>');
+    const response = await request(app).get('/contents/owned/preview');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(renderContent).toHaveBeenCalledWith('owned', { id: owner }, {
+      showFrame: true, showDownloadButton: true, showLicenseButton: true,
+      showEmbedButton: false, showH5PIcon: true
+    });
+  });
+  test('looks up receipts and their results only for the signed-in owner', async () => {
+    getJob.mockResolvedValueOnce(null);
+    expect((await request(app).get('/ai/jobs/another-request')).status).toBe(404);
+    expect(getJob).toHaveBeenCalledWith(owner, 'another-request');
+    getJob.mockResolvedValueOnce({ status: 'succeeded', contentId: 'deleted-or-not-owned' });
+    const response = await request(app).get('/ai/jobs/owned-request');
+    expect(response.body.data.content).toBeNull();
+    expect(findOne).toHaveBeenCalledWith({ lumiContentId: 'deleted-or-not-owned', owner });
+  });
+  test('source status neither exposes non-owned drafts nor deleted source quiz details', async () => {
+    expect((await request(app).get('/contents/private/source')).status).toBe(404);
+    findOne.mockResolvedValueOnce({ owner, quiz: '507f1f77bcf86cd799439012' });
+    findOne.mockReturnValueOnce({ populate: () => ({ populate: async () => null }) });
+    const response = await request(app).get('/contents/owned/source');
+    expect(response.body.data.source).toEqual({ independent: true, quizId: null, folderId: null, title: null, state: 'unavailable' });
+    expect(findOne).toHaveBeenLastCalledWith({ _id: '507f1f77bcf86cd799439012', createdBy: owner });
   });
   test('creates a separate compatible empty template without an AI call', async () => {
     const response = await request(app).post('/ai/template').send({ library: 'H5P.Dictation 1.3' });

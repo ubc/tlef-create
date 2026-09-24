@@ -14,6 +14,34 @@ Use this playbook together with:
 - `routes/create/config/h5pLibraryRegistry.js` for vendored library versions.
 - `routes/create/config/h5pTypeAdapterRegistry.js` for native adapter metadata.
 
+## Pinned runtime baseline (2026-09-20)
+
+CREATE serves actual official H5P core and editor assets from the matched
+`moodle-1.28.2` release (API 1.28). `routes/create/config/h5pRuntime.js` owns the
+API declaration, complete core script/style lists and asset revision.
+`h5p-runtime-manifest.json` beside it records source commits, build lockfiles,
+installed asset hashes and the small CREATE patches. The implementation record
+is [Branching runtime recovery](plans/branching-runtime-upgrade.md).
+
+- Branching Scenario 1.10.1 plus editor 1.5.13 requires Course Presentation 1.27,
+  Interactive Video 1.28 and their editors. Existing Branching 1.9.2 is retained.
+  Branching Question 1.0 also requires its editor widget; stripping its
+  `editorDependencies` creates an editor that appears installed but cannot work.
+- Branching is a standalone native activity. It remains excluded from Column,
+  Interactive Book and Question Set in the normalized question matrix.
+- Studio, generated-question previews and uploaded-package previews use the
+  same official core. An uploaded package must carry its own matching libraries;
+  do not repair its missing bundle using another patch from the local store.
+- Official `jquery.js` already assigns `H5P.jQuery` and calls `noConflict(true)`.
+  A compatibility bridge must preserve that instance when global `jQuery` is
+  absent. Verify initialization by executing real bundles, not just inspecting
+  version strings or checking for HTTP 200 responses.
+- Both editor host/iframe and player pages need core fonts, theme variables and
+  styles. The Lumi package's static core asset list alone is incomplete for this
+  release. Keep one shared list and use the same revision query on all surfaces.
+- Keep the runtime availability guard and export integrity preflight. Restoring
+  the frontend entry does not remove defense against incomplete deployments.
+
 ## The four contracts every type must satisfy
 
 Supporting an H5P type is not one conversion function. It requires four
@@ -251,6 +279,45 @@ root class, performs the primary interaction, and fails on console errors.
 | Old packages break after a new Lumi import | Lumi's global library store was polluted | Installed patch versions in Lumi's library directory |
 
 ## Definition of done for a new H5P type
+
+### Native Studio acceptance lessons (September 2026)
+
+- Ordinary groups with exactly one child are **flattened** in H5P parameters.
+  The synthetic root parameters object and `isSubContent` groups are exceptions.
+  Apply this rule consistently to JSON Schema, parameter validation, and media
+  discovery. Interactive Book chapter entries are native library objects, not
+  `{chapter: ...}` wrappers. Image Slider has the same pattern.
+- Pass an absent single-child group through to its child before inventing an
+  empty object. Otherwise optional `overallFeedback` becomes an invalid list.
+- The official editor can emit `{params: {}}` for an unselected optional library,
+  and null for an optional color. These are empty choices, not unknown libraries
+  or invalid text. Continue rejecting explicit unapproved library names.
+- Optional groups propagate optionality to their children. Native optional
+  selects may retain a `-` placeholder. The video editor adds an empty subtitle
+  row; discard the unused row at the editor-save boundary without relaxing the
+  AI's file allowlist. Wait for nested semantics/assets before enabling Save:
+  Lumi's root loaded event alone is too early for some composite types.
+- `dynamicCheckboxes` selections are indexes, not a static enum. Validate their
+  syntax and their references to existing drag elements/drop zones.
+- Semantics alone do not guarantee runtime safety: DragQuestion 1.14 reads
+  `tipsAndFeedback.tip` even when the group is omitted. Supply an empty group.
+  Conversely, GuessTheAnswer cannot handle an invented empty media group.
+- Avoid initializing the same nested library twice when the selector has only
+  one choice. If an optional editor widget is missing, use the known default
+  widget constructor, not a property on the uninitialized widget instance.
+- Lumi serves core/editor assets with a one-year cache lifetime. When patching
+  vendored editor code, update `H5P_RUNTIME_REVISION` in `config/h5pRuntime.js`
+  for both the host page and editor iframe; do not mislabel the upstream API
+  version just to invalidate a browser cache.
+- A media round-trip test must delete its original **test** template before
+  exporting the derived draft; otherwise a stale source-file reference can hide
+  behind files that still exist on the test server.
+- `e2e/h5p-type-matrix.spec.ts` exercises fixed AI completion → production
+  validation → native save/import → official editor → save/preview → export →
+  reimport. These synthetic fixtures do not prove live AI quality, every nested
+  combination, or acceptance by an independent LMS. External embeds and gated
+  libraries need separately authorized acceptance and must not be counted as
+  passing local compatibility tests.
 
 A type is complete only when all answers below are yes:
 

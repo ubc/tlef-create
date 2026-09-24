@@ -1,0 +1,162 @@
+@media print {
+  @page {
+    size: portrait;
+  }
+
+  /* Hide navigationbar - physical sheets does not support touch yet */
+  .h5p-content .h5p-actions,
+  /* Hide progressbar */
+  .h5p-course-presentation .h5p-progressbar,
+  /* Hide footer */
+  .h5p-course-presentation .h5p-footer,
+  /* Hide keywords */
+  .h5p-course-presentation .h5p-keywords-wrapper {
+    display:none;
+  }
+  /* Make a border on bottom */
+  .h5p-content {
+    border-color: transparent;
+    background: transparent;
+  }
+  .h5p-course-presentation,
+  .h5p-course-presentation .h5p-box-wrapper,
+  .h5p-course-presentation .h5p-presentation-wrapper {
+    background: transparent;
+  }
+  /* Show slides on print */
+  .h5p-course-presentation .h5p-slides-wrapper {
+    height: 100%;
+    background: transparent;
+  }
+  /* Slide setup - only slides with doprint class is printed */
+  .h5p-course-presentation .h5p-slides-wrapper .h5p-slide {
+    display: none;
+  }
+  .h5p-course-presentation .h5p-slides-wrapper .h5p-slide.doprint {
+    border: 1px solid #ddd;
+    display: block;
+    position: relative;
+    transform: none;
+  }
+
+  .h5p-course-presentation .h5p-slides-wrapper .h5p-slide.doprint:nth-child(2n) {
+      break-after: always;
+  }
+
+  .h5p-course-presentation .h5p-slides-wrapper .h5p-slide.doprint > div[role="document"] {
+    height: 100%;
+    width: 100%;
+  }
+
+  .h5p-course-presentation .h5p-slide.h5p-summary-slide .h5p-theme-results-list-container {
+    max-height: none;
+  }
+
+  .h5p-course-presentation .h5p-slide.h5p-summary-slide .h5p-theme-results-list-container .h5p-summary-task-title {
+    width: auto;
+  }
+
+  .h5p-course-presentation .h5p-slide.h5p-summary-slide .h5p-theme-results-list-container .h5p-summary-task-title .h5p-slide-link {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25em;
+  }
+
+  .h5p-course-presentation .h5p-summary-footer {
+    display: none;
+  }
+  .h5p-course-presentation .h5p-slide .h5p-element {
+    overflow: visible;
+  }
+  .h5p-course-presentation .h5p-slides-wrapper .h5p-slide:last-child {
+    page-break-after: auto;
+  }
+  /******************************************/ 
+  /* Special handling of elements on slides */
+  /******************************************/
+  /* Hiding buttons */
+  .h5p-course-presentation .h5p-element-button-wrapper {
+    display: none;
+  }
+
+   /* Reset button icon positioning to prevent empty spacing */
+  .h5p-course-presentation .h5p-theme-primary-cta::before {
+    opacity: 1;
+    transform: none;
+  }
+  /* Drag and drop question */
+  .h5p-course-presentation .h5p-dragquestion > .h5p-inner {
+    width: 100%;
+    height: 100%;
+  }
+  /* Summary slide - showing percents */
+  .h5p-course-presentation .h5p-summary-score-meter:before {
+    content: attr(title);
+    font-size: .6em;
+    text-shadow:
+     -1px -1px 0 #fff,
+      1px -1px 0 #fff,
+      -1px 1px 0 #fff,
+       1px 1px 0 #fff;
+    position: absolute;
+    top: 0;
+  }
+  /* Hide twitter on summary slide */
+  .h5p-course-presentation .h5p-summary-twitter-message {
+    display: none;
+  }
+  /* Summary content type - avoiding black background */
+  .h5p-course-presentation .summary-container li {
+    background: #fff;
+
+    /* Need to reset transition for Chrome */
+    transition: none;
+  }
+  /* Styling for videos */
+  .h5p-course-presentation .h5p-element.h5p-video {
+    background-color: #fff;
+    text-align: center;
+    min-height: 10em;
+  }
+  .h5p-course-presentation .h5p-element.h5p-video:before {
+    font-family: 'H5PFontAwesome4';
+    font-size: 4em;
+    color: #666;
+    content: '\f03d';
+
+    display: inline-block;
+    position: relative;
+    top: 1.5em;
+  }
+  .h5p-course-presentation .h5p-element.h5p-video * {
+    width: 0;
+  }
+  .h5p-course-presentation .h5p-element-inner.h5p-single-choice-set .h5p-question-main-content {
+    height: 100%;
+  }
+  .h5p-course-presentation .h5p-element-inner.h5p-single-choice-set .h5p-question-main-content .h5p-sc-set-wrapper {
+    overflow: hidden;
+  }
+
+  .h5p-course-presentation .h5p-summary-slide {
+    height: auto !important;
+    margin-block-start: 1rem;
+  }
+}
+
+.h5p-print-dialog .h5p-confirmation-dialog-buttons .h5p-theme-check::before {
+  content: '\f0c5'; /* icon with two pages */
+  font-family: 'H5PFontAwesome4';
+}
+
+/* Override for H5P core confirmation dialog. Should be changed when Confirmation Dialog uses H5P.Component.Button */
+@container (max-width: 400px) {
+  .h5p-theme .h5p-print-dialog .h5p-confirmation-dialog-buttons button.h5p-theme-cancel {
+    justify-content: center;
+  }
+
+  .h5p-theme .h5p-print-dialog .h5p-confirmation-dialog-buttons button.h5p-theme-cancel::before {
+    content: '\f016'; /* icon with one page */
+    font-family: 'H5PFontAwesome4';
+  }
+}

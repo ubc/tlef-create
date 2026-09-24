@@ -4,10 +4,10 @@ import { StreamingState } from './generationTypes';
 interface StreamingProgressProps {
   streamingState: StreamingState;
   connectionStatus: string;
-  onStopGeneration: () => void;
 }
 
-const StreamingProgress = ({ streamingState, connectionStatus, onStopGeneration }: StreamingProgressProps) => {
+const StreamingProgress = ({ streamingState, connectionStatus }: StreamingProgressProps) => {
+  const readyCount = streamingState.readyCount ?? streamingState.completedQuestions.length;
   return (
     <div className="streaming-phase">
       <div className="card">
@@ -17,7 +17,7 @@ const StreamingProgress = ({ streamingState, connectionStatus, onStopGeneration 
             Generating Questions in Real-time
           </h3>
           <p className="card-description">
-            Questions are being generated with AI streaming. Watch them appear as they're created!
+            Your saved questions remain available while this batch is prepared. All new questions are published together after the whole batch succeeds. You can leave this tab or refresh; CREATE will recover the task.
           </p>
         </div>
 
@@ -40,14 +40,14 @@ const StreamingProgress = ({ streamingState, connectionStatus, onStopGeneration 
             <div className="progress-header">
               <h4>Generation Progress</h4>
               <span className="progress-count">
-                {streamingState.completedQuestions.length} / {streamingState.totalQuestions} completed
+                {readyCount} / {streamingState.totalQuestions} prepared
               </span>
             </div>
             <div className="progress-bar">
               <div
                 className="progress-fill"
                 style={{
-                  width: `${(streamingState.completedQuestions.length / streamingState.totalQuestions) * 100}%`
+                  width: `${(readyCount / Math.max(1, streamingState.totalQuestions)) * 100}%`
                 }}
               ></div>
             </div>
@@ -82,7 +82,7 @@ const StreamingProgress = ({ streamingState, connectionStatus, onStopGeneration 
         {/* Completed Questions Preview */}
         {streamingState.completedQuestions.length > 0 && (
           <div className="completed-questions-preview">
-            <h4>Recently Completed</h4>
+            <h4>Prepared drafts — awaiting batch completion</h4>
             <div className="completed-list">
               {streamingState.completedQuestions.slice(-3).map((question, index) => (
                 <div key={index} className="completed-question">
@@ -105,12 +105,7 @@ const StreamingProgress = ({ streamingState, connectionStatus, onStopGeneration 
           </div>
         )}
 
-        {/* Stop Streaming Button */}
-        <div className="streaming-actions">
-          <button className="btn btn-secondary" onClick={onStopGeneration}>
-            Stop Generation
-          </button>
-        </div>
+
       </div>
     </div>
   );

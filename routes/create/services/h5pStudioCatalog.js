@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { H5P_CORE_API } from '../config/h5pRuntime.js';
+import { listH5PTypeAdapters } from '../config/h5pTypeAdapterRegistry.js';
 
 const libraryRoot = fileURLToPath(new URL('../h5p-libs/', import.meta.url));
 const mediaTypes = new Set(['Agamotto', 'Audio', 'Collage', 'Dictation', 'DragQuestion', 'ImageHotspotQuestion', 'ImageHotspots', 'ImageSlider', 'InteractiveVideo', 'MemoryGame', 'MultiMediaChoice']);
@@ -36,9 +38,9 @@ export function libraryProblems(library, libraries, visited = new Set()) {
   if (!entry) return [`Missing installed dependency: ${library}`];
   const problems = [];
   const { descriptor, directory } = entry;
-  // The installed Lumi configuration and vendored core currently use 1.27.
-  if (descriptor.coreApi && (descriptor.coreApi.majorVersion > 1 || descriptor.coreApi.minorVersion > 27)) {
-    problems.push(`${library} requires H5P core ${descriptor.coreApi.majorVersion}.${descriptor.coreApi.minorVersion}; CREATE uses 1.27.`);
+  if (descriptor.coreApi && (descriptor.coreApi.majorVersion > H5P_CORE_API.major
+    || (descriptor.coreApi.majorVersion === H5P_CORE_API.major && descriptor.coreApi.minorVersion > H5P_CORE_API.minor))) {
+    problems.push(`${library} requires H5P core ${descriptor.coreApi.majorVersion}.${descriptor.coreApi.minorVersion}; CREATE uses ${H5P_CORE_API.major}.${H5P_CORE_API.minor}.`);
   }
   for (const asset of [...(descriptor.preloadedJs || []), ...(descriptor.preloadedCss || [])]) {
     const filename = path.resolve(directory, asset.path);
@@ -53,6 +55,7 @@ export function libraryProblems(library, libraries, visited = new Set()) {
 }
 
 export function buildStudioCatalog(libraries) {
+  const adapters = listH5PTypeAdapters({ aiEnabled: true });
   const latest = new Map();
   for (const entry of libraries.values()) {
     if (!entry.descriptor.runnable) continue;
@@ -66,11 +69,15 @@ export function buildStudioCatalog(libraries) {
   return [...latest.values()].map(entry => {
     const name = entry.descriptor.machineName.replace(/^H5P\./, '');
     const problems = libraryProblems(entry.library, libraries);
+    // Do not reject a container merely because it lists this retired type as
+    // an optional dependency; block authoring the retired activity itself.
+    if (name === 'TwitterUserFeed') problems.push('Twitter User Feed is no longer supported: its required Twitter API is no longer available.');
     const needsTemplate = mediaTypes.has(name) || externalTypes.has(name);
     return {
       library: entry.library, machineName: entry.descriptor.machineName,
       title: entry.descriptor.title, version: `${entry.descriptor.majorVersion}.${entry.descriptor.minorVersion}.${entry.descriptor.patchVersion}`,
       category: containers.has(name) ? 'Lessons & collections' : externalTypes.has(name) ? 'External content' : mediaTypes.has(name) ? 'Media activities' : 'Questions & text activities',
+      questionTypes: adapters.filter(adapter => adapter.mainLibrary === entry.library).map(adapter => ({ type: adapter.type, title: adapter.label, containers: adapter.containers })),
       mode: problems.length ? 'unavailable' : needsTemplate ? 'template' : 'generate',
       guidance: problems.length ? problems[0] : externalTypes.has(name)
         ? 'Save a working activity with your real URL or account first. AI can adapt its text; the external service must allow embedding.'

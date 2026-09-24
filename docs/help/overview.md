@@ -17,7 +17,7 @@ The Dashboard keeps the summary cards for **Active Courses**, **Total Quizzes**,
 
 After at least one course exists, the Dashboard replaces the static setup tutorial with live information from saved work:
 
-- **Continue where you left off** selects the most recently active course and shows one specific next action, its Quiz step, and a direct button to the correct page.
+- **Continue where you left off** selects the most recently active course and shows one specific next action, the Quiz and stage it belongs to, and a direct button to the correct page.
 - **Needs attention** shows up to three unfinished or blocked items, such as a failed course material, a course with no ready source, or a Quiz that still needs materials, objectives, generation, or review.
 - **Your courses** shows each course's ready material count, Quiz and question totals, last activity, and a link to its current recommended action.
 
@@ -43,7 +43,7 @@ Each Quiz then has five numbered steps:
 
 1. **Materials:** assign only the course sources relevant to this object.
 2. **Learning Objectives:** generate from evidence, paste existing objectives, or add them manually.
-3. **Blueprint & Generate:** choose ASSESS, SUPPORT, or GAMIFY, compare visual layout cards, review the AI Blueprint, and generate questions.
+3. **Generate:** choose ASSESS, SUPPORT, or GAMIFY, compare activity formats, review the question plan, and generate questions.
 4. **Review:** verify correctness, answer options, feedback, evidence, and ordering.
 5. **Preview & Export:** experience the final activity and export it to H5P, PDF, Markdown, or Canvas.
 
@@ -53,7 +53,7 @@ Each Quiz then has five numbered steps:
 
 The numbered navigation shows the current step, completed work, useful counts, and unavailable steps. A green check means the saved prerequisite is complete; a black circle and underline identify the page currently open; a lock means required content is still missing; and an attention state identifies work that should be reviewed.
 
-Materials must be assigned before grounded objectives can be generated, learning objectives are required before the Blueprint, and at least one question is required before Preview & Export. When a later step is unavailable, read its status and return to the named prerequisite. Normal unfinished work is not an error.
+Materials must be assigned before grounded objectives can be generated, learning objectives are required before Generate, and at least one question is required before Preview. When a later step is unavailable, read its status and return to the named prerequisite. Normal unfinished work is not an error.
 
 Step 1 is complete only when all assigned materials have finished processing. **Checking or processing sources** means they are not ready yet; a failed material needs attention. Existing objectives and questions can still be opened for inspection if their materials are later unassigned. Moving between numbered Quiz steps updates the URL, and the browser's Back and Forward buttons return to the matching step, including Materials.
 

@@ -180,7 +180,9 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
           connect();
         }, delay);
       } else {
-        setError('Failed to connect to SSE after multiple attempts');
+        const message = 'The live connection was lost. Refresh Review before retrying; generation may still finish.';
+        setError(message);
+        callbacksRef.current.onError?.('', message, 'CONNECTION_ERROR');
         console.error('[SSE] Max reconnection attempts reached');
       }
     };

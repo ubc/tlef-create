@@ -25,7 +25,8 @@ export function useQuestionEditHandlers(
         updatedOptions[optionIndex] = { ...updatedOptions[optionIndex], text: newText };
         return {
           ...q,
-          content: { ...q.content, options: updatedOptions }
+          content: { ...q.content, options: updatedOptions },
+          correctAnswer: deriveCorrectAnswer(updatedOptions, q.content.selectionMode === 'multiple' ? 'multiple' : 'single')
         };
       }
       return q;
@@ -113,7 +114,9 @@ export function useQuestionEditHandlers(
     setQuestions(questions.map(q => {
       if (q._id === questionId && q.content?.options && q.content.options.length > 2) {
         const optionToRemove = q.content.options[optionIndex];
-        const updatedOptions = q.content.options.filter((_: { text: string; isCorrect: boolean; order?: number }, index: number) => index !== optionIndex);
+        const updatedOptions = q.content.options
+          .filter((_: { text: string; isCorrect: boolean; order?: number }, index: number) => index !== optionIndex)
+          .map(option => ({ ...option }));
         const selectionMode = q.content.selectionMode === 'multiple' ? 'multiple' : 'single';
         if (selectionMode === 'single' && optionToRemove.isCorrect && updatedOptions.length > 0) {
           updatedOptions[0].isCorrect = true;

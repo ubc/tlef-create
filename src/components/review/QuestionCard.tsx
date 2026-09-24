@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { Edit, Trash2, Plus, EyeOff, Save, RotateCcw, Share2, X } from 'lucide-react';
+import { Edit, Trash2, Plus, EyeOff, Save, RotateCcw, Share2, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { ExtendedQuestion } from './reviewTypes';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
 import BranchingScenarioTreeView from './BranchingScenarioTreeView';
@@ -17,6 +17,11 @@ interface QuestionCardProps {
   onSave: (questionId: string) => void;
   onDelete: (questionId: string) => void;
   onRegenerate: (questionId: string) => void;
+  onMove?: (questionId: string, direction: -1 | 1) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  reorderDisabledReason?: string;
+  actionsDisabled?: boolean;
   evidenceMapOpen: boolean;
   coverageMap: CoverageMap | null;
   coverageLoading: boolean;
@@ -35,6 +40,11 @@ const QuestionCard = ({
   onSave,
   onDelete,
   onRegenerate,
+  onMove,
+  canMoveUp = false,
+  canMoveDown = false,
+  reorderDisabledReason,
+  actionsDisabled = false,
   evidenceMapOpen,
   coverageMap,
   coverageLoading,
@@ -81,6 +91,22 @@ const QuestionCard = ({
           <span className="question-lo">Order {question.order + 1}</span>
         </div>
         <div className="question-actions">
+          {onMove && (
+            <>
+              <button type="button" className="btn btn-ghost btn-sm"
+                aria-label={`Move question ${index + 1} up`}
+                title={reorderDisabledReason || 'Move question up (saved automatically)'}
+                disabled={!canMoveUp} onClick={() => onMove(question._id, -1)}>
+                <ArrowUp size={14} />
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm"
+                aria-label={`Move question ${index + 1} down`}
+                title={reorderDisabledReason || 'Move question down (saved automatically)'}
+                disabled={!canMoveDown} onClick={() => onMove(question._id, 1)}>
+                <ArrowDown size={14} />
+              </button>
+            </>
+          )}
           <FeatureCoachmark
             isOpen={showEvidenceTutorial}
             title="See why this question was generated"
@@ -107,13 +133,13 @@ const QuestionCard = ({
               <Share2 size={14} />
             </button>
           </FeatureCoachmark>
-          <button className="btn btn-ghost btn-sm" onClick={() => onRegenerate(question._id)} title="Regenerate question with custom prompt">
+          <button className="btn btn-ghost btn-sm" disabled={actionsDisabled} onClick={() => onRegenerate(question._id)} title="Regenerate question with custom prompt">
             <RotateCcw size={14} />
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => onToggleEdit(question._id)} title={question.isEditing ? 'Cancel edit' : 'Edit question'}>
+          <button className="btn btn-ghost btn-sm" disabled={actionsDisabled} onClick={() => onToggleEdit(question._id)} title={question.isEditing ? 'Cancel edit' : 'Edit question'}>
             {question.isEditing ? <EyeOff size={14} /> : <Edit size={14} />}
           </button>
-          <button className="btn btn-ghost btn-sm text-destructive" onClick={() => onDelete(question._id)} title="Delete question">
+          <button className="btn btn-ghost btn-sm text-destructive" disabled={actionsDisabled} onClick={() => onDelete(question._id)} title="Delete question">
             <Trash2 size={14} />
           </button>
         </div>
@@ -543,7 +569,7 @@ const QuestionCard = ({
 
           <div className="edit-actions">
             <button className="btn btn-primary btn-sm" onClick={() => onSave(question._id)}><Save size={14} /> Save</button>
-            <button className="btn btn-outline btn-sm" onClick={() => onToggleEdit(question._id)}>Cancel</button>
+            <button className="btn btn-outline btn-sm" disabled={actionsDisabled} onClick={() => onToggleEdit(question._id)}>Cancel</button>
           </div>
         </div>
       ) : question.type === 'summary' ? (

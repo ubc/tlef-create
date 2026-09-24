@@ -1,4 +1,8 @@
 import dotenv from 'dotenv';
+import fs from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 dotenv.config();
 
@@ -31,5 +35,12 @@ Object.assign(process.env, {
   SESSION_SECRET: process.env.E2E_SESSION_SECRET || 'local-e2e-session-secret',
   LTI_CLIENT_ID: ''
 });
+const testH5PStorage = await fs.mkdtemp(path.join(os.tmpdir(), 'create-e2e-h5p-'));
+process.env.H5P_STORAGE_ROOT = testH5PStorage;
+// Remove only the directory allocated by this process, never configured storage.
+process.once('exit', () => rmSync(testH5PStorage, { recursive: true, force: true }));
+process.env.EMBEDDINGS_COLLECTION_NAME = 'create-e2e-materials';
+const { installModelFixture } = await import('./e2e-model-fixture.mjs');
+await installModelFixture();
 
 await import('../server.js');

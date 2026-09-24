@@ -2,6 +2,9 @@ import { createRequire } from 'module';
 import { renderContent } from './lumiService.js';
 import Quiz from '../models/Quiz.js';
 import { submitScore } from './gradePassbackService.js';
+import { renderMixedActivityPreview, renderNativeH5PPreview } from './h5pNativePreviewService.js';
+import { buildMixedActivityItemDocument } from './mixedActivityService.js';
+import { createH5PPreviewToken, verifyH5PPreviewToken } from '../utils/h5pPreviewToken.js';
 
 const require = createRequire(import.meta.url);
 const lti = require('ltijs').Provider;
@@ -36,7 +39,13 @@ export async function startLtiServer() {
   });
 
   // Whitelist H5P content routes (so they don't require LTI token)
-  lti.whitelist(lti.appRoute(), '/h5p/play', '/h5p/content', '/h5p/libraries');
+  lti.whitelist(
+    lti.appRoute(),
+    '/h5p/play',
+    '/h5p/content',
+    '/h5p/libraries',
+    /^\/h5p\/mixed\//
+  );
 
   // Main LTI launch handler — student opens assignment in Canvas
   lti.onConnect(async (token, req, res) => {
@@ -67,6 +76,28 @@ export async function startLtiServer() {
         e => e.canvasExport?.resourceLinkId === quizExportId
       );
 
+      if (exportRecord?.canvasExport?.playerMode === 'mixed-activity') {
+        const snapshot = exportRecord.canvasExport.mixedActivitySnapshot;
+        const items = (snapshot?.questions || []).map((question, index) => ({
+          title: `Question ${index + 1}`,
+          url: `/h5p/mixed/${encodeURIComponent(quizExportId)}/${encodeURIComponent(String(question._id))}?token=${encodeURIComponent(createH5PPreviewToken({
+            userId: quiz.createdBy,
+            quizId: quiz._id,
+            questionId: question._id
+          }))}`
+        }));
+        if (items.length === 0) return res.status(404).send('Mixed Activity snapshot is empty');
+        res.removeHeader('Content-Security-Policy');
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(renderMixedActivityPreview({
+          title: snapshot.title || quiz.name,
+          items,
+          scoreEndpoint: typeof req.query?.ltik === 'string'
+            ? `/score?ltik=${encodeURIComponent(req.query.ltik)}`
+            : '/score'
+        }));
+      }
+
       if (!exportRecord?.lumiContentId) {
         return res.status(404).send('H5P content not found for this quiz');
       }
@@ -81,6 +112,41 @@ export async function startLtiServer() {
     } catch (error) {
       console.error('❌ LTI launch error:', error);
       return res.status(500).send('Error loading quiz content');
+    }
+  });
+
+  lti.app.get('/h5p/mixed/:resourceLinkId/:questionId', async (req, res) => {
+    try {
+      const token = verifyH5PPreviewToken(req.query.token, { questionId: req.params.questionId });
+      if (!token) return res.status(401).send('Mixed Activity preview expired');
+
+      const quiz = await Quiz.findOne({
+        _id: token.quizId,
+        createdBy: token.userId,
+        'exports.canvasExport.resourceLinkId': req.params.resourceLinkId
+      });
+      const exportRecord = quiz?.exports.find(
+        entry => entry.canvasExport?.resourceLinkId === req.params.resourceLinkId
+      );
+      const snapshot = exportRecord?.canvasExport?.mixedActivitySnapshot;
+      if (!snapshot) return res.status(404).send('Mixed Activity snapshot not found');
+
+      const document = await buildMixedActivityItemDocument(snapshot, req.params.questionId);
+      const mainServerUrl = process.env.H5P_ASSETS_URL || `http://localhost:${process.env.PORT || 8051}`;
+      const html = await renderNativeH5PPreview(document, {
+        contentId: `lti-${req.params.questionId}`,
+        libraryBasePath: `${mainServerUrl}/api/create/h5p-preview/libs`,
+        coreBasePath: `${mainServerUrl}/api/create/h5p-preview/core`,
+        contentBasePath: `${mainServerUrl}/api/create/h5p-preview/content`,
+        xapiBridge: { questionId: req.params.questionId }
+      });
+      res.removeHeader('X-Frame-Options');
+      res.removeHeader('Content-Security-Policy');
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.type('text/html').send(html);
+    } catch (error) {
+      console.error('❌ LTI mixed activity item error:', error);
+      return res.status(500).send('Error loading Mixed Activity question');
     }
   });
 

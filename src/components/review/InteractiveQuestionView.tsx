@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ExtendedQuestion } from './reviewTypes';
+import { ExtendedQuestion, questionTypes } from './reviewTypes';
 import { LearningObjectiveData } from '../generation/generationTypes';
 import BranchingScenarioTreeView from './BranchingScenarioTreeView';
 import '../../styles/components/InteractiveQuestions.css';
@@ -14,6 +14,7 @@ interface InteractiveQuestionViewProps {
 
 const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggleBulletPoint, learningObjectives }: InteractiveQuestionViewProps) => {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+    const [selectedMCAnswers, setSelectedMCAnswers] = useState<Set<string>>(new Set());
     const [showAnswer, setShowAnswer] = useState(false);
     const [isFlipped, setIsFlipped] = useState(false);
 
@@ -47,11 +48,18 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
     // Dictation state
     const [dictationAnswers, setDictationAnswers] = useState<{[idx: number]: string}>({});
     const [dictationChecked, setDictationChecked] = useState(false);
+    const questionTypeLabel = questionTypes.find(type => type.id === question.type)?.label
+      || question.type.replace(/-/g, ' ');
 
     useEffect(() => {
       if (question.type === 'ordering') {
         if (question.content?.items) {
-          setOrderingItems([...question.content.items]);
+          const items = [...question.content.items];
+          const correct = question.content?.correctOrder || [];
+          if (items.length > 1 && JSON.stringify(items) === JSON.stringify(correct)) {
+            items.push(items.shift() as string);
+          }
+          setOrderingItems(items);
         } else {
           const fallbackItems = [
             "Initialize variables and data structures",
@@ -70,12 +78,10 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
         const paragraphs = question.content.paragraphs.map((p: string | { text: string }) =>
           typeof p === 'string' ? p : p.text || ''
         );
-        // Shuffle for the user
+        // Keep Preview stable while ensuring the learner does not start with
+        // the already-correct sequence.
         const shuffled = [...paragraphs];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
+        if (shuffled.length > 1) shuffled.push(shuffled.shift() as string);
         setSortedParagraphs(shuffled);
       }
     }, [question]);
@@ -122,9 +128,11 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
 
     const checkClozeAnswers = () => {
       const correctAnswers = question.content?.correctAnswers || [];
-      return clozeAnswers.every((answer, idx) =>
-        answer.toLowerCase() === correctAnswers[idx]?.toLowerCase()
-      );
+      return correctAnswers.length > 0
+        && correctAnswers.every((answer: string, idx: number) =>
+          Boolean(clozeAnswers[idx]?.trim())
+          && clozeAnswers[idx].trim().toLowerCase() === answer.trim().toLowerCase()
+        );
     };
 
     const isCorrect = (answer: string) => {
@@ -142,7 +150,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
       <div className="interactive-question">
         <div className="question-header">
           <span className="question-number">Q{index + 1}</span>
-          <span className="question-type">{question.type.replace('-', ' ')}</span>
+          <span className="question-type">{questionTypeLabel}</span>
           <span className="question-difficulty">{question.difficulty}</span>
         </div>
 
@@ -173,16 +181,29 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
             <div className="question-options">
               {question.type === 'multiple-choice' && question.content?.options &&
                 question.content.options.map((option: { text: string; isCorrect: boolean; order?: number }, idx: number) => {
-                  const isSelected = selectedAnswer === option.text;
+                  const multipleAnswers = question.content?.selectionMode === 'multiple';
+                  const isSelected = multipleAnswers
+                    ? selectedMCAnswers.has(option.text)
+                    : selectedAnswer === option.text;
                   const optionIsCorrect = option.isCorrect;
-                  const showResult = showAnswer && isSelected;
+                  const showResult = showAnswer && (isSelected || optionIsCorrect);
 
                   return (
                     <button
                       key={idx}
                       className={`option-button ${isSelected ? 'selected' : ''} ${showResult ? (optionIsCorrect ? 'correct' : 'incorrect') : ''}`}
-                      onClick={() => !showAnswer && handleAnswerSelect(option.text)}
+                      onClick={() => {
+                        if (showAnswer) return;
+                        if (!multipleAnswers) return handleAnswerSelect(option.text);
+                        setSelectedMCAnswers(previous => {
+                          const next = new Set(previous);
+                          if (next.has(option.text)) next.delete(option.text);
+                          else next.add(option.text);
+                          return next;
+                        });
+                      }}
                       disabled={showAnswer}
+                      aria-pressed={isSelected}
                     >
                       <span className="option-label">{String.fromCharCode(65 + idx)}</span>
                       <span className="option-text">{option.text}</span>
@@ -195,6 +216,16 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                   );
                 })
               }
+              {question.type === 'multiple-choice' && question.content?.selectionMode === 'multiple' && !showAnswer && (
+                <button
+                  type="button"
+                  className="btn btn-primary mixed-preview-check"
+                  disabled={selectedMCAnswers.size === 0}
+                  onClick={() => setShowAnswer(true)}
+                >
+                  Check answers
+                </button>
+              )}
 
               {question.type === 'true-false' &&
                 ['True', 'False'].map((option: string, idx: number) => {
@@ -289,6 +320,12 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
 
               {question.type === 'discussion' && (
                 <div className="discussion-question">
+                  <label htmlFor={`discussion-${question._id}`}>Your response</label>
+                  <textarea
+                    id={`discussion-${question._id}`}
+                    rows={6}
+                    placeholder="Write notes or a response for discussion…"
+                  />
                 </div>
               )}
 
@@ -327,7 +364,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                     <button
                       className="btn btn-primary"
                       onClick={() => setShowAnswer(true)}
-                      disabled={clozeAnswers.some(answer => !answer)}
+                      disabled={(question.content.correctAnswers || []).some((_answer: string, index: number) => !clozeAnswers[index]?.trim())}
                     >
                       Check Answers
                     </button>
@@ -858,9 +895,14 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
                       </div>
                       {page.introText && <div style={{ fontSize: '0.8rem', marginTop: 2, opacity: 0.8 }}>{page.introText}</div>}
                       {page.fields && page.fields.length > 0 && (
-                        <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: '0.8rem' }}>
-                          {page.fields.map((f, fi) => <li key={fi}>{f.label}</li>)}
-                        </ul>
+                        <div className="documentation-fields">
+                          {page.fields.map((field, fieldIndex) => (
+                            <label key={fieldIndex}>
+                              <span>{field.label}</span>
+                              <textarea rows={3} placeholder="Enter your response…" />
+                            </label>
+                          ))}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -874,7 +916,7 @@ const InteractiveQuestionView = ({ question, index, expandedBulletPoints, toggle
               </div>
             )}
 
-            {!showAnswer && (question.type as string) !== 'flashcard' && question.type !== 'guess-the-answer' && question.type !== 'ordering' && question.type !== 'matching' && question.type !== 'mark-the-words' && question.type !== 'single-choice-set' && question.type !== 'essay' && question.type !== 'free-text' && question.type !== 'open-ended' && question.type !== 'simple-multi-choice' && question.type !== 'sort-paragraphs' && question.type !== 'crossword' && question.type !== 'dictation' && question.type !== 'arithmetic-quiz' && question.type !== 'branching-scenario' && question.type !== 'documentation-tool' && (
+            {!showAnswer && ['multiple-choice', 'true-false'].includes(question.type) && (
               <div className="question-hint">
                 Select an answer to see the result
               </div>

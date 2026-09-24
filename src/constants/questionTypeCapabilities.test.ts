@@ -4,6 +4,7 @@ import {
   getFormatsForDeliveryTarget,
   H5P_PACKAGE_FORMATS,
   QUESTION_TYPES,
+  UNAVAILABLE_QUESTION_TYPES,
   QUESTION_TYPES_BY_TARGET
 } from './questionTypeCapabilities';
 import {
@@ -36,7 +37,7 @@ describe('H5P package format presentation', () => {
 describe('H5P adapter capability parity', () => {
   it('registers every frontend AI question type in the backend adapter registry', () => {
     expect(listH5PTypeAdapters({ aiEnabled: true }).map(adapter => adapter.type))
-      .toEqual(QUESTION_TYPES.map(type => type.value));
+      .toEqual(QUESTION_TYPES.filter(type => !UNAVAILABLE_QUESTION_TYPES[type.value]).map(type => type.value));
   });
 
   it.each(Object.keys(QUESTION_TYPES_BY_TARGET))(

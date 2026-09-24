@@ -1,6 +1,5 @@
 import express from 'express';
 import Quiz from '../models/Quiz.js';
-import LearningObjective from '../models/LearningObjective.js';
 import Question from '../models/Question.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -77,16 +76,14 @@ router.get('/quiz/:quizId', authenticateToken, asyncHandler(async (req, res) => 
     .map(objective => objective.toObject ? objective.toObject() : objective)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  const [fallbackObjectives, questions] = await Promise.all([
-    quizObjectives.length > 0
-      ? Promise.resolve([])
-      : LearningObjective.find({ quiz: quizId }).sort({ order: 1 }).lean(),
-    Question.find({ quiz: quizId })
+  const questions = await Question.find({ quiz: quizId, _id: { $in: quiz.questions || [] } })
       .select('questionText type learningObjective generationMetadata order difficulty')
       .sort({ order: 1 })
-      .lean()
-  ]);
-  const learningObjectives = quizObjectives.length > 0 ? quizObjectives : fallbackObjectives;
+      .lean();
+  // Use the same contiguous display order as Objectives, Blueprint and Review.
+  // Older objectives may have gaps in their persisted order after deletion.
+  const learningObjectives = quizObjectives
+    .map((objective, index) => ({ ...objective, order: index }));
 
   if (learningObjectives.length === 0) {
     return errorResponse(

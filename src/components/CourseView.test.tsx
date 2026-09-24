@@ -43,6 +43,7 @@ vi.mock('../services/api', () => {
 
   return {
     ApiError: MockApiError,
+    h5pEditorApi: { listContents: vi.fn().mockResolvedValue({ data: { contents: [] } }) },
     foldersApi: {
       getFolder: mocks.getFolder,
       deleteFolder: vi.fn(),
@@ -160,10 +161,12 @@ describe('CourseView quiz creation', () => {
       </Provider>
     );
 
-    const nextAction = await screen.findByRole('heading', { name: 'Review generated questions in Quiz 1' });
+    const nextAction = await screen.findByRole('heading', { name: 'Review generated questions' });
     expect(nextAction).toBeInTheDocument();
+    expect(screen.getByText('Next in Quiz 1 · Stage 4 of 5')).toBeInTheDocument();
+    expect(screen.queryByText(/Step 3 · Quiz step/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Continue Quiz/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Quiz 1' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/course/course-1/quiz/quiz-1?tab=review');
   });
 
@@ -193,7 +196,7 @@ describe('CourseView quiz creation', () => {
     expect(screen.getByRole('heading', { name: '1 course source is ready' })).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /Quizzes/ })[0]);
-    expect(screen.getByRole('heading', { name: 'Review generated questions in Quiz 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Review generated questions' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Course details/ }));
     expect(screen.getByRole('heading', { name: 'Test Course is ready' })).toBeInTheDocument();

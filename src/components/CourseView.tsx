@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import MaterialUpload from './MaterialUpload';
 import CoursePromptSettings from './CoursePromptSettings';
+import CourseStudioActivities from './h5p/CourseStudioActivities';
 import { ArrowLeft, ArrowRight, Plus, Settings, Trash2 } from 'lucide-react';
 import { foldersApi, materialsApi, Material, Quiz, ApiError } from '../services/api';
 import { usePubSub } from '../hooks/usePubSub';
@@ -246,7 +247,7 @@ const CourseView = () => {
     materialData: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
     onProgress?: (progress: number) => void
   ) => {
-    if (!course) return;
+    if (!course) throw new Error('Course is not ready. Please retry once it has loaded.');
 
     try {
       let response;
@@ -303,6 +304,7 @@ const CourseView = () => {
           tone: 'danger'
         });
       }
+      throw err;
     }
   };
 
@@ -470,10 +472,10 @@ const CourseView = () => {
       return {
         step: 3,
         tab: 'generation',
-        label: quiz.progress?.planGenerated ? 'Generate planned questions' : 'Build the AI Blueprint',
+        label: quiz.progress?.planGenerated ? 'Generate your questions' : 'Plan and generate questions',
         detail: quiz.progress?.planGenerated
-          ? 'The Blueprint is ready. Review it and start generation.'
-          : 'Choose the activity mix before generating questions.'
+          ? 'Review the saved question plan, then start generation.'
+          : 'Choose the activity format and question mix, then generate.'
       };
     }
     if (!quiz.progress?.reviewCompleted) {
@@ -583,10 +585,10 @@ const CourseView = () => {
               action: handleCreateQuiz
             }
           : {
-              eyebrow: `Step 3 · Quiz step ${recommendedQuiz.stage.step} of 5`,
-              title: `${recommendedQuiz.stage.label} in ${recommendedQuiz.quiz.name}`,
+              eyebrow: `Next in ${recommendedQuiz.quiz.name} · Stage ${recommendedQuiz.stage.step} of 5`,
+              title: recommendedQuiz.stage.label,
               detail: recommendedQuiz.stage.detail,
-              label: 'Continue Quiz',
+              label: `Open ${recommendedQuiz.quiz.name}`,
               action: () => handleQuizClick(recommendedQuiz.quiz.id, recommendedQuiz.stage.tab)
             };
 
@@ -629,8 +631,8 @@ const CourseView = () => {
           <header className="course-setup-heading">
             <span>Guided course setup</span>
             <div>
-              <h2 id="course-setup-heading">Prepare this course, one step at a time</h2>
-              <p>Select a step to see its current status and the most useful next action.</p>
+              <h2 id="course-setup-heading">Prepare your course</h2>
+              <p>Set up shared materials, then continue the next unfinished Quiz.</p>
             </div>
           </header>
 
@@ -639,6 +641,7 @@ const CourseView = () => {
             activeStepId={activeCourseStep}
             ariaLabel="Course setup steps"
             onStepSelect={handleCourseStepSelect}
+            compact
           />
 
           <section className="course-next-action" aria-labelledby="course-next-action-title">
@@ -769,6 +772,8 @@ const CourseView = () => {
               </div>
             )}
           </div>
+
+          <CourseStudioActivities courseId={course.id} learningObjects={course.quizzes} />
 
           <details className="course-advanced-settings course-workspace-advanced">
             <summary>

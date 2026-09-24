@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PlanEditor from './PlanEditor';
 
@@ -55,4 +55,32 @@ describe('PlanEditor list keys', () => {
     expect(screen.getByPlaceholderText(/Describe the documentation tool topic and purpose/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Increase count' })).toHaveAttribute('title', 'Increase count');
   });
+  it('labels remaining objectives by the current list position after deletions', () => {
+    render(<PlanEditor
+      planItems={[{ id: 'row', type: 'multiple-choice', learningObjectiveId: 'lo-b', count: 1 }]}
+      learningObjectives={[
+        { _id: 'lo-b', text: 'Condensation', order: 1 },
+        { _id: 'lo-c', text: 'Evaporation', order: 2 }
+      ]}
+      onPlanItemsChange={vi.fn()} targetFormat="column" />);
+    expect(screen.getByRole('option', { name: 'LO 1: Condensation' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'LO 2: Evaporation' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /LO 3/ })).not.toBeInTheDocument();
+  });
+
+  it('lets one Branching Scenario cover additional objectives without adding another activity', () => {
+    const onPlanItemsChange = vi.fn();
+    render(<PlanEditor
+      planItems={[{ id: 'branch', type: 'branching-scenario', learningObjectiveId: 'lo-a', count: 1 }]}
+      learningObjectives={[
+        { _id: 'lo-a', text: 'Agree on AI use', order: 0 },
+        { _id: 'lo-b', text: 'Address integrity concerns', order: 1 }
+      ]}
+      onPlanItemsChange={onPlanItemsChange} targetFormat="standalone" />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'LO 2: Address integrity concerns' }));
+    expect(onPlanItemsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'branch', count: 1, supportingLearningObjectiveIds: ['lo-b'] })
+    ]);
+  });
+
 });

@@ -1,6 +1,6 @@
 # Question Types and Compatibility
 
-CREATE currently exposes 16 question types. Availability depends on both the teaching purpose used by AI planning and the selected delivery target/format. Manual selection still cannot bypass format compatibility.
+CREATE's catalogue contains 16 question types, all currently available for new activities with compatible delivery settings. Branching Scenario uses the upgraded native runtime and editor; existing versions remain supported. Availability also depends on the teaching purpose used by AI planning and the selected delivery target/format. Manual selection cannot bypass these checks.
 
 ## Question type catalogue
 
@@ -30,10 +30,12 @@ CREATE currently exposes 16 question types. Availability depends on both the tea
 | H5P Package — Column | Multiple Choice, True/False, Fill in the Blank, Mark the Words, Ordering, Matching, Single Choice Set, Essay, Flashcard, Guess the Answer, Summary, Discussion, Documentation Tool |
 | H5P Package — Interactive Book | The same mixed-content types as Column |
 | H5P Package — Question Set | Multiple Choice, True/False, Fill in the Blank, Mark the Words, Essay |
-| H5P Package — Standalone | Branching Scenario, Crossword, Sort Paragraphs |
-| Canvas LTI — Mixed Activity | All 16 CREATE question types |
+| H5P Package — Standalone | Crossword, Sort Paragraphs, Branching Scenario |
+| Canvas LTI — Mixed Activity | All 16 currently available CREATE question types |
 
 Standalone is intentionally narrow: it represents one complex H5P activity rather than a mixed list. Column and Interactive Book are the broadest downloadable H5P choices. Mixed Activity is rendered by CREATE's Canvas LTI player and is not equivalent to a standard mixed H5P package.
+
+For a Branching Scenario, keep one Blueprint row with a primary learning objective and optionally select other objectives in **Also cover in this one scenario**. The source material and teaching instructions guide the decisions and outcome feedback. CREATE rejects a generated draft with missing questions, choices, links, or ending feedback instead of saving an incomplete path. Open the native preview and try every path; revise the prompt or edit the H5P activity if an outcome needs correction.
 
 ## Teaching-purpose defaults
 
@@ -41,7 +43,7 @@ Standalone is intentionally narrow: it represents one complex H5P activity rathe
 | --- | --- |
 | Support Learning | Flashcard, Summary, Mark the Words |
 | Assess Understanding | Multiple Choice, True/False, Single Choice Set, Essay |
-| Gamify Learning | Matching, Ordering, Fill in the Blank, Discussion, Crossword, Sort Paragraphs, Mark the Words |
+| Gamify Learning | Matching, Ordering, Fill in the Blank, Discussion, Crossword, Sort Paragraphs, Mark the Words, Branching Scenario |
 
 The final usable set is the intersection of teaching-purpose defaults and target-format compatibility. If that intersection is too narrow for your design, choose a different format or edit the Blueprint with another compatible type.
 

@@ -215,3 +215,19 @@
         justify-content: center;
     }
 }
+
+@media (max-width: 768px) {
+    .quiz-view {
+        padding: 0;
+    }
+
+    .quiz-title-row h1 {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .quiz-header-nav {
+        gap: var(--spacing-sm);
+        flex-wrap: wrap;
+    }
+}

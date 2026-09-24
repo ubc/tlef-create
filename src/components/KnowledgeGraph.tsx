@@ -27,6 +27,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { CoverageMap, SourceReference } from '../services/api';
 import SourceReferencePreviewModal from './SourceReferencePreviewModal';
+import { sourceSectionLabel } from '../utils/sourceReferenceLabels';
 import '../styles/components/KnowledgeGraph.css';
 
 type KnowledgeNodeKind = 'material' | 'evidence' | 'objective' | 'subpoint' | 'question';
@@ -164,7 +165,7 @@ export function buildGraph(coverageMap: CoverageMap) {
 
     const location = typeof reference.pageNumber === 'number'
       ? `Page ${reference.pageNumber}`
-      : reference.section || 'Evidence';
+      : sourceSectionLabel(reference) || 'Evidence';
     const sourceName = reference.materialName || reference.sourceFile || 'Course material';
     const node: KnowledgeNode = {
       id: `evidence-${++evidenceIndex}`,
@@ -173,7 +174,7 @@ export function buildGraph(coverageMap: CoverageMap) {
       data: {
         kind: 'evidence',
         eyebrow: location,
-        label: shortText(reference.excerpt || reference.section || 'Referenced passage'),
+        label: shortText(reference.excerpt || sourceSectionLabel(reference) || 'Referenced passage'),
         meta: shortText(sourceName, 34),
         reference
       }
@@ -376,7 +377,7 @@ function nodeProperties(node: KnowledgeNode) {
     ['Meta', node.data.meta],
     ['Material', reference?.materialName || reference?.sourceFile],
     ['Page', typeof reference?.pageNumber === 'number' ? String(reference.pageNumber) : undefined],
-    ['Section', reference?.section]
+    ['Section', reference ? sourceSectionLabel(reference) : undefined]
   ].filter(([, value]) => Boolean(value)) as Array<[string, string]>;
 }
 

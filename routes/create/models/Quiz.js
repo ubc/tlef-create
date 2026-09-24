@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { PEDAGOGICAL_APPROACHES, DIFFICULTY_LEVELS, QUIZ_STATUS, QUESTION_TYPES } from '../config/constants.js';
+import { withQuestionMutation } from '../services/questionPublication.js';
 
 const quizSchema = new mongoose.Schema({
   // Basic Quiz Information
@@ -32,6 +33,10 @@ const quizSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Question'
   }],
+  questionRevision: { type: Number, default: 0 },
+  questionMutation: { token: String, leaseUntil: Date },
+  questionGenerationLease: { jobId: mongoose.Schema.Types.ObjectId, token: String, leaseUntil: Date },
+  lastQuestionGenerationJob: mongoose.Schema.Types.ObjectId,
   
   // Generation Plans (can have multiple plans - drafts, approved, etc.)
   generationPlans: [{
@@ -178,7 +183,11 @@ const quizSchema = new mongoose.Schema({
         type: Number,
         min: 2,
         max: 3
-      }
+      },
+      supportingLearningObjectives: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'LearningObjective'
+      }]
     }],
 
     aiConfig: {
@@ -264,6 +273,8 @@ const quizSchema = new mongoose.Schema({
       pageId: { type: String },
       moduleItemId: { type: String },
       resourceLinkId: { type: String },
+      playerMode: { type: String, enum: ['native-h5p', 'mixed-activity'] },
+      mixedActivitySnapshot: { type: mongoose.Schema.Types.Mixed },
       exportedAt: { type: Date }
     }
   }],
@@ -277,6 +288,7 @@ const quizSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true, // Adds createdAt and updatedAt
+  optimisticConcurrency: true,
   collection: 'quizzes'
 });
 
@@ -394,17 +406,20 @@ quizSchema.methods.removeLearningObjective = function(objectiveId) {
   return this.updateProgress();
 };
 
-quizSchema.methods.addQuestion = function(questionId) {
-  if (!this.questions.includes(questionId)) {
-    this.questions.push(questionId);
-    return this.updateProgress();
-  }
-  return Promise.resolve(this);
+quizSchema.methods.addQuestion = async function(questionId) {
+  return withQuestionMutation(this.constructor, this._id, this.createdBy, async ({ writeQuiz }) => {
+    return writeQuiz({
+      $addToSet: { questions: questionId },
+      $set: { 'progress.questionsGenerated': true, status: QUIZ_STATUS.COMPLETED }
+    });
+  });
 };
 
-quizSchema.methods.removeQuestion = function(questionId) {
-  this.questions = this.questions.filter(id => !id.equals(questionId));
-  return this.updateProgress();
+quizSchema.methods.removeQuestion = async function(questionId) {
+  return withQuestionMutation(this.constructor, this._id, this.createdBy, async ({ quiz, writeQuiz }) => {
+    const questions = quiz.questions.filter(id => String(id) !== String(questionId));
+    return writeQuiz({ $set: { questions, 'progress.questionsGenerated': questions.length > 0 } });
+  });
 };
 
 quizSchema.methods.setStatus = function(status) {

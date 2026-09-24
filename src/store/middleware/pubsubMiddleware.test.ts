@@ -1,26 +1,25 @@
 // src/store/middleware/pubsubMiddleware.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { configureStore } from '@reduxjs/toolkit';
 import { pubsubMiddleware } from './pubsubMiddleware';
-import { pubsubService, PUBSUB_EVENTS } from '../../services/pubsubService';
+import { pubsubService, PUBSUB_EVENTS, type QuestionGenerationStartedPayload, type QuestionGenerationCompletedPayload } from '../../services/pubsubService';
 import planSlice, { setQuestionsGenerating } from '../slices/planSlice';
 
+const createTestStore = () => configureStore({
+    reducer: { plan: planSlice },
+    middleware: getDefaultMiddleware => getDefaultMiddleware().concat(pubsubMiddleware)
+});
+
 describe('pubsubMiddleware - Question Generation Events', () => {
-    let store: any;
-    let publishSpy: any;
+    let store: ReturnType<typeof createTestStore>;
+    let publishSpy: MockInstance<typeof pubsubService.publish>;
 
     beforeEach(() => {
         // Create a spy on the publish method
         publishSpy = vi.spyOn(pubsubService, 'publish');
 
         // Create a test store with the middleware
-        store = configureStore({
-            reducer: {
-                plan: planSlice,
-            },
-            middleware: (getDefaultMiddleware) =>
-                getDefaultMiddleware().concat(pubsubMiddleware),
-        });
+        store = createTestStore();
     });
 
     afterEach(() => {
@@ -86,8 +85,8 @@ describe('pubsubMiddleware - Question Generation Events', () => {
             quizId: 'test-quiz-789',
             totalQuestions: 10,
         });
-        expect(callArgs[1].timestamp).toBeGreaterThanOrEqual(beforeTimestamp);
-        expect(callArgs[1].timestamp).toBeLessThanOrEqual(afterTimestamp);
+        expect((callArgs[1] as QuestionGenerationStartedPayload).timestamp).toBeGreaterThanOrEqual(beforeTimestamp);
+        expect((callArgs[1] as QuestionGenerationStartedPayload).timestamp).toBeLessThanOrEqual(afterTimestamp);
     });
 
     it('should NOT publish question generation events for other Redux actions', () => {
@@ -135,6 +134,6 @@ describe('pubsubMiddleware - Question Generation Events', () => {
 
         // Duration should be at least 50ms
         const callArgs = publishSpy.mock.calls[0];
-        expect(callArgs[1].duration).toBeGreaterThanOrEqual(50);
+        expect((callArgs[1] as QuestionGenerationCompletedPayload).duration).toBeGreaterThanOrEqual(50);
     });
 });

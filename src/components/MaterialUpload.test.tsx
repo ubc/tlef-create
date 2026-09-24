@@ -94,4 +94,30 @@ describe('MaterialUpload preview', () => {
     await vi.waitFor(() => expect(mocks.reprocessMaterial).toHaveBeenCalledWith('64b7f1d4e5a6b7c8d9e0f123'));
     await vi.waitFor(() => expect(onMaterialReprocessed).toHaveBeenCalled());
   });
+  it.each([
+    ['URL', 'Enter website URL...', 'https://example.com/course'],
+    ['Text', 'Paste your text content here...', 'Retain this source text.']
+  ])('retains failed %s submissions and waits for success before clearing', async (type, placeholder, content) => {
+    const onAdd = vi.fn().mockRejectedValueOnce(new Error('Rejected'));
+    const { container } = render(<MaterialUpload materials={[]} onAddMaterial={onAdd} onRemoveMaterial={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: `Add ${type}` }));
+    const input = screen.getByPlaceholderText(placeholder);
+    fireEvent.change(input, { target: { value: content } });
+    fireEvent.submit(container.querySelector('form')!);
+    await vi.waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(input).toBeEnabled());
+    expect(input).toHaveValue(content);
+    expect(mocks.showNotification).not.toHaveBeenCalledWith('success', expect.anything(), expect.anything());
+
+    let resolveUpload!: () => void;
+    onAdd.mockImplementationOnce(() => new Promise<void>(resolve => { resolveUpload = resolve; }));
+    fireEvent.submit(container.querySelector('form')!);
+    expect(input).toBeDisabled();
+    expect(input).toHaveValue(content);
+    expect(mocks.showNotification).not.toHaveBeenCalled();
+    resolveUpload();
+    await vi.waitFor(() => expect(screen.queryByPlaceholderText(placeholder)).not.toBeInTheDocument());
+    expect(mocks.showNotification).toHaveBeenCalledWith('success', `${type} Added`, expect.any(String));
+  });
+
 });

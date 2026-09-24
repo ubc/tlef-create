@@ -15,7 +15,8 @@ const state = {
       folder: { name: 'Test Course' },
       materials: ['material-1'],
       learningObjectives: [{ _id: 'objective-1', text: 'Analyze evidence', order: 0 }],
-      questions: [] as string[]
+      questions: [] as string[],
+      progress: { reviewCompleted: false }
     },
     loading: false,
     error: null
@@ -57,6 +58,7 @@ describe('QuizView tabs', () => {
     routeParams = new URLSearchParams();
     state.quiz.currentQuiz.materials = ['material-1'];
     state.quiz.currentQuiz.questions = [];
+    state.quiz.currentQuiz.progress.reviewCompleted = false;
     state.material.materials = [];
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 640 });
     window.scrollTo = vi.fn();
@@ -65,9 +67,14 @@ describe('QuizView tabs', () => {
   it('preserves the current page position when Coverage Map is selected', async () => {
     render(<QuizView />);
 
-    expect(screen.getByRole('navigation', { name: 'Quiz creation steps' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Blueprint & Generate/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Preview & Export/ })).toBeDisabled();
+    const workflow = screen.getByRole('navigation', { name: 'Quiz creation steps' });
+    expect(workflow).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Sources/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Objectives/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Generate/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Review/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Preview/ })).toBeDisabled();
+    expect(screen.queryByText('Blueprint & Generate')).not.toBeInTheDocument();
 
     const coverageTab = await screen.findByRole('button', { name: 'Coverage Map' });
     await waitFor(() => expect(coverageTab).toBeEnabled());
@@ -84,20 +91,20 @@ describe('QuizView tabs', () => {
   it('restores Materials when browser navigation returns to step 1', async () => {
     routeParams = new URLSearchParams('tab=generation');
     const view = render(<QuizView />);
-    expect(screen.getByRole('button', { name: /Blueprint & Generate/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: /Generate/ })).toHaveAttribute('aria-current', 'step');
     routeParams = new URLSearchParams('tab=materials');
     view.rerender(<QuizView />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Materials/ })).toHaveAttribute('aria-current', 'step'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Sources/ })).toHaveAttribute('aria-current', 'step'));
     expect(screen.getByText('Materials panel').parentElement).toHaveStyle({ display: 'block' });
   });
 
   it('does not mark processing sources complete and refreshes the step once ready', async () => {
     state.material.materials = [{ _id: 'material-1', processingStatus: 'processing' }];
     const view = render(<QuizView />);
-    expect(await screen.findByRole('button', { name: /Materials Checking or processing sources/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Sources Checking or processing sources/ })).toBeInTheDocument();
     state.material.materials = [{ _id: 'material-1', processingStatus: 'completed' }];
     view.rerender(<QuizView />);
-    expect(await screen.findByRole('button', { name: /Materials Ready · 1 assigned/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Sources Ready · 1 assigned/ })).toBeInTheDocument();
   });
 
   it('keeps existing questions reviewable when assigned materials have been removed', async () => {
@@ -105,6 +112,15 @@ describe('QuizView tabs', () => {
     state.quiz.currentQuiz.questions = ['question-1'];
     render(<QuizView />);
     expect(await screen.findByRole('button', { name: /^Review / })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /^Preview & Export/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Preview/ })).toBeEnabled();
+  });
+
+  it('changes Review from attention to complete after instructor confirmation', async () => {
+    state.quiz.currentQuiz.questions = ['question-1'];
+    const view = render(<QuizView />);
+    expect(await screen.findByRole('button', { name: /Review 1 question to check/ })).toHaveAttribute('data-state', 'attention');
+    state.quiz.currentQuiz.progress.reviewCompleted = true;
+    view.rerender(<QuizView />);
+    expect(screen.getByRole('button', { name: /Review Reviewed · 1 question/ })).toHaveAttribute('data-state', 'complete');
   });
 });

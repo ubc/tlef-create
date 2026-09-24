@@ -74,6 +74,17 @@ const initialState: QuizState = {
   selectedFolderId: null,
 };
 
+// Save endpoints may return a folder ID after a populated detail was loaded.
+// Keep the known name only when both responses refer to the same course.
+function mergeQuizResponse(previous: Quiz | null | undefined, incoming: Quiz): Quiz {
+  if (previous?._id === incoming._id
+    && typeof previous.folder === 'object'
+    && previous.folder?._id === incoming.folder) {
+    return { ...incoming, folder: previous.folder };
+  }
+  return incoming;
+}
+
 const quizSlice = createSlice({
   name: 'quiz',
   initialState,
@@ -84,7 +95,7 @@ const quizSlice = createSlice({
       state.selectedFolderId = null;
     },
     setCurrentQuiz: (state, action: PayloadAction<Quiz | null>) => {
-      state.currentQuiz = action.payload;
+      state.currentQuiz = action.payload ? mergeQuizResponse(state.currentQuiz, action.payload) : null;
     },
     setSelectedFolder: (state, action: PayloadAction<string | null>) => {
       state.selectedFolderId = action.payload;
@@ -103,10 +114,10 @@ const quizSlice = createSlice({
     updateQuizLocally: (state, action: PayloadAction<Quiz>) => {
       const index = state.quizzes.findIndex(quiz => quiz._id === action.payload._id);
       if (index !== -1) {
-        state.quizzes[index] = action.payload;
+        state.quizzes[index] = mergeQuizResponse(state.quizzes[index], action.payload);
       }
       if (state.currentQuiz && state.currentQuiz._id === action.payload._id) {
-        state.currentQuiz = action.payload;
+        state.currentQuiz = mergeQuizResponse(state.currentQuiz, action.payload);
       }
     },
     removeQuizLocally: (state, action: PayloadAction<string>) => {
@@ -159,10 +170,10 @@ const quizSlice = createSlice({
       .addCase(updateQuiz.fulfilled, (state, action) => {
         const index = state.quizzes.findIndex(quiz => quiz._id === action.payload._id);
         if (index !== -1) {
-          state.quizzes[index] = action.payload;
+          state.quizzes[index] = mergeQuizResponse(state.quizzes[index], action.payload);
         }
         if (state.currentQuiz && state.currentQuiz._id === action.payload._id) {
-          state.currentQuiz = action.payload;
+          state.currentQuiz = mergeQuizResponse(state.currentQuiz, action.payload);
         }
       })
       .addCase(updateQuiz.rejected, (state, action) => {
@@ -184,10 +195,10 @@ const quizSlice = createSlice({
       .addCase(assignMaterials.fulfilled, (state, action) => {
         const index = state.quizzes.findIndex(quiz => quiz._id === action.payload._id);
         if (index !== -1) {
-          state.quizzes[index] = action.payload;
+          state.quizzes[index] = mergeQuizResponse(state.quizzes[index], action.payload);
         }
         if (state.currentQuiz && state.currentQuiz._id === action.payload._id) {
-          state.currentQuiz = action.payload;
+          state.currentQuiz = mergeQuizResponse(state.currentQuiz, action.payload);
         }
       })
       .addCase(assignMaterials.rejected, (state, action) => {
@@ -209,7 +220,7 @@ const quizSlice = createSlice({
       })
       .addCase(fetchQuizById.fulfilled, (state, action) => {
         state.loading = false;
-        state.currentQuiz = action.payload;
+        state.currentQuiz = mergeQuizResponse(state.currentQuiz, action.payload);
         state.error = null;
       })
       .addCase(fetchQuizById.rejected, (state, action) => {

@@ -3,6 +3,7 @@ import { Plus, Minus, X } from 'lucide-react';
 import { PlanItem, LearningObjectiveData } from './generationTypes';
 import {
   TargetFormat,
+  UNAVAILABLE_QUESTION_TYPES,
   getFallbackQuestionType,
   getQuestionTypesForTarget
 } from '../../constants/questionTypeCapabilities';
@@ -81,6 +82,7 @@ export default function PlanEditor({
     } else {
       updates.branchingLayers = undefined;
       updates.branchingChoices = undefined;
+      updates.supportingLearningObjectiveIds = undefined;
     }
     if (newType === 'documentation-tool') {
       updates.count = 1;
@@ -111,7 +113,7 @@ export default function PlanEditor({
 
   const loDistribution = planItems.reduce((acc, item) => {
     const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
-    const loLabel = lo ? `LO ${lo.order + 1}` : 'No LO (custom prompt)';
+    const loLabel = lo ? `LO ${learningObjectives.indexOf(lo) + 1}` : 'No LO (custom prompt)';
     acc[loLabel] = (acc[loLabel] || 0) + item.count;
     return acc;
   }, {} as Record<string, number>);
@@ -139,8 +141,8 @@ export default function PlanEditor({
   const getLearningObjectiveLabel = (lo: LearningObjectiveData) => {
     const trimmedText = lo.text?.trim();
     return trimmedText
-      ? `LO ${lo.order + 1}: ${truncateText(trimmedText, 50)}`
-      : `LO ${lo.order + 1}: (loading objective text...)`;
+      ? `LO ${learningObjectives.indexOf(lo) + 1}: ${truncateText(trimmedText, 50)}`
+      : `LO ${learningObjectives.indexOf(lo) + 1}: (loading objective text...)`;
   };
 
   return (
@@ -152,6 +154,12 @@ export default function PlanEditor({
         </p>
       </div>
 
+      {(targetFormat === 'standalone' || targetFormat === 'mixed-activity') && UNAVAILABLE_QUESTION_TYPES['branching-scenario'] && (
+        <p className="input-hint" role="note">{UNAVAILABLE_QUESTION_TYPES['branching-scenario']}</p>
+      )}
+      {targetFormat === 'standalone' && (
+        <p className="input-hint" role="note">Standalone creates one activity. Keep one row with a count of one; a Branching Scenario can cover several learning objectives within that row.</p>
+      )}
       <div className="plan-editor-table">
         <div className="plan-editor-table-header">
           <div className="plan-col-type">Question Type</div>
@@ -215,11 +223,32 @@ export default function PlanEditor({
                       </option>
                     ))}
                   </select>
+                  {item.type === 'branching-scenario' && learningObjectives.length > 1 && (
+                    <div className="plan-branching-objectives" style={{ marginTop: 8 }}>
+                      <span className="input-hint">Also cover in this one scenario (optional)</span>
+                      {learningObjectives.filter(objective => objective._id !== item.learningObjectiveId).map(objective => (
+                        <label key={objective._id} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 4 }}>
+                          <input
+                            type="checkbox"
+                            checked={item.supportingLearningObjectiveIds?.includes(objective._id) || false}
+                            disabled={readOnly}
+                            onChange={event => {
+                              const selected = item.supportingLearningObjectiveIds || [];
+                              handleUpdateItem(item.id, { supportingLearningObjectiveIds: event.target.checked
+                                ? [...selected, objective._id]
+                                : selected.filter(id => id !== objective._id) });
+                            }}
+                          />
+                          <span>{getLearningObjectiveLabel(objective)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="plan-col-count">
                   {item.type === 'branching-scenario' ? (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                         <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>Layers</span>
                         <select
@@ -244,6 +273,7 @@ export default function PlanEditor({
                           {[2, 3].map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
                       </div>
+                      <span className="input-hint" style={{ flexBasis: '100%' }}>Minimum choices per decision. Final decisions may use more source options, up to six.</span>
                     </div>
                   ) : (
                     <div className="count-stepper">
@@ -358,6 +388,7 @@ export default function PlanEditor({
                       <input
                         value={item.focusArea || ''}
                         onChange={(e) => handleUpdateItem(item.id, { focusArea: e.target.value })}
+                        maxLength={300}
                         disabled={readOnly}
                         className="plan-select"
                         placeholder="Specific concept, skill, misconception, or scenario"
@@ -369,6 +400,7 @@ export default function PlanEditor({
                       <textarea
                         value={item.rationale || ''}
                         onChange={(e) => handleUpdateItem(item.id, { rationale: e.target.value })}
+                        maxLength={1000}
                         disabled={readOnly}
                         className="plan-select"
                         placeholder="Why this row belongs in the quiz blueprint"

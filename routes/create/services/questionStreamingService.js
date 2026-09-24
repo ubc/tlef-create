@@ -7,6 +7,7 @@ import sseService from './sseService.js';
 import llmService from './llmService.js';
 import questionMemoryService from './questionMemoryService.js';
 import { formatContentForDatabase } from './questionContentService.js';
+import { assertGenerationActive, generationOutcomeUnconfirmed } from '../utils/generationDeadline.js';
 
 class QuestionStreamingService {
   buildPlannedTaskPrompt(plannedTask, attempt = 1) {
@@ -83,7 +84,10 @@ class QuestionStreamingService {
     learningObjective,
     relevantContent,
     sessionId,
-    userId
+    userId,
+    signal,
+    beginPersistence,
+    generationContext
   }) {
     console.log(`🎯 Starting streaming generation for question: ${questionId}`);
     console.log(`🔍 DEBUG - learningObjective received:`, typeof learningObjective, learningObjective);
@@ -91,7 +95,9 @@ class QuestionStreamingService {
     console.log(`🔍 DEBUG - userId:`, userId);
     
     try {
+      assertGenerationActive(signal);
       const resolvedLLMConfig = await llmService.resolveUserLLMConfig(userId);
+      assertGenerationActive(signal);
 
       // Send diagnostic info to frontend
       sseService.streamQuestionProgress(sessionId, questionId, {
@@ -111,6 +117,7 @@ class QuestionStreamingService {
 
       // Create streaming callback
       const onStreamChunk = (textChunk, metadata) => {
+        if (signal?.aborted) return;
         console.log(`📝 onStreamChunk called for ${questionId}: partial=${metadata.partial}, textLength=${textChunk?.length}, totalLength=${metadata.totalLength}`);
 
         if (metadata.partial && textChunk) {
@@ -158,6 +165,7 @@ class QuestionStreamingService {
       let finalFailureReason = 'LLM generation failed';
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        assertGenerationActive(signal);
         if (attempt > 1) {
           sseService.streamTextReset(sessionId, questionId, {
             attempt,
@@ -200,12 +208,15 @@ class QuestionStreamingService {
           courseContext: questionConfig.courseContext || '',
           previousQuestions: questionConfig.previousQuestions || [],
           customPrompt,
+          instructorPrompt: questionConfig.instructorPrompt ?? questionConfig.customPrompt ?? '',
           userId,
           llmConfig: resolvedLLMConfig,
           selectionMode: questionConfig.selectionMode,
           branchingLayers: questionConfig.branchingLayers ?? 2,
-          branchingChoices: questionConfig.branchingChoices ?? 2
+          branchingChoices: questionConfig.branchingChoices ?? 2,
+          signal
         }, attemptStreamCallback);
+        assertGenerationActive(signal);
 
         if (!result?.success) {
           finalFailureReason = result?.error || 'LLM generation failed';
@@ -231,14 +242,23 @@ class QuestionStreamingService {
           continue;
         }
 
+        // Branching Scenario uses a fixed database title. Compare the actual
+        // decisions instead, otherwise every regenerated scenario looks like
+        // the same question before its content is even considered.
+        const noveltyCandidate = questionConfig.questionType === 'branching-scenario'
+          ? [result.questionData.content?.introText,
+            ...(result.questionData.content?.nodes || []).map(node => node.question)]
+            .filter(Boolean).join(' ') || result.questionData.questionText
+          : result.questionData.questionText;
         noveltyResult = await questionMemoryService.reserveIfNovel({
           sessionId,
           questionId,
-          candidate: result.questionData.questionText,
+          candidate: noveltyCandidate,
           existingQuestions: questionConfig.duplicateCheckQuestions
             || questionConfig.previousQuestions
             || []
         });
+        assertGenerationActive(signal);
 
         if (!noveltyResult.novel) {
           const similarStem = noveltyResult.mostSimilarQuestionText?.slice(0, 240) || 'an existing question';
@@ -247,7 +267,7 @@ class QuestionStreamingService {
             'NOVELTY RETRY REQUIRED:',
             `The previous candidate was too similar to: "${similarStem}".`,
             'Assess a different fact, subpoint, misconception, application context, or reasoning step.',
-            'Use a meaningfully different stem structure and answer-option pattern while preserving the assigned learning objective and planned slice.'
+            'Use a meaningfully different stem structure and answer-option pattern while preserving the assigned learning objective and planned slice. Stay within the instructor-requested topic, scenario, and exclusions.'
           ].join(' ');
           console.warn(`[${questionId}] Novelty validation failed on attempt ${attempt}: similarity=${noveltyResult.similarity}`);
           sseService.streamQuestionProgress(sessionId, questionId, {
@@ -309,7 +329,8 @@ class QuestionStreamingService {
         
         // Get current question count for proper ordering
         console.log(`[${questionId}] Counting existing questions...`);
-        const existingQuestionsCount = await Question.countDocuments({ quiz: quizId });
+        const existingQuestionsCount = generationContext ? generationContext.order : await Question.countDocuments({ quiz: quizId });
+        assertGenerationActive(signal);
         console.log(`[${questionId}] Existing questions count: ${existingQuestionsCount}`);
         
         // Generate metadata fields to match non-streaming implementation
@@ -366,6 +387,7 @@ class QuestionStreamingService {
         const sourceReferences = this.buildSourceReferences(relevantContent);
 
         const newQuestion = new Question({
+          ...(generationContext ? { _id: generationContext.savedQuestionId, generationJob: generationContext.jobId } : {}),
           quiz: quizId,
           type: result.questionData.type,
           questionText: result.questionData.questionText,
@@ -380,6 +402,10 @@ class QuestionStreamingService {
           generationMetadata: {
             llmModel: result.questionData.generationMetadata?.llmModel || resolvedLLMConfig.model,
             generationPrompt: result.promptUsed || result.questionData.prompt,
+            instructorPrompt: questionConfig.instructorPrompt || undefined,
+            supportingLearningObjectives: questionConfig.supportingLearningObjectiveIds || [],
+            useCustomPromptOnly: questionConfig.useCustomPromptOnly === true,
+            qualityReview: result.questionData.generationMetadata?.qualityReview,
             generatedFrom: sourceReferences
               .map(ref => ref.materialId)
               .filter(Boolean),
@@ -413,18 +439,29 @@ class QuestionStreamingService {
           
           // Add timeout for database save operation
           const DB_SAVE_TIMEOUT = 30000; // 30 seconds
+          assertGenerationActive(signal);
+          await generationContext?.assertActive();
+          beginPersistence?.();
           const savePromise = newQuestion.save();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Database save timeout after 30s')), DB_SAVE_TIMEOUT)
-          );
+          let saveTimer;
+          const timeoutPromise = new Promise((_, reject) => {
+            saveTimer = setTimeout(() => reject(generationOutcomeUnconfirmed(new Error('Database save timeout after 30s'))), DB_SAVE_TIMEOUT);
+          });
           
-          savedQuestion = await Promise.race([savePromise, timeoutPromise]);
+          try {
+            savedQuestion = await Promise.race([savePromise, timeoutPromise]);
+          } finally {
+            clearTimeout(saveTimer);
+          }
           console.log(`[${questionId}] Question saved: ${savedQuestion._id}`);
           sseService.streamQuestionProgress(sessionId, questionId, {
             status: 'db-saved',
             message: `Question saved: ${savedQuestion._id}`
           });
 
+          // A receipt-owned candidate remains invisible until the entire batch
+          // is atomically published through Quiz.questions by the job service.
+          if (!generationContext) {
           // Add question to quiz using the proper method (like in main branch)
           console.log(`[${questionId}] Finding quiz...`);
           const quiz = await Quiz.findById(quizId);
@@ -441,18 +478,29 @@ class QuestionStreamingService {
           
           // Add timeout for addQuestion operation
           const addPromise = quiz.addQuestion(savedQuestion._id);
-          const addTimeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Add to quiz timeout after 30s')), DB_SAVE_TIMEOUT)
-          );
+          let addTimer;
+          const addTimeoutPromise = new Promise((_, reject) => {
+            addTimer = setTimeout(() => reject(generationOutcomeUnconfirmed(new Error('Add to quiz timeout after 30s'))), DB_SAVE_TIMEOUT);
+          });
           
-          await Promise.race([addPromise, addTimeoutPromise]);
+          try {
+            await Promise.race([addPromise, addTimeoutPromise]);
+          } finally {
+            clearTimeout(addTimer);
+          }
           console.log(`[${questionId}] Question added to quiz successfully`);
           sseService.streamQuestionProgress(sessionId, questionId, {
             status: 'added-to-quiz',
             message: 'Question added to quiz successfully'
           });
+          }
         } catch (saveError) {
           console.error(`[${questionId}] ERROR saving question:`, saveError.message);
+          // A timed-out write can still commit. After the question is saved,
+          // failing to link it to the quiz also does not mean nothing was saved.
+          // Keep both cases distinct from an explicit pre-save validation error.
+          if (saveError.code === 'GENERATION_OUTCOME_UNCONFIRMED') throw saveError;
+          if (savedQuestion) throw generationOutcomeUnconfirmed(saveError);
           saveError.errorType = saveError.errorType || 'database-error';
           saveError.message = `Failed to save question: ${saveError.message}`;
           throw saveError;
@@ -476,7 +524,8 @@ class QuestionStreamingService {
             explanation: savedQuestion.explanation,
             content: savedQuestion.content,
             difficulty: savedQuestion.difficulty,
-            streamingGenerated: true
+            streamingGenerated: true,
+            ...(generationContext ? { staged: true } : {})
           });
 
           console.log(`[${questionId}] question-complete sent: ${sent}`);

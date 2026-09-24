@@ -20,9 +20,15 @@ export default function AIConfigPanel({
   learningObjectives
 }: AIConfigPanelProps) {
   const [inputValue, setInputValue] = useState(aiConfig.totalQuestions.toString());
-  const minQuestions = learningObjectives.length; // At least 1 per LO
+  const minQuestions = Math.max(1, learningObjectives.length); // At least 1 per LO
   const maxQuestions = 100;
   const isBusy = isGenerating || disabled;
+
+  const countIsValid = aiConfig.autoRecommendTotalQuestions || (
+    /^\d+$/.test(inputValue)
+    && Number(inputValue) >= minQuestions
+    && Number(inputValue) <= maxQuestions
+  );
 
   // Sync input value when aiConfig changes externally
   useEffect(() => {
@@ -37,7 +43,7 @@ export default function AIConfigPanel({
       return; // Don't update aiConfig yet
     }
 
-    const num = parseInt(value, 10);
+    const num = /^\d+$/.test(value) ? Number(value) : NaN;
 
     // Ignore invalid numbers
     if (isNaN(num)) {
@@ -88,16 +94,8 @@ export default function AIConfigPanel({
             pattern={aiConfig.autoRecommendTotalQuestions ? undefined : '[0-9]*'}
             value={aiConfig.autoRecommendTotalQuestions ? 'Auto' : inputValue}
             onChange={(e) => handleTotalChange(e.target.value)}
-            onBlur={() => {
-              if (aiConfig.autoRecommendTotalQuestions) {
-                return;
-              }
-              // On blur, ensure value is valid
-              if (inputValue === '' || isNaN(parseInt(inputValue, 10))) {
-                setInputValue(minQuestions.toString());
-                onConfigChange({ ...aiConfig, totalQuestions: minQuestions });
-              }
-            }}
+            aria-invalid={!countIsValid}
+            aria-describedby={!countIsValid ? 'ai-question-count-error' : undefined}
             disabled={isBusy || aiConfig.autoRecommendTotalQuestions}
             className={`question-count-input ${aiConfig.autoRecommendTotalQuestions ? 'auto-value' : ''}`}
             placeholder={`${minQuestions}-${maxQuestions}`}
@@ -108,6 +106,11 @@ export default function AIConfigPanel({
               : `questions (${minQuestions}-${maxQuestions})`}
           </span>
         </div>
+        {!countIsValid && (
+          <p id="ai-question-count-error" role="alert" className="input-error">
+            Enter a whole number between {minQuestions} and {maxQuestions} before generating a plan.
+          </p>
+        )}
         {!aiConfig.autoRecommendTotalQuestions && minQuestions > 1 && (
           <div className="input-hint" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
             Minimum is {minQuestions} (at least 1 question per learning objective)
@@ -136,8 +139,8 @@ export default function AIConfigPanel({
 
       <div className="ai-config-action">
         <button
-          onClick={onGeneratePlan}
-          disabled={isBusy}
+          onClick={() => { if (countIsValid) onGeneratePlan(); }}
+          disabled={isBusy || !countIsValid}
           className="btn btn-primary generate-plan-btn"
         >
           {isGenerating ? (

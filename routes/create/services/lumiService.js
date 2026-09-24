@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 import fs from 'fs/promises';
 import H5PContent from '../models/H5PContent.js';
 import { getStudioCatalog } from './h5pStudioCatalog.js';
+import { H5P_CORE_API, H5P_CORE_VERSION, H5P_CORE_SCRIPTS, H5P_CORE_STYLES, H5P_RUNTIME_REVISION } from '../config/h5pRuntime.js';
 
 // Use createRequire for CJS packages
 const require = createRequire(import.meta.url);
@@ -17,8 +18,9 @@ const BASE_DIR = path.resolve(__dirname, '..');
 const H5P_LIBS_DIR = path.join(BASE_DIR, 'h5p-libs');
 const H5P_CORE_DIR = path.join(BASE_DIR, 'h5p-core');
 const H5P_EDITOR_CORE_DIR = path.join(BASE_DIR, 'h5p-editor-core');
-const H5P_CONTENT_DIR = path.join(BASE_DIR, 'uploads', 'h5p-content');
-const H5P_TEMP_DIR = path.join(BASE_DIR, 'uploads', 'h5p-temp');
+const storageRoot = process.env.H5P_STORAGE_ROOT || path.join(BASE_DIR, 'uploads');
+const H5P_CONTENT_DIR = path.join(storageRoot, 'h5p-content');
+const H5P_TEMP_DIR = path.join(storageRoot, 'h5p-temp');
 
 let h5pEditor = null;
 let h5pPlayer = null;
@@ -46,21 +48,56 @@ function insertH5PJQueryBridge(scripts = []) {
   ];
 }
 
+function prepareRuntimeAssets(assets = [], kind = 'scripts') {
+  const coreAsset = assets.find(asset => asset.includes('/core/'));
+  const coreBase = coreAsset?.split('/core/')[0] + '/core/';
+  // Lumi 10's static asset list predates core 1.28's font/theme styles.
+  // Use the actual upstream list for both the outer page and editor iframe.
+  const prepared = coreAsset ? [
+    ...(kind === 'scripts' ? H5P_CORE_SCRIPTS : H5P_CORE_STYLES).map(asset => coreBase + asset),
+    ...assets.filter(asset => !asset.startsWith(coreBase))
+  ] : assets;
+  return prepared.map(asset => /\/(?:core|editor)\//.test(asset)
+    ? `${asset}${asset.includes('?') ? '&' : '?'}createRevision=${H5P_RUNTIME_REVISION}`
+    : asset);
+}
+
 function prepareEditorModel(model) {
   return {
     ...model,
-    scripts: insertH5PJQueryBridge(model.scripts),
+    scripts: prepareRuntimeAssets(model.scripts),
+    styles: prepareRuntimeAssets(model.styles, 'styles'),
     integration: {
       ...model.integration,
       editor: {
         ...model.integration?.editor,
         assets: {
           ...model.integration?.editor?.assets,
-          js: insertH5PJQueryBridge(model.integration?.editor?.assets?.js)
+          js: prepareRuntimeAssets(model.integration?.editor?.assets?.js),
+          css: prepareRuntimeAssets(model.integration?.editor?.assets?.css, 'styles')
         }
       }
     }
   };
+}
+
+// The package's demo renderer adds an unstyled, malformed Download link and
+// omits the mobile viewport. Keep the player document limited to native H5P.
+export function renderPlayerPage(model) {
+  const escapeAttribute = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const integration = JSON.stringify(model.integration).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html class="h5p-iframe" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H5P activity preview</title>
+  ${prepareRuntimeAssets(model.styles, 'styles').map(style => `<link rel="stylesheet" href="${escapeAttribute(style)}">`).join('\n  ')}
+  ${prepareRuntimeAssets(insertH5PJQueryBridge(model.scripts)).map(script => `<script src="${escapeAttribute(script)}"></script>`).join('\n  ')}
+  <script>window.H5PIntegration = ${integration};</script>
+</head>
+<body><div class="h5p-content" data-content-id="${escapeAttribute(model.contentId)}"></div></body>
+</html>`;
 }
 
 /**
@@ -178,8 +215,12 @@ async function createLumiRuntime() {
   // Create config
   // baseUrl is prepended to librariesUrl/contentFilesUrl, so keep it short
   const config = new H5PServer.H5PConfig();
+  config.coreApiVersion = { ...H5P_CORE_API };
+  config.h5pVersion = H5P_CORE_VERSION;
   config.baseUrl = '/api/create/h5p-editor/runtime';
-  config.contentFilesUrlPlayerOverride = '/content';
+  // This override is a complete URL template, not a suffix of baseUrl.
+  // Every activity needs its own content directory for images/audio/video.
+  config.contentFilesUrlPlayerOverride = `${config.baseUrl}/content/{{contentId}}`;
   config.librariesUrl = '/libraries';
   config.sendUsageStatistics = false;
 
@@ -225,6 +266,7 @@ async function createLumiRuntime() {
     contentStorage,
     config
   );
+  h5pPlayer.setRenderer(renderPlayerPage);
 
   console.log('✅ Lumi H5P server initialized');
   console.log(`   Libraries: ${H5P_LIBS_DIR}`);
@@ -292,10 +334,10 @@ export async function importH5PContent(h5pFilePath, user = systemUser) {
  * @param {string} contentId - Lumi content ID
  * @returns {string} HTML string
  */
-export async function renderContent(contentId, user = systemUser) {
+export async function renderContent(contentId, user = systemUser, options) {
   const { h5pPlayer: readyPlayer } = await waitForLumiRuntime();
 
-  let html = await readyPlayer.render(contentId, user, 'en');
+  let html = await readyPlayer.render(contentId, user, 'en', options);
 
   if (typeof html === 'string') {
     // When rendered inside Canvas LTI iframe, relative paths go to :7737 instead of :8051
@@ -303,12 +345,6 @@ export async function renderContent(contentId, user = systemUser) {
     const mainServerUrl = process.env.H5P_ASSETS_URL || `http://localhost:${process.env.PORT || 8051}`;
     html = html.replace(/(['"])(\/api\/create\/h5p\/)/g, `$1${mainServerUrl}/api/create/h5p/`);
 
-    // Inject jQuery-to-H5P bridge script right after jquery.js loads
-    // H5P core expects H5P.jQuery to be set before h5p.js runs
-    html = html.replace(
-      /(<script src="[^"]*jquery\.js[^"]*"><\/script>)/,
-      `$1\n    <script src="${mainServerUrl}/api/create/h5p/core/js/h5p-jquery-bridge.js"></script>`
-    );
   }
 
   return html;

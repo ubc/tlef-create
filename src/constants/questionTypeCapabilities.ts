@@ -52,7 +52,7 @@ export const H5P_PACKAGE_FORMATS: TargetFormatOption[] = [
   {
     value: 'standalone',
     label: 'Standalone',
-    description: 'Best for complex single H5P activities.'
+    description: 'One Branching Scenario, crossword, or paragraph-sorting activity.'
   }
 ];
 
@@ -87,6 +87,8 @@ export const QUESTION_TYPES: QuestionTypeOption[] = [
   { value: 'branching-scenario', label: 'Branching Scenario' },
   { value: 'documentation-tool', label: 'Documentation Tool' }
 ];
+
+export const UNAVAILABLE_QUESTION_TYPES: Record<string, string> = {};
 
 export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
   column: [
@@ -127,9 +129,9 @@ export const QUESTION_TYPES_BY_TARGET: Record<TargetFormat, string[]> = {
     'essay'
   ],
   standalone: [
-    'branching-scenario',
     'crossword',
-    'sort-paragraphs'
+    'sort-paragraphs',
+    'branching-scenario'
   ],
   'mixed-activity': [
     'multiple-choice',

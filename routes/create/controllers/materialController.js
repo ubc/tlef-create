@@ -9,6 +9,7 @@ import { successResponse, errorResponse, notFoundResponse } from '../utils/respo
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, MATERIAL_TYPES, PROCESSING_STATUS } from '../config/constants.js';
 import { resolveReferenceChunk } from '../utils/referenceResolver.js';
+import { getChunkSectionLabel } from '../utils/chunkLabels.js';
 import path from 'path';
 
 const router = express.Router();
@@ -524,7 +525,7 @@ async function sendResolvedReference(req, res, reference = {}) {
     pageNumber,
     pageCount: parsed.pages?.length || material.processingMetadata?.pageCount,
     chunkIndex: citedIndex,
-    section: citedChunk?.sectionTitle || citedChunk?.section || '',
+    section: getChunkSectionLabel(citedChunk, citedIndex),
     excerpt: isMaterialPreview ? '' : citedChunk?.content || '',
     pageContext: isMaterialPreview
       ? parsed.content || chunks.map(chunk => chunk.content).join('\n\n')
@@ -566,7 +567,6 @@ router.post('/:materialId/reprocess', authenticateToken, validateMaterialId, asy
   const { default: ragService } = await import('../services/ragService.js');
   await ragService.initialize();
   await material.markAsProcessing();
-  await ragService.cleanupMaterialEmbeddings(materialId);
   const result = await ragService.processAndEmbedMaterial(material);
 
   if (!result.success) {

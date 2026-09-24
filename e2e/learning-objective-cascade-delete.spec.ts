@@ -5,11 +5,12 @@ const apiBaseUrl = 'http://localhost:8051/api/create';
 test('deleting a learning objective removes linked questions and refreshes every count', async ({ page, request }) => {
   test.setTimeout(60_000);
   let createdCourseId = '';
+  const courseName = `E2E Objective Delete ${Date.now()}`;
 
   try {
     const courseResponse = await request.post(`${apiBaseUrl}/folders`, {
       data: {
-        name: `E2E Objective Delete ${Date.now()}`,
+        name: courseName,
         quizCount: 1
       }
     });
@@ -76,9 +77,12 @@ test('deleting a learning objective removes linked questions and refreshes every
     }
 
     await page.goto(`/course/${createdCourseId}/quiz/${quizId}?tab=objectives`);
-    await expect(page.getByText('Course • 2 questions', { exact: true })).toBeVisible();
+    await expect(page.getByText(`${courseName} • 2 questions`, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Delete learning objective 1' }).click();
+    const basicConfirmation = page.getByRole('dialog', { name: 'Delete learning objective?' });
+    await expect(basicConfirmation).toBeVisible();
+    await basicConfirmation.getByRole('button', { name: 'Delete learning objective', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Delete Learning Objective?' })).toBeVisible();
     await expect(page.getByText('This Learning Objective has 1 question(s) associated with it.')).toBeVisible();
 
@@ -92,20 +96,20 @@ test('deleting a learning objective removes linked questions and refreshes every
     const deleteResponse = await deleteResponsePromise;
     expect(deleteResponse.ok()).toBeTruthy();
 
-    await expect(page.getByText('Course • 1 questions', { exact: true })).toBeVisible();
+    await expect(page.getByText(`${courseName} • 1 question`, { exact: true })).toBeVisible();
     await expect(
-      page.locator('.quiz-item.active').getByText('1 questions', { exact: true })
+      page.locator('.quiz-item.active').getByText('1 question', { exact: true })
     ).toBeVisible();
 
-    await page.getByRole('button', { name: 'Review & Edit' }).click();
-    await expect(page.getByText('1 questions total', { exact: true })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Quiz creation steps' }).getByRole('button', { name: /^Review / }).click();
+    await expect(page.getByText('1 question total', { exact: true })).toBeVisible();
 
     const objectiveFilter = page.getByRole('combobox');
     await expect(objectiveFilter).toHaveCount(1);
     await expect(objectiveFilter.locator('option')).toHaveCount(2);
     await expect(objectiveFilter.locator('option').filter({ hasText: 'Unknown' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Generate Questions' }).click();
+    await page.getByRole('button', { name: /^Generate/ }).click();
     await expect(page.getByRole('heading', { name: 'Questions Generated' })).toBeVisible();
     await page.getByRole('button', { name: 'Back to AI Plan Configuration' }).click();
     await expect(page.locator('.plan-editor-row')).toHaveCount(1);

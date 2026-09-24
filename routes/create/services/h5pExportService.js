@@ -19,6 +19,8 @@ import { escapeHtml, generateAvailableOptionsText } from './exportUtils.js';
 import { normalizeMarkTheWordsText } from './questionContentService.js';
 import { convertGuessTheAnswerToH5P } from './h5pTypeAdapters/guessTheAnswerAdapter.js';
 import { resolveNativeH5PContainerMode } from './h5pNativeDocumentConfig.js';
+import { assertH5PLibraryIntegrity } from './h5pLibraryIntegrity.js';
+import { getQuestionTypeAvailability } from '../utils/questionTypeAvailability.js';
 
 const SERVICE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_H5P_LIBRARY_PATH = path.resolve(SERVICE_DIR, '../h5p-libs');
@@ -79,6 +81,14 @@ function getDeterministicOrderingItems(question, items) {
  * @returns {Promise<{library: string, metadata: Object, parameters: Object, packaging: Object}>}
  */
 export async function buildNativeH5PDocument(quiz, options = {}) {
+    for (const question of quiz.questions) {
+      const availability = getQuestionTypeAvailability(question.type);
+      if (!availability.available) {
+        const error = new Error(availability.message);
+        error.code = availability.code;
+        throw error;
+      }
+    }
     // Classify questions
     const containerMode = resolveNativeH5PContainerMode(quiz, options.containerMode);
     const flashcardQuestions = quiz.questions.filter(q => q.type === 'flashcard');
@@ -382,8 +392,18 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
   const {
     metadata: h5pJson,
     parameters: contentJson,
-    packaging: { allLibs, containerMode, libraryPath, questionTypes }
+    packaging: { allLibs, libraryPath, questionTypes }
   } = document;
+
+  for (const type of questionTypes) {
+    const availability = getQuestionTypeAvailability(type);
+    if (!availability.available) {
+      const error = new Error(availability.message);
+      error.code = availability.code;
+      throw error;
+    }
+  }
+  await assertH5PLibraryIntegrity(allLibs, libraryPath);
 
   return new Promise((resolve, reject) => {
     const output = createWriteStream(outputPath);
@@ -404,27 +424,15 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
     archive.append(JSON.stringify(h5pJson), { name: 'h5p.json' });
     archive.append(JSON.stringify(contentJson), { name: 'content/content.json' });
 
-    // Standard platform libraries are omitted for the historical Column export
-    // path. Interactive Book exports remain self-contained for Lumi.
-    const skipDirLibs = new Set(containerMode === 'column' ? ['H5P.Column', 'jQuery.ui'] : []);
-    const questionVersions = [...allLibs.keys()].filter(key => key.startsWith('H5P.Question-'));
-    if (containerMode === 'column' && questionVersions.length > 1) {
-      const primaryKey = `H5P.Question-${LIBRARY_REGISTRY['H5P.Question']?.majorVersion}.${LIBRARY_REGISTRY['H5P.Question']?.minorVersion}`;
-      if (primaryKey) skipDirLibs.add(primaryKey);
-    }
-
     const appendLibraries = async () => {
       try {
         await fs.access(libraryPath);
-        for (const [key, lib] of allLibs) {
-          if (skipDirLibs.has(lib.machineName) || skipDirLibs.has(key)) continue;
+        // Every declared version travels with the package, including Column and
+        // jQuery UI. A receiving platform need not have our dependencies installed.
+        for (const lib of allLibs.values()) {
           const libDir = path.join(libraryPath, lib.dirName);
-          try {
-            await fs.access(libDir);
-            archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
-          } catch {
-            // Missing library directories are handled by target-platform validation.
-          }
+          await fs.access(libDir);
+          archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
         }
 
         if (questionTypes.has('crossword')) {
@@ -437,7 +445,9 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
           }
         }
       } catch (error) {
-        console.warn('H5P library files not found, creating minimal export:', error.message);
+        archive.abort();
+        output.destroy();
+        throw error;
       }
 
       await archive.finalize();
@@ -860,8 +870,6 @@ export function generateH5PDialogCards(flashcardQuestions) {
       "text": `<p style="text-align: center;">${escapedFront}</p>`,
       "answer": `<p style="text-align: center;">${escapedBack}</p>`,
       "tips": {},
-      "audio": [],
-      "image": {},
       "imageAltText": ""
     };
   });
@@ -1705,16 +1713,31 @@ function convertQuestionToH5PLegacy(question, quiz) {
   } else if (question.type === 'branching-scenario') {
     const introText = question.content?.introText || 'Introduction';
 
-    // Sort by node.index so h5pContent[i] matches nextContentId references
+    // Older drafts could contain blank nodes. H5P navigation targets are array
+    // positions, not the model's original indices, so remap every surviving node.
     const nodes = (question.content?.nodes || [])
       .slice()
-      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      .filter(node => Number.isInteger(node.index) && node.index > 0 && typeof node.question === 'string' && node.question.trim())
+      .sort((a, b) => a.index - b.index);
+    if (!nodes.length) {
+      const error = new Error('Branching Scenario has no decision questions. Regenerate or edit this activity before previewing it.');
+      error.code = 'INVALID_BRANCHING_SCENARIO_CONTENT';
+      throw error;
+    }
+    const contentIds = new Map(nodes.map((node, index) => [node.index, index + 1]));
+    const endScreens = [];
+    const endingFor = alternative => {
+      const contentId = -1 - endScreens.length;
+      endScreens.push({
+        endScreenTitle: `<p>${escapeHtml(alternative.text || 'Scenario complete')}</p>`,
+        endScreenSubtitle: `<p>${escapeHtml(alternative.feedback || 'This path ends here. Review the outcome with your instructor.')}</p>`,
+        contentId,
+        endScreenScore: 0
+      });
+      return contentId;
+    };
 
-    const h5pContent = nodes.map(node => {
-      // Only node at index 0 is the intro text — never trust question===null for others
-      if (node.index === 0) {
-        const nextId = 1;
-        return {
+    const h5pContent = [{
           "type": {
             "library": "H5P.AdvancedText 1.1",
             "params": { "text": `<p>${escapeHtml(introText)}</p>` },
@@ -1726,33 +1749,33 @@ function convertQuestionToH5PLegacy(question, quiz) {
           "forceContentFinished": "useBehavioural",
           "feedback": { "title": "", "subtitle": "" },
           "contentBehaviour": "useBehavioural",
-          "nextContentId": nextId
-        };
+          "nextContentId": 1
+        }, ...nodes.map(node => {
+      if (!Array.isArray(node.alternatives) || node.alternatives.length < 2) {
+        const error = new Error(`Branching Scenario decision ${node.index} needs at least two choices.`);
+        error.code = 'INVALID_BRANCHING_SCENARIO_CONTENT';
+        throw error;
       }
-
-      // Branching Question node
-      let alternatives = (node.alternatives || []).map(alt => ({
+      if (node.alternatives.some(alt => !alt || typeof alt.text !== 'string' || !alt.text.trim())) {
+        const error = new Error(`Branching Scenario decision ${node.index} has an empty choice. Edit or regenerate this activity.`);
+        error.code = 'INVALID_BRANCHING_SCENARIO_CONTENT';
+        throw error;
+      }
+      const alternatives = node.alternatives.map(alt => ({
         "text": escapeHtml(alt.text || ''),
-        "nextContentId": alt.nextContentId ?? -1,
+        "nextContentId": contentIds.get(alt.nextContentId) ?? endingFor(alt),
         "feedback": {
           "title": alt.feedback ? `<p>${escapeHtml(alt.feedback)}</p>` : '',
           "subtitle": ""
         }
       }));
 
-      // If the LLM left alternatives empty, add a fallback "End" option so the user isn't stuck
-      if (alternatives.length === 0) {
-        alternatives = [{ "text": "Continue", "nextContentId": -1, "feedback": { "title": "", "subtitle": "" } }];
-      }
-
-      const questionText = node.question || 'What would you do next?';
-
       return {
         "type": {
           "library": "H5P.BranchingQuestion 1.0",
           "params": {
             "branchingQuestion": {
-              "question": `<p>${escapeHtml(questionText)}</p>`,
+              "question": `<p>${escapeHtml(node.question)}</p>`,
               "alternatives": alternatives
             }
           },
@@ -1765,13 +1788,18 @@ function convertQuestionToH5PLegacy(question, quiz) {
         "feedback": { "title": "", "subtitle": "" },
         "contentBehaviour": "useBehavioural"
       };
-    });
+    })];
+    if (!endScreens.length) {
+      const error = new Error('Branching Scenario has no ending path. Edit or regenerate this activity.');
+      error.code = 'INVALID_BRANCHING_SCENARIO_CONTENT';
+      throw error;
+    }
 
     return {
       "params": {
         "branchingScenario": {
           "content": h5pContent,
-          "endScreens": [{ "endScreenTitle": "", "endScreenSubtitle": "", "contentId": -1, "endScreenScore": 0 }],
+          "endScreens": endScreens,
           "scoringOptionGroup": { "scoringOption": "no-score", "includeInteractionsScores": true },
           "startScreen": { "startScreenTitle": "", "startScreenSubtitle": "" },
           "behaviour": { "enableBackwardsNavigation": false, "forceContentFinished": false, "randomizeBranchingQuestions": false },

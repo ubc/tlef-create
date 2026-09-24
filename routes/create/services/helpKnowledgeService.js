@@ -56,16 +56,27 @@ const SYNONYMS = {
   如何导出: ['export', 'download']
 };
 
+const QUERY_STOP_WORDS = new Set('a an and are as at be by did do does for from how i if in is it my of on or that the these this to was what when where which why will with you your'.split(' '));
+
 function tokenize(value = '') {
   const normalized = String(value).toLowerCase();
   const tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
   // Chinese phrases are not whitespace-delimited, so expand known concepts
   // found inside a longer token such as "我们支持多少种题目".
   const phraseExpansions = Object.entries(SYNONYMS)
-    .filter(([phrase]) => normalized.includes(phrase))
+    .filter(([phrase]) => /[\u3400-\u9fff]/.test(phrase) && normalized.includes(phrase))
     .flatMap(([phrase, synonyms]) => [phrase, ...synonyms]);
   const expanded = [...tokens.flatMap(token => [token, ...(SYNONYMS[token] || [])]), ...phraseExpansions];
   return [...new Set(expanded.filter(token => token.length > 1))];
+}
+
+function phraseWords(value = '') {
+  return (String(value).toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).join(' ');
+}
+
+function containsPhrase(text, phrase) {
+  const normalized = phraseWords(phrase);
+  return normalized.split(' ').length >= 2 && ` ${phraseWords(text)} `.includes(` ${normalized} `);
 }
 
 function titleFromMarkdown(content, fallback) {
@@ -146,14 +157,15 @@ function buildCapabilitiesDocument(source) {
   const questionTypes = parseQuestionTypeOptions(source);
   const targets = parseNamedArrays(source, 'QUESTION_TYPES_BY_TARGET');
   const approaches = parseNamedArrays(source, 'QUESTION_TYPES_BY_APPROACH');
+  const available = new Set(targets.flatMap(entry => entry.values));
   const lines = [
     '# Question Type Compatibility',
     '',
     'These compatibility facts are generated directly from questionTypeCapabilities.ts.',
     '',
     '## Question type catalogue',
-    `CREATE currently exposes ${questionTypes.length} question types.`,
-    ...questionTypes.map((entry, index) => `${index + 1}. ${entry.label} (${entry.value})`),
+    `CREATE's catalogue contains ${questionTypes.length} question types; ${questionTypes.filter(entry => available.has(entry.value)).length} are currently available for new activities.`,
+    ...questionTypes.map((entry, index) => `${index + 1}. ${entry.label} (${entry.value})${available.has(entry.value) ? '' : ' — temporarily unavailable; existing records are retained'}`),
     '',
     '## Delivery targets and formats',
     ...targets.map(entry => `${entry.name}: ${entry.values.join(', ')}`),
@@ -175,12 +187,30 @@ function documentationTarget(chunk) {
   };
 }
 
+function citationSource(chunk, citationIndex, score = 0) {
+  const target = documentationTarget(chunk);
+  return {
+    id: chunk.id,
+    citationIndex,
+    title: chunk.title,
+    section: chunk.section,
+    excerpt: chunk.content.replace(/\s+/g, ' ').trim().slice(0, 520),
+    content: chunk.content,
+    sourcePath: chunk.sourcePath,
+    documentId: target.documentId,
+    sectionId: target.section,
+    navigationPath: target.navigationPath,
+    score: Number(score.toFixed(2))
+  };
+}
+
 class HelpKnowledgeService {
   constructor() {
     this.contentHash = null;
     this.chunks = [];
     this.documents = [];
     this.questionTypes = [];
+    this.availableQuestionTypes = [];
   }
 
   async loadKnowledge() {
@@ -191,6 +221,8 @@ class HelpKnowledgeService {
     })));
     const capabilitiesSource = await fs.readFile(CAPABILITIES_PATH, 'utf8');
     this.questionTypes = parseQuestionTypeOptions(capabilitiesSource);
+    const available = new Set(parseNamedArrays(capabilitiesSource, 'QUESTION_TYPES_BY_TARGET').flatMap(entry => entry.values));
+    this.availableQuestionTypes = this.questionTypes.filter(type => available.has(type.value));
     files.push({ fileName: 'question-type-capabilities', content: buildCapabilitiesDocument(capabilitiesSource) });
 
     const nextHash = crypto.createHash('sha256')
@@ -213,6 +245,12 @@ class HelpKnowledgeService {
       };
     });
     this.chunks = this.documents.flatMap(document => splitMarkdown(document.content, document));
+    this.tokenDocumentFrequency = new Map();
+    for (const chunk of this.chunks) {
+      for (const token of tokenize(chunk.content)) {
+        this.tokenDocumentFrequency.set(token, (this.tokenDocumentFrequency.get(token) || 0) + 1);
+      }
+    }
     this.contentHash = nextHash;
     console.info('[CREATE Guide] Help knowledge refreshed', {
       documents: this.documents.length,
@@ -221,20 +259,42 @@ class HelpKnowledgeService {
     });
   }
 
-  scoreChunk(chunk, queryTokens, context = {}, boostTokens = queryTokens) {
+  scoreChunk(chunk, queryTokens, context = {}, boostTokens = queryTokens, query = '') {
     const titleTokens = tokenize(`${chunk.title} ${chunk.section} ${(chunk.keywords || []).join(' ')}`);
+    const sectionTokens = tokenize(chunk.section);
     const contentTokens = tokenize(chunk.content);
     const route = context.route || '';
     let score = 0;
 
     for (const token of queryTokens) {
       if (titleTokens.includes(token)) score += 4;
+      // Break broad-keyword ties in favor of the section about the action,
+      // without displacing the established content/context ranking.
+      if (sectionTokens.includes(token)) score += 0.1;
       if (contentTokens.includes(token)) score += 1;
       if (chunk.content.toLowerCase().includes(token)) score += 0.5;
     }
 
+    // Specific user terms (for example a provider error) distinguish an answer
+    // from new pages that repeat broad workflow labels. Context and expanded
+    // document keywords must not receive this rarity bonus.
+    for (const token of boostTokens) {
+      if (!QUERY_STOP_WORDS.has(token) && contentTokens.includes(token)) {
+        score += Math.log(1 + this.chunks.length / (this.tokenDocumentFrequency?.get(token) || 1));
+      }
+    }
+    if (containsPhrase(query, chunk.section)) score += 20;
+    const matchedLabels = [...chunk.content.matchAll(/\*\*([^*\n]+)\*\*/g)]
+      .map(match => phraseWords(match[1])).filter(label => containsPhrase(query, label));
+    score += Math.min(new Set(matchedLabels).size * 6, 12);
+
     if ((chunk.routes || []).some(prefix => route.includes(prefix))) score += 2;
     if (context.activeTab && tokenize(chunk.section).includes(context.activeTab.toLowerCase())) score += 1;
+    // An explicitly active help surface should not be displaced by several
+    // generic "Quiz" matches when new documentation is added to the corpus.
+    if (context.activeTab && tokenize(context.activeTab).some(token => tokenize(chunk.section).includes(token))) score += 4;
+    const activeTokens = tokenize(context.activeTab || '');
+    if (activeTokens.length && activeTokens.every(token => tokenize(chunk.title).includes(token))) score += 4;
     if ((chunk.retrievalBoostKeywords || []).some(keyword => boostTokens.includes(keyword))) {
       score += chunk.retrievalBoost || 0;
     }
@@ -247,30 +307,19 @@ class HelpKnowledgeService {
     const queryTokens = tokenize(`${query} ${context.pageTitle || ''} ${context.activeTab || ''}`);
     const boostTokens = tokenize(query);
     const ranked = this.chunks
-      .map(chunk => ({ chunk, score: this.scoreChunk(chunk, queryTokens, context, boostTokens) }))
+      .map(chunk => ({ chunk, score: this.scoreChunk(chunk, queryTokens, context, boostTokens, query) }))
       .sort((left, right) => right.score - left.score);
     const selected = ranked.filter(result => result.score > 0).slice(0, limit);
     const fallback = selected.length ? selected : ranked.slice(0, Math.min(3, limit));
 
-    return fallback.map(({ chunk, score }, index) => {
-      const target = documentationTarget(chunk);
-      return {
-        id: chunk.id,
-        citationIndex: index + 1,
-        title: chunk.title,
-        section: chunk.section,
-        excerpt: chunk.content.replace(/\s+/g, ' ').trim().slice(0, 520),
-        content: chunk.content,
-        sourcePath: chunk.sourcePath,
-        documentId: target.documentId,
-        sectionId: target.section,
-        navigationPath: target.navigationPath,
-        score: Number(score.toFixed(2))
-      };
-    });
+    return fallback.map(({ chunk, score }, index) => citationSource(chunk, index + 1, score));
   }
 
   async getVerifiedFacts(query) {
+    return (await this.getVerifiedAnswer(query)).facts;
+  }
+
+  async getVerifiedAnswer(query) {
     await this.loadKnowledge();
     const normalized = String(query || '').toLowerCase();
     const tokens = tokenize(normalized);
@@ -290,18 +339,39 @@ class HelpKnowledgeService {
     const asksExport = normalized.includes('export') || normalized.includes('导出');
     const isChinese = /[\u3400-\u9fff]/.test(normalized);
     const facts = [];
+    const sources = [];
+    // Deterministic statements must cite the documents they were derived from,
+    // not whichever unrelated page won the ambient-context lexical ranking.
+    const cite = (fileName, section) => {
+      const chunk = this.chunks.find(item => item.fileName === fileName && item.section === section);
+      if (!chunk) return '';
+      let source = sources.find(item => item.id === chunk.id);
+      if (!source) {
+        source = citationSource(chunk, sources.length + 1);
+        sources.push(source);
+      }
+      return `[${source.citationIndex}]`;
+    };
 
     if (asksQuestionTypes && this.questionTypes.length) {
-      facts.push(isChinese
-        ? `CREATE 目前支持 ${this.questionTypes.length} 种题型：${this.questionTypes.map(type => type.label).join('、')}。实际可用题型会根据 Delivery Target、Package Format 和 Teaching Purpose 过滤。[1]`
-        : `CREATE currently exposes ${this.questionTypes.length} question types: ${this.questionTypes.map(type => type.label).join(', ')}. Availability is filtered by delivery target, package format, and teaching purpose. [1]`);
+      const catalogue = cite('question-type-capabilities', 'Question type catalogue');
+      const compatibility = cite('question-types.md', 'Teaching-purpose defaults');
+      const paused = this.questionTypes.filter(type => !this.availableQuestionTypes.some(available => available.value === type.value));
+      if (catalogue && compatibility) facts.push(isChinese
+        ? `CREATE 目录共有 ${this.questionTypes.length} 种题型，目前 ${this.availableQuestionTypes.length} 种可用于新建活动：${this.availableQuestionTypes.map(type => type.label).join('、')}。${paused.length ? `${paused.map(type => type.label).join('、')} 暂停使用，已有记录保留。` : ''}${catalogue}实际可用题型还会根据 Delivery Target、Package Format 和 Teaching Purpose 过滤。${compatibility}`
+        : `CREATE's catalogue contains ${this.questionTypes.length} question types; ${this.availableQuestionTypes.length} are currently available for new activities: ${this.availableQuestionTypes.map(type => type.label).join(', ')}.${paused.length ? ` ${paused.map(type => type.label).join(', ')} is temporarily unavailable; existing records are retained.` : ''} ${catalogue} Availability is also filtered by delivery target, package format, and teaching purpose. ${compatibility}`);
     }
     if (asksExport) {
-      facts.push(isChinese
-        ? 'CREATE 支持 H5P Package、PDF、Markdown 和 Canvas LTI 导出。生成题目后进入 Review & Edit 页面底部的 Export 区域：H5P 会下载 `.h5p` 文件；PDF 和 Markdown 可选择 Questions、Answers 或 Combined；Canvas LTI 会让你选择 Canvas course 和 module。[1][2][3]'
-        : 'CREATE supports H5P Package, PDF, Markdown, and Canvas LTI export. After generating questions, use the Export section at the bottom of Review & Edit. H5P downloads a `.h5p` file; PDF and Markdown offer Questions, Answers, or Combined output; Canvas LTI asks for a Canvas course and module. [1][2][3]');
+      const workflow = cite('review-and-export.md', 'Review, Edit, and Export');
+      const handout = cite('review-and-export.md', 'PDF and Markdown export');
+      const h5p = cite('review-and-export.md', 'H5P export');
+      const canvas = cite('review-and-export.md', 'Canvas export');
+      if (workflow && handout && h5p && canvas) facts.push(isChinese
+        ? `CREATE 支持 H5P Package、PDF、Markdown 和 Canvas LTI 导出。生成并检查题目后，进入第 5 步 Preview & Export。${workflow}\nPDF 和 Markdown 可选择 Questions（仅题目，不含答案区）、Answers 或 Combined。${handout}\nH5P 会下载 \`.h5p\` 文件。${h5p} Canvas LTI 需要有效的 Canvas 连接，然后按界面选择目标位置。${canvas}`
+        : `CREATE supports H5P Package, PDF, Markdown, and Canvas LTI export. After generating and reviewing questions, open Step 5, Preview & Export. ${workflow}\nPDF and Markdown offer Questions (without the answer section), Answers, or Combined output. ${handout}\nH5P downloads a \`.h5p\` file. ${h5p} Canvas LTI requires a valid Canvas connection; follow its destination workflow. ${canvas}`);
     }
-    return facts;
+    const used = new Set(facts.join('\n').match(/\[\d+\]/g) || []);
+    return { facts, sources: sources.filter(source => used.has(`[${source.citationIndex}]`)) };
   }
 
   async getStatus() {

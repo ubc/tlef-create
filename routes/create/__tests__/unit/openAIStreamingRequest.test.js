@@ -8,13 +8,41 @@ import {
   getQuestionCompletionOptions,
   isOpenAIOutputBudgetError,
   isGpt5Family,
+  supportsOpenAIStructuredOutputs,
   parseCoursePromptReviewResponse
 } from '../../utils/openAIRequestUtils.js';
 
 describe('OpenAI streaming request configuration', () => {
-  test('recognizes GPT-5 family model names', () => {
+  test('only enables strict output schemas on compatible official text models', () => {
+    for (const model of ['gpt-4o', 'gpt-4o-mini', 'gpt-4o-2024-08-06', 'gpt-4.1', 'gpt-5.4-nano', 'o1', 'o3-mini']) {
+      expect(supportsOpenAIStructuredOutputs(model, 'https://api.openai.com/v1/')).toBe(true);
+    }
+    for (const model of ['gpt-4o-2024-05-13', 'gpt-4o-audio-preview', 'o1-preview', 'o1-mini', 'gpt-4-turbo']) {
+      expect(supportsOpenAIStructuredOutputs(model, 'https://api.openai.com/v1')).toBe(false);
+    }
+    expect(supportsOpenAIStructuredOutputs('gpt-5.4-nano', 'http://localhost:4000/v1')).toBe(false);
+  });
+  test('uses strict schema output on both transports without conflating it with JSON mode', () => {
+    const jsonSchema = { name: 'review', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } };
+    const options = { model: 'gpt-5-nano', prompt: 'Return JSON.', maxTokens: 8000, jsonMode: true, jsonSchema };
+    expect(buildOpenAIStreamingRequest({ ...options, useResponsesApi: true }).text.format).toEqual({ type: 'json_schema', ...jsonSchema, strict: true });
+    expect(buildOpenAIStreamingRequest({ ...options, useResponsesApi: false }).response_format).toEqual({ type: 'json_schema', json_schema: { ...jsonSchema, strict: true } });
+  });
+  test('opts structured workflows into JSON mode on both API transports', () => {
+    const options = { model: 'gpt-5-nano', prompt: 'Return JSON.', maxTokens: 12000, jsonMode: true };
+    expect(buildOpenAIStreamingRequest({ ...options, useResponsesApi: true }).text).toEqual({ format: { type: 'json_object' } });
+    expect(buildOpenAIStreamingRequest({ ...options, useResponsesApi: false }).response_format).toEqual({ type: 'json_object' });
+    expect(buildOpenAIStreamingRequest({ ...options, jsonMode: false, useResponsesApi: false })).not.toHaveProperty('response_format');
+  });
+  test('recognizes newer GPT model families that omit custom temperature', () => {
     expect(isGpt5Family('gpt-5.4-nano')).toBe(true);
+    expect(isGpt5Family('gpt-6-luna')).toBe(true);
     expect(isGpt5Family('gpt-4o-mini')).toBe(false);
+  });
+
+  test('does not send unsupported sampling temperature to GPT-6 chat requests', () => {
+    const request = buildOpenAIStreamingRequest({ model: 'gpt-6-luna', prompt: 'Return JSON.', temperature: 0.3, maxTokens: 8000 });
+    expect(request).not.toHaveProperty('temperature');
   });
 
   test('uses Responses API parameters without temperature for GPT-5 models', () => {
@@ -35,6 +63,10 @@ describe('OpenAI streaming request configuration', () => {
       reasoning: { effort: 'none' }
     });
     expect(request.temperature).toBeUndefined();
+  });
+  test('does not send unsupported sampling temperature to o-series reasoning models', () => {
+    const request = buildOpenAIStreamingRequest({ model: 'o3-mini', prompt: 'Return JSON.', temperature: 0.1, maxTokens: 8000 });
+    expect(request).not.toHaveProperty('temperature');
   });
 
   test('allocates a reasoning-safe LO budget for GPT-5.4 nano with one larger retry', () => {

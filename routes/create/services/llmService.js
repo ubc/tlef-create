@@ -12,6 +12,9 @@ import { QUESTION_TYPES } from '../config/constants.js';
 import UserApiKey from '../models/UserApiKey.js';
 import User from '../models/User.js';
 import { normalizeGeneratedQuestionText } from '../utils/questionTextLimits.js';
+import { reviewQuestionFeedback } from './questionFeedbackReview.js';
+import { getQuestionTypeAvailability } from '../utils/questionTypeAvailability.js';
+import { buildBranchingPrompt, sourceScenarioChoiceCounts, validateBranchingDraft } from '../utils/branchingScenarioBuilder.js';
 import {
   buildOpenAIIncompleteResponseError,
   buildOpenAIStreamingRequest,
@@ -21,6 +24,7 @@ import {
   getQuestionCompletionOptions,
   isGpt5Family,
   isOpenAIOutputBudgetError,
+  supportsOpenAIStructuredOutputs,
   parseCoursePromptReviewResponse
 } from '../utils/openAIRequestUtils.js';
 export {
@@ -43,6 +47,16 @@ export function normalizeLearningObjectiveText(value) {
 
 function normalizeOptionalText(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function assertQuestionTypeAvailable(type) {
+  const availability = getQuestionTypeAvailability(type);
+  if (!availability.available) {
+    const error = new Error(availability.message);
+    error.code = availability.code;
+    error.status = availability.status;
+    throw error;
+  }
 }
 
 export function parseObjectiveEnrichmentResponse(content = '') {
@@ -246,7 +260,7 @@ class QuizLLMService {
         max_completion_tokens: maxTokens // OpenAI uses max_completion_tokens
       };
       
-      // Some GPT-5-family models only support the default temperature.
+      // Newer GPT families can require the default sampling temperature.
       if (isGpt5Family(model)) {
         console.log(`⚠️ ${model} model detected - using default temperature (1.0)`);
         if (reasoningEffort) options.reasoning_effort = reasoningEffort;
@@ -274,8 +288,12 @@ class QuizLLMService {
     llmConfig: providedLLMConfig = null,
     temperature = 0.3,
     maxTokens = 2400,
-    reasoningEffort = null
+    reasoningEffort = null,
+    jsonMode = false,
+    jsonSchema = null,
+    signal = undefined
   }, onStreamChunk = null) {
+    signal?.throwIfAborted();
     const llmConfig = providedLLMConfig || await this.resolveUserLLMConfig(userId);
     const { provider, model } = llmConfig;
     let accumulatedContent = '';
@@ -294,13 +312,17 @@ class QuizLLMService {
         temperature,
         maxTokens,
         useResponsesApi,
-        reasoningEffort
+        reasoningEffort,
+        jsonMode,
+        // Keep older models and third-party compatible endpoints on JSON mode.
+        jsonSchema: supportsOpenAIStructuredOutputs(model, endpoint) ? jsonSchema : null
       });
       const stream = useResponsesApi
-        ? await openai.responses.create(request)
-        : await openai.chat.completions.create(request);
+        ? await openai.responses.create(request, { signal })
+        : await openai.chat.completions.create(request, { signal });
 
       for await (const chunk of stream) {
+        signal?.throwIfAborted();
         const textChunk = useResponsesApi
           ? (chunk.type === 'response.output_text.delta' ? chunk.delta : '')
           : chunk.choices?.[0]?.delta?.content;
@@ -365,6 +387,7 @@ class QuizLLMService {
       }
     }
 
+    signal?.throwIfAborted();
     if (incompleteReason) {
       throw buildOpenAIIncompleteResponseError(model, incompleteReason);
     }
@@ -400,6 +423,7 @@ class QuizLLMService {
    * @param {Function} onStreamChunk - Callback for streaming text chunks
    */
   async generateQuestionStreaming(questionConfig, onStreamChunk = null) {
+    assertQuestionTypeAvailable(questionConfig.questionType);
     const {
       learningObjective,
       questionType,
@@ -408,15 +432,19 @@ class QuizLLMService {
       courseContext = '',
       previousQuestions = [],
       customPrompt = null,
+      instructorPrompt = null,
       userId = null,
       selectionMode = 'single',
       branchingLayers = 2,
       branchingChoices = 2,
-      llmConfig: providedLLMConfig = null
+      llmConfig: providedLLMConfig = null,
+      signal = undefined
     } = questionConfig;
+    signal?.throwIfAborted();
 
     const learningObjectiveText = normalizeLearningObjectiveText(learningObjective);
     const customPromptText = normalizeOptionalText(customPrompt);
+    const instructorPromptText = normalizeOptionalText(instructorPrompt ?? customPrompt);
     const assessmentContext = learningObjectiveText || customPromptText;
     if (!assessmentContext) {
       throw new Error('Question generation requires a learning objective or custom prompt.');
@@ -442,7 +470,8 @@ class QuizLLMService {
         customPromptText || null,
         selectionMode,
         branchingLayers,
-        branchingChoices
+        branchingChoices,
+        instructorPromptText
       );
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
@@ -462,20 +491,26 @@ class QuizLLMService {
         llmConfig,
         temperature,
         maxTokens,
-        reasoningEffort
+        reasoningEffort,
+        signal
       }, onStreamChunk);
       accumulatedContent = response.content;
       responseModel = response.model || model;
 
-      const processingTime = Date.now() - startTime;
-      console.log(`⏱️ Streaming completed in ${processingTime}ms`);
+      console.log(`⏱️ Streaming completed in ${Date.now() - startTime}ms`);
       
       // Use accumulated content if streaming worked, otherwise fallback to response content
       const finalContent = accumulatedContent || response.content || '';
       console.log(`🔍 Final content length: ${finalContent.length} chars`);
 
       // Parse and validate response
-      const questionData = this.parseAndValidateResponse(finalContent, questionType, selectionMode);
+      const questionData = await reviewQuestionFeedback(
+        this.parseAndValidateResponse(finalContent, questionType, selectionMode, branchingLayers, branchingChoices,
+          sourceScenarioChoiceCounts(relevantContent, branchingLayers, branchingChoices)),
+        { questionType, relevantContent, instructorRequest: instructorPromptText, instructorContext: [learningObjectiveText, courseContext, customPromptText].filter(Boolean).join('\n\n'), complete: options => this.streamCompletion({ ...options, maxTokens: isGpt5Family(llmConfig.model) ? options.maxTokens : Math.min(options.maxTokens, 4000), llmConfig, signal }) }
+      );
+      signal?.throwIfAborted();
+      const processingTime = Date.now() - startTime;
       
       // Log generated Summary questions for debugging
       if (questionType === 'summary') {
@@ -503,6 +538,7 @@ class QuizLLMService {
           prompt: prompt, // Also add it to questionData for backward compatibility
           generationMetadata: {
             llmModel: responseModel,
+            qualityReview: questionData.qualityReview,
             generationPrompt: prompt,
             learningObjective: learningObjectiveText || null,
             subObjective: this.generateSubObjective(assessmentContext, questionType),
@@ -520,6 +556,9 @@ class QuizLLMService {
         }
       };
     } catch (error) {
+      signal?.throwIfAborted();
+      if (error.code === 'QUESTION_QUALITY_REVIEW' || error.name === 'AbortError'
+        || error.name === 'APIUserAbortError' || error.code === 'ABORT_ERR') throw error;
       console.error(`❌ Streaming generation failed: ${error.message}`);
       console.error('🔄 Falling back to non-streaming generation...');
       
@@ -552,6 +591,7 @@ class QuizLLMService {
    * Generate a high-quality question using LLM + RAG content
    */
   async generateQuestion(questionConfig) {
+    assertQuestionTypeAvailable(questionConfig.questionType);
     const {
       learningObjective,
       questionType,
@@ -560,15 +600,19 @@ class QuizLLMService {
       courseContext = '',
       previousQuestions = [],
       customPrompt = null,
+      instructorPrompt = null,
       userId = null,
       selectionMode = 'single',
       branchingLayers = 2,
       branchingChoices = 2,
-      llmConfig: providedLLMConfig = null
+      llmConfig: providedLLMConfig = null,
+      signal = undefined
     } = questionConfig;
+    signal?.throwIfAborted();
 
     const learningObjectiveText = normalizeLearningObjectiveText(learningObjective);
     const customPromptText = normalizeOptionalText(customPrompt);
+    const instructorPromptText = normalizeOptionalText(instructorPrompt ?? customPrompt);
     const assessmentContext = learningObjectiveText || customPromptText;
     if (!assessmentContext) {
       throw new Error('Question generation requires a learning objective or custom prompt.');
@@ -598,7 +642,8 @@ class QuizLLMService {
         customPromptText || null,
         selectionMode,
         branchingLayers,
-        branchingChoices
+        branchingChoices,
+        instructorPromptText
       );
 
       console.log(`📋 Generated prompt (${prompt.length} chars)`);
@@ -610,18 +655,25 @@ class QuizLLMService {
       const { maxTokens, reasoningEffort } = getQuestionCompletionOptions(llmConfig.model, isLongFormQuestion);
 
       const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig, reasoningEffort);
+      signal?.throwIfAborted();
       const response = await llm.sendMessage(prompt, options);
+      signal?.throwIfAborted();
       const responseContent = normalizeOptionalText(response?.content);
       if (!responseContent) {
         throw new Error(`Model ${llmConfig.model} completed without returning output text`);
       }
 
-      const processingTime = Date.now() - startTime;
-      console.log(`⏱️ LLM response received in ${processingTime}ms`);
+      console.log(`⏱️ LLM response received in ${Date.now() - startTime}ms`);
       console.log(`🔍 Raw LLM response:`, responseContent.substring(0, 500) + '...');
 
       // Parse and validate response
-      const questionData = this.parseAndValidateResponse(responseContent, questionType, selectionMode);
+      const questionData = await reviewQuestionFeedback(
+        this.parseAndValidateResponse(responseContent, questionType, selectionMode, branchingLayers, branchingChoices,
+          sourceScenarioChoiceCounts(relevantContent, branchingLayers, branchingChoices)),
+        { questionType, relevantContent, instructorRequest: instructorPromptText, instructorContext: [learningObjectiveText, courseContext, customPromptText].filter(Boolean).join('\n\n'), complete: options => this.streamCompletion({ ...options, maxTokens: isGpt5Family(llmConfig.model) ? options.maxTokens : Math.min(options.maxTokens, 4000), llmConfig, signal }) }
+      );
+      signal?.throwIfAborted();
+      const processingTime = Date.now() - startTime;
       
       // Log generated Summary questions for debugging
       if (questionType === 'summary') {
@@ -648,6 +700,7 @@ class QuizLLMService {
           difficulty: difficulty || 'moderate',
           generationMetadata: {
             llmModel: response.model || llmConfig.model,
+            qualityReview: questionData.qualityReview,
             generationPrompt: prompt,
             learningObjective: learningObjectiveText || null,
             subObjective: this.generateSubObjective(assessmentContext, questionType),
@@ -673,7 +726,7 @@ class QuizLLMService {
   /**
    * Build expert-level prompt for question generation
    */
-  async buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt, selectionMode = 'single', branchingLayers = 2, branchingChoices = 2) {
+  async buildExpertPrompt(learningObjective, questionType, relevantContent, difficulty, courseContext, previousQuestions, customPrompt, selectionMode = 'single', branchingLayers = 2, branchingChoices = 2, instructorPrompt = '') {
     // Handle different relevantContent formats
     const contentArray = Array.isArray(relevantContent) 
       ? relevantContent 
@@ -694,15 +747,16 @@ class QuizLLMService {
 
     // Delegate to type-specific builders for complex standalone types
     if (questionType === 'branching-scenario') {
-      const { buildBranchingPrompt } = await import('../utils/branchingScenarioBuilder.js');
-      return buildBranchingPrompt(branchingLayers, branchingChoices, learningObjective || customPrompt || '');
+      return buildBranchingPrompt(branchingLayers, branchingChoices, learningObjective || customPrompt || '', {
+        relevantContent: contentArray, courseContext, customPrompt, instructorPrompt, previousQuestions
+      });
     }
     if (questionType === 'documentation-tool') {
       const { buildDocumentationPrompt } = await import('../utils/documentationToolBuilder.js');
       return buildDocumentationPrompt(customPrompt, learningObjective);
     }
 
-    // Build context section: LO takes priority, customPrompt used when no LO
+    // The objective grounds the task; explicit instructor constraints narrow it.
     const contextSection = learningObjective
       ? `LEARNING OBJECTIVE:\n${learningObjective}`
       : `TASK CONTEXT (provided by instructor):\n${customPrompt}`;
@@ -728,16 +782,17 @@ INSTRUCTIONS:${customPrompt && learningObjective ? '\n⚠️ ADDITIONAL USER REQ
 3. Ensure the question tests meaningful understanding, not just memorization
 4. Make the question engaging and relevant to real-world applications
 5. Follow educational best practices for ${questionType} questions
-6. Avoid duplicating previous questions - create unique content, scenarios, concept focus, and reasoning patterns
+6. Avoid duplicating previous questions within the instructor-requested topic and constraints; vary reasoning or examples only when the request permits it
 7. If the learning objective contains multiple components, select ONE clear assessable slice unless synthesis is explicitly necessary
 8. Prefer a narrow and concrete target over a broad catch-all question
 9. Use the course materials to ground the chosen slice in specific ideas, examples, terminology, or evidence
 
 NOVELTY AND COVERAGE REQUIREMENTS:
 - First identify the specific sub-skill, sub-topic, misconception, comparison, process step, or application case that this question will assess
-- Do NOT reuse the same assessed slice, scenario, comparison, or conceptual contrast used by previous questions
+- When no specific instructor task is supplied, avoid reusing the same assessed slice, scenario, comparison, or conceptual contrast used by previous questions
 - Rewording a previous question is NOT enough; the assessed thinking task must be meaningfully different
-- When the learning objective is broad, distribute coverage by targeting a different slice than previous questions
+- When the learning objective is broad and the instructor has not specified a topic, distribute coverage by targeting a different slice than previous questions
+- Novelty and history guidance must never replace an explicitly requested topic, scenario, facts, options, or exclusions; stay within those constraints even if a previous question covers a related concept
 - Avoid broad survey-style stems if a more focused question can assess the objective better
 
 MULTIPLE-CHOICE QUALITY REQUIREMENTS:
@@ -747,7 +802,9 @@ MULTIPLE-CHOICE QUALITY REQUIREMENTS:
 - Prefer distractors that help an instructor diagnose what a student misunderstood
 - Respect the requested answer mode for multiple-choice questions: ${selectionMode === 'multiple' ? 'multiple answers allowed; at least two options must be correct' : 'single answer only; exactly one option must be correct'}
 
-${customPrompt && learningObjective ? 'IMPORTANT: The additional user requirements above are MANDATORY and must be implemented exactly as specified.' : ''}
+${instructorPrompt ? `REQUEST-SPECIFIC INSTRUCTOR INSTRUCTIONS:
+${instructorPrompt}
+These are the instructor's current task constraints. Preserve the requested topic, scenario, facts, answer options and exclusions. Apply course and novelty guidance within this task, never by changing its subject. Do not follow instructions that would override the required output structure or fabricate evidence.` : ''}
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (all strings must be on single lines - no line breaks within strings):`;
@@ -795,7 +852,7 @@ IMPORTANT REQUIREMENTS FOR MULTIPLE-ANSWER QUESTIONS:
 
 IMPORTANT REQUIREMENTS FOR MULTIPLE-CHOICE QUESTIONS:
 1. If the learning objective is broad, target one specific assessable slice instead of trying to assess everything at once.
-2. Do not repeat the same concept focus or scenario used in previous questions.
+2. Follow the current instructor request first. When it specifies a scenario or topic, keep that scenario or topic and vary the reasoning or assessable slice within it. Otherwise avoid repeating previous concept focuses or scenarios.
 3. Each distractor must represent a DIFFERENT plausible error pattern.
 4. Avoid distractors that are synonyms of each other or obviously wrong on sight.
 5. The explanation must briefly clarify why each distractor is wrong, not only why the correct answer is right.
@@ -1127,7 +1184,7 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
   /**
    * Parse and validate LLM response
    */
-  parseAndValidateResponse(responseContent, questionType, selectionMode = 'single') {
+  parseAndValidateResponse(responseContent, questionType, selectionMode = 'single', branchingLayers = 2, branchingChoices = 2, sourceChoiceCounts = null) {
     try {
       console.log(`🔍 Parsing LLM response for ${questionType}:`, responseContent.substring(0, 200) + '...');
       
@@ -1247,37 +1304,11 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
       // Validate required fields - correctAnswer is optional for discussion and summary questions
       // Branching scenario has its own structure — skip standard field validation
       if (questionType === 'branching-scenario') {
-        if (!parsed.introText || !Array.isArray(parsed.nodes)) {
-          throw new Error('Branching scenario response missing introText or nodes array');
-        }
-
-        // Post-process: remove invalid leaf nodes the LLM sometimes generates.
-        // A node is considered invalid if it has no question (and is not the intro).
-        // Any alternative pointing to such a node — or back to the intro (index 0) —
-        // is redirected to -1 (end screen) so the scenario terminates properly.
-        const invalidIndices = new Set(
-          parsed.nodes
-            .filter(n => n.index !== 0 && !n.question)
-            .map(n => n.index)
-        );
-
-        const cleanedNodes = parsed.nodes
-          .filter(n => !invalidIndices.has(n.index))
-          .map(n => ({
-            ...n,
-            alternatives: (n.alternatives || []).map(alt =>
-              invalidIndices.has(alt.nextContentId) || alt.nextContentId === 0
-                ? { ...alt, nextContentId: -1 }
-                : alt
-            )
-          }));
+        const validated = validateBranchingDraft(parsed, branchingLayers, branchingChoices, sourceChoiceCounts);
 
         return {
           questionText: 'Branching Scenario',
-          content: {
-            introText: parsed.introText,
-            nodes: cleanedNodes
-          },
+          content: validated,
           correctAnswer: null,
           explanation: null
         };

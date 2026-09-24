@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import { importH5PContent, renderContent } from '../services/lumiService.js';
 import { createH5PPackage } from '../services/h5pExportService.js';
 import Quiz from '../models/Quiz.js';
+import { createMixedActivitySnapshot, validateMixedActivitySnapshot } from '../services/mixedActivityService.js';
 
 const router = express.Router();
 
@@ -184,16 +185,25 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
     return errorResponse(res, 'Quiz has no questions to export', ERROR_CODES.VALIDATION_ERROR, HTTP_STATUS.BAD_REQUEST);
   }
 
-  // Step 1: Generate H5P package
-  const exportId = crypto.randomBytes(8).toString('hex');
-  const filename = `${quiz.name.replace(/[^a-zA-Z0-9]/g, '_')}_canvas_${exportId}.h5p`;
-  const uploadsDir = path.join('./routes/create/uploads/');
-  const filePath = path.join(uploadsDir, filename);
-  await fs.mkdir(uploadsDir, { recursive: true });
-  await createH5PPackage(quiz, filePath);
+  const isMixedActivity = quiz.settings?.targetFormat === 'mixed-activity'
+    || quiz.settings?.deliveryTarget === 'canvas-lti';
+  let filePath;
+  let lumiContentId;
+  let mixedActivitySnapshot;
 
-  // Step 2: Import into Lumi
-  const lumiContentId = await importH5PContent(filePath);
+  if (isMixedActivity) {
+    mixedActivitySnapshot = createMixedActivitySnapshot(quiz);
+    await validateMixedActivitySnapshot(mixedActivitySnapshot);
+  } else {
+    // Standard H5P Canvas exports retain the existing immutable Lumi package.
+    const exportId = crypto.randomBytes(8).toString('hex');
+    const filename = `${quiz.name.replace(/[^a-zA-Z0-9]/g, '_')}_canvas_${exportId}.h5p`;
+    const uploadsDir = path.join('./routes/create/uploads/');
+    filePath = path.join(uploadsDir, filename);
+    await fs.mkdir(uploadsDir, { recursive: true });
+    await createH5PPackage(quiz, filePath);
+    lumiContentId = await importH5PContent(filePath);
+  }
 
   // Step 3: Generate resource link ID for LTI
   const resourceLinkId = crypto.randomUUID();
@@ -222,6 +232,8 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
       moduleId: String(moduleId),
       moduleItemId: String(moduleItem.id),
       resourceLinkId,
+      playerMode: isMixedActivity ? 'mixed-activity' : 'native-h5p',
+      ...(mixedActivitySnapshot && { mixedActivitySnapshot }),
       exportedAt: new Date()
     }
   });
@@ -233,7 +245,7 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
 
   return successResponse(res, {
     moduleItemId: moduleItem.id,
-    lumiContentId,
+    lumiContentId: lumiContentId || null,
     quizName: quiz.name,
     canvasUrl: canvasModulesUrl
   }, 'Quiz exported to Canvas successfully', HTTP_STATUS.CREATED);

@@ -37,8 +37,12 @@ export const store = configureStore({
 
 // Expose store to window for debugging (development only)
 if (import.meta.env.DEV) {
-  (window as any).store = store;
-  (window as any).getReduxState = () => store.getState();
+  const debugWindow = window as Window & {
+    store: typeof store;
+    getReduxState: typeof store.getState;
+  };
+  debugWindow.store = store;
+  debugWindow.getReduxState = () => store.getState();
 }
 
 export type RootState = ReturnType<typeof store.getState>;

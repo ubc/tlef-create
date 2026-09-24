@@ -23,6 +23,32 @@
     flex-wrap: wrap;
 }
 
+.review-completion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-top: 1px solid var(--color-border);
+}
+
+.review-completion p {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.review-completion small,
+.review-completion [role='alert'] {
+    flex-basis: 100%;
+}
+
+.review-completion [role='alert'] {
+    color: var(--color-destructive);
+}
+
 .format-selector {
     display: flex;
     align-items: center;
@@ -1515,7 +1541,7 @@
 /* Interactive Mode Styles */
 .questions-interactive {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--spacing-lg);
     padding: var(--spacing-lg);
 }
@@ -1663,6 +1689,22 @@
     border-color: var(--color-primary);
     background: var(--color-muted);
     transform: translateX(4px);
+}
+
+.option-button:disabled,
+.tf-button:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.option-button:disabled:hover,
+.tf-button:disabled:hover {
+    transform: none;
+}
+
+.mixed-preview-check {
+    align-self: flex-start;
+    margin-top: var(--spacing-sm);
 }
 
 .option-button.selected {
@@ -1921,7 +1963,32 @@
 
 /* Discussion Question Styles */
 .discussion-question {
-    /* Discussion questions show only question text, no additional styling needed */
+    margin-top: var(--spacing-sm);
+}
+
+.discussion-question label,
+.documentation-fields label {
+    display: grid;
+    gap: var(--spacing-xs);
+    color: var(--color-foreground);
+    font-weight: 600;
+}
+
+.discussion-question textarea,
+.documentation-fields textarea {
+    width: 100%;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font: inherit;
+    resize: vertical;
+}
+
+.documentation-fields {
+    display: grid;
+    gap: var(--spacing-sm);
     margin-top: var(--spacing-sm);
 }
 
@@ -2410,4 +2477,17 @@
   .h5p-draft-actions .btn {
     width: 100%;
   }
+}
+
+@media (max-width: 768px) {
+    .review-edit-preview .questions-list,
+    .review-edit .questions-interactive {
+        padding: 0;
+    }
+
+    .review-edit .questions-interactive iframe {
+        display: block;
+        min-width: 0;
+        max-width: 100%;
+    }
 }

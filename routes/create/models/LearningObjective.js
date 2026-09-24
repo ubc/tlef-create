@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { beginQuestionMutation, withQuestionMutation } from '../services/questionPublication.js';
 
 const learningObjectiveSchema = new mongoose.Schema({
   // The actual learning objective text
@@ -162,17 +163,64 @@ learningObjectiveSchema.methods.addEdit = function(userId, changes, previousText
 };
 
 // Static method to get ordered objectives for a quiz
-learningObjectiveSchema.statics.getOrderedByQuiz = function(quizId) {
-  return this.find({ quiz: quizId }).sort({ order: 1 });
+learningObjectiveSchema.statics.getOrderedByQuiz = async function(quizId) {
+  const quiz = await mongoose.model('Quiz').findById(quizId).select('learningObjectives');
+  return this.find({ quiz: quizId, _id: { $in: quiz?.learningObjectives || [] } }).sort({ order: 1 });
 };
 
 // Static method to reorder all objectives in a quiz
 learningObjectiveSchema.statics.reorderObjectives = async function(quizId, orderedIds) {
-  const promises = orderedIds.map((id, index) => 
-    this.findByIdAndUpdate(id, { order: index })
-  );
-  return Promise.all(promises);
+  const Quiz = mongoose.model('Quiz');
+  const quiz = await Quiz.findById(quizId).select('createdBy');
+  if (!quiz) throw Object.assign(new Error('Learning object not found.'), { status: 404, code: 'NOT_FOUND' });
+  return withQuestionMutation(Quiz, quizId, quiz.createdBy, async ({ quiz: current, writeQuiz }) => {
+    if (orderedIds.length !== current.learningObjectives.length || new Set(orderedIds.map(String)).size !== orderedIds.length
+      || current.learningObjectives.some(id => !orderedIds.map(String).includes(String(id)))) {
+      throw Object.assign(new Error('The learning objective list changed. Refresh before reordering.'), { status: 409, code: 'OBJECTIVE_LIST_CHANGED' });
+    }
+    await writeQuiz({ $set: { learningObjectives: orderedIds } });
+    return Promise.all(orderedIds.map(async (id, index) => {
+      const objective = await this.findOneAndUpdate({ _id: id, quiz: quizId,
+        $expr: { $lte: ['$$NOW', current.questionMutation.leaseUntil] } }, { order: index });
+      if (!objective) throw Object.assign(new Error('The objective reorder lease expired. Refresh before reordering again.'), { status: 409, code: 'QUESTION_EDIT_EXPIRED' });
+      return objective;
+    }));
+  });
 };
+
+// Changes to an existing objective invalidate the Quiz snapshot used for
+// question generation, including AI enrichment and single-objective rewrites.
+learningObjectiveSchema.pre('save', async function() {
+  if (this.isNew || !this.isModified()) return;
+  const Quiz = mongoose.model('Quiz');
+  const mutation = await beginQuestionMutation(Quiz, this.quiz, this.createdBy);
+  this.$locals.objectiveMutation = mutation;
+  if (!mutation.quiz.learningObjectives.some(id => String(id) === String(this._id))) {
+    throw Object.assign(new Error('The learning objective list changed. Refresh before editing.'), { status: 409, code: 'OBJECTIVE_LIST_CHANGED' });
+  }
+  this.$locals.previousSaveFilter = this.$where;
+  // Fence the actual cross-document write as well as the surrounding checks.
+  this.$where = { ...this.$where, $expr: { $lte: ['$$NOW', mutation.quiz.questionMutation.leaseUntil] } };
+  await mutation.assertActive();
+});
+learningObjectiveSchema.post('save', async function(doc) {
+  const mutation = doc.$locals.objectiveMutation;
+  if (!mutation) return;
+  delete doc.$locals.objectiveMutation;
+  doc.$where = doc.$locals.previousSaveFilter;
+  delete doc.$locals.previousSaveFilter;
+  try { await mutation.assertActive(); }
+  finally { await mutation.finish(); }
+});
+learningObjectiveSchema.post('save', function(error, doc, next) {
+  const mutation = doc?.$locals?.objectiveMutation;
+  if (!mutation) return next(error);
+  delete doc.$locals.objectiveMutation;
+  doc.$where = doc.$locals.previousSaveFilter;
+  delete doc.$locals.previousSaveFilter;
+  mutation.assertActive().then(() => error, leaseError => leaseError)
+    .then(finalError => mutation.finish().then(() => next(finalError), () => next(finalError)));
+});
 
 // Ensure virtual fields are serialized
 learningObjectiveSchema.set('toJSON', {

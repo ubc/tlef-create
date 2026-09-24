@@ -28,7 +28,7 @@ class BackgroundUploadService {
     console.log(`✅ All materials uploaded for course ${courseId}`);
 
     // Refresh materials list after all uploads complete
-    store.dispatch(fetchMaterials(courseId) as any);
+    store.dispatch(fetchMaterials(courseId));
   }
 
   /**

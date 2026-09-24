@@ -774,6 +774,17 @@ const LearningObjectives = ({
       return;
     }
     
+    const savedObjective = reduxObjectives[index] || objectives[index];
+    if (savedObjective?._id || reduxObjectives.length === 0) {
+      const confirmed = await showConfirm({
+        title: 'Delete learning objective?',
+        description: 'This permanently removes the learning objective. Any linked questions will also be deleted. This cannot be undone.',
+        confirmLabel: 'Delete learning objective',
+        tone: 'danger'
+      });
+      if (!confirmed) return;
+    }
+
     try {
       // If using Redux objectives, delete via Redux
       if (reduxObjectives.length > 0 && reduxObjectives[index]) {

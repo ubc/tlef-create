@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { Plus, Download, Upload, BookMarked, Boxes } from 'lucide-react';
-import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi } from '../../services/api';
+import { useSelector, useDispatch, useStore } from 'react-redux';
+import { Plus, Download, Upload, BookMarked, Boxes, Check } from 'lucide-react';
+import { coverageMapApi, CoverageMap, questionsApi, Question, exportApi, h5pEditorApi, quizApi } from '../../services/api';
 import type { H5PStudioContent } from '../../services/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { PUBSUB_EVENTS } from '../../services/pubsubService';
@@ -10,10 +10,14 @@ import { RootState, AppDispatch } from '../../store';
 import {
   addQuestionForQuiz,
   fetchQuestions,
+  setQuestionsForQuiz,
   deleteQuestion,
-  updateQuestion as updateQuestionThunk
+  updateQuestion as updateQuestionThunk,
+  updateSavedQuestionForQuiz,
+  selectReviewDrafts
 } from '../../store/slices/questionSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
+import { updateQuizLocally } from '../../store/slices/quizSlice';
 import RegeneratePromptModal from '../RegeneratePromptModal';
 import ChapterEditorPanel from './ChapterEditorPanel';
 import PdfExportModal from '../PdfExportModal';
@@ -23,6 +27,9 @@ import QuestionCard from './QuestionCard';
 import H5PStudioDraftDialog from './H5PStudioDraftDialog';
 import FeatureCoachmark from '../onboarding/FeatureCoachmark';
 import { useQuestionEditHandlers } from './useQuestionEditHandlers';
+import { useQuestionDrafts } from './useQuestionDrafts';
+import { useSingleQuestionGeneration } from '../../hooks/useSingleQuestionGeneration';
+import GenerationJobStatus from '../generation/GenerationJobStatus';
 import { useFeatureOnboarding } from '../../hooks/useFeatureOnboarding';
 import { filterQuestionsByLearningObjectiveId } from '../../utils/questionLearningObjective';
 import { useSystemDialog } from '../system-dialog/SystemDialogProvider';
@@ -39,14 +46,48 @@ import {
 } from '../../constants/questionTypeCapabilities';
 import '../../styles/components/ReviewEdit.css';
 
+const recoveryFieldLabels: Record<string, string> = {
+  isCorrect: 'Correct option', chosenFeedback: 'Feedback when selected',
+  notChosenFeedback: 'Feedback when not selected', tip: 'Hint',
+  textWithBlanks: 'Text with blanks', correctAnswers: 'Correct answers',
+  leftItems: 'Left items', rightItems: 'Right items', matchingPairs: 'Matching pairs',
+  correctOrder: 'Correct order', selectionMode: 'Answer mode',
+};
+const readableRecoveryValue = (value: unknown, indent = ''): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'string') return new DOMParser().parseFromString(value, 'text/html').body.textContent || value;
+  if (Array.isArray(value)) return value.map((item, index) => `${indent}${index + 1}. ${readableRecoveryValue(item, `${indent}  `)}`).join('\n');
+  if (typeof value === 'object') return Object.entries(value)
+    .filter(([key]) => !['_id', 'id', 'subContentId', 'library'].includes(key))
+    .map(([key, item]) => {
+      const label = recoveryFieldLabels[key] || key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, letter => letter.toUpperCase());
+      return `${indent}${label}: ${readableRecoveryValue(item, `${indent}  `)}`;
+    }).join('\n');
+  return String(value);
+};
+const readableRecoveredQuestion = (question: Question) => [
+  `Question\n${readableRecoveryValue(question.questionText)}`,
+  Object.keys(question.content || {}).length ? `Activity content\n${readableRecoveryValue(question.content)}` : '',
+  `Answer\n${typeof question.correctAnswer === 'boolean' ? String(question.correctAnswer) : readableRecoveryValue(question.correctAnswer)}`,
+  question.explanation ? `Explanation\n${readableRecoveryValue(question.explanation)}` : ''
+].filter(Boolean).join('\n\n');
+
 const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: ReviewEditProps) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
+  const store = useStore<RootState>();
   const reduxQuestions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
   const currentQuiz = useSelector((state: RootState) => state.quiz.currentQuiz);
-  const [questions, setQuestions] = useState<ExtendedQuestion[]>([]);
+  const drafts = useQuestionDrafts(quizId);
+  const { questions, setQuestions, recoveredDrafts } = drafts;
+  const recoveryRequests = useRef(new Set<string>());
+  const [recoveringIds, setRecoveringIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reordering, setReordering] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [h5pStudioLoading, setH5PStudioLoading] = useState(false);
   const [pdfExportModalOpen, setPdfExportModalOpen] = useState(false);
@@ -59,12 +100,42 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const { showConfirm } = useSystemDialog();
 
   const viewMode = workflowMode === 'preview-export' ? 'preview' : 'edit';
+  const markReviewPending = () => {
+    const quiz = store.getState().quiz.currentQuiz;
+    if (quiz?._id === quizId && quiz.progress?.reviewCompleted) {
+      dispatch(updateQuizLocally({ ...quiz, progress: { ...quiz.progress, reviewCompleted: false } }));
+    }
+  };
+  const completeReview = async () => {
+    if (reviewSaving || !questions.length || hasOpenDrafts || recoveredDrafts.length || filterByLOId) return;
+    setReviewSaving(true);
+    setReviewError('');
+    try {
+      const result = await quizApi.completeReview(quizId);
+      if (activeQuizIdRef.current !== quizId) return;
+      dispatch(updateQuizLocally(result.quiz));
+      showNotification('success', 'Review completed', 'The current questions are ready to preview. Editing or generating questions will require another review.');
+    } catch (error) {
+      if (activeQuizIdRef.current !== quizId) return;
+      setReviewError(error instanceof Error ? error.message : 'Could not complete review.');
+    } finally {
+      if (activeQuizIdRef.current === quizId) setReviewSaving(false);
+    }
+  };
+  const ownerId = useSelector((state: RootState) => state.app.user?.id);
+  const generationTask = useSingleQuestionGeneration(quizId, ownerId, job => {
+    if (job.status === 'succeeded') {
+      void dispatch(fetchQuestions(quizId));
+      markReviewPending();
+      setCoverageMap(null);
+    }
+  });
+  const { generate: generateSingleQuestion } = generationTask;
   const [h5pDraftChoice, setH5PDraftChoice] = useState<{
     draft: H5PStudioContent;
     sourceOutdated: boolean;
     sourceQuizId: string;
   } | null>(null);
-  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const activeQuizIdRef = useRef(quizId);
   const h5pStudioRequestRef = useRef(0);
   activeQuizIdRef.current = quizId;
@@ -78,6 +149,17 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const [evidenceQuestionId, setEvidenceQuestionId] = useState<string | null>(null);
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [coverageError, setCoverageError] = useState<string | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    const resize = (event: MessageEvent) => {
+      const frame = previewIframeRef.current;
+      if (!frame || event.source !== frame.contentWindow || event.data?.type !== 'tlef:h5p-preview-height') return;
+      const height = event.data.height;
+      if (typeof height === 'number' && Number.isFinite(height) && height > 0) frame.style.height = `${Math.min(100000, Math.max(320, height))}px`;
+    };
+    window.addEventListener('message', resize);
+    return () => window.removeEventListener('message', resize);
+  }, []);
   const evidenceTutorial = useFeatureOnboarding(
     'question-evidence',
     questions.length > 0 && viewMode === 'edit'
@@ -105,32 +187,29 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
 
   // Load questions from Redux on mount
   useEffect(() => {
+    setRegenerateModalOpen(false);
+    setQuestionToRegenerate(null);
+    setRegenerateLoading(false);
     if (quizId) {
       dispatch(fetchQuestions(quizId));
     }
   }, [quizId, dispatch]);
 
-  // Sync Redux questions to local state
+  useEffect(() => { setLoading(false); }, [reduxQuestions]);
+
+  const hasOpenDrafts = Object.keys(useSelector((state: RootState) => selectReviewDrafts(state, quizId))).length > 0;
   useEffect(() => {
-    if (reduxQuestions.length > 0) {
-      setQuestions(prev => {
-        // Skip update if the question IDs haven't changed
-        const prevIds = prev.map(q => q._id).join(',');
-        const newIds = reduxQuestions.map(q => q._id).join(',');
-        if (prevIds === newIds) {
-          // Update content but preserve isEditing state
-          return prev.map(existing => {
-            const updated = reduxQuestions.find(q => q._id === existing._id);
-            return updated ? { ...updated, isEditing: existing.isEditing } : existing;
-          });
-        }
-        return reduxQuestions.map(q => ({ ...q, isEditing: false }));
-      });
-    } else {
-      setQuestions(prev => prev.length === 0 ? prev : []);
-    }
-    setLoading(false);
-  }, [reduxQuestions]);
+    if (!hasOpenDrafts) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [hasOpenDrafts]);
+
+  const isPublished = (questionId: string) => selectQuestionsByQuiz(store.getState(), quizId)
+    .some(question => question._id === questionId);
 
   // Subscribe to PubSub events
   useEffect(() => {
@@ -140,6 +219,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         if (data.quizId === quizId) {
           setCoverageMap(null);
           dispatch(fetchQuestions(quizId));
+          markReviewPending();
         }
       }
     );
@@ -188,51 +268,60 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
     setH5PStudioLoading(false);
   }, [quizId]);
 
-  useEffect(() => {
-    if (viewMode !== 'preview') return undefined;
-
-    const handlePreviewMessage = (event: MessageEvent) => {
-      const iframe = previewIframeRef.current;
-      if (
-        event.source !== iframe?.contentWindow
-        || event.data?.type !== 'tlef:h5p-preview-height'
-        || typeof event.data.height !== 'number'
-        || !Number.isFinite(event.data.height)
-      ) {
-        return;
-      }
-
-      const nextHeight = Math.min(20000, Math.max(320, Math.ceil(event.data.height)));
-      iframe.style.height = `${nextHeight}px`;
-    };
-
-    window.addEventListener('message', handlePreviewMessage);
-    return () => window.removeEventListener('message', handlePreviewMessage);
-  }, [viewMode]);
-
   const filteredQuestions = filterQuestionsByLearningObjectiveId(
     questions,
     filterByLOId
   );
 
-  const toggleEdit = (questionId: string) => {
-    setQuestions(questions.map(q =>
-      q._id === questionId ? { ...q, isEditing: !q.isEditing } : q
-    ));
+  const reorderDisabledReason = reordering ? 'Saving question order…'
+    : filterByLOId ? 'Select All Objectives to reorder the full question list.'
+    : questions.some(question => question.isEditing) ? 'Save or cancel your edits before reordering.'
+    : undefined;
+
+  const moveQuestion = async (questionId: string, direction: -1 | 1) => {
+    if (reorderDisabledReason) return;
+    const from = questions.findIndex(question => question._id === questionId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= questions.length) return;
+    const reordered = [...questions];
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+    setReordering(true);
+    try {
+      const result = await questionsApi.reorderQuestions(quizId, reordered.map(question => question._id));
+      if (activeQuizIdRef.current !== quizId) return;
+      dispatch(setQuestionsForQuiz({ quizId, questions: result.questions }));
+      markReviewPending();
+      setCoverageMap(null);
+      showNotification('success', 'Question Order Saved', 'The question list order has been saved.');
+      publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, { quizId, reason: 'reordered', timestamp: Date.now() });
+    } catch (error) {
+      showNotification('error', 'Reorder Failed', error instanceof Error ? error.message : 'Could not save the question order.');
+    } finally {
+      setReordering(false);
+    }
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
+    const confirmed = await showConfirm({
+      title: 'Delete question?',
+      description: 'This permanently removes the saved question. This cannot be undone.',
+      confirmLabel: 'Delete question',
+      tone: 'danger'
+    });
+    if (!confirmed || activeQuizIdRef.current !== quizId || !isPublished(questionId)) return;
     try {
       await dispatch(deleteQuestion({ quizId, questionId })).unwrap();
-      const updatedQuestions = questions.filter(q => q._id !== questionId);
-      setQuestions(updatedQuestions);
+      if (activeQuizIdRef.current !== quizId) return;
+      markReviewPending();
+      drafts.discardSnapshot(questionId);
       setCoverageMap(null);
-      if (evidenceQuestionId === questionId) setEvidenceQuestionId(null);
+      setEvidenceQuestionId(current => current === questionId ? null : current);
       showNotification('success', 'Question Deleted', 'Question has been removed');
       publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
-        quizId, reason: 'deleted', questionCount: updatedQuestions.length, timestamp: Date.now()
+        quizId, reason: 'deleted', timestamp: Date.now()
       });
     } catch (error) {
+      if (activeQuizIdRef.current !== quizId) return;
       console.error('Failed to delete question:', error);
       showNotification('error', 'Delete Failed', 'Failed to delete question');
     }
@@ -262,7 +351,9 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const saveQuestion = async (questionId: string) => {
     try {
       const question = questions.find(q => q._id === questionId);
-      if (!question) return;
+      if (!question || !isPublished(questionId)) return;
+      const submittedDraft = { ...question };
+      delete submittedDraft.isEditing;
       const updates: Partial<Question> = {
         questionText: question.questionText,
         type: question.type,
@@ -271,13 +362,17 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         correctAnswer: question.correctAnswer,
         explanation: question.explanation
       };
-      const result = await dispatch(updateQuestionThunk({ quizId, questionId, updates })).unwrap();
-      setQuestions(questions.map(q =>
-        q._id === questionId ? { ...result.question, isEditing: false } : q
-      ));
+      await dispatch(updateQuestionThunk({ quizId, questionId, updates })).unwrap();
+      if (activeQuizIdRef.current !== quizId) return;
+      markReviewPending();
+      if (!isPublished(questionId)) return;
+      drafts.discardSnapshot(questionId, submittedDraft);
       setCoverageMap(null);
-      showNotification('success', 'Question Saved', 'Question has been updated');
+      showNotification('success', 'Question Saved', selectReviewDrafts(store.getState(), quizId)[questionId]
+        ? 'The submitted changes were saved. Your newer edits are still unsaved.'
+        : 'Question has been updated');
     } catch (error) {
+      if (activeQuizIdRef.current !== quizId) return;
       console.error('Failed to save question:', error);
       showNotification('error', 'Save Failed', 'Failed to save question changes');
     }
@@ -292,28 +387,29 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   };
 
   const handleRegenerate = async (customPrompt?: string) => {
-    if (!questionToRegenerate) return;
+    if (!questionToRegenerate || !isPublished(questionToRegenerate._id)) return;
     setRegenerateLoading(true);
     try {
       const result = await questionsApi.regenerateQuestion(questionToRegenerate._id, customPrompt);
-      setQuestions(questions.map(q =>
-        q._id === questionToRegenerate._id ? { ...result.question, isEditing: false } : q
-      ));
+      if (activeQuizIdRef.current !== quizId) return;
+      if (!isPublished(questionToRegenerate._id)) return;
+      drafts.discardSnapshot(questionToRegenerate._id);
+      dispatch(updateSavedQuestionForQuiz({ quizId, question: result.question }));
+      markReviewPending();
       setCoverageMap(null);
       showNotification('success', 'Question Regenerated', 'Question has been regenerated using AI');
       setRegenerateModalOpen(false);
       setQuestionToRegenerate(null);
     } catch (error) {
+      if (activeQuizIdRef.current !== quizId) return;
       console.error('Failed to regenerate question:', error);
       showNotification('error', 'Regeneration Failed', 'Failed to regenerate question');
     } finally {
-      setRegenerateLoading(false);
+      if (activeQuizIdRef.current === quizId) setRegenerateLoading(false);
     }
   };
 
   const handleGenerateAIQuestion = async (loIndex: number, prompt: string, questionType: string) => {
-    const initialQuestionCount = questions.length;
-    const existingQuestionIds = new Set(questions.map(question => question._id));
     const selectedLO = loIndex >= 0 ? learningObjectives[loIndex] : null;
     const questionConfig = {
       questionType,
@@ -326,49 +422,99 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
 
     showNotification('info', 'AI Generation Started', 'Generating a new question...');
 
-    const response = await fetch('/api/create/streaming/generate-questions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        quizId,
-        sessionId: `review-add-${Date.now()}`,
-        questionConfigs: [questionConfig]
-      })
-    });
+    const generatedId = await generateSingleQuestion(questionConfig);
+    if (activeQuizIdRef.current !== quizId) return;
 
-    if (!response.ok) {
-      throw new Error('Failed to start AI question generation');
-    }
-
-    const maxAttempts = 20;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    // Completion identifies this session's committed question. A different
+    // concurrent addition cannot satisfy it, and list loading does not retry AI.
+    try {
       const result = await dispatch(fetchQuestions(quizId)).unwrap();
-      if (result.questions.length > initialQuestionCount) {
-        const generatedQuestion = result.questions.find(question => !existingQuestionIds.has(question._id));
-        publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
-          quizId,
-          reason: 'added',
-          questionCount: result.questions.length,
-          timestamp: Date.now()
-        });
-        showNotification('success', 'Question Added', 'AI generated a new question successfully');
-        if (generatedQuestion) {
-          window.setTimeout(() => {
-            document.getElementById(`question-${generatedQuestion._id}`)?.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center'
-            });
-          }, 250);
-        }
-        return;
+      if (!result.questions.some(question => question._id === generatedId)) {
+        throw new Error('The saved question is not in the refreshed list yet.');
       }
+      publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
+        quizId, reason: 'added', questionCount: result.questions.length, timestamp: Date.now()
+      });
+      showNotification('success', 'Question Added', 'AI generated a new question successfully');
+      window.setTimeout(() => {
+        document.getElementById(`question-${generatedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 250);
+    } catch {
+      showNotification('warning', 'Question Saved', 'The new question was saved, but the list could not refresh. Refresh Review to see it; do not generate it again.');
     }
+  };
 
-    throw new Error('AI generation started, but the new question did not appear in time');
+  const recoveredContent = (question: Question) => JSON.stringify({
+    originalQuestionId: question._id,
+    quizId,
+    learningObjective: question.learningObjective,
+    type: question.type,
+    difficulty: question.difficulty,
+    questionText: question.questionText,
+    content: question.content,
+    correctAnswer: question.correctAnswer,
+    explanation: question.explanation,
+    sourceReferences: question.generationMetadata?.sourceReferences
+  }, null, 2);
+
+  const copyRecoveredDraft = async (question: Question) => {
+    try {
+      await navigator.clipboard.writeText(readableRecoveredQuestion(question));
+      showNotification('success', 'Draft Copied', 'The recovered question, answers and feedback are on your clipboard.');
+    } catch {
+      showNotification('warning', 'Copy Unavailable', 'Use Download draft or select the text under View recovered content.');
+    }
+  };
+
+  const downloadRecoveredDraft = (question: Question) => {
+    const url = URL.createObjectURL(new Blob([recoveredContent(question)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `recovered-question-${question._id}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const saveRecoveredDraft = async (question: Question) => {
+    if (recoveryRequests.current.has(question._id) || isPublished(question._id)) return;
+    recoveryRequests.current.add(question._id);
+    setRecoveringIds(current => [...current, question._id]);
+    try {
+      const learningObjectiveId = typeof question.learningObjective === 'string'
+        ? question.learningObjective : question.learningObjective?._id || '';
+      const result = await questionsApi.createQuestion({
+        quizId, learningObjectiveId, type: question.type, difficulty: question.difficulty,
+        questionText: question.questionText, content: question.content,
+        correctAnswer: question.correctAnswer, explanation: question.explanation
+      });
+      // Never send an update to the retired ID. Only a confirmed creation can
+      // remove this recovery copy; the returned question has its own new ID.
+      if (!result.question?._id || result.question._id === question._id) throw new Error('The new question was not confirmed.');
+      dispatch(addQuestionForQuiz({ quizId, question: result.question }));
+      markReviewPending();
+      drafts.discardSnapshot(question._id, question);
+      if (activeQuizIdRef.current !== quizId) return;
+      setCoverageMap(null);
+      showNotification('success', 'Recovered Question Saved', 'Your edits were saved as a new question. Review its objective and evidence before export.');
+      publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, { quizId, reason: 'added', timestamp: Date.now() });
+    } catch (error) {
+      if (activeQuizIdRef.current !== quizId) return;
+      showNotification('warning', 'Recovery Not Confirmed', `${error instanceof Error ? error.message : 'Could not confirm the new question.'} Your draft is still available. Check the saved list before trying again.`);
+    } finally {
+      recoveryRequests.current.delete(question._id);
+      setRecoveringIds(current => current.filter(id => id !== question._id));
+    }
+  };
+
+  const discardRecoveredDraft = async (questionId: string) => {
+    const confirmed = await showConfirm({
+      title: 'Discard recovered edits?',
+      description: 'These edits are not in the saved question list. Copy or download them first if you want to keep them.',
+      confirmLabel: 'Discard edits', tone: 'danger'
+    });
+    if (confirmed) drafts.discardSnapshot(questionId);
   };
 
   const handleH5PExport = async () => {
@@ -577,7 +723,8 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
 
   if (loading) {
     return (
-      <div className="review-edit">
+      <div className={`review-edit ${viewMode === 'preview' ? 'review-edit-preview' : ''}`}>
+      <GenerationJobStatus job={generationTask.job} busy={generationTask.isBusy} message={generationTask.recoveryMessage} onRefresh={generationTask.refresh} onCloseUnregistered={generationTask.unregistered ? generationTask.closeUnregistered : undefined} />
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Loading Questions...</h3>
@@ -600,7 +747,43 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   const availableQuestionTypes = getQuestionTypesForTarget(targetFormat);
 
   return (
-    <div className="review-edit">
+    <div className={`review-edit ${viewMode === 'preview' ? 'review-edit-preview' : ''}`}>
+      <GenerationJobStatus job={generationTask.job} busy={generationTask.isBusy} message={generationTask.recoveryMessage} onRefresh={generationTask.refresh} onCloseUnregistered={generationTask.unregistered ? generationTask.closeUnregistered : undefined} />
+      {recoveredDrafts.length > 0 && (
+        <section className="card" aria-label="Recovered unsaved edits">
+          <div className="card-header">
+            <h3 className="card-title">Recovered unsaved edits</h3>
+            <p>The saved question list changed while you were editing. Your edits below are kept separately and are not included in previews or exports. Copy, download, or save them as new questions before refreshing or closing this page.</p>
+          </div>
+          <div className="p-6">
+            {recoveredDrafts.map(({ question }) => {
+              const objectiveId = typeof question.learningObjective === 'string' ? question.learningObjective : question.learningObjective?._id;
+              const recoveryBlocked = !availableQuestionTypes.some(type => type.value === question.type)
+                ? 'This type is not supported by the current layout. Copy or download the draft to keep it.'
+                : objectiveId && !learningObjectives.some(objective => objective._id === objectiveId)
+                  ? 'The original learning objective is no longer available. Copy or download the draft, then add a question with a current objective.' : undefined;
+              const saving = recoveringIds.includes(question._id);
+              return (
+                <article key={question._id} aria-label={`Recovered draft: ${question.questionText}`} className="mb-6">
+                  <h4>{question.questionText}</h4>
+                  <details>
+                    <summary>View recovered content</summary>
+                    <div role="document" aria-label="Recovered question content" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: '12px' }}>{readableRecoveredQuestion(question)}</div>
+                  </details>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <button className="btn btn-outline" onClick={() => void copyRecoveredDraft(question)}>Copy draft</button>
+                    <button className="btn btn-outline" onClick={() => downloadRecoveredDraft(question)}>Download draft</button>
+                    <button className="btn btn-primary" disabled={saving || !!recoveryBlocked} onClick={() => void saveRecoveredDraft(question)}>{saving ? 'Saving recovered question…' : 'Save as new question'}</button>
+                    <button className="btn btn-ghost" disabled={saving} onClick={() => void discardRecoveredDraft(question._id)}>Discard edits</button>
+                  </div>
+                  <p className="text-sm">Download draft keeps a complete recovery file, including your original source references.</p>
+                  {recoveryBlocked && <p>{recoveryBlocked}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <div className="card">
         <div className="card-header">
           <div className="review-header">
@@ -646,6 +829,23 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
           </div>
         </div>
 
+        {workflowMode === 'review' && questions.length > 0 && (
+          <div className="review-completion" role="status">
+            {currentQuiz?.progress?.reviewCompleted ? (
+              <p><Check size={17} /> Review complete. These saved questions are ready to preview.</p>
+            ) : (
+              <>
+                <p>Check every question’s accuracy, answer, feedback, sources and order. When finished, confirm the full saved set.</p>
+                <button type="button" className="btn btn-primary" disabled={reviewSaving || hasOpenDrafts || recoveredDrafts.length > 0 || !!filterByLOId || generationTask.isBusy || reordering} onClick={() => void completeReview()}>
+                  <Check size={16} /> {reviewSaving ? 'Saving review…' : 'Mark review complete'}
+                </button>
+                {(hasOpenDrafts || recoveredDrafts.length > 0 || !!filterByLOId) && <small>{filterByLOId ? 'Select All Objectives to review the full question set.' : 'Save, cancel or recover unsaved edits before completing review.'}</small>}
+              </>
+            )}
+            {reviewError && <p role="alert">{reviewError}</p>}
+          </div>
+        )}
+
         <div className="review-filters">
           <div className="filter-group">
             <label>Filter by Learning Objective:</label>
@@ -684,16 +884,10 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
             <div className="questions-interactive">
               <iframe
                 ref={previewIframeRef}
-                key={`h5p-preview-${quizId}-${filterByLOId ?? 'all'}-${containerMode}`}
-                src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${containerMode}${filterByLOId !== null ? `&lo=${filterByLOId}` : ''}`}
-                style={{
-                  width: '100%',
-                  height: `${Math.max(800, filteredQuestions.length * 350)}px`,
-                  border: 'none',
-                  borderRadius: '8px',
-                  background: '#f9fafb'
-                }}
+                key={`h5p-preview-${quizId}-${filterByLOId ?? 'all'}-${targetFormat}`}
+                src={`/api/create/h5p-preview/quiz/${quizId}/render?containerMode=${targetFormat}${filterByLOId !== null ? `&lo=${filterByLOId}` : ''}`}
                 title="H5P Quiz Preview"
+                style={{ width: '100%', height: '800px', border: 'none', borderRadius: '8px', background: '#f9fafb' }}
                 allow="fullscreen"
                 sandbox="allow-scripts"
               />
@@ -705,10 +899,15 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
                 question={question}
                 index={index}
                 handlers={handlers}
-                onToggleEdit={toggleEdit}
+                onToggleEdit={drafts.toggleEdit}
                 onSave={saveQuestion}
                 onDelete={handleDeleteQuestion}
                 onRegenerate={openRegenerateModal}
+                onMove={moveQuestion}
+                canMoveUp={!reorderDisabledReason && index > 0}
+                canMoveDown={!reorderDisabledReason && index < filteredQuestions.length - 1}
+                reorderDisabledReason={reorderDisabledReason}
+                actionsDisabled={reordering}
                 evidenceMapOpen={evidenceQuestionId === question._id}
                 coverageMap={coverageMap}
                 coverageLoading={coverageLoading}
@@ -779,6 +978,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
           availableQuestionTypes={availableQuestionTypes}
           onQuestionAdded={(question) => {
             dispatch(addQuestionForQuiz({ quizId, question }));
+            markReviewPending();
             publish(PUBSUB_EVENTS.QUESTIONS_CHANGED, {
               quizId,
               reason: 'added',

@@ -7,115 +7,30 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import sseService from '../services/sseService.js';
-import { planLOSlices } from '../services/loSlicePlanner.js';
-import coursePromptService from '../services/coursePromptService.js';
-import questionMemoryService, { buildQuestionMemory } from '../services/questionMemoryService.js';
-import { v4 as uuidv4 } from 'uuid';
+import mongoose from 'mongoose';
+import { getGenerationReadiness } from '../utils/generationReadiness.js';
+import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
+import questionGenerationJobs, { questionGenerationRequestHash, serializeQuestionJob } from '../services/questionGenerationJobs.js';
+import { createQuestionBatchWork, normalizeGenerationConfigs } from '../services/questionBatchGeneration.js';
+import QuestionGenerationJob from '../models/QuestionGenerationJob.js';
 
 const router = express.Router();
-
-/**
- * Enrich question configs with learning objective ObjectIds from quiz.
- * Maps text or index-based LO references to actual Mongoose documents.
- */
-function enrichQuestionConfigsWithObjectives(questionConfigs, quiz) {
-  const hasLOs = quiz.learningObjectives && quiz.learningObjectives.length > 0;
-
-  return questionConfigs.map((config, index) => {
-    // If the config has no LO reference and uses a custom prompt, allow null LO
-    if (!hasLOs || config.useCustomPromptOnly) {
-      return { ...config, learningObjective: null };
-    }
-
-    let learningObjective;
-
-    if (config.learningObjectiveIndex !== undefined) {
-      learningObjective = quiz.learningObjectives[config.learningObjectiveIndex];
-    } else if (config.learningObjective) {
-      learningObjective = quiz.learningObjectives.find(lo => lo.text === config.learningObjective);
-    } else {
-      learningObjective = quiz.learningObjectives[index % quiz.learningObjectives.length];
-    }
-
-    return {
-      ...config,
-      learningObjective: learningObjective || quiz.learningObjectives[0]
-    };
-  });
-}
-
-function getLearningObjectiveText(config) {
-  if (typeof config.learningObjective === 'string') {
-    return config.learningObjective;
-  }
-
-  return config.learningObjective?.text || '';
-}
-
-function buildPlanningGroupKey(config) {
-  const loText = getLearningObjectiveText(config);
-  return [
-    config.learningObjective?._id?.toString?.() || config.learningObjectiveId || loText,
-    config.questionType,
-    config.selectionMode || 'single',
-    config.customPrompt || ''
-  ].join('::');
-}
-
-/**
- * Assign a distinct LO slice to each repeated config before parallel generation.
- * This prevents parallel LLM calls from independently choosing the same narrow focus.
- */
-function attachPlannedTasksToQuestionConfigs(questionConfigs) {
-  const groups = new Map();
-
-  questionConfigs.forEach((config, index) => {
-    const loText = getLearningObjectiveText(config);
-    if (!loText || !config.questionType) {
-      return;
-    }
-
-    const groupKey = buildPlanningGroupKey(config);
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, []);
-    }
-    groups.get(groupKey).push({ config, index, loText });
-  });
-
-  const plannedConfigs = questionConfigs.map(config => ({ ...config }));
-
-  for (const group of groups.values()) {
-    if (group.length < 2) {
-      continue;
-    }
-
-    const slicePlan = planLOSlices({
-      learningObjective: group[0].loText,
-      questionType: group[0].config.questionType,
-      requestedCount: group.length,
-      subpoints: group[0].config.learningObjective?.generationMetadata?.subpoints || []
-    });
-
-    console.log(
-      `🧩 Streaming slice plan for ${group[0].config.questionType}:`,
-      slicePlan.recommendedTasks.map(task => task.sliceLabel).join(' | ')
-    );
-
-    group.forEach(({ index }, taskIndex) => {
-      plannedConfigs[index] = {
-        ...plannedConfigs[index],
-        plannedTask: slicePlan.recommendedTasks[taskIndex] || null,
-        slicePlanBreadth: slicePlan.breadth
-      };
-    });
-  }
-
-  return plannedConfigs;
-}
 
 // ============================================================
 // Production endpoints
 // ============================================================
+
+// The UI calls this before replacement can delete existing questions. Generation
+// repeats the same check because material state can change after the preflight.
+router.post('/generation-readiness', authenticateToken, asyncHandler(async (req, res) => {
+  const { quizId, questionConfigs } = req.body;
+  const Quiz = (await import('../models/Quiz.js')).default;
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id }).populate('materials');
+  if (!quiz) return notFoundResponse(res, 'Learning object');
+  const readiness = getGenerationReadiness(quiz, questionConfigs);
+  if (!readiness.ready) return errorResponse(res, readiness.message, readiness.code, readiness.status);
+  return successResponse(res, { ready: true });
+}));
 
 /**
  * GET /api/streaming/questions/:sessionId
@@ -128,6 +43,11 @@ router.get('/questions/:sessionId', authenticateToken, asyncHandler(async (req, 
   if (!sessionId || sessionId.length < 10) {
     return res.status(400).json({ error: 'Invalid session ID' });
   }
+  const knownJob = await QuestionGenerationJob.exists({ sessionId });
+  if (knownJob && !await questionGenerationJobs.findSession(userId, sessionId)) return notFoundResponse(res, 'Generation task');
+  // LO and Blueprint clients subscribe before their POST. They use this shared
+  // transport without a question receipt, but still retain an authenticated owner.
+  sseService.claimSession(sessionId, userId);
 
   sseService.addClient(sessionId, res, {
     userId,
@@ -140,211 +60,73 @@ router.get('/questions/:sessionId', authenticateToken, asyncHandler(async (req, 
  * POST /api/streaming/generate-questions
  * Start streaming question generation process
  */
-router.post('/generate-questions', authenticateToken, asyncHandler(async (req, res) => {
-  const { quizId, questionConfigs, sessionId } = req.body;
-  const userId = req.user.id;
+router.get('/generation-jobs', authenticateToken, asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.query.quizId)) return errorResponse(res, 'Invalid learning object ID.', 'VALIDATION_ERROR', 400);
+  const jobs = await questionGenerationJobs.list(req.user.id, req.query.quizId);
+  if (!jobs) return notFoundResponse(res, 'Learning object');
+  return successResponse(res, { jobs: jobs.map(serializeQuestionJob) });
+}));
 
-  if (!quizId || !questionConfigs || !Array.isArray(questionConfigs)) {
-    return res.status(400).json({
-      error: 'Missing required fields: quizId, questionConfigs'
-    });
-  }
+router.get('/generation-jobs/:requestId', authenticateToken, asyncHandler(async (req, res) => {
+  const job = await questionGenerationJobs.get(req.user.id, req.params.requestId);
+  if (!job) return notFoundResponse(res, 'Generation task');
+  return successResponse(res, { job: serializeQuestionJob(job) });
+}));
 
-  const finalSessionId = sessionId || uuidv4();
-
+router.post('/generation-jobs/:requestId/abandon', authenticateToken, asyncHandler(async (req, res) => {
   try {
-    const Quiz = (await import('../models/Quiz.js')).default;
-    const quiz = await Quiz.findById(quizId)
-      .populate('learningObjectives')
-      .populate('materials');
+    const job = await questionGenerationJobs.abandon({ owner: req.user.id, quizId: req.body.quizId, requestId: req.params.requestId });
+    return successResponse(res, { job: serializeQuestionJob(job) });
+  } catch (error) {
+    return errorResponse(res, error.status ? error.message : 'The request could not be confirmed. Keep this request ID and try checking again.', error.code || 'GENERATION_RECOVERY_FAILED', error.status || 503);
+  }
+}));
 
-    if (!quiz) {
-      return res.status(404).json({ error: 'Quiz not found' });
+router.post('/generate-questions', authenticateToken, asyncHandler(async (req, res) => {
+  const { quizId, requestId, mode = 'append' } = req.body;
+  const userId = req.user.id;
+  try {
+    if (!mongoose.isValidObjectId(quizId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) {
+      return errorResponse(res, 'A valid learning object and generation request ID are required.', 'INVALID_GENERATION_REQUEST', 400);
     }
-
-    const Question = (await import('../models/Question.js')).default;
-    const existingQuestions = await Question.find({ quiz: quizId })
-      .select('questionText type explanation learningObjective generationMetadata.focusArea generationMetadata.plannedSlice generationMetadata.subObjective generationMetadata.sourceReferences')
-      .sort({ order: 1 })
-      .lean();
-    const questionHistory = buildQuestionMemory(existingQuestions);
-    console.log('🧠 Question memory prepared:', questionHistory.stats);
-
-    const [coursePrompt, historyPrompt, validationPrompt] = await Promise.all([
-      coursePromptService.buildCoursePromptInstructions({
-        folderId: quiz.folder,
-        userId,
-        promptType: 'question-generation',
-        approach: quiz.settings?.pedagogicalApproach || 'support'
-      }),
-      coursePromptService.buildCoursePromptInstructions({
-        folderId: quiz.folder,
-        userId,
-        promptType: 'history-summary'
-      }),
-      coursePromptService.buildCoursePromptInstructions({
-        folderId: quiz.folder,
-        userId,
-        promptType: 'question-validation'
-      })
-    ]);
-
-    const configsWithCoursePrompt = questionConfigs.map(config => ({
-      ...config,
-      previousQuestions: [
-        ...(config.previousQuestions || []),
-        ...questionHistory.previousQuestions
-      ],
-      duplicateCheckQuestions: questionHistory.comparisonQuestions,
-      customPrompt: coursePromptService.mergePromptParts(
-        coursePrompt.prompt,
-        historyPrompt.prompt,
-        questionHistory.prompt,
-        validationPrompt.prompt,
-        config.customPrompt
-      )
-    }));
-
-    const enrichedConfigs = attachPlannedTasksToQuestionConfigs(
-      enrichQuestionConfigsWithObjectives(configsWithCoursePrompt, quiz)
-    );
-
-    // Get processed material IDs for RAG retrieval
-    const processedMaterialIds = (quiz.materials || [])
-      .filter(m => m.processingStatus === 'completed')
-      .map(m => m._id.toString());
-    console.log(`📚 RAG: ${processedMaterialIds.length} processed materials available for retrieval`);
-
-    sseService.notifyBatchStarted(finalSessionId, {
-      quizId,
-      totalQuestions: enrichedConfigs.length,
-      questionTypes: enrichedConfigs.map(config => config.questionType),
-      userId
-    });
-
-    const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
-    const { default: ragService } = await import('../services/ragService.js');
-
-    // Helper function to add timeout to a promise
-    const withTimeout = (promise, timeoutMs, questionId) => {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Generation timeout after ${timeoutMs/1000}s`)), timeoutMs)
-        )
-      ]).catch(error => {
-        console.error(`[${questionId}] Timeout or error:`, error.message);
-        throw error;
-      });
-    };
-
-    const QUESTION_TIMEOUT_MS = 120000; // 2 minutes per question
-
-    const questionPromises = enrichedConfigs.map(async (config, index) => {
-      const questionId = `question-${index + 1}`;
-      try {
-        // Retrieve relevant content from RAG for this question's learning objective
-        let relevantContent = [];
-        if (ragService.isInitialized && processedMaterialIds.length > 0) {
-          try {
-            const loText = config.learningObjective?.text || config.learningObjective;
-            const loSubpoints = config.learningObjective?.generationMetadata?.subpoints || [];
-            const retrievalQuery = [
-              loText,
-              config.focusArea ? `Focus area: ${config.focusArea}` : '',
-              config.bloomLevel ? `Bloom level: ${config.bloomLevel}` : '',
-              config.plannedTask?.sliceLabel ? `Planned slice: ${config.plannedTask.sliceLabel}` : '',
-              loSubpoints.length ? `Learning objective subpoints: ${loSubpoints.join('; ')}` : ''
-            ].filter(Boolean).join('\n');
-            const ragResult = await ragService.retrieveRelevantContent(
-              retrievalQuery,
-              config.questionType,
-              { topK: 5, materialIds: processedMaterialIds, minScore: 0.3 }
-            );
-            relevantContent = ragResult?.chunks || [];
-            console.log(`[${questionId}] RAG retrieved ${relevantContent.length} chunks`);
-          } catch (ragError) {
-            console.error(`[${questionId}] RAG retrieval failed, proceeding without:`, ragError.message);
-          }
-        }
-
-        await withTimeout(
-          questionStreamingService.generateQuestionWithStreaming({
-            quizId,
-            questionId,
-            questionConfig: config,
-            learningObjective: config.learningObjective,
-            relevantContent: relevantContent,
-            sessionId: finalSessionId,
-            userId
-          }),
-          QUESTION_TIMEOUT_MS,
-          questionId
-        );
-        console.log(`[${questionId}] Generation completed successfully`);
-        return { success: true, questionId };
-      } catch (error) {
-        console.error(`[${questionId}] Failed to generate:`, error.message);
-        sseService.emitError(finalSessionId, questionId, error.message, error.errorType || 'generation-error');
-        
-        // Send a "complete" event even for failed questions to unblock the UI
-        sseService.notifyQuestionComplete(finalSessionId, questionId, {
-          error: true,
-          errorMessage: error.message,
-          questionId
+    const questionConfigs = normalizeGenerationConfigs(req.body.questionConfigs);
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId }).populate('learningObjectives').populate('materials');
+    if (!quiz) return notFoundResponse(res, 'Learning object');
+    // Replays return the durable result even if materials/settings changed since
+    // admission. The same request ID cannot be reused for another paid intent.
+    const previous = await questionGenerationJobs.get(userId, requestId);
+    if (previous?.abandoned) {
+      return errorResponse(res, 'This request was closed before generation started. Start a new attempt with a new request ID.', 'GENERATION_REQUEST_ABANDONED', 409);
+    }
+    if (previous && previous.requestHash !== questionGenerationRequestHash({ quizId, mode, questionConfigs })) {
+      return errorResponse(res, 'This request ID was already used for different generation instructions.', 'REQUEST_ID_CONFLICT', 409);
+    }
+    const readiness = previous ? { ready: true } : getGenerationReadiness(quiz, questionConfigs);
+    if (!readiness.ready) return errorResponse(res, readiness.message, readiness.code, readiness.status);
+    if (!previous && questionConfigs.some(config => config.learningObjectiveId && !quiz.learningObjectives.some(lo => String(lo._id) === config.learningObjectiveId))) {
+      return errorResponse(res, 'A selected learning objective no longer belongs to this learning object.', 'INVALID_GENERATION_CONFIG', 400);
+    }
+    if (!previous && questionConfigs.some(config => (config.supportingLearningObjectiveIds || [])
+      .some(id => !quiz.learningObjectives.some(lo => String(lo._id) === String(id))))) {
+      return errorResponse(res, 'A supporting learning objective no longer belongs to this learning object.', 'INVALID_GENERATION_CONFIG', 400);
+    }
+    const job = await questionGenerationJobs.start({
+      owner: userId, quizId, requestId, mode, questionConfigs, expectedQuizVersion: quiz.__v || 0,
+      work: createQuestionBatchWork({ quiz, questionConfigs, readiness, userId, mode }),
+      onSettled(receipt) {
+        if (!receipt) return;
+        sseService.notifyBatchComplete(receipt.sessionId, {
+          totalGenerated: receipt.status === 'succeeded' ? receipt.items.length : 0,
+          totalFailed: receipt.items.filter(item => item.status === 'failed').length,
+          requestId: receipt.requestId, status: receipt.status, error: receipt.status !== 'succeeded'
         });
-        
-        return { success: false, questionId, error: error.message };
       }
     });
-
-    Promise.all(questionPromises).then((results) => {
-      const successCount = results.filter(r => r.success).length;
-      const failureCount = results.filter(r => !r.success).length;
-      
-      console.log(`✅ Batch complete: ${successCount} succeeded, ${failureCount} failed`);
-      console.log(`📤 Sending batch-complete event to session: ${finalSessionId}`);
-      questionMemoryService.clearSession(finalSessionId);
-      
-      // Add a small delay to ensure all question-complete events are processed first
-      setTimeout(() => {
-        const sent = sseService.notifyBatchComplete(finalSessionId, {
-          totalGenerated: successCount,
-          totalFailed: failureCount,
-          totalTime: 'completed'
-        });
-        console.log(`📡 batch-complete sent result: ${sent}`);
-      }, 500);
-    }).catch((error) => {
-      // This should rarely happen now since we catch errors in individual promises
-      console.error('❌ Unexpected batch error:', error);
-      sseService.emitError(finalSessionId, 'batch', error.message, 'batch-error');
-      
-      // Still send batch-complete to unblock the UI
-      setTimeout(() => {
-        sseService.notifyBatchComplete(finalSessionId, {
-          totalGenerated: 0,
-          totalFailed: enrichedConfigs.length,
-          error: true
-        });
-      }, 500);
-    });
-
-    res.json({
-      success: true,
-      sessionId: finalSessionId,
-      jobId: 'direct-processing',
-      message: 'Question generation started with direct streaming',
-      sseEndpoint: `/api/streaming/questions/${finalSessionId}`
-    });
-
+    return res.status(job.active ? 202 : 200).json({ success: true, sessionId: job.sessionId, jobId: String(job._id),
+      requestId: job.requestId, job: serializeQuestionJob(job), sseEndpoint: `/api/create/streaming/questions/${job.sessionId}` });
   } catch (error) {
-    console.error('Failed to start streaming generation:', error);
-    sseService.emitError(finalSessionId, 'batch', error.message, 'startup-error');
-    res.status(500).json({
-      error: 'Failed to start question generation',
-      details: error.message
-    });
+    return errorResponse(res, error.status ? error.message : 'Question generation could not be started. Retry with the same request ID to check whether it was accepted.', error.code || 'GENERATION_START_FAILED', error.status || 503);
   }
 }));
 
@@ -370,10 +152,7 @@ if (process.env.NODE_ENV !== 'production') {
    * GET /api/streaming/test-sse/:sessionId
    * Test SSE endpoint without authentication
    */
-  router.get('/test-sse/:sessionId', asyncHandler(async (req, res) => {
-    const { sessionId } = req.params;
-    sseService.addClient(sessionId, res, { isTest: true, ip: req.ip });
-  }));
+  router.get('/test-sse/:sessionId', authenticateToken, (req, res) => res.redirect(307, `/api/create/streaming/questions/${encodeURIComponent(req.params.sessionId)}`));
 
   /**
    * GET /api/streaming/diagnostic
@@ -726,12 +505,15 @@ if (process.env.NODE_ENV !== 'production') {
    * GET /api/streaming/test-questions/:quizId
    * Test endpoint to view saved questions without authentication
    */
-  router.get('/test-questions/:quizId', asyncHandler(async (req, res) => {
+  router.get('/test-questions/:quizId', authenticateToken, asyncHandler(async (req, res) => {
     const { quizId } = req.params;
 
     try {
       const Question = (await import('../models/Question.js')).default;
-      const questions = await Question.find({ quiz: quizId })
+      const Quiz = (await import('../models/Quiz.js')).default;
+      const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
+      if (!quiz) return notFoundResponse(res, 'Learning object');
+      const questions = await Question.find({ quiz: quizId, _id: { $in: quiz.questions } })
         .populate('learningObjective', 'text order')
         .sort({ order: 1 });
 

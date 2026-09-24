@@ -4,6 +4,22 @@
  */
 
 /**
+ * Strip labels only when the complete option list has sequential A/B/... labels.
+ * A single option beginning with e.g. "A. Einstein" must remain untouched.
+ */
+export function normalizeOptionLabels(texts = []) {
+  const normalized = texts.map(text => String(text ?? ''));
+  if (normalized.length < 2) return normalized;
+  const patterns = normalized.map((_, index) => {
+    const letter = String.fromCharCode(65 + index);
+    return new RegExp(`^\\s*(?:${letter}[.)]|\\(${letter}\\))\\s+`, 'i');
+  });
+  return normalized.every((text, index) => patterns[index].test(text))
+    ? normalized.map((text, index) => text.replace(patterns[index], ''))
+    : normalized;
+}
+
+/**
  * Escape HTML special characters to prevent XSS
  * @param {string} text - Text to escape
  * @returns {string} Escaped text

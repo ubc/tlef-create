@@ -36,7 +36,7 @@ const PdfExportModal = ({
     {
       type: 'combined' as const,
       title: 'Combined',
-      description: 'Export questions and answers together in one PDF',
+      description: 'Export questions and answers together in one file',
       icon: <FileText size={24} />
     }
   ];

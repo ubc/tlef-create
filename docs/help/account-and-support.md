@@ -48,3 +48,7 @@ Use the thumbs-up/down control under an AI help answer to rate that answer. Nega
 ## Sign out and session expiry
 
 Sign Out ends the authenticated session. If a session expires while CREATE is open, protected requests stop and the application returns to sign-in. Save edits through their normal action before leaving the application; unsent text in an open form may be lost.
+
+## Administrator content statistics
+
+The administrator's per-user course, learning-object and question counts describe currently saved content owned by that user. Deleted content is excluded; these are not lifetime generation totals. Refreshing the Admin page waits for your signed-in role to load before deciding whether you can access it. An expired session still requires sign-in.

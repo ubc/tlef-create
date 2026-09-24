@@ -322,7 +322,10 @@ ns.Library.prototype.librariesLoaded = function (libList) {
     self.runChangeCallback = false;
   }
   // Load default library.
-  if (this.params.library !== undefined) {
+  // A single-option field was already loaded above. Loading it a second time
+  // removes live children and can erase their parameter objects while nested
+  // widgets are still initializing (Column, ImageSlide, Interactive Book).
+  if (self.libraries.length !== 1 && this.params.library !== undefined) {
     self.loadLibrary(this.params.library, true);
   }
 };

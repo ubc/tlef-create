@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, test } from '@jest/globals';
 import {
+  renderMixedActivityPreview,
   renderNativeH5PPreview,
   resolveNativePreviewAssets
 } from '../../services/h5pNativePreviewService.js';
@@ -19,6 +20,27 @@ async function writeLibrary(basePath, name, libraryJson, assets = {}) {
 }
 
 describe('native H5P preview service', () => {
+  test('renders mixed activities as isolated question players with responsive height forwarding', () => {
+    const html = renderMixedActivityPreview({
+      title: 'Mixed <Activity>',
+      items: [
+        { title: 'Question 1', url: '/preview/one' },
+        { title: 'Question 2', url: '/preview/two' }
+      ]
+    });
+
+    expect(html).toContain('&lt;Activity&gt;');
+    expect(html).toContain('data-src="/preview/one"');
+    expect(html).toContain('data-src="/preview/two"');
+    expect(html).toContain('stagedLoader');
+    expect(html).toContain('}, 500);');
+    expect(html).toContain('Math.min(frames.length, 4)');
+    expect(html.match(/class="mixed-item-frame"/g)).toHaveLength(2);
+    expect(html).toContain("candidate.contentWindow === event.source");
+    expect(html).toContain("type: 'tlef:h5p-preview-height'");
+    expect(html).toContain('Object.keys(scores).length === frames.length');
+  });
+
   test('loads transitive runtime dependencies before their parent library', async () => {
     const libraryPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tlef-h5p-preview-'));
     try {

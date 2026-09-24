@@ -4,6 +4,19 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { addQuestionContent, addAnswerContent, createPDFExport } from '../../services/pdfExportService.js';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+async function readPdfPages(filename) {
+  const pdf = await getDocument({ data: new Uint8Array(await readFile(filename)), useSystemFonts: false }).promise;
+  try {
+    const pages = [];
+    for (let number = 1; number <= pdf.numPages; number++) {
+      const page = await pdf.getPage(number);
+      pages.push((await page.getTextContent()).items.map(item => item.str).join(' '));
+    }
+    return pages;
+  } finally { await pdf.destroy(); }
+}
 
 // Create a mock PDFDocument that tracks method calls
 function createMockDoc() {
@@ -38,6 +51,15 @@ describe('pdfExportService', () => {
   });
 
   describe('addQuestionContent', () => {
+    test('labels options and answers once when stored text already has sequential labels', () => {
+      const question = { type: 'multiple-choice', content: { options: [
+        { text: 'A) Evaporation', isCorrect: true }, { text: 'B) Condensation' }
+      ] } };
+      addQuestionContent(doc, question);
+      addAnswerContent(doc, question);
+      expect(getTextCalls(doc)).toContain('A. Evaporation');
+      expect(getTextCalls(doc).join(' ')).not.toMatch(/A\. A\)|B\. B\)/);
+    });
     test('multiple-choice: renders options with letters', () => {
       const question = {
         type: 'multiple-choice',
@@ -398,11 +420,35 @@ describe('pdfExportService', () => {
 
     try {
       await createPDFExport({ name: 'PDF regression check', questions }, outputPath, 'combined');
-      const pdfSource = (await readFile(outputPath)).toString('latin1');
-      const pageObjects = pdfSource.match(/\/Type \/Page\b/g) || [];
-      expect(pageObjects).toHaveLength(2);
+      const pages = await readPdfPages(outputPath);
+      expect(pages.length).toBeGreaterThanOrEqual(2);
+      for (const page of pages) expect(page).toMatch(/Question \d/);
     } finally {
       await unlink(outputPath).catch(() => undefined);
     }
+  });
+
+  test('embeds mathematical glyphs and keeps normal question options with their stems', async () => {
+    const outputPath = join(tmpdir(), `tlef-create-layout-${randomUUID()}.pdf`);
+    const questionText = 'Calculate 120 − (25 + 35) = 60; also check 2 × 3 ÷ 2 = 3, x², H₂O and A → B.';
+    const questions = Array.from({ length: 7 }, (_, index) => ({
+      type: 'multiple-choice', questionText: `${questionText} Item ${index + 1}.`,
+      content: { options: [
+        { text: `A) First option for item ${index + 1}`, isCorrect: true },
+        { text: 'B) Second option' }, { text: 'C) Third option' }, { text: 'D) Fourth option' }
+      ] }
+    }));
+    try {
+      await createPDFExport({ name: 'Layout and formula check', questions }, outputPath, 'questions');
+      const pages = await readPdfPages(outputPath);
+      const text = pages.join(' ');
+      expect(text).toContain('120 − (25 + 35) = 60');
+      expect(text).toContain('2 × 3 ÷ 2 = 3, x², H₂O and A → B.');
+      expect(text).not.toContain('A. A)');
+      for (let number = 1; number <= questions.length; number++) {
+        const page = pages.find(candidate => candidate.includes(`Question ${number}`));
+        expect(page).toContain(`First option for item ${number}`);
+      }
+    } finally { await unlink(outputPath).catch(() => undefined); }
   });
 });

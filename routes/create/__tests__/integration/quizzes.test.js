@@ -6,6 +6,7 @@ import User from '../../models/User.js';
 import Folder from '../../models/Folder.js';
 import Quiz from '../../models/Quiz.js';
 import Material from '../../models/Material.js';
+import Question from '../../models/Question.js';
 import quizController from '../../controllers/quizController.js';
 
 // Create test app with auth middleware bypass
@@ -47,6 +48,7 @@ describe('Quiz Management API Integration Tests', () => {
     await Folder.deleteMany({});
     await Quiz.deleteMany({});
     await Material.deleteMany({});
+    await Question.deleteMany({});
 
     // Create test user directly in DB
     const user = await User.create({ cwlId: 'quiztest', password: 'TestPass123' });
@@ -170,12 +172,7 @@ describe('Quiz Management API Integration Tests', () => {
   });
 
   describe('GET /api/quizzes/folder/:folderId', () => {
-    // NOTE: The controller applies validateMongoId which validates param('id'),
-    // but this route uses :folderId, not :id. In express-validator v7, param('id')
-    // on a route with :folderId will get undefined and fail isMongoId() validation.
-    // These tests reflect the actual behavior: requests return 400 due to this
-    // validator mismatch.
-    test('should return 400 due to validateMongoId checking param id on folderId route', async () => {
+    test('returns quizzes in an owned folder', async () => {
       await Quiz.create([
         { name: 'Quiz 1', folder: folderId, createdBy: userId },
         { name: 'Quiz 2', folder: folderId, createdBy: userId }
@@ -183,10 +180,15 @@ describe('Quiz Management API Integration Tests', () => {
 
       const response = await request(app)
         .get(`/api/quizzes/folder/${folderId}`)
-        .expect(400);
+        .expect(200);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error.message).toBe('Validation failed');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.quizzes.map(quiz => quiz.name).sort()).toEqual(['Quiz 1', 'Quiz 2']);
+    });
+
+    test('rejects an invalid folder ID', async () => {
+      const response = await request(app).get('/api/quizzes/folder/not-an-id').expect(400);
+      expect(response.body.error.details).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'folderId' })]));
     });
   });
 
@@ -210,7 +212,7 @@ describe('Quiz Management API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.quiz.id).toBe(quizId);
       expect(response.body.data.quiz.name).toBe('Test Quiz');
-      expect(response.body.data.quiz.folder).toBe(folderId);
+      expect(response.body.data.quiz.folder._id).toBe(folderId);
       expect(response.body.data.quiz.createdBy).toBe(userId);
     });
 
@@ -691,6 +693,29 @@ describe('Quiz Management API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('PUT /api/quizzes/:id/review', () => {
+    test('requires a published question and the learning-object owner', async () => {
+      const quiz = await Quiz.create({ name: 'Review Quiz', folder: folderId, createdBy: userId });
+      await request(app).put(`/api/quizzes/${quiz._id}/review`).send({}).expect(400);
+      const otherUserQuiz = await Quiz.create({ name: 'Other Review Quiz', folder: folderId, createdBy: new mongoose.Types.ObjectId() });
+      await request(app).put(`/api/quizzes/${otherUserQuiz._id}/review`).send({}).expect(404);
+    });
+
+    test('marks the current question set reviewed, then reopens review after an edit', async () => {
+      const quiz = await Quiz.create({ name: 'Review Quiz', folder: folderId, createdBy: userId });
+      const question = await Question.create({ quiz: quiz._id, createdBy: userId, type: 'essay',
+        difficulty: 'moderate', questionText: 'Explain evaporation.', order: 0 });
+      await quiz.addQuestion(question._id);
+
+      const response = await request(app).put(`/api/quizzes/${quiz._id}/review`).send({}).expect(200);
+      expect(response.body.data.quiz.progress.reviewCompleted).toBe(true);
+
+      question.questionText = 'Explain evaporation and condensation.';
+      await question.save();
+      expect((await Quiz.findById(quiz._id)).progress.reviewCompleted).toBe(false);
     });
   });
 });

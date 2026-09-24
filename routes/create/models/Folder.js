@@ -60,16 +60,18 @@ folderSchema.virtual('materialCount').get(function() {
 
 // Instance Methods
 folderSchema.methods.updateStats = async function() {
-  const Question = mongoose.model('Question');
+  const Quiz = mongoose.model('Quiz');
   
   this.stats.lastActivity = new Date();
   this.stats.totalQuizzes = this.quizzes.length;
   this.stats.totalMaterials = this.materials.length;
   
   // Calculate total questions across all quizzes in this folder
-  this.stats.totalQuestions = await Question.countDocuments({
-    quiz: { $in: this.quizzes }
-  });
+  const publishedCounts = await Quiz.aggregate([
+    { $match: { _id: { $in: this.quizzes } } },
+    { $group: { _id: null, count: { $sum: { $size: { $ifNull: ['$questions', []] } } } } }
+  ]);
+  this.stats.totalQuestions = publishedCounts[0]?.count || 0;
   
   console.log(`📊 Updated folder stats: quizzes=${this.stats.totalQuizzes}, questions=${this.stats.totalQuestions}, materials=${this.stats.totalMaterials}`);
   

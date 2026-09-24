@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch, useSelector, useStore } from 'react-redux';
 import { Save, Wand2 } from 'lucide-react';
 import { RootState, AppDispatch } from '../../store';
-import { fetchQuestions, setQuestionsGenerating, setQuestionsForQuiz } from '../../store/slices/questionSlice';
+import { fetchQuestions, setQuestionsGenerating, setQuestionsForQuiz, selectHasReviewDrafts } from '../../store/slices/questionSlice';
 import { updateQuizLocally } from '../../store/slices/quizSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
 import { ApiError, questionsApi, quizApi, plansApi, Question } from '../../services/api';
 import { API_URL } from '../../config/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { useSSE } from '../../hooks/useSSE';
+import { useQuestionGenerationJob, isGenerationJobActive } from '../../hooks/useQuestionGenerationJob';
+import GenerationJobStatus from './GenerationJobStatus';
 import { QuestionGenerationProps, PlanItem, AIConfig, StreamingState } from './generationTypes';
 import {
   DeliveryTarget,
@@ -69,9 +71,11 @@ type QuestionBudgetSummary = {
   }>;
 };
 
-const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, courseId, onQuestionsGenerated }: QuestionGenerationProps) => {
+const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, courseId, onQuestionsGenerated, isActive = true }: QuestionGenerationProps) => {
   const dispatch = useDispatch<AppDispatch>();
+  const store = useStore<RootState>();
   const questions = useSelector((state: RootState) => selectQuestionsByQuiz(state, quizId));
+  const hasReviewDrafts = useSelector((state: RootState) => selectHasReviewDrafts(state, quizId));
   const { showNotification } = usePubSub('QuestionGeneration');
   const { showConfirm } = useSystemDialog();
   const hasUserSelectedViewRef = useRef(false);
@@ -142,10 +146,39 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
     batchStarted: false
   });
 
-  // SSE connection
+  useEffect(() => {
+    setStreamingState({ isStreaming: false, sessionId: null, questionsInProgress: new Map(), completedQuestions: [], totalQuestions: 0, batchStarted: false });
+  }, [quizId]);
+
+  const ownerId = useSelector((state: RootState) => state.app.user?.id);
+  const generationTask = useQuestionGenerationJob(quizId, ownerId, job => {
+    dispatch(setQuestionsGenerating({ generating: false, quizId }));
+    setStreamingState(previous => ({ ...previous, isStreaming: false, sessionId: null, batchStarted: false }));
+    if (job.status === 'succeeded') {
+      void reloadQuestions();
+      hasUserSelectedViewRef.current = true;
+      setCurrentView('results');
+      showNotification('success', 'Questions Saved', `Saved all ${job.totalQuestions} questions. The task is complete.`);
+      if (isActive) onQuestionsGenerated?.();
+    } else {
+      showNotification('warning', 'Saved Questions Preserved', job.message || 'Generation did not publish. Your previous questions are still available.');
+    }
+  });
+
+  useEffect(() => {
+    const job = generationTask.job;
+    if (!job || !isGenerationJobActive(job)) return;
+    setStreamingState(previous => ({
+      ...previous, isStreaming: true, sessionId: job.sessionId,
+      totalQuestions: job.totalQuestions, readyCount: job.completedQuestions, batchStarted: true
+    }));
+    dispatch(setQuestionsGenerating({ generating: true, quizId }));
+  }, [generationTask.job, dispatch, quizId]);
+
+  // The live stream is optional progress; only the durable receipt confirms a save.
   const sseUrl = streamingState.sessionId ? `${API_URL}/api/create/streaming/questions/${streamingState.sessionId}` : null;
   const planWorkflowUrl = planWorkflowSessionId ? `${API_URL}/api/create/streaming/questions/${planWorkflowSessionId}` : null;
-  const { disconnect } = useSSE(sseUrl, {
+  const { connectionStatus } = useSSE(sseUrl, {
     onConnected: () => {},
     onBatchStarted: (data: { totalQuestions?: number }) => {
       setStreamingState(prev => ({
@@ -226,33 +259,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
         };
       });
     },
-    onBatchComplete: (summary: { totalGenerated?: number; totalFailed?: number }) => {
-      dispatch(setQuestionsGenerating({ generating: false, quizId }));
-      reloadQuestions();
-      hasUserSelectedViewRef.current = true;
-      setCurrentView('results');
-
-      const successCount = summary.totalGenerated || streamingState.completedQuestions.length;
-      const failureCount = summary.totalFailed || 0;
-      
-      if (failureCount > 0) {
-        showNotification('warning', 'Generation Completed with Errors',
-          `Generated ${successCount} questions successfully, ${failureCount} failed.`);
-      } else {
-        showNotification('success', 'Questions Generated',
-          `Successfully generated ${successCount} questions!`);
-      }
-
-      if (onQuestionsGenerated) {
-        setTimeout(() => { onQuestionsGenerated(); }, 3000);
-      }
-
-      setStreamingState(prev => ({ ...prev, isStreaming: false, batchStarted: false }));
-    },
-    onError: (questionId: string, errorMessage: string) => {
-      console.error('SSE error:', questionId, errorMessage);
-      showNotification('error', 'Generation Error', `Error: ${errorMessage}`);
-    },
+    onBatchComplete: () => { void generationTask.refresh(); },
+    onError: () => { void generationTask.refresh(); },
     onHeartbeat: () => {}
   });
 
@@ -348,7 +356,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
             }),
             ...(item.type === 'branching-scenario' && {
               branchingLayers: item.branchingLayers ?? 2,
-              branchingChoices: item.branchingChoices ?? 2
+              branchingChoices: item.branchingChoices ?? 2,
+              supportingLearningObjectiveIds: item.supportingLearningObjectives?.map(String) || []
             })
           }));
           setPlanItems(items);
@@ -408,6 +417,14 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
   // Save plan
   const handleSavePlan = async (): Promise<boolean> => {
+    if (targetFormat === 'standalone' && (planItems.length !== 1 || planItems[0].count !== 1)) {
+      showNotification(
+        'error',
+        'Standalone needs one activity',
+        'Keep one plan row with a count of one. For a Branching Scenario that covers several learning objectives, select them under “Also cover in this one scenario”.'
+      );
+      return false;
+    }
     const invalidItemIndex = planItems.findIndex(item => {
       const hasLinkedObjective = learningObjectives.some(lo => lo._id === item.learningObjectiveId);
       return !hasLinkedObjective && !item.customPrompt?.trim();
@@ -424,9 +441,6 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
     setIsSaving(true);
     try {
-      // Get current quiz to merge settings
-      const { quiz } = await quizApi.getQuiz(quizId);
-
       // Clean aiConfig - remove empty strings and ensure proper types
       const cleanedAiConfig: {
         totalQuestions: number;
@@ -447,37 +461,40 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
       // Only include additionalInstructions if it has a value
       if (aiConfig.additionalInstructions && aiConfig.additionalInstructions.trim() !== '') {
-        cleanedAiConfig.additionalInstructions = aiConfig.additionalInstructions.trim();
+        cleanedAiConfig.additionalInstructions = aiConfig.additionalInstructions.trim().slice(0, 1000);
       }
 
       const { quiz: updatedQuiz } = await quizApi.updateQuiz(quizId, {
         containerMode: targetFormat === 'standalone' || targetFormat === 'mixed-activity' ? 'column' : targetFormat,
         settings: {
-          ...quiz.settings, // Keep existing settings
           planMode,
           deliveryTarget,
           targetFormat,
           planItems: planItems.map(item => {
             const hasLinkedObjective = learningObjectives.some(lo => lo._id === item.learningObjectiveId);
             const customPrompt = item.customPrompt?.trim();
+            const focusArea = item.focusArea?.trim();
+            const rationale = item.rationale?.trim();
 
             return {
               type: item.type,
               learningObjective: hasLinkedObjective ? item.learningObjectiveId : null,
               count: item.count,
-              pedagogicalIntent: item.pedagogicalIntent,
-              bloomLevel: item.bloomLevel,
-              difficulty: item.difficulty,
-              focusArea: item.focusArea,
-              rationale: item.rationale,
-              ...(customPrompt && { customPrompt }),
+              ...(item.pedagogicalIntent && { pedagogicalIntent: item.pedagogicalIntent }),
+              ...(item.bloomLevel && { bloomLevel: item.bloomLevel }),
+              difficulty: item.difficulty || 'moderate',
+              ...(focusArea && { focusArea: focusArea.slice(0, 300) }),
+              ...(rationale && { rationale: rationale.slice(0, 1000) }),
+              ...(customPrompt && { customPrompt: customPrompt.slice(0, 4000) }),
               useCustomPromptOnly: !hasLinkedObjective,
               ...(item.type === 'multiple-choice' && {
                 selectionMode: item.selectionMode || 'single'
               }),
               ...(item.type === 'branching-scenario' && {
                 branchingLayers: item.branchingLayers ?? 2,
-                branchingChoices: item.branchingChoices ?? 2
+                branchingChoices: item.branchingChoices ?? 2,
+                supportingLearningObjectives: (item.supportingLearningObjectiveIds || [])
+                  .filter(id => id !== item.learningObjectiveId && learningObjectives.some(lo => lo._id === id))
               })
             };
           }),
@@ -500,8 +517,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   // Generate AI plan
   const handleGenerateAIPlan = async () => {
     // Validate before sending
-    const minQuestions = learningObjectives.length;
-    if (!aiConfig.autoRecommendTotalQuestions && (aiConfig.totalQuestions < minQuestions || aiConfig.totalQuestions > 100)) {
+    const minQuestions = Math.max(1, learningObjectives.length);
+    if (!aiConfig.autoRecommendTotalQuestions && (!Number.isInteger(aiConfig.totalQuestions) || aiConfig.totalQuestions < minQuestions || aiConfig.totalQuestions > 100)) {
       showNotification('error', 'Invalid Input', `Please enter a number between ${minQuestions} and 100`);
       return;
     }
@@ -601,6 +618,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       ].filter(Boolean).join('\n');
       const mergedCustomPrompt = [
         blueprintContext,
+        ...(item.type === 'branching-scenario' && item.supportingLearningObjectiveIds?.length
+          ? [`This is ONE Branching Scenario, not separate activities. Integrate these additional learning objectives into its decision paths: ${item.supportingLearningObjectiveIds
+            .filter(id => id !== item.learningObjectiveId)
+            .map(id => learningObjectives.find(objective => objective._id === id)?.text)
+            .filter(Boolean).join('; ')}`]
+          : []),
         item.customPrompt?.trim() || ''
       ].filter(Boolean).join('\n\n');
 
@@ -620,61 +643,37 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
         ...(mergedCustomPrompt && { customPrompt: mergedCustomPrompt }),
         ...(item.type === 'branching-scenario' && {
           branchingLayers: item.branchingLayers ?? 2,
-          branchingChoices: item.branchingChoices ?? 2
+          branchingChoices: item.branchingChoices ?? 2,
+          supportingLearningObjectiveIds: (item.supportingLearningObjectiveIds || [])
+            .filter(id => id !== item.learningObjectiveId && learningObjectives.some(objective => objective._id === id))
         })
       }));
     });
   };
 
-  const startQuestionGeneration = async () => {
+  const startQuestionGeneration = (mode: GenerationMode) => {
     const questionConfigs = buildQuestionConfigs();
-
-    try {
-      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      setStreamingState({
-        isStreaming: true,
-        sessionId,
-        questionsInProgress: new Map(),
-        completedQuestions: [],
-        totalQuestions: questionConfigs.length,
-        batchStarted: false
-      });
-      window.setTimeout(() => {
-        streamingProgressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-
-      dispatch(setQuestionsGenerating({ generating: true, quizId }));
-
-      const response = await fetch(`${API_URL}/api/create/streaming/generate-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include', // Important: Send cookies for SAML session
-        body: JSON.stringify({
-          quizId,
-          sessionId,
-          questionConfigs,
-          useRealLLM: true,
-          saveToDatabase: true
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to start question generation');
-      }
-
-      showNotification('info', 'Generation Started', 'Question generation has started...');
-    } catch (error) {
-      console.error('Failed to start generation:', error);
-      showNotification('error', 'Generation Failed', 'Failed to start question generation');
-      setStreamingState(prev => ({ ...prev, isStreaming: false }));
+    setStreamingState({
+      isStreaming: true, sessionId: null, questionsInProgress: new Map(),
+      completedQuestions: [], totalQuestions: questionConfigs.length, batchStarted: false
+    });
+    dispatch(setQuestionsGenerating({ generating: true, quizId }));
+    window.setTimeout(() => streamingProgressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    void generationTask.start(questionConfigs, mode === 'replace' ? 'replace' : 'append').catch(error => {
+      if (error?.code === 'GENERATION_JOB_FAILED' || error?.code === 'GENERATION_OUTCOME_UNCONFIRMED') return;
+      showNotification('error', 'Generation Not Started', error instanceof Error ? error.message : 'Could not start generation.');
+      setStreamingState(previous => ({ ...previous, isStreaming: false }));
       dispatch(setQuestionsGenerating({ generating: false, quizId }));
-    }
+    });
   };
 
   const executeGeneration = async (mode: GenerationMode) => {
+    const replacementBlocked = () => {
+      if (mode !== 'replace' || !selectHasReviewDrafts(store.getState(), quizId)) return false;
+      showNotification('warning', 'Unsaved Review Edits', 'Save, cancel, or recover your edits in Review before replacing questions. You can still add new questions.');
+      return true;
+    };
+    if (replacementBlocked()) return;
     setIsPreparingGeneration(true);
     try {
       const planSaved = await handleSavePlan();
@@ -682,19 +681,18 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
         return;
       }
 
-      if (mode === 'replace') {
-        for (const question of questions) {
-          await questionsApi.deleteQuestion(question._id);
-        }
-        dispatch(setQuestionsForQuiz({ quizId, questions: [] }));
-      }
+      await questionsApi.checkGenerationReadiness(quizId, buildQuestionConfigs());
+
+      // A draft can open in Review while saving the Blueprint or checking
+      // readiness. Read the current shared state at the actual start boundary.
+      if (replacementBlocked()) return;
 
       setShowGenerationModeModal(false);
-      await startQuestionGeneration();
+      startQuestionGeneration(mode);
     } catch (error) {
       console.error('Failed to prepare generation:', error);
-      showNotification('error', 'Generation Failed', mode === 'replace'
-        ? 'Failed to replace existing questions before generation'
+      showNotification('error', 'Generation Failed', error instanceof Error
+        ? error.message
         : 'Failed to prepare question generation');
     } finally {
       setIsPreparingGeneration(false);
@@ -923,14 +921,10 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   if (streamingState.isStreaming) {
     return (
       <div ref={streamingProgressRef} className="question-generation">
+        <GenerationJobStatus job={generationTask.job} busy={generationTask.isBusy} message={generationTask.recoveryMessage} onRefresh={generationTask.refresh} onCloseUnregistered={generationTask.unregistered ? generationTask.closeUnregistered : undefined} />
         <StreamingProgress
           streamingState={streamingState}
-          connectionStatus="connected"
-          onStopGeneration={() => {
-            disconnect();
-            setStreamingState(prev => ({ ...prev, isStreaming: false }));
-            dispatch(setQuestionsGenerating({ generating: false, quizId }));
-          }}
+          connectionStatus={connectionStatus}
         />
       </div>
     );
@@ -946,6 +940,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
 
     return (
       <div ref={generationResultsRef} className="question-generation">
+        <GenerationJobStatus job={generationTask.job} busy={generationTask.isBusy} message={generationTask.recoveryMessage} onRefresh={generationTask.refresh} onCloseUnregistered={generationTask.unregistered ? generationTask.closeUnregistered : undefined} />
         <div className="generation-results">
           <div className="results-header">
             <div>
@@ -1009,6 +1004,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   // Show generation form
   return (
     <div className="question-generation">
+        <GenerationJobStatus job={generationTask.job} busy={generationTask.isBusy} message={generationTask.recoveryMessage} onRefresh={generationTask.refresh} onCloseUnregistered={generationTask.unregistered ? generationTask.closeUnregistered : undefined} />
       <div className="generation-header generation-setup-start" ref={configurationStartRef} tabIndex={-1}>
         <h2>Generate Questions</h2>
         <p className="generation-subtitle">
@@ -1051,7 +1047,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
               targetFormat={targetFormat}
               onDeliveryTargetChange={handleDeliveryTargetChange}
               onTargetFormatChange={handleTargetFormatChange}
-              disabled={streamingState.isStreaming || isGeneratingPlan || isChangingFormat || isSaving || isPreparingGeneration}
+              disabled={generationTask.isBusy || streamingState.isStreaming || isGeneratingPlan || isChangingFormat || isSaving || isPreparingGeneration}
             />
           </FeatureCoachmark>
 
@@ -1153,7 +1149,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                   learningObjectives={learningObjectives}
                   onPlanItemsChange={handlePlanItemsChange}
                   targetFormat={targetFormat}
-                  readOnly={streamingState.isStreaming || isChangingFormat || isSaving || isPreparingGeneration}
+                  readOnly={generationTask.isBusy || streamingState.isStreaming || isChangingFormat || isSaving || isPreparingGeneration}
                 />
               </FeatureCoachmark>
             </>
@@ -1175,7 +1171,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
               <div className="actions-right">
                 <button
                   onClick={handleGenerateQuestions}
-                  disabled={streamingState.isStreaming || isChangingFormat || isSaving || totalPlannedQuestions === 0 || isPreparingGeneration}
+                  disabled={generationTask.isBusy || streamingState.isStreaming || isChangingFormat || isSaving || totalPlannedQuestions === 0 || isPreparingGeneration}
                   className="btn btn-primary"
                 >
                   <Wand2 size={18} />
@@ -1206,8 +1202,9 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                 </div>
                 <div className="modal-body">
                   <p style={{ marginTop: 0 }}>
-                    Choose whether to keep the existing questions and add new ones, or replace the current set with questions from the updated plan.
+                    Choose whether to add to the existing questions or replace them. Your saved questions stay available until every new question succeeds. If generation fails or you edit the saved questions during generation, the new batch will not replace them.
                   </p>
+                  {hasReviewDrafts && <p role="status">You have unsaved Review edits. Save, cancel, or recover them in Review before replacing questions. Add New Questions is still available.</p>}
                   <div style={{ display: 'grid', gap: '12px' }}>
                     <button
                       type="button"
@@ -1221,7 +1218,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                       type="button"
                       className="btn btn-secondary"
                       onClick={() => executeGeneration('replace')}
-                      disabled={isPreparingGeneration}
+                      disabled={isPreparingGeneration || hasReviewDrafts}
                     >
                       Replace Existing Questions
                     </button>

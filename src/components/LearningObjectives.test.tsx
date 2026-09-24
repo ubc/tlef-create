@@ -413,7 +413,24 @@ describe('LearningObjectives Component - Redux State Subscription', () => {
       .toBeLessThan(regenerateQuestionSpy.mock.invocationCallOrder[0]);
   });
 
+  it.each([false, true])('requires confirmation for saved objectives even with no linked questions (skip cascade warning: %s)', async skipWarning => {
+    window.localStorage.setItem('dontShowDeleteLOWarning', String(skipWarning));
+    const objective = { _id: 'saved-lo', text: 'Do not delete silently', order: 0 } as LearningObjective;
+    vi.spyOn(objectivesApi, 'getObjectives').mockResolvedValue({ objectives: [objective] });
+    vi.spyOn(questionsApi, 'getQuestions').mockResolvedValue({ questions: [] });
+    const deleteSpy = vi.spyOn(objectivesApi, 'deleteObjective').mockResolvedValue({ message: 'Deleted' });
+    render(<Provider store={store}><LearningObjectives {...defaultProps} objectives={[objective]} /></Provider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete learning objective 1' }));
+    await waitFor(() => expect(dialogMocks.showConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Delete learning objective?', confirmLabel: 'Delete learning objective'
+    })));
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('Do not delete silently')).toBeInTheDocument();
+    window.localStorage.removeItem('dontShowDeleteLOWarning');
+  });
+
   it('keeps complete objective records and refreshes questions after a confirmed cascade delete', async () => {
+    dialogMocks.showConfirm.mockResolvedValue(true);
     const deletedObjective = {
       _id: 'objective-1',
       text: 'Analyze old evidence',

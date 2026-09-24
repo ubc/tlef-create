@@ -43,7 +43,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     const ownedFolders = await Folder.find({ instructor: userId }).select('_id').lean();
     const ownedFolderIds = ownedFolders.map(folder => folder._id);
     const ownedQuizzes = ownedFolderIds.length > 0
-      ? await Quiz.find({ createdBy: userId, folder: { $in: ownedFolderIds } }).select('_id').lean()
+      ? await Quiz.find({ createdBy: userId, folder: { $in: ownedFolderIds } }).select('_id questions learningObjectives').lean()
       : [];
     const ownedQuizIds = ownedQuizzes.map(quiz => quiz._id);
 
@@ -64,6 +64,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     const questionsPromise = Question.find({
       createdBy: userId,
       quiz: { $in: ownedQuizIds },
+      _id: { $in: ownedQuizzes.flatMap(quiz => quiz.questions || []) },
       $or: [
         { questionText: searchRegex },
         { explanation: searchRegex }
@@ -84,6 +85,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     const objectivesPromise = LearningObjective.find({
       createdBy: userId,
       quiz: { $in: ownedQuizIds },
+      _id: { $in: ownedQuizzes.flatMap(quiz => quiz.learningObjectives || []) },
       $or: [
         { text: searchRegex },
         { description: searchRegex }

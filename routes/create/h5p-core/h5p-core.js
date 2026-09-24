@@ -569,6 +569,11 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
   }
 
   if (instance) {
+    // Match the core contract: nested activities use their parent for resize
+    // and navigation feedback (notably H5P.BranchingQuestion).
+    if (instance.parent === undefined && extras.parent) {
+      instance.parent = extras.parent;
+    }
     instance.libraryInfo = {
       machineName: nameSplit,
       majorVersion: parseInt(versionSplit[0]),

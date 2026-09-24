@@ -1,3 +1,4 @@
+import { renderLegacyH5PPreview } from '../services/h5pLegacyPreviewService.js';
 import express from 'express';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
@@ -10,10 +11,12 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { validateQuizId } from '../middleware/validator.js';
+import { allowSandboxedH5PAsset } from '../middleware/h5pAssetHeaders.js';
 import Quiz from '../models/Quiz.js';
 import { buildNativeH5PDocument } from '../services/h5pExportService.js';
 import { renderNativeH5PPreview } from '../services/h5pNativePreviewService.js';
-import { resolveNativeH5PContainerMode } from '../services/h5pNativeDocumentConfig.js';
+import { getH5PTypeAdapter } from '../config/h5pTypeAdapterRegistry.js';
+import { createH5PPreviewToken, verifyH5PPreviewToken } from '../utils/h5pPreviewToken.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,8 +28,15 @@ const UPLOAD_BASE = path.join(__dirname, '..', 'uploads', 'h5p-preview');
 const H5P_LIBS_DIR = path.join(__dirname, '..', 'h5p-libs');
 const MAX_AGE_MS = 60 * 60 * 1000; // 1 hour TTL for extracted files
 
-function applyGeneratedPreviewHeaders(res) {
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+function applyGeneratedPreviewHeaders(res, { nested = false } = {}) {
+  if (nested) {
+    // Mixed Activity children sit inside the already sandboxed, same-site
+    // preview shell. X-Frame-Options compares the child's opaque sandbox
+    // ancestor and blocks it even though the top-level CREATE page is same-site.
+    res.removeHeader('X-Frame-Options');
+  } else {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  }
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader(
     'Content-Security-Policy',
@@ -100,21 +110,26 @@ router.post('/upload', upload.single('h5pFile'), asyncHandler(async (req, res) =
 /**
  * GET /core/h5p-core.js — Serve the minimal H5P runtime
  */
-router.get('/core/h5p-core.js', asyncHandler(async (req, res) => {
+router.get('/core/h5p-core.js', allowSandboxedH5PAsset, asyncHandler(async (req, res) => {
   const corePath = path.join(__dirname, '..', 'h5p-core', 'h5p-core.js');
   res.type('application/javascript').sendFile(corePath);
 }));
 
-router.get('/core/js/jquery.js', asyncHandler(async (_req, res) => {
+router.get('/core/js/jquery.js', allowSandboxedH5PAsset, asyncHandler(async (_req, res) => {
   const jqueryPath = path.join(__dirname, '..', 'h5p-core', 'js', 'jquery.js');
   res.type('application/javascript').sendFile(jqueryPath);
+}));
+
+// Serve the same pinned official core used by Studio, including fonts/theme CSS.
+router.use('/core', allowSandboxedH5PAsset, express.static(path.join(__dirname, '..', 'h5p-core'), {
+  dotfiles: 'deny', index: false, fallthrough: false
 }));
 
 /**
  * GET /libs/* — Serve H5P library files (JS, CSS, fonts, images).
  * Uses the existing /api/create/h5p-preview/ route so no nginx config is needed.
  */
-router.get('/libs/*', (req, res) => {
+router.get('/libs/*', allowSandboxedH5PAsset, (req, res) => {
   const requestedPath = req.params[0];
 
   // Security: prevent directory traversal
@@ -136,10 +151,63 @@ router.get('/libs/*', (req, res) => {
  * package export and H5P Studio, without persisting a Studio draft.
  * Supports ?lo=<loId> to filter by a specific learning objective.
  */
+router.get('/quiz/:quizId/render-item/:questionId', validateQuizId, asyncHandler(async (req, res) => {
+  const token = verifyH5PPreviewToken(req.query.token, {
+    quizId: req.params.quizId,
+    questionId: req.params.questionId
+  });
+  if (!token) {
+    applyGeneratedPreviewHeaders(res, { nested: true });
+    return res.status(HTTP_STATUS.UNAUTHORIZED).type('text/html').send(renderPreviewMessage('Preview expired', 'Return to CREATE and open Preview again.'));
+  }
+
+  const quiz = await Quiz.findOne({ _id: req.params.quizId, createdBy: token.userId })
+    .populate({ path: 'questions', options: { sort: { order: 1 } } });
+
+  if (!quiz) {
+    return res.status(HTTP_STATUS.NOT_FOUND).type('text/html').send(renderPreviewMessage('Activity unavailable', 'This Learning Object could not be found.'));
+  }
+
+  const isColumnGroup = req.params.questionId.startsWith('column-group-');
+  const requestedIds = isColumnGroup
+    ? String(req.query.ids || '').split(',').filter(Boolean).slice(0, 100)
+    : [req.params.questionId];
+  const requestedIdSet = new Set(requestedIds);
+  const selectedQuestions = quiz.questions.filter(item => requestedIdSet.has(item._id.toString()));
+  const validColumnGroup = isColumnGroup
+    && selectedQuestions.length === requestedIdSet.size
+    && selectedQuestions.every(item => getH5PTypeAdapter(item.type)?.containers.includes('column'));
+  const question = selectedQuestions[0];
+  if ((!isColumnGroup && !question) || (isColumnGroup && !validColumnGroup)) {
+    return res.status(HTTP_STATUS.NOT_FOUND).type('text/html').send(renderPreviewMessage('Activity unavailable', 'This question is no longer part of the Learning Object.'));
+  }
+
+  const adapter = getH5PTypeAdapter(question.type);
+  const itemContainer = isColumnGroup
+    ? 'column'
+    : (adapter?.containers.includes('standalone') ? 'standalone' : 'column');
+  const itemQuiz = quiz.toObject();
+  itemQuiz.questions = isColumnGroup ? selectedQuestions : [question];
+
+  try {
+    const document = await buildNativeH5PDocument(itemQuiz, { containerMode: itemContainer });
+    const html = await renderNativeH5PPreview(document, { contentId: `mixed-${req.params.questionId}` });
+    applyGeneratedPreviewHeaders(res, { nested: true });
+    return res.type('text/html').send(html);
+  } catch (error) {
+    console.error('[H5P Preview] Mixed activity item failed', { type: question.type, code: error.code, message: error.message });
+    applyGeneratedPreviewHeaders(res, { nested: true });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).type('text/html').send(renderPreviewMessage(
+      'Question could not be rendered',
+      error.code === 'QUESTION_TYPE_UNAVAILABLE' ? error.message : 'A required H5P component could not be loaded.'
+    ));
+  }
+}));
+
 router.get('/quiz/:quizId/render', authenticateToken, validateQuizId, asyncHandler(async (req, res) => {
   const { quizId } = req.params;
   const loFilter = req.query.lo || null;
-  const supportedContainerModes = new Set(['column', 'question-set', 'interactive-book', 'standalone']);
+  const supportedContainerModes = new Set(['column', 'question-set', 'interactive-book', 'standalone', 'mixed-activity']);
   const requestedContainerMode = String(req.query.containerMode || '');
   if (requestedContainerMode && !supportedContainerModes.has(requestedContainerMode)) {
     return errorResponse(
@@ -201,46 +269,29 @@ router.get('/quiz/:quizId/render', authenticateToken, validateQuizId, asyncHandl
     ));
   }
 
-  const previewQuiz = quiz.toObject();
-  previewQuiz.questions = questions;
-  const effectiveContainerMode = resolveNativeH5PContainerMode(previewQuiz, containerMode);
-
-  // A filtered Interactive Book preview is intentionally a one-chapter subset.
-  // Keeping the saved chapter map would otherwise reference questions omitted by
-  // the Learning Objective filter.
-  if (filteredByObjective && effectiveContainerMode === 'interactive-book') {
-    previewQuiz.chapters = [{
-      title: 'Filtered questions',
-      questionIds: questions.map(question => question._id),
-      containerType: 'column',
-      passPercentage: 50
-    }];
+  if (containerMode === 'standalone' && questions.length === 1 && questions[0].type === 'branching-scenario') {
+    try {
+      const source = quiz.toObject();
+      source.questions = questions.map(question => question.toObject?.() || question);
+      const document = await buildNativeH5PDocument(source, { containerMode: 'standalone' });
+      const html = await renderNativeH5PPreview(document, { contentId: `branching-${quizId}` });
+      applyGeneratedPreviewHeaders(res);
+      return res.type('text/html').send(html);
+    } catch (error) {
+      console.error('[H5P Preview] Branching Scenario could not render', { code: error.code, message: error.message });
+      applyGeneratedPreviewHeaders(res);
+      return res.status(HTTP_STATUS.BAD_REQUEST).type('text/html').send(renderPreviewMessage(
+        'Branching Scenario needs review',
+        error.code === 'INVALID_BRANCHING_SCENARIO_CONTENT'
+          ? error.message
+          : 'A required H5P component could not be loaded. Please contact support.'
+      ));
+    }
   }
 
-  try {
-    const nativeDocument = await buildNativeH5PDocument(previewQuiz, {
-      containerMode: effectiveContainerMode
-    });
-    const html = await renderNativeH5PPreview(nativeDocument);
-
-    applyGeneratedPreviewHeaders(res);
-    return res.type('text/html').send(html);
-  } catch (error) {
-    console.error('[H5P Preview] Native preview failed', {
-      code: error.code || 'UNKNOWN',
-      message: error.message
-    });
-    applyGeneratedPreviewHeaders(res);
-    const status = error.code === 'INVALID_STANDALONE_H5P_SOURCE'
-      ? HTTP_STATUS.BAD_REQUEST
-      : HTTP_STATUS.INTERNAL_SERVER_ERROR;
-    return res.status(status).type('text/html').send(renderPreviewMessage(
-      'Preview could not be created',
-      error.code === 'INVALID_STANDALONE_H5P_SOURCE'
-        ? error.message
-        : 'CREATE could not load every H5P component required by this Learning Object. Try again after restarting the server or contact support.'
-    ));
-  }
+  const html = await renderLegacyH5PPreview(quiz.toObject(), questions, containerMode || 'column');
+  applyGeneratedPreviewHeaders(res);
+  return res.type('text/html').send(html);
 }));
 
 /**
@@ -268,304 +319,38 @@ router.get('/:id/render', asyncHandler(async (req, res) => {
     return errorResponse(res, 'Missing content/content.json in H5P package', 'INVALID_H5P', HTTP_STATUS.BAD_REQUEST);
   }
 
-  // Resolve all dependencies (topological sort)
-  const { cssFiles, jsFiles } = await resolveDependencies(h5pJson, extractDir);
-
-  // Build the base path for static files
-  const basePath = `/h5p-preview-files/${id}`;
-
-  // Build the main library string "H5P.MultiChoice 1.16"
   const mainLib = h5pJson.mainLibrary;
-  const mainDep = (h5pJson.preloadedDependencies || []).find(d => d.machineName === mainLib);
-  const mainLibString = mainDep
-    ? `${mainLib} ${mainDep.majorVersion}.${mainDep.minorVersion}`
-    : mainLib;
+  const mainDependency = (h5pJson.preloadedDependencies || []).find(
+    dependency => dependency.machineName === mainLib
+  );
+  if (!mainDependency) {
+    return errorResponse(res, 'The package does not declare its main H5P library.', 'INVALID_H5P', HTTP_STATUS.BAD_REQUEST);
+  }
 
-  // Generate CSS link tags
-  const cssTags = cssFiles.map(f => `  <link rel="stylesheet" href="${basePath}/${f}">`).join('\n');
-
-  // Generate JS script tags
-  const jsTags = jsFiles.map(f => `  <script src="${basePath}/${f}"></script>`).join('\n');
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(h5pJson.title || 'H5P Preview')}</title>
-  <style>
-    :root {
-      --h5p-theme-main-cta-base: #2374e3;
-      --h5p-theme-main-cta-dark: #1a5bbf;
-      --h5p-theme-main-cta-light: #5a9af0;
-      --h5p-theme-secondary-cta-base: #4a4a4a;
-      --h5p-theme-secondary-cta-dark: #2a2a2a;
-      --h5p-theme-secondary-cta-light: #6a6a6a;
-      --h5p-theme-contrast-cta: #ffffff;
-      --h5p-theme-contrast-cta-light: #f0f4ff;
-      --h5p-theme-contrast-cta-white: #ffffff;
-      --h5p-theme-secondary-contrast-cta: #ffffff;
-      --h5p-theme-secondary-contrast-cta-hover: #f5f5f5;
-      --h5p-theme-alternative-base: #ffffff;
-      --h5p-theme-alternative-dark: #f3f4f6;
-      --h5p-theme-alternative-darker: #e5e7eb;
-      --h5p-theme-alternative-light: #f9fafb;
-      --h5p-theme-ui-base: #f9fafb;
-      --h5p-theme-text-primary: #111827;
-      --h5p-theme-text-secondary: #374151;
-      --h5p-theme-text-third: #6b7280;
-      --h5p-theme-stroke-1: #e5e7eb;
-      --h5p-theme-font-name: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --h5p-theme-font-size-s: 12px;
-      --h5p-theme-font-size-m: 16px;
-      --h5p-theme-font-size-l: 20px;
-      --h5p-theme-font-size-xl: 24px;
-      --h5p-theme-font-size-xxl: 32px;
-      --h5p-theme-spacing-xxs: 4px;
-      --h5p-theme-spacing-xs: 8px;
-      --h5p-theme-spacing-s: 12px;
-      --h5p-theme-spacing-m: 16px;
-      --h5p-theme-spacing-l: 24px;
-      --h5p-theme-border-radius-small: 4px;
-      --h5p-theme-border-radius-medium: 6px;
-      --h5p-theme-border-radius-large: 12px;
-      --h5p-theme-feedback-correct-main: #166534;
-      --h5p-theme-feedback-correct-secondary: #dcfce7;
-      --h5p-theme-feedback-correct-third: #86efac;
-      --h5p-theme-feedback-incorrect-main: #991b1b;
-      --h5p-theme-feedback-incorrect-secondary: #fee2e2;
-      --h5p-theme-feedback-incorrect-third: #fca5a5;
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; }
-    .h5p-content { max-width: 960px; margin: 0 auto; }
-    .h5p-question-content { font-size: 16px; line-height: 1.5; }
-    .h5p-question-introduction { margin-bottom: 1em; }
-    .h5p-question-buttons { margin-top: 1em; }
-    .h5p-joubelui-button { cursor: pointer; }
-  </style>
-${cssTags}
-</head>
-<body>
-  <div id="h5p-container" class="h5p-content"></div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-  <script src="/api/create/h5p-preview/core/h5p-core.js"></script>
-${jsTags}
-
-  <script>
-    // Ensure H5P.jQuery is set after jQuery loads
-    H5P.jQuery = jQuery;
-    H5P.$body = jQuery('body');
-    H5P.$window = jQuery(window);
-
-    var integration = {
-      basePath: '${basePath}',
-      contentPath: '${basePath}/content',
-      contentId: '${id}',
-      mainLibrary: '${mainLibString}',
-      title: ${JSON.stringify(h5pJson.title || 'H5P Preview')},
-      contentData: ${JSON.stringify(contentJson)},
-      metadata: ${JSON.stringify(h5pJson.metadata || { title: h5pJson.title || 'H5P Preview' })}
-    };
-
-    jQuery(document).ready(function() {
-      H5P.init(document.getElementById('h5p-container'), integration);
+  // A package must contain its own matching runtime assets. Do not silently
+  // fill missing files with a different installed patch of the same library.
+  const basePath = `/h5p-preview-files/${id}`;
+  applyGeneratedPreviewHeaders(res);
+  try {
+    const html = await renderNativeH5PPreview({
+      library: `${mainLib} ${mainDependency.majorVersion}.${mainDependency.minorVersion}`,
+      metadata: h5pJson,
+      parameters: contentJson
+    }, {
+      libraryPath: extractDir,
+      libraryBasePath: basePath,
+      contentBasePath: `${basePath}/content`,
+      contentId: id
     });
-  </script>
-</body>
-</html>`;
-
-  // Override Helmet's CSP to allow framing and inline scripts/CDN resources
-  res.removeHeader('Content-Security-Policy');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.type('text/html').send(html);
+    return res.type('text/html').send(html);
+  } catch (error) {
+    console.error('[H5P Preview] Uploaded package preview failed', { code: error.code, message: error.message });
+    return res.status(HTTP_STATUS.BAD_REQUEST).type('text/html').send(renderPreviewMessage(
+      'Preview could not be created',
+      'This package is missing a required H5P component. Export a complete package from its authoring tool and try again.'
+    ));
+  }
 }));
-
-
-/**
- * Resolve the full dependency tree from h5p.json into ordered CSS and JS file lists.
- * Uses topological sort (Kahn's algorithm) to ensure correct load order.
- * Used by the upload-based preview (/:id/render).
- */
-async function resolveDependencies(h5pJson, extractDir) {
-  const deps = h5pJson.preloadedDependencies || [];
-
-  // Map: "machineName-major.minor" → { dirName, css[], js[], deps[] }
-  const libMap = new Map();
-  const adjacency = new Map(); // key → [dependency keys]
-  const inDegree = new Map();
-
-  // BFS to discover all libraries and their transitive dependencies
-  const queue = [...deps];
-  const visited = new Set();
-
-  while (queue.length > 0) {
-    const dep = queue.shift();
-    const key = `${dep.machineName}-${dep.majorVersion}.${dep.minorVersion}`;
-    if (visited.has(key)) continue;
-    visited.add(key);
-
-    // Find the library directory — could be in extracted H5P or in h5p-libs
-    const dirName = `${dep.machineName}-${dep.majorVersion}.${dep.minorVersion}`;
-    let libJsonPath = path.join(extractDir, dirName, 'library.json');
-    let libBasePath = dirName; // relative path for URL generation
-    let libDirExists = false;
-
-    try {
-      await fs.access(libJsonPath);
-      libDirExists = true;
-    } catch {
-      // Try the shared h5p-libs directory
-      libJsonPath = path.join(H5P_LIBS_DIR, dirName, 'library.json');
-      try {
-        await fs.access(libJsonPath);
-        libDirExists = true;
-      } catch {
-        // Library not found — skip
-      }
-    }
-
-    if (!libDirExists) {
-      libMap.set(key, { dirName, css: [], js: [], deps: [] });
-      adjacency.set(key, []);
-      inDegree.set(key, inDegree.get(key) || 0);
-      continue;
-    }
-
-    const libJson = JSON.parse(await fs.readFile(libJsonPath, 'utf-8'));
-
-    // Merge from shared h5p-libs into extracted dir so static serving works.
-    // Always merge (not just when missing) because the .h5p archive may contain
-    // incomplete library dirs (e.g. metadata only, no dist/ build artifacts).
-    const extractedLibDir = path.join(extractDir, dirName);
-    const sharedLibDir = path.join(H5P_LIBS_DIR, dirName);
-    try {
-      await fs.access(sharedLibDir);
-      await mergeDir(sharedLibDir, extractedLibDir);
-    } catch {
-      // Shared lib not available, rely on whatever's in the archive
-    }
-
-    const css = (libJson.preloadedCss || []).map(f => `${dirName}/${f.path}`);
-    const js = (libJson.preloadedJs || []).map(f => `${dirName}/${f.path}`);
-    const subDeps = libJson.preloadedDependencies || [];
-    const subDepKeys = subDeps.map(d => `${d.machineName}-${d.majorVersion}.${d.minorVersion}`);
-
-    libMap.set(key, { dirName, css, js, deps: subDepKeys });
-    adjacency.set(key, subDepKeys);
-
-    if (!inDegree.has(key)) {
-      inDegree.set(key, 0);
-    }
-
-    // Enqueue sub-dependencies
-    for (const subDep of subDeps) {
-      queue.push(subDep);
-    }
-  }
-
-  // Build in-degree counts
-  for (const [key, depKeys] of adjacency) {
-    for (const depKey of depKeys) {
-      inDegree.set(depKey, (inDegree.get(depKey) || 0));
-    }
-  }
-  // A depends on B means B must load before A → A has edge to B
-  // In-degree: count how many things depend on each lib (incoming edges)
-  // Actually, for topological sort with Kahn's, we need: if A depends on B, then B must come first.
-  // So the edge is B → A (B must come before A), and A's in-degree increases.
-  const reverseAdj = new Map();
-  const realInDegree = new Map();
-  for (const key of adjacency.keys()) {
-    reverseAdj.set(key, []);
-    realInDegree.set(key, 0);
-  }
-  for (const [key, depKeys] of adjacency) {
-    for (const depKey of depKeys) {
-      if (!reverseAdj.has(depKey)) reverseAdj.set(depKey, []);
-      reverseAdj.get(depKey).push(key);
-      realInDegree.set(key, (realInDegree.get(key) || 0) + 1);
-    }
-  }
-
-  // Kahn's algorithm
-  const sorted = [];
-  const q = [];
-  for (const [key, deg] of realInDegree) {
-    if (deg === 0) q.push(key);
-  }
-
-  while (q.length > 0) {
-    const current = q.shift();
-    sorted.push(current);
-    for (const neighbor of (reverseAdj.get(current) || [])) {
-      realInDegree.set(neighbor, realInDegree.get(neighbor) - 1);
-      if (realInDegree.get(neighbor) === 0) {
-        q.push(neighbor);
-      }
-    }
-  }
-
-  // If there are nodes not in sorted (cycle), add them at the end
-  for (const key of adjacency.keys()) {
-    if (!sorted.includes(key)) {
-      sorted.push(key);
-    }
-  }
-
-  // Collect CSS and JS in dependency order, filtering out files that don't exist on disk
-  const cssFiles = [];
-  const jsFiles = [];
-  for (const key of sorted) {
-    const lib = libMap.get(key);
-    if (lib) {
-      for (const f of lib.css) {
-        const fullPath = path.join(extractDir, f);
-        try {
-          await fs.access(fullPath);
-          cssFiles.push(f);
-        } catch {
-          // File doesn't exist (e.g. missing dist/ build), skip it
-        }
-      }
-      for (const f of lib.js) {
-        const fullPath = path.join(extractDir, f);
-        try {
-          await fs.access(fullPath);
-          jsFiles.push(f);
-        } catch {
-          // File doesn't exist (e.g. missing dist/ build), skip it
-        }
-      }
-    }
-  }
-
-  return { cssFiles, jsFiles };
-}
-
-/**
- * Recursively merge src into dest — copies files that don't already exist in dest.
- * This fills in missing build artifacts (dist/) without overwriting archive contents.
- */
-async function mergeDir(src, dest) {
-  await fs.mkdir(dest, { recursive: true });
-  const entries = await fs.readdir(src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      await mergeDir(srcPath, destPath);
-    } else {
-      try {
-        await fs.access(destPath);
-        // File already exists in archive, skip
-      } catch {
-        await fs.copyFile(srcPath, destPath);
-      }
-    }
-  }
-}
 
 /**
  * Clean up extracted preview directories older than MAX_AGE_MS

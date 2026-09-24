@@ -43,7 +43,7 @@ function expectDeclaredDirectoryAssetsToExist(directoryName) {
 }
 
 function expectLocalCssAssetsToExist(cssPath) {
-  const css = fs.readFileSync(cssPath, 'utf8');
+  const css = fs.readFileSync(cssPath, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const assetReferences = css.matchAll(/url\(\s*['"]?([^'"\s)]+)['"]?\s*\)/g);
 
   for (const [, reference] of assetReferences) {
@@ -74,16 +74,31 @@ function expectDeclaredAssetsToExist(machineName) {
 }
 
 describe('vendored H5P library assets', () => {
+  test('Branching Scenario advertises its actual upstream core and editor requirements', () => {
+    const { libraryJson } = readLibraryJson('H5P.BranchingScenario');
+    expect(libraryJson.coreApi).toEqual({ majorVersion: 1, minorVersion: 28 });
+    expect(libraryJson.editorDependencies).toContainEqual({ machineName: 'H5PEditor.BranchingScenario', majorVersion: 1, minorVersion: 5 });
+  });
   test('H5P Studio libraries include their version-matched browser bundles', () => {
     const studioLibraryDirectories = [
       'H5P.Agamotto-1.6',
       'H5P.AudioRecorder-1.0',
       'H5P.CoursePresentation-1.26',
+      'H5P.CoursePresentation-1.27',
+      'H5P.BranchingScenario-1.9',
+      'H5P.BranchingScenario-1.10',
+      'H5P.DragQuestion-1.15',
+      'H5PEditor.BranchingScenario-1.5',
+      'H5PEditor.BranchingQuestion-1.0',
+      'H5PEditor.CoursePresentation-1.26',
+      'H5PEditor.InteractiveVideo-1.26',
+      'jQuery.ui-1.10',
       'H5P.Crossword-0.5',
       'H5P.Dictation-1.3',
       'H5P.ExportableTextArea-1.3',
       'H5P.InteractiveBook-1.11',
       'H5P.InteractiveVideo-1.27',
+      'H5P.InteractiveVideo-1.28',
       'H5P.MultiMediaChoice-0.3',
       'H5P.OpenEndedQuestion-1.0',
       'H5P.Questionnaire-1.3',

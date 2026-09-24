@@ -30,6 +30,18 @@ describe('question generation null safety', () => {
     expect(prompt).toContain('Assess the instructor-provided case study.');
   });
 
+  test('keeps the current teacher task distinct from history and limits novelty to that task', async () => {
+    const request = 'Ask about condensation on the outside of a sealed cold glass. Do not ask about runoff.';
+    const prompt = await llmService.buildExpertPrompt('Explain the water cycle.', 'multiple-choice', [], 'moderate', '',
+      [{ questionText: 'Define condensation.' }], 'History guidance: choose a different slice.', 'single', 2, 2, request);
+    expect(prompt).toContain(`REQUEST-SPECIFIC INSTRUCTOR INSTRUCTIONS:\n${request}`);
+    expect(prompt).toContain('Novelty and history guidance must never replace an explicitly requested topic');
+    expect(prompt).not.toContain('Do NOT reuse the same assessed slice');
+    const format = llmService.getFormatInstructions('multiple-choice', 'single');
+    expect(format).toContain('Follow the current instructor request first');
+    expect(format).not.toContain('Do not repeat the same concept focus or scenario');
+  });
+
   test('generates through the non-streaming fallback contract with a null objective', async () => {
     const originalCreateLLMForConfig = llmService.createLLMForConfig;
     llmService.createLLMForConfig = () => ({

@@ -111,7 +111,15 @@
         }
         data.action = action;
         data.context = 'h5p';
-        event.source.postMessage(data, event.origin);
+        // Sandboxed CREATE players intentionally have an opaque (`null`)
+        // origin. Their nested H5P frames still need the standard resize
+        // handshake, but targeting the visible URL cannot reach an opaque
+        // recipient. Use a wildcard only inside that sandbox; normal H5P
+        // pages retain the sender origin check.
+        var targetOrigin = window.origin === 'null' || event.origin === 'null'
+          ? '*'
+          : event.origin;
+        event.source.postMessage(data, targetOrigin);
       });
     }
   }, false);

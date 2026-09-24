@@ -9,6 +9,9 @@ import { successResponse, errorResponse, notFoundResponse } from '../utils/respo
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, REVIEW_STATUS } from '../config/constants.js';
 import { formatContentForDatabase, normalizeMarkTheWordsText } from '../services/questionContentService.js';
+import { getGenerationReadiness } from '../utils/generationReadiness.js';
+import { getQuestionTypeAvailability } from '../utils/questionTypeAvailability.js';
+import { publishedQuestionFilter, withQuestionMutation } from '../services/questionPublication.js';
 
 const router = express.Router();
 
@@ -26,7 +29,7 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
     return notFoundResponse(res, 'Quiz');
   }
 
-  const questions = await Question.find({ quiz: quizId })
+  const questions = await Question.find(publishedQuestionFilter(quiz))
     .populate('learningObjective', 'text order')
     .populate('generationPlan', 'approach')
     .populate('createdBy', 'cwlId')
@@ -76,8 +79,12 @@ router.post('/', authenticateToken, validateCreateQuestion, asyncHandler(async (
   }
 
   // Verify learning objective exists and belongs to quiz (optional)
+  const availability = getQuestionTypeAvailability(type);
+  if (!availability.available) return errorResponse(res, availability.message, availability.code, availability.status);
+
   let objective = null;
   if (learningObjectiveId) {
+    if (!quiz.learningObjectives.some(id => String(id) === String(learningObjectiveId))) return notFoundResponse(res, 'Published learning objective');
     objective = await LearningObjective.findOne({ _id: learningObjectiveId, quiz: quizId });
     if (!objective) {
       return notFoundResponse(res, 'Learning objective');
@@ -85,7 +92,7 @@ router.post('/', authenticateToken, validateCreateQuestion, asyncHandler(async (
   }
 
   // Get next order number
-  const lastQuestion = await Question.findOne({ quiz: quizId }).sort({ order: -1 });
+  const lastQuestion = await Question.findOne(publishedQuestionFilter(quiz)).sort({ order: -1 });
   const order = lastQuestion ? lastQuestion.order + 1 : 0;
 
   const question = new Question({
@@ -140,10 +147,17 @@ router.put('/reorder', authenticateToken, validateReorderQuestions, asyncHandler
     );
   }
 
-  // Update order
-  await Question.reorderQuestions(quizId, questionIds);
+  // Reorder the publication list and invalidate any in-flight replacement.
+  await withQuestionMutation(Quiz, quizId, userId, async ({ quiz: current, writeQuiz }) => {
+    if (questionIds.length !== current.questions.length || new Set(questionIds).size !== questionIds.length
+      || current.questions.some(id => !questionIds.includes(String(id)))) {
+      throw Object.assign(new Error('The question list changed. Refresh before reordering.'), { status: 409, code: 'QUESTION_LIST_CHANGED' });
+    }
+    await writeQuiz({ $set: { questions: questionIds } });
+    await Question.reorderQuestions(quizId, questionIds, current.questionMutation.leaseUntil);
+  });
 
-  const reorderedQuestions = await Question.find({ quiz: quizId })
+  const reorderedQuestions = await Question.find({ quiz: quizId, _id: { $in: questionIds } })
     .populate('learningObjective', 'text')
     .sort({ order: 1 });
 
@@ -162,6 +176,12 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
   const question = await Question.findOne({ _id: questionId, createdBy: userId });
   if (!question) {
     return notFoundResponse(res, 'Question');
+  }
+  if (!await Quiz.exists({ _id: question.quiz, createdBy: userId, questions: question._id })) return notFoundResponse(res, 'Published question');
+
+  if (updates.type !== undefined && updates.type !== question.type) {
+    const availability = getQuestionTypeAvailability(updates.type);
+    if (!availability.available) return errorResponse(res, availability.message, availability.code, availability.status);
   }
 
   // Track changes for edit history
@@ -209,6 +229,7 @@ router.put('/:id/review', authenticateToken, validateMongoId, asyncHandler(async
   if (!question) {
     return notFoundResponse(res, 'Question');
   }
+  if (!await Quiz.exists({ _id: question.quiz, createdBy: userId, questions: question._id })) return notFoundResponse(res, 'Published question');
 
   await question.markAsReviewed(status);
 
@@ -227,6 +248,7 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
   if (!question) {
     return notFoundResponse(res, 'Question');
   }
+  if (!await Quiz.exists({ _id: question.quiz, createdBy: userId, questions: question._id })) return notFoundResponse(res, 'Published question');
 
   // Remove from quiz
   const quiz = await Quiz.findById(question.quiz);
@@ -258,19 +280,51 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
   try {
     const { default: llmService } = await import('../services/llmService.js');
 
+    const quiz = await Quiz.findOne({ _id: question.quiz, createdBy: userId }).populate('materials');
+    if (!quiz || !quiz.questions.some(id => String(id) === String(question._id))) return notFoundResponse(res, 'Published question');
+    const availability = getQuestionTypeAvailability(question.type);
+    if (!availability.available) return errorResponse(res, availability.message, availability.code, availability.status);
+    const originalPrompt = question.generationMetadata?.instructorPrompt;
+    const teachingInstructions = [originalPrompt, customPrompt]
+      .filter(value => typeof value === 'string' && value.trim()).join('\n\n');
+    const usesCustomPromptOnly = Boolean(teachingInstructions)
+      && (question.generationMetadata?.useCustomPromptOnly === true || !question.learningObjective);
+    const readiness = getGenerationReadiness(quiz, [{
+      learningObjective: question.learningObjective,
+      customPrompt: teachingInstructions,
+      useCustomPromptOnly: usesCustomPromptOnly
+    }]);
+    if (!readiness.ready) return errorResponse(res, readiness.message, readiness.code, readiness.status);
+
+    let relevantContent = [];
+    if (!usesCustomPromptOnly) {
+      const { default: ragService } = await import('../services/ragService.js');
+      const retrieval = await ragService.retrieveRelevantContent(
+        question.learningObjective?.text || question.questionText,
+        question.type,
+        { materialIds: readiness.processedMaterialIds, topK: 5, minScore: 0.3 }
+      );
+      relevantContent = retrieval?.chunks || [];
+      if (!relevantContent.length) {
+        return errorResponse(res, 'No supporting material could be retrieved. Check the assigned materials and retry; the existing question has been kept.', 'MATERIAL_RETRIEVAL_FAILED', HTTP_STATUS.SERVICE_UNAVAILABLE);
+      }
+    }
+
     const questionConfig = {
-      learningObjective: question.learningObjective?.text || 'General knowledge assessment',
+      learningObjective: question.learningObjective?.text || null,
       questionType: question.type,
-      relevantContent: [],
+      relevantContent,
       difficulty: 'moderate',
       courseContext: customPrompt ? `Question regeneration with custom instructions: ${customPrompt}` : `Question regeneration`,
       previousQuestions: [{ questionText: question.questionText }],
-      customPrompt: customPrompt || undefined,
+      customPrompt: teachingInstructions || undefined,
       userId: req.user?.id
     };
 
     const result = await llmService.generateQuestion(questionConfig);
     const newQuestionData = result.questionData;
+    if (!result.success || !newQuestionData) throw new Error('Question generation did not return a valid question');
+    const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
 
     // Store previous version
     const previousData = {
@@ -289,6 +343,10 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     question.generationMetadata = {
       ...question.generationMetadata,
       ...newQuestionData.generationMetadata,
+      sourceReferences: questionStreamingService.buildSourceReferences(relevantContent),
+      generatedFrom: [...new Set(relevantContent.map(chunk => chunk.metadata?.materialId).filter(Boolean))],
+      instructorPrompt: teachingInstructions || undefined,
+      useCustomPromptOnly: usesCustomPromptOnly,
       regeneratedAt: new Date(),
       regenerationMethod: 'llm-regeneration'
     };
@@ -346,17 +404,16 @@ router.delete('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(a
   }
 
   try {
-    const questions = await Question.find({ quiz: quizId, createdBy: userId });
-    const questionCount = questions.length;
+    const questionCount = quiz.questions.length;
 
     if (questionCount === 0) {
       return successResponse(res, { deletedCount: 0 }, 'No questions to delete');
     }
 
-    await Question.deleteMany({ quiz: quizId, createdBy: userId });
-
-    quiz.questions = [];
-    await quiz.save();
+    await withQuestionMutation(Quiz, quizId, userId, async ({ quiz: current, writeQuiz }) => {
+      await writeQuiz({ $set: { questions: [], 'progress.questionsGenerated': false } });
+      await Question.deleteMany({ quiz: quizId, createdBy: userId, _id: { $in: current.questions } });
+    });
 
     // Update folder stats after deleting questions
     const folder = await Folder.findOne({ quizzes: quizId });
@@ -370,6 +427,7 @@ router.delete('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(a
     }, `Successfully deleted ${questionCount} questions`);
 
   } catch (error) {
+    if (error.status === 409) return errorResponse(res, error.message, error.code, 409);
     console.error('Question deletion error:', error);
     return errorResponse(res, `Failed to delete questions: ${error.message}`, 'DELETION_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
   }

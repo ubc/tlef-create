@@ -1,5 +1,18 @@
 export function isGpt5Family(model = '') {
-  return model.toLowerCase().startsWith('gpt-5');
+  return /^gpt-[5-9](?:\.|-|$)/i.test(model);
+}
+
+// Strict output schemas are not supported by the first GPT-4o snapshot or the
+// o1 preview/mini models. Compatible third-party endpoints retain JSON mode.
+export function supportsOpenAIStructuredOutputs(model = '', endpoint = '') {
+  if (endpoint.replace(/\/$/, '') !== 'https://api.openai.com/v1') return false;
+  const name = model.toLowerCase();
+  if (name === 'gpt-4o' || /^gpt-4o-mini(?:$|-\d{4}-\d{2}-\d{2}$)/.test(name)) return true;
+  const snapshot = name.match(/^gpt-4o-(\d{4}-\d{2}-\d{2})$/)?.[1];
+  if (snapshot) return snapshot >= '2024-08-06';
+  if (name === 'o1' || /^o1-\d{4}-\d{2}-\d{2}$/.test(name)) return true;
+  return /^(?:gpt-4\.1|gpt-[5-9](?:\.\d+)?|o[34])(?:-|$)/.test(name)
+    && !/(?:audio|realtime|transcribe|search|chat-latest)/.test(name);
 }
 
 export function extractBalancedJson(value = '') {
@@ -44,14 +57,20 @@ export function buildOpenAIStreamingRequest({
   temperature,
   maxTokens,
   useResponsesApi,
-  reasoningEffort = null
+  reasoningEffort = null,
+  jsonMode = false,
+  jsonSchema = null
 }) {
+  const format = jsonSchema
+    ? { type: 'json_schema', name: jsonSchema.name, schema: jsonSchema.schema, strict: true }
+    : (jsonMode ? { type: 'json_object' } : null);
   if (useResponsesApi) {
     return {
       model,
       input: prompt,
       max_output_tokens: maxTokens,
       stream: true,
+      ...(format ? { text: { format } } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {})
     };
   }
@@ -61,7 +80,10 @@ export function buildOpenAIStreamingRequest({
     messages: [{ role: 'user', content: prompt }],
     max_completion_tokens: maxTokens,
     stream: true,
-    ...(!isGpt5Family(model) ? { temperature } : {})
+    ...(format ? { response_format: jsonSchema
+      ? { type: 'json_schema', json_schema: { name: jsonSchema.name, schema: jsonSchema.schema, strict: true } }
+      : format } : {}),
+    ...(!isGpt5Family(model) && !/^o[134](?:-|$)/i.test(model) ? { temperature } : {})
   };
 }
 

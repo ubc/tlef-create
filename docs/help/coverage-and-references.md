@@ -10,6 +10,8 @@ In Graph view, CREATE fits the complete map into the canvas when Coverage Map be
 
 The lines are generated from saved evidence and coverage relationships. CREATE does not let an instructor draw an arbitrary new line in this view because an unsaved line would falsely represent source support; update the objective, Blueprint, question, or source reference that owns the relationship instead.
 
+Objective labels use the current displayed sequence, starting at **LO 1**, consistently with the Blueprint. Evidence chunk labels start at **Chunk 1**; a chunk number is not a PDF page number. Named sections keep their actual section titles.
+
 Look for objectives with no evidence, objectives with no questions, heavily reused source passages, and clusters of questions that test the same subpoint. A sparse map can indicate missing coverage; an extremely dense area can indicate duplication.
 
 ## Learning-objective references
@@ -33,6 +35,8 @@ DOCX, URL, and pasted-text materials do not always have a stable printed page. T
 Source cards in CREATE Guide cite this product manual. Selecting one opens the Help Center and highlights the cited manual section. Learning-objective and question references cite course materials and open the source-reference preview. The two reference systems intentionally use different destinations.
 
 ## Resolve weak or missing evidence
+
+Question retrieval searches within the assigned materials before selecting the most relevant excerpts. Higher-scoring content from another course does not displace the selected course's sources. This scope still cannot guarantee that a relevant passage exists or that an AI answer interprets it correctly.
 
 1. Confirm the source finished processing and is assigned to the learning object.
 2. Preview the extracted content and locate the expected passage.

@@ -246,7 +246,7 @@ const CreateGuide = () => {
                 {message.sources && message.sources.length > 0 && (
                   <div className="create-guide-sources">
                     <span>Sources</span>
-                    {message.sources.slice(0, 3).map(source => (
+                    {message.sources.map(source => (
                       <Link
                         key={source.id}
                         className="create-guide-source"

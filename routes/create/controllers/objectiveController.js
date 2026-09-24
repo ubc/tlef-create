@@ -10,6 +10,7 @@ import { HTTP_STATUS } from '../config/constants.js';
 import llmService from '../services/llmService.js';
 import coursePromptService from '../services/coursePromptService.js';
 import sseService from '../services/sseService.js';
+import { withQuestionMutation } from '../services/questionPublication.js';
 import {
   buildInstructorMetadata,
   mergeInstructorProtectedMetadata,
@@ -32,7 +33,7 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
     return notFoundResponse(res, 'Quiz');
   }
 
-  const objectives = await LearningObjective.find({ quiz: quizId })
+  const objectives = await LearningObjective.find({ quiz: quizId, _id: { $in: quiz.learningObjectives } })
     .populate('generatedFrom', 'name type')
     .populate('createdBy', 'cwlId')
     .sort({ order: 1 });
@@ -47,6 +48,7 @@ router.get('/quiz/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
 router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHandler(async (req, res) => {
   const { quizId, materialIds, targetCount, customPrompt, replaceExisting = false, sessionId } = req.body;
   const userId = req.user.id;
+  if (sessionId) sseService.claimSession(sessionId, userId);
   const progressQuestionId = 'learning-objectives';
   const streamProgress = (status, message, metadata = {}) => {
     if (!sessionId) return;
@@ -168,32 +170,18 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
     const processingTime = Date.now() - startTime;
 
     let replacementMetadata = null;
-    if (replaceExisting) {
-      const Question = (await import('../models/Question.js')).default;
-      const [objectiveResult, questionResult] = await Promise.all([
-        LearningObjective.deleteMany({ quiz: quizId }),
-        Question.deleteMany({ quiz: quizId })
-      ]);
-      quiz.learningObjectives = [];
-      quiz.questions = [];
-      await quiz.save();
-      replacementMetadata = {
-        replacedObjectives: objectiveResult.deletedCount,
-        removedQuestions: questionResult.deletedCount
-      };
-    }
-
     const objectives = [];
     for (let i = 0; i < generatedObjectives.length; i++) {
       const generatedObjective = generatedObjectives[i];
       const objectiveText = typeof generatedObjective === 'string'
         ? generatedObjective
-        : generatedObjective.text;
+        : generatedObjective?.text;
       const objectiveMetadata = typeof generatedObjective === 'object' && generatedObjective !== null
         ? generatedObjective
         : {};
 
-      if (!objectiveText || !objectiveText.trim()) {
+      if (typeof objectiveText !== 'string' || !objectiveText.trim()) {
+        if (replaceExisting) throw new Error('A generated learning objective was empty. Existing objectives and questions were preserved.');
         continue;
       }
 
@@ -225,11 +213,28 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
         createdBy: userId
       });
 
-      await objective.save();
+      if (replaceExisting) await objective.validate();
+      else await objective.save();
       objectives.push(objective);
 
-      // Add to quiz
-      await quiz.addLearningObjective(objective._id);
+      if (!replaceExisting) await quiz.addLearningObjective(objective._id);
+    }
+
+    if (replaceExisting) {
+      // Validate the whole batch before staging any candidates. All candidates
+      // must exist before the single Quiz manifest update can publish them.
+      for (const objective of objectives) await objective.save();
+      const validatedVersion = quiz.__v || 0;
+      replacementMetadata = await withQuestionMutation(Quiz, quizId, userId, async ({ quiz: current, writeQuiz }) => {
+        if (current.__v !== validatedVersion + 1) {
+          throw Object.assign(new Error('The learning object changed while objectives were generating. Existing objectives and questions were preserved.'), { status: 409, code: 'GENERATION_SNAPSHOT_CHANGED' });
+        }
+        await writeQuiz({ $set: { learningObjectives: objectives.map(objective => objective._id), questions: [],
+          'progress.objectivesSet': true, 'progress.questionsGenerated': false } });
+        // Retain retired documents: cleanup must never turn an uncertain commit
+        // acknowledgement into deletion of the newly published content.
+        return { replacedObjectives: current.learningObjectives.length, removedQuestions: current.questions.length };
+      });
     }
 
     streamProgress('saved', `Saved ${objectives.length} learning objective${objectives.length === 1 ? '' : 's'}.`);
@@ -268,6 +273,7 @@ router.post('/generate', authenticateToken, validateGenerateObjectives, asyncHan
         workflow: 'learning-objectives'
       });
     }
+    if (error.status === 409) return errorResponse(res, error.message, error.code, 409);
     return errorResponse(
       res, 
       'Failed to generate learning objectives', 
@@ -372,11 +378,13 @@ router.post('/enrich', authenticateToken, asyncHandler(async (req, res) => {
 
   const objectiveQuery = {
     quiz: quizId,
-    createdBy: userId
+    createdBy: userId,
+    _id: { $in: quiz.learningObjectives }
   };
 
   if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
-    objectiveQuery._id = { $in: objectiveIds };
+    const requested = new Set(objectiveIds.map(String));
+    objectiveQuery._id = { $in: quiz.learningObjectives.filter(id => requested.has(String(id))) };
   }
 
   const objectives = await LearningObjective.find(objectiveQuery).sort({ order: 1 });
@@ -546,6 +554,9 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
     if (!quizId) {
       return errorResponse(res, 'QuizId is required', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
     }
+    if (objectivesData.some(objective => String(objective?.quizId || '') !== String(quizId))) {
+      return errorResponse(res, 'All learning objectives must belong to the same learning object.', 'VALIDATION_ERROR', HTTP_STATUS.BAD_REQUEST);
+    }
 
     // Verify quiz exists and user owns it
     const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
@@ -553,11 +564,42 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
       return notFoundResponse(res, 'Quiz');
     }
 
+    if (!appendMode) {
+      const candidates = [];
+      try {
+        for (const data of objectivesData) {
+          if (typeof data.text !== 'string' || !data.text.trim()) throw new Error('Every learning objective requires text.');
+          const metadata = validateInstructorMetadata(data);
+          if (metadata.error) throw new Error(metadata.error);
+          const objective = new LearningObjective({ text: data.text.trim(), quiz: quizId, order: data.order ?? candidates.length,
+            generationMetadata: buildInstructorMetadata(metadata), createdBy: userId });
+          await objective.validate();
+          candidates.push(objective);
+        }
+      } catch {
+        return errorResponse(res, 'Every replacement learning objective must have valid text and metadata. Existing objectives and questions are unchanged.', 'INVALID_OBJECTIVES', 400);
+      }
+      try {
+        for (const objective of candidates) await objective.save();
+      } catch {
+        return errorResponse(res, 'The replacement objectives could not all be saved. Existing objectives and questions are unchanged.', 'OBJECTIVE_REPLACEMENT_FAILED', 503);
+      }
+      const validatedVersion = quiz.__v || 0;
+      await withQuestionMutation(Quiz, quizId, userId, async ({ quiz: current, writeQuiz }) => {
+        if (current.__v !== validatedVersion + 1) {
+          throw Object.assign(new Error('The learning object changed while replacement objectives were being saved. Existing content was preserved.'), { status: 409, code: 'GENERATION_SNAPSHOT_CHANGED' });
+        }
+        await writeQuiz({ $set: { learningObjectives: candidates.map(objective => objective._id), 'progress.objectivesSet': true } });
+      });
+      return successResponse(res, { objectives: candidates, summary: { total: candidates.length, successful: candidates.length, failed: 0 } },
+        `${candidates.length} learning objectives created successfully`, HTTP_STATUS.CREATED);
+    }
+
     let nextOrder = 0;
     let existingTexts = new Set();
 
     if (appendMode) {
-      const existingObjectives = await LearningObjective.find({ quiz: quizId })
+      const existingObjectives = await LearningObjective.find({ quiz: quizId, _id: { $in: quiz.learningObjectives } })
         .select('text order')
         .sort({ order: -1 })
         .lean();
@@ -565,10 +607,6 @@ router.post('/', authenticateToken, asyncHandler(async (req, res) => {
         ? Math.max(...existingObjectives.map(objective => objective.order ?? 0)) + 1
         : 0;
       existingTexts = new Set(existingObjectives.map(objective => objective.text.trim().toLowerCase()));
-    } else {
-      await LearningObjective.deleteMany({ quiz: quizId });
-      quiz.learningObjectives = [];
-      await quiz.save();
     }
 
     for (const objData of objectivesData) {
@@ -700,7 +738,7 @@ router.put('/reorder', authenticateToken, asyncHandler(async (req, res) => {
   // Update order
   await LearningObjective.reorderObjectives(quizId, objectiveIds);
 
-  const reorderedObjectives = await LearningObjective.find({ quiz: quizId })
+  const reorderedObjectives = await LearningObjective.find({ quiz: quizId, _id: { $in: objectiveIds } })
     .sort({ order: 1 });
 
   return successResponse(res, { objectives: reorderedObjectives }, 'Learning objectives reordered successfully');
@@ -719,6 +757,7 @@ router.put('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
   if (!objective) {
     return notFoundResponse(res, 'Learning objective');
   }
+  if (!await Quiz.exists({ _id: objective.quiz, createdBy: userId, learningObjectives: objective._id })) return notFoundResponse(res, 'Published learning objective');
 
 
   const instructorMetadata = validateInstructorMetadata({ bloomLevel, subpoints });
@@ -776,26 +815,25 @@ router.delete('/quiz/:quizId/all', authenticateToken, validateQuizId, asyncHandl
 
   const Question = (await import('../models/Question.js')).default;
 
-  // Get all objective IDs for this quiz before deleting
-  const objectives = await LearningObjective.find({ quiz: quizId }).select('_id');
-  const objectiveIds = objectives.map(o => o._id);
-
-  // Delete all questions linked to these objectives
-  const questionResult = await Question.deleteMany({ learningObjective: { $in: objectiveIds } });
-
-  // Delete all objectives
-  const result = await LearningObjective.deleteMany({ quiz: quizId });
-
-  // Clear arrays on quiz document
-  quiz.learningObjectives = [];
-  quiz.questions = [];
-  await quiz.save();
+  const { deletedCount, deletedQuestions } = await withQuestionMutation(Quiz, quizId, userId, async ({ quiz: current, writeQuiz }) => {
+    const objectives = await LearningObjective.find({ quiz: quizId, createdBy: userId, _id: { $in: current.learningObjectives } }).select('_id');
+    const objectiveIds = objectives.map(objective => objective._id);
+    const linked = await Question.find({ quiz: quizId, _id: { $in: current.questions }, learningObjective: { $in: objectiveIds } }).select('_id');
+    const removed = new Set(linked.map(question => String(question._id)));
+    const retained = current.questions.filter(id => !removed.has(String(id)));
+    await writeQuiz({ $set: {
+      learningObjectives: [], questions: retained, 'progress.objectivesSet': false, 'progress.questionsGenerated': retained.length > 0
+    } });
+    await Question.deleteMany({ quiz: quizId, createdBy: userId, _id: { $in: linked.map(question => question._id) } });
+    const result = await LearningObjective.deleteMany({ quiz: quizId, createdBy: userId, _id: { $in: objectiveIds } });
+    return { deletedCount: result.deletedCount, deletedQuestions: linked.length };
+  });
 
   return successResponse(res, {
-    deletedCount: result.deletedCount,
-    deletedQuestions: questionResult.deletedCount,
+    deletedCount,
+    deletedQuestions,
     quizId: quizId
-  }, `${result.deletedCount} learning objectives and ${questionResult.deletedCount} question(s) deleted successfully`);
+  }, `${deletedCount} learning objectives and ${deletedQuestions} question(s) deleted successfully`);
 }));
 
 /**
@@ -811,10 +849,13 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
   if (!objective) {
     return notFoundResponse(res, 'Learning objective');
   }
+  if (!await Quiz.exists({ _id: objective.quiz, createdBy: userId, learningObjectives: objective._id })) return notFoundResponse(res, 'Published learning objective');
 
   // Check how many questions will be deleted
   const Question = (await import('../models/Question.js')).default;
-  const questionCount = await Question.countDocuments({ learningObjective: objectiveId });
+  const quiz = await Quiz.findOne({ _id: objective.quiz, createdBy: userId });
+  if (!quiz) return notFoundResponse(res, 'Quiz');
+  const questionCount = await Question.countDocuments({ quiz: quiz._id, _id: { $in: quiz.questions }, learningObjective: objectiveId });
 
   // If there are questions and user hasn't confirmed, return warning
   if (questionCount > 0 && confirmed !== 'true') {
@@ -826,29 +867,24 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
     }, 'Confirmation required');
   }
 
-  // Get all question IDs before deleting
-  const questions = await Question.find({ learningObjective: objectiveId }).select('_id');
-  const questionIds = questions.map(q => q._id);
-
-  // Remove from quiz
-  const quiz = await Quiz.findById(objective.quiz);
-  if (quiz) {
-    // Remove all questions from quiz.questions array
-    for (const questionId of questionIds) {
-      await quiz.removeQuestion(questionId);
-    }
-    await quiz.removeLearningObjective(objectiveId);
-  }
-
-  // Delete associated questions from database
-  await Question.deleteMany({ learningObjective: objectiveId });
-
-  // Delete objective
-  await LearningObjective.findByIdAndDelete(objectiveId);
+  const outcome = await withQuestionMutation(Quiz, quiz._id, userId, async ({ quiz: current, writeQuiz }) => {
+    const questions = await Question.find({ quiz: quiz._id, _id: { $in: current.questions }, learningObjective: objectiveId }).select('_id');
+    if (questions.length && confirmed !== 'true') return { requiresConfirmation: true, questionCount: questions.length, objectiveId };
+    const removed = new Set(questions.map(question => String(question._id)));
+    const retained = current.questions.filter(id => !removed.has(String(id)));
+    const objectives = current.learningObjectives.filter(id => String(id) !== objectiveId);
+    await writeQuiz({ $set: {
+      learningObjectives: objectives, questions: retained, 'progress.objectivesSet': objectives.length > 0, 'progress.questionsGenerated': retained.length > 0
+    } });
+    await Question.deleteMany({ quiz: quiz._id, createdBy: userId, _id: { $in: questions.map(question => question._id) } });
+    await LearningObjective.deleteOne({ _id: objectiveId, createdBy: userId });
+    return { deletedQuestions: questions.length };
+  });
+  if (outcome.requiresConfirmation) return successResponse(res, outcome, 'Confirmation required');
 
   return successResponse(res, {
-    deletedQuestions: questionCount
-  }, `Learning objective and ${questionCount} question(s) deleted successfully`);
+    deletedQuestions: outcome.deletedQuestions
+  }, `Learning objective and ${outcome.deletedQuestions} question(s) deleted successfully`);
 }));
 
 /**
@@ -866,9 +902,10 @@ router.post('/:id/regenerate', authenticateToken, validateMongoId, asyncHandler(
     return notFoundResponse(res, 'Learning objective');
   }
 
-  if (objective.quiz.createdBy.toString() !== userId) {
+  if (!objective.quiz || objective.quiz.createdBy.toString() !== userId) {
     return errorResponse(res, 'Not authorized to regenerate this objective', 'UNAUTHORIZED', HTTP_STATUS.FORBIDDEN);
   }
+  if (!objective.quiz.learningObjectives.some(id => String(id) === String(objective._id))) return notFoundResponse(res, 'Published learning objective');
 
   // Get materials assigned to the quiz
   const materials = await Material.find({ 

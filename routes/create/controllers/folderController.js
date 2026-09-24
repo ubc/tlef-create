@@ -322,7 +322,6 @@ router.get('/:id/stats', authenticateToken, validateMongoId, asyncHandler(async 
   // Get detailed stats
   const Material = (await import('../models/Material.js')).default;
   const Quiz = (await import('../models/Quiz.js')).default;
-  const Question = (await import('../models/Question.js')).default;
 
   const [materialStats, quizStats] = await Promise.all([
     Material.aggregate([
@@ -346,9 +345,11 @@ router.get('/:id/stats', authenticateToken, validateMongoId, asyncHandler(async 
     ])
   ]);
 
-  const totalQuestions = await Question.countDocuments({
-    quiz: { $in: folder.quizzes }
-  });
+  const savedQuestionCounts = await Quiz.aggregate([
+    { $match: { _id: { $in: folder.quizzes } } },
+    { $group: { _id: null, count: { $sum: { $size: { $ifNull: ['$questions', []] } } } } }
+  ]);
+  const totalQuestions = savedQuestionCounts[0]?.count || 0;
 
   const stats = {
     folder: folder.stats,

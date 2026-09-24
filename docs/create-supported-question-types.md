@@ -16,9 +16,9 @@ the Quiz/container compatibility matrix. It currently lists 37 runnable types:
 
 | Availability | Types |
 | --- | --- |
-| AI draft from instructions (23) | Accordion, Arithmetic Quiz, Audio Recorder, Chart, Course Presentation, Crossword, Dialog Cards, Documentation Tool, Drag the Words, Essay, Fill in the Blanks, Guess the Answer, Interactive Book, Mark the Words, Multiple Choice, Page (Column), Question Set, Questionnaire, Single Choice Set, Sort the Paragraphs, Summary, Timeline, True/False |
-| AI adaptation of an owned saved template (13) | Agamotto, Audio, Collage, Dictation, Drag and Drop, Find the Hotspot, Iframe Embedder, Image Hotspots, Image Slider, Interactive Video, Memory Game, Multimedia Choice, Twitter User Feed |
-| Unavailable pending runtime maintenance (1) | Branching Scenario |
+| AI draft from instructions (24) | Accordion, Arithmetic Quiz, Audio Recorder, Branching Scenario, Chart, Course Presentation, Crossword, Dialog Cards, Documentation Tool, Drag the Words, Essay, Fill in the Blanks, Guess the Answer, Interactive Book, Mark the Words, Multiple Choice, Page (Column), Question Set, Questionnaire, Single Choice Set, Sort the Paragraphs, Summary, Timeline, True/False |
+| AI adaptation of an owned saved template (12) | Agamotto, Audio, Collage, Dictation, Drag and Drop, Find the Hotspot, Iframe Embedder, Image Hotspots, Image Slider, Interactive Video, Memory Game, Multimedia Choice |
+| Unavailable retired external service (1) | Twitter User Feed |
 
 This is **beta structural coverage, not certification of all 36 playable
 outputs**. AI output must pass installed-field validation before being saved;
@@ -27,12 +27,19 @@ Only supplied text is sent to the AI; it does not watch template videos or
 interpret images. Media templates must already contain usable owned files or
 approved external sources. External services can independently block embedding.
 
-Branching Scenario 1.10 has missing compiled assets in this checkout; its
-upstream 1.10.1 descriptor also requires core 1.28 despite the older local
-descriptor. CREATE's current Lumi runtime uses core 1.27. Native Branching
-Scenario is deliberately not offered as a successful AI-generation choice until
-the runtime/editor dependencies and real-player validation are completed. The older normalized Branching Scenario adapter below
-does not establish compatibility for native Studio authoring.
+Branching Scenario 1.10.1 now uses the official core/editor 1.28 pair and its
+complete compiled runtime and editor dependency tree. Existing Branching 1.9.2
+and older child-library minors remain installed. Studio offers native Branching
+authoring again; normalized questions support Standalone H5P and Canvas LTI Mixed
+Activity, not Column, Interactive Book or Question Set. Missing runtime assets
+still block authoring/generation and package export with a recovery message.
+See the [pinned upgrade and validation record](plans/branching-runtime-upgrade.md).
+
+The core upgrade also makes already installed Page/Column 1.20.0 and Question Set
+1.21.11 eligible in the Studio catalog. Studio selects Course Presentation
+1.27.25, Interactive Video 1.28.37 and Drag and Drop 1.15.16. The normalized Quiz
+exporter retains its existing container/library mappings, including Column 1.18
+and Question Set 1.20; a Studio catalog upgrade does not rewrite saved activities.
 
 Interactive Book selects the healthy installed 1.11 release, not incomplete
 1.13. Agamotto's missing 1.6.8 compiled assets were restored from its exact
@@ -194,7 +201,7 @@ Drag the Words is supported by H5P Question Set through `H5P.DragText 1.10`, but
 
 ## Canvas LTI / Mixed Activity Notes
 
-Canvas LTI / Mixed Activity is not an official H5P container. It is a CREATE delivery mode for Canvas that relies on the CREATE LTI/player runtime.
+Canvas LTI / Mixed Activity is not an official H5P container. It is a CREATE delivery mode that composes isolated native H5P players into one learner page. Standalone-only types therefore keep their own root library instead of being inserted into H5P Column. Canvas uses LTI for secure launch context and grade passback; the renderer itself is also available in CREATE Preview without an LTI launch.
 
 Because of that, the compatibility rule is different:
 
@@ -227,7 +234,7 @@ For example, Sort Paragraphs may not be valid inside a standard H5P Column packa
 - The delivery target and format matrix is defined in `src/constants/questionTypeCapabilities.ts`.
 - Native H5P library, dependency, container, AI-enabled, and direct-export metadata is defined in `routes/create/config/h5pTypeAdapterRegistry.js`.
 - `h5pExportService.js` routes question conversion through the adapter registry. Hidden historical types remain registered as legacy adapters so existing content can still export.
-- `buildNativeH5PDocument()` is shared by Review & Edit Preview, downloadable package export, and H5P Studio. Preview renders the native root document without persistence; H5P Studio saves it directly through Lumi instead of creating and re-importing a temporary package.
+- `buildNativeH5PDocument()` is shared by Review & Edit Preview, downloadable package export, and H5P Studio. Standard H5P previews render one native root document without persistence. Mixed Activity renders each question through its compatible native root and combines the isolated players in `renderMixedActivityPreview()`. H5P Studio saves its document directly through Lumi instead of creating and re-importing a temporary package.
 - Guess the Answer is the first phase-three adapter expansion: CREATE generates its normalized fields, converts them through an isolated adapter to official `H5P.GuessTheAnswer 1.5` parameters, and can continue editing the saved native document in H5P Studio. Future phase-three types should use the same isolated adapter boundary instead of extending the legacy converter.
 - The Generate Questions dropdown is defined in `src/components/generation/PlanEditor.tsx`.
 - The Review & Edit Add Question modal dropdown is defined in `src/components/AddQuestionModal.tsx`.

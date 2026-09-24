@@ -218,6 +218,7 @@ H5PEditor.language.core = {
   avTablistLabel: 'Insertar usando',
   tabTitleBasicFileUpload: 'Subir archivo',
   tabTitleInputLinkURL: 'Enlace/URL',
+  openInNewTab: 'Open in a new tab',
   errorTooHighVersion:
     'Los parámetros contienen %used mientras que solamente %supported o anteriores están soportados.',
   errorNotSupported: 'Los parámetros contienen %used que no está soportado.',
@@ -299,7 +300,7 @@ H5PEditor.language.core = {
   previousPage: 'Go to previous page',
   contentPreviewButtonLabel: 'Preview',
   contentDownloadButtonLabel: 'Get Content',
-  reuseContentTabLabel: 'Get Shared Content',
+  reuseContentTabLabel: 'Create from OER Content',
   contentPublisherPanelHeader: 'Publisher Info',
   noContentFoundDesc: 'There is no content that matches your search criteria.',
   h5pType: 'H5P Type',

@@ -4,10 +4,20 @@ import {
   getQuestionTypeBreakdown,
   getDifficultyDistribution,
   estimateExportSize,
-  generateAvailableOptionsText
+  generateAvailableOptionsText,
+  normalizeOptionLabels
 } from '../../services/exportUtils.js';
 
 describe('exportUtils', () => {
+  test('removes complete sequential option labels while preserving actual initial text', () => {
+    expect(normalizeOptionLabels(['A) First', 'B) Second', 'C) Third'])).toEqual(['First', 'Second', 'Third']);
+    expect(normalizeOptionLabels(['(A) First', '(B) Second'])).toEqual(['First', 'Second']);
+    expect(normalizeOptionLabels(['A. First', 'B. Second'])).toEqual(['First', 'Second']);
+    expect(normalizeOptionLabels(['A. Einstein', 'Newton'])).toEqual(['A. Einstein', 'Newton']);
+    expect(normalizeOptionLabels(['A. Einstein'])).toEqual(['A. Einstein']);
+    expect(normalizeOptionLabels(['A molecule', 'B cell'])).toEqual(['A molecule', 'B cell']);
+    expect(normalizeOptionLabels(['B) First', 'A) Second'])).toEqual(['B) First', 'A) Second']);
+  });
   describe('escapeHtml', () => {
     test('should return empty string for null/undefined', () => {
       expect(escapeHtml(null)).toBe('');

@@ -80,7 +80,17 @@ const fixtures = {
   },
   'branching-scenario': {
     questionText: 'Choose a path.',
-    content: { introText: 'Start', nodes: [] }
+    content: {
+      introText: 'Start',
+      nodes: [{
+        index: 1,
+        question: 'Which path will you take?',
+        alternatives: [
+          { text: 'First path', nextContentId: -1 },
+          { text: 'Second path', nextContentId: -1 }
+        ]
+      }]
+    }
   },
   'documentation-tool': {
     questionText: 'Document your work.',
@@ -89,6 +99,11 @@ const fixtures = {
 };
 
 describe('H5P type adapter registry', () => {
+  test('enables Branching Scenario for its compatible delivery formats', () => {
+    expect(getH5PTypeAdapter('branching-scenario')).toMatchObject({ aiEnabled: true, containers: ['standalone', 'mixed-activity'] });
+    expect(convertQuestionToH5P({ type: 'branching-scenario', ...fixtures['branching-scenario'] }).library)
+      .toBe('H5P.BranchingScenario 1.10');
+  });
   test('registers every AI-enabled CREATE question type once', () => {
     expect(listH5PTypeAdapters({ aiEnabled: true }).map(adapter => adapter.type))
       .toEqual(AI_TYPES);

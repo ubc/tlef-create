@@ -6,6 +6,15 @@ import {
 } from '../../services/markdownExportService.js';
 
 describe('markdownExportService', () => {
+  test('uses one option label in questions and answers while retaining unlabelled initials', () => {
+    const question = { type: 'multiple-choice', content: { options: [
+      { text: 'A) Alpha', isCorrect: true }, { text: 'B) Beta' }
+    ] } };
+    expect(renderMarkdownQuestionContent(question)).toContain('- A. Alpha');
+    expect(renderMarkdownAnswerContent(question)).toContain('- Correct Answer: A\\. Alpha');
+    question.content.options = [{ text: 'A. Einstein', isCorrect: true }, { text: 'Newton' }];
+    expect(renderMarkdownQuestionContent(question)).toContain('- A. A\\. Einstein');
+  });
   test('renders multiple-choice question content with options', () => {
     const output = renderMarkdownQuestionContent({
       type: 'multiple-choice',
@@ -57,4 +66,3 @@ describe('markdownExportService', () => {
     expect(output).toContain('- Correct Answer: True');
   });
 });
-

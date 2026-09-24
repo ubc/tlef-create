@@ -5,6 +5,8 @@ build/
 playwright/.auth/
 playwright-report/
 test-results/
+artifacts/
+public/artifacts/
 *.log
 .DS_Store
 

@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildUserContentStats } from '../services/adminContentStats.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
@@ -114,7 +115,7 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
     User.countDocuments(),
     Folder.countDocuments(),
     Quiz.countDocuments(),
-    Question.countDocuments(),
+    Quiz.aggregate([{ $project: { count: { $size: { $ifNull: ['$questions', []] } } } }, { $group: { _id: null, count: { $sum: '$count' } } }]).then(rows => rows[0]?.count || 0),
     HelpInteraction.countDocuments(),
     AuditEvent.distinct('actor', { createdAt: { $gte: activeSince } }),
     HelpInteraction.aggregate([
@@ -123,8 +124,15 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
     ])
   ]);
 
-  // Per-user question generation stats
-  const userStats = await User.find({}, 'cwlId stats lastLogin createdAt').sort({ 'stats.questionsCreated': -1 }).limit(50);
+  // Match the platform totals: current content, including manual questions and
+  // excluding deleted records. Historical User.stats counters are not maintained.
+  const [users, folders, quizzes, questions] = await Promise.all([
+    User.find({}, 'cwlId lastLogin createdAt').lean(),
+    Folder.aggregate([{ $group: { _id: '$instructor', count: { $sum: 1 } } }]),
+    Quiz.aggregate([{ $group: { _id: '$createdBy', count: { $sum: 1 } } }]),
+    Quiz.aggregate([{ $group: { _id: '$createdBy', count: { $sum: { $size: { $ifNull: ['$questions', []] } } } } }])
+  ]);
+  const userStats = buildUserContentStats(users, { folders, quizzes, questions });
 
   const openReports = await BugReport.countDocuments({ status: 'open' });
   const ratingCounts = Object.fromEntries(guideRatings.map(item => [item._id, item.count]));
@@ -141,15 +149,7 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
       guideNotHelpful: ratingCounts['not-helpful'] || 0,
       openReports
     },
-    users: userStats.map(u => ({
-      _id: u._id,
-      cwlId: u.cwlId,
-      coursesCreated: u.stats?.coursesCreated || 0,
-      quizzesGenerated: u.stats?.quizzesGenerated || 0,
-      questionsCreated: u.stats?.questionsCreated || 0,
-      lastLogin: u.lastLogin,
-      joinedAt: u.createdAt
-    }))
+    users: userStats
   }, 'Admin stats retrieved');
 }));
 
@@ -292,7 +292,7 @@ router.get('/courses/:id', authenticateToken, requireAdmin, asyncHandler(async (
  * Read-only quiz content with prompt text and raw source excerpts removed.
  */
 router.get('/quizzes/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
-  const quiz = await Quiz.findById(req.params.id, 'name folder status settings materials activePlan createdBy exports.format exports.exportedAt createdAt updatedAt')
+  const quiz = await Quiz.findById(req.params.id, 'name folder status settings materials questions learningObjectives activePlan createdBy exports.format exports.exportedAt createdAt updatedAt')
     .populate('folder', 'name instructor')
     .populate('createdBy', 'cwlId displayName email')
     .lean();
@@ -300,8 +300,8 @@ router.get('/quizzes/:id', authenticateToken, requireAdmin, asyncHandler(async (
 
   const [materials, objectives, questions, plans] = await Promise.all([
     Material.find({ _id: { $in: quiz.materials || [] } }, MATERIAL_ADMIN_FIELDS).lean(),
-    LearningObjective.find({ quiz: quiz._id }, 'text order generatedFrom generationMetadata.isAIGenerated generationMetadata.llmModel generationMetadata.sourceReferences.materialId generationMetadata.sourceReferences.materialName generationMetadata.sourceReferences.pageNumber generationMetadata.sourceReferences.pageStart generationMetadata.sourceReferences.pageEnd generationMetadata.sourceReferences.relevanceScore generationMetadata.sourceReferences.section generationMetadata.title generationMetadata.topic generationMetadata.subtopic generationMetadata.sourceOutlineSection generationMetadata.subpoints generationMetadata.bloomLevel generationMetadata.rationale generationMetadata.confidence createdAt updatedAt').sort({ order: 1 }).lean(),
-    Question.find({ quiz: quiz._id }, QUESTION_ADMIN_FIELDS).sort({ order: 1 }).lean(),
+    LearningObjective.find({ quiz: quiz._id, _id: { $in: quiz.learningObjectives || [] } }, 'text order generatedFrom generationMetadata.isAIGenerated generationMetadata.llmModel generationMetadata.sourceReferences.materialId generationMetadata.sourceReferences.materialName generationMetadata.sourceReferences.pageNumber generationMetadata.sourceReferences.pageStart generationMetadata.sourceReferences.pageEnd generationMetadata.sourceReferences.relevanceScore generationMetadata.sourceReferences.section generationMetadata.title generationMetadata.topic generationMetadata.subtopic generationMetadata.sourceOutlineSection generationMetadata.subpoints generationMetadata.bloomLevel generationMetadata.rationale generationMetadata.confidence createdAt updatedAt').sort({ order: 1 }).lean(),
+    Question.find({ quiz: quiz._id, _id: { $in: quiz.questions || [] } }, QUESTION_ADMIN_FIELDS).sort({ order: 1 }).lean(),
     GenerationPlan.find({ quiz: quiz._id }, 'approach questionsPerLO totalQuestions customFormula breakdown distribution generationMetadata.llmModel generationMetadata.processingTime generationMetadata.confidence generationMetadata.reasoning status createdAt updatedAt').sort({ createdAt: -1 }).lean()
   ]);
 

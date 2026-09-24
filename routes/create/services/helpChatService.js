@@ -57,19 +57,18 @@ function fallbackAnswer(sources, languageHint = '') {
 }
 
 export async function answerHelpQuestion({ message, history, context, userId, onChunk }) {
-  const [sources, verifiedFacts] = await Promise.all([
-    helpKnowledgeService.retrieve(message, context, 5),
-    helpKnowledgeService.getVerifiedFacts(message)
-  ]);
-  const prompt = buildPrompt({ message, history, context, sources, verifiedFacts });
+  const { facts: verifiedFacts, sources: verifiedSources } = await helpKnowledgeService.getVerifiedAnswer(message);
 
   // Stable product facts should not depend on model compliance. They are built
   // from the canonical registry and supported export routes, then cited normally.
   if (verifiedFacts.length) {
     const answer = verifiedFacts.join('\n\n');
     onChunk?.(answer);
-    return { answer, model: 'verified-product-facts', sources, fallback: false };
+    return { answer, model: 'verified-product-facts', sources: verifiedSources, fallback: false };
   }
+
+  const sources = await helpKnowledgeService.retrieve(message, context, 5);
+  const prompt = buildPrompt({ message, history, context, sources });
 
   try {
     const response = await llmService.streamCompletion({

@@ -3,6 +3,7 @@
  * Handles Markdown generation for quiz exports.
  */
 import { writeFile } from 'fs/promises';
+import { normalizeOptionLabels } from './exportUtils.js';
 
 function normalizeText(value) {
   return String(value ?? '').replace(/\r\n/g, '\n').trim();
@@ -82,12 +83,13 @@ export function renderMarkdownQuestionContent(question) {
 
   if (question.type === 'multiple-choice') {
     const options = question.content?.options || [];
+    const optionTexts = normalizeOptionLabels(options.map(option => option.text));
     if (options.length > 0) {
       lines.push('### Options');
       lines.push('');
       options.forEach((option, index) => {
         const letter = String.fromCharCode(65 + index);
-        lines.push(`- ${letter}. ${escapeMarkdown(option.text)}`);
+        lines.push(`- ${letter}. ${escapeMarkdown(optionTexts[index])}`);
       });
 
       const tips = options
@@ -164,18 +166,19 @@ export function renderMarkdownAnswerContent(question) {
 
   if (question.type === 'multiple-choice') {
     const options = question.content?.options || [];
+    const optionTexts = normalizeOptionLabels(options.map(option => option.text));
     const correctOptions = options.filter(option => option.isCorrect);
     if (correctOptions.length > 0) {
       if (getMultipleChoiceMode(question) === 'multiple') {
         lines.push('- Correct Answers:');
         correctOptions.forEach((correctOption) => {
           const letter = String.fromCharCode(65 + options.indexOf(correctOption));
-          lines.push(`  - ${letter}\\. ${escapeMarkdown(correctOption.text)}`);
+          lines.push(`  - ${letter}\\. ${escapeMarkdown(optionTexts[options.indexOf(correctOption)])}`);
         });
       } else {
         const correctOption = correctOptions[0];
         const letter = String.fromCharCode(65 + options.indexOf(correctOption));
-        lines.push(`- Correct Answer: ${letter}\\. ${escapeMarkdown(correctOption.text)}`);
+        lines.push(`- Correct Answer: ${letter}\\. ${escapeMarkdown(optionTexts[options.indexOf(correctOption)])}`);
       }
     } else if (question.correctAnswer) {
       lines.push(`- Correct Answer: ${escapeMarkdown(question.correctAnswer)}`);

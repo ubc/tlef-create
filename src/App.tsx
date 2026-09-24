@@ -1,6 +1,7 @@
 import { Provider } from 'react-redux';
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { store } from './store';
+import { setUser, type UserInfo } from './store/slices/appSlice';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import CourseView from './components/CourseView';
@@ -22,10 +23,7 @@ import { SystemDialogProvider } from './components/system-dialog/SystemDialogPro
 // normal instructor bundle until an author opens H5P Studio.
 const H5PStudio = lazy(() => import('./pages/H5PStudio'));
 
-interface AuthenticatedUser {
-  canUseEnvKey?: boolean;
-  isAdmin?: boolean;
-}
+type AuthenticatedUser = UserInfo & { canUseEnvKey?: boolean };
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -54,25 +52,28 @@ const App = () => {
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           console.error('Auth check returned non-JSON response (likely HTML error page)');
+          store.dispatch(setUser(null));
           setIsAuthenticated(false);
           return;
         }
         const data = await response.json() as {
           data?: { authenticated?: boolean; user?: AuthenticatedUser };
         };
-        if (data.data?.authenticated) {
+        if (data.data?.authenticated && data.data.user) {
+          store.dispatch(setUser(data.data.user));
           setIsAuthenticated(true);
-          if (data.data.user) {
-            checkFirstUse(data.data.user);
-          }
+          checkFirstUse(data.data.user);
         } else {
+          store.dispatch(setUser(null));
           setIsAuthenticated(false);
         }
       } else {
+        store.dispatch(setUser(null));
         setIsAuthenticated(false);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+      store.dispatch(setUser(null));
       setIsAuthenticated(false);
     }
   }, [checkFirstUse]);
@@ -81,6 +82,7 @@ const App = () => {
     checkAuth();
     const handleNoApiKey = () => setShowFirstUseModal(true);
     const handleAuthExpired = () => {
+      store.dispatch(setUser(null));
       setIsAuthenticated(false);
       setShowFirstUseModal(false);
     };
@@ -98,7 +100,7 @@ const App = () => {
 
   return (
     <Provider store={store}>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <SystemDialogProvider>
           {isAuthenticated && showFirstUseModal && (
             <FirstUseApiKeyModal onDismiss={() => setShowFirstUseModal(false)} />

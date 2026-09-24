@@ -25,7 +25,7 @@ interface MaterialUploadProps {
   onAddMaterial: (
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
     onProgress?: (progress: number) => void
-  ) => void;
+  ) => void | Promise<void>;
   onRemoveMaterial: (id: string) => void;
   onMaterialReprocessed?: () => void | Promise<void>;
   embedded?: boolean;
@@ -38,6 +38,7 @@ const MaterialUpload = ({
   onMaterialReprocessed,
   embedded = false
 }: MaterialUploadProps) => {
+  const [submittingType, setSubmittingType] = useState<'url' | 'text' | null>(null);
   const [urlInput, setUrlInput] = useState('');
   const [textInput, setTextInput] = useState('');
   const [showUrlForm, setShowUrlForm] = useState(false);
@@ -186,24 +187,32 @@ const MaterialUpload = ({
   };
 
 
-  const handleUrlSubmit = (e: React.FormEvent) => {
+  const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (urlInput.trim()) {
-      onAddMaterial({
-        name: `URL: ${urlInput}`,
+    if (!urlInput.trim() || submittingType) return;
+    setSubmittingType('url');
+    try {
+      await onAddMaterial({
+        name: `URL: ${urlInput.trim()}`,
         type: 'url',
-        content: urlInput
+        content: urlInput.trim()
       });
       setUrlInput('');
       setShowUrlForm(false);
       showNotification('success', 'URL Added', 'Website URL has been added to materials');
+    } catch {
+      // The caller reports the failure; retain the draft for correction and retry.
+    } finally {
+      setSubmittingType(null);
     }
   };
 
-  const handleTextSubmit = (e: React.FormEvent) => {
+  const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (textInput.trim()) {
-      onAddMaterial({
+    if (!textInput.trim() || submittingType) return;
+    setSubmittingType('text');
+    try {
+      await onAddMaterial({
         name: `Text: ${textInput.substring(0, 30)}...`,
         type: 'text',
         content: textInput
@@ -211,6 +220,10 @@ const MaterialUpload = ({
       setTextInput('');
       setShowTextForm(false);
       showNotification('success', 'Text Added', 'Text content has been added to materials');
+    } catch {
+      // The caller reports the failure; retain the draft for correction and retry.
+    } finally {
+      setSubmittingType(null);
     }
   };
 
@@ -279,6 +292,7 @@ const MaterialUpload = ({
             <div className="upload-buttons">
               <button
                   className="btn btn-outline"
+                  disabled={submittingType !== null}
                   onClick={() => setShowUrlForm(!showUrlForm)}
               >
                 <Link size={16} />
@@ -287,6 +301,7 @@ const MaterialUpload = ({
 
               <button
                   className="btn btn-outline"
+                  disabled={submittingType !== null}
                   onClick={() => setShowTextForm(!showTextForm)}
               >
                 <Plus size={16} />
@@ -305,6 +320,7 @@ const MaterialUpload = ({
                       placeholder="Enter website URL..."
                       value={urlInput}
                       onChange={(e) => setUrlInput(e.target.value)}
+                      disabled={submittingType !== null}
                       required
                   />
                   <div className="url-allowlist-info">
@@ -333,11 +349,11 @@ const MaterialUpload = ({
                     )}
                   </div>
                   <div className="form-actions">
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowUrlForm(false)}>
+                    <button type="button" className="btn btn-secondary" disabled={submittingType !== null} onClick={() => setShowUrlForm(false)}>
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary">
-                      Add URL
+                    <button type="submit" className="btn btn-primary" disabled={submittingType !== null}>
+                      {submittingType === 'url' ? 'Adding URL…' : 'Add URL'}
                     </button>
                   </div>
                 </form>
@@ -354,14 +370,15 @@ const MaterialUpload = ({
                   rows={4}
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
+                  disabled={submittingType !== null}
                   required
               />
                   <div className="form-actions">
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowTextForm(false)}>
+                    <button type="button" className="btn btn-secondary" disabled={submittingType !== null} onClick={() => setShowTextForm(false)}>
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary">
-                      Add Text
+                    <button type="submit" className="btn btn-primary" disabled={submittingType !== null}>
+                      {submittingType === 'text' ? 'Adding Text…' : 'Add Text'}
                     </button>
                   </div>
                 </form>

@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { X, Plus, GripVertical, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { ExtendedQuestion } from './reviewTypes';
+import { getQuestionLearningObjectiveId } from '../../utils/questionLearningObjective';
 import { LearningObjectiveData } from '../generation/generationTypes';
 import '../../styles/components/ChapterEditorPanel.css';
 
@@ -263,7 +264,7 @@ export default function ChapterEditorPanel({
     const loMap = new Map<string, string[]>();
     const noLO: string[] = [];
     embeddableQuestions.forEach(q => {
-      const loId = (q as any).learningObjectiveId || (q as any).learningObjective?._id;
+      const loId = getQuestionLearningObjectiveId(q);
       if (loId) {
         if (!loMap.has(loId)) loMap.set(loId, []);
         loMap.get(loId)!.push(q._id);

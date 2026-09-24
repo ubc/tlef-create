@@ -19,6 +19,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { getChunkSectionLabel } from '../utils/chunkLabels.js';
+import { qdrantMetadataFilter, readQdrantChunk } from '../utils/qdrantScope.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -166,6 +168,7 @@ export class QuizRAGService {
     // Use the proper UBC GenAI Toolkit logger
     this.logger = new ConsoleLogger('RAG');
     this.isInitialized = false;
+    this.materialProcessing = new Map();
     
     if (autoInitialize) {
       this.initializeAsync();
@@ -406,6 +409,7 @@ export class QuizRAGService {
                 materialType: material.type,
                 quizId: quizId,
                 chunkIndex: index,
+                sourceChunkIndex: index,
                 totalChunks: chunks.length,
                 section: chunk.section || 'main',
                 sourceFile: material.originalFileName || material.name
@@ -493,46 +497,32 @@ export class QuizRAGService {
       // Query RAG system - check which method is available
       let results;
       try {
-        if (typeof this.ragModule.query === 'function') {
-          console.log('🔍 Using query method');
-          results = await this.ragModule.query(searchQuery, this.embeddings, {
-            topK: topK * 2, // Get more results to filter by quiz if needed
-            filter: quizId ? { quizId: quizId } : undefined
-          });
-        } else if (typeof this.ragModule.retrieveContext === 'function') {
-          console.log('🔍 Using retrieveContext method');
-          // Since UBC toolkit filters are broken, always search without filter and filter manually
-          results = await this.ragModule.retrieveContext(searchQuery, {
-            limit: topK * 2, // Use 'limit' instead of 'topK' to match toolkit interface
-            scoreThreshold: minScore
-          });
-          
-          console.log(`📊 RAG returned ${results.length} unfiltered results`);
-          
-          // Filter results by specific material IDs (much more precise than quiz filtering)
-          if (materialIds.length > 0 && results && results.length > 0) {
-            console.log(`📊 Got ${results.length} total results, filtering by ${materialIds.length} material IDs`);
-            
-            // Filter by specific material IDs from the quiz
-            results = results.filter(result => 
-              result.metadata?.materialId && // Must have material ID
-              materialIds.includes(result.metadata.materialId) // Must be from one of the quiz materials
-            );
-            console.log(`📊 Filtered to ${results.length} results from quiz materials`);
-          } else if (results && results.length > 0) {
-            // Fallback: filter by materials processed through our new system
-            results = results.filter(result => 
-              result.metadata?.materialId && // Must have material ID
-              result.metadata?.processedAt    // Must be from our new processing system
-            );
-            console.log(`📊 Filtered to ${results.length} results from processed materials (fallback)`);
-          }
-        } else {
-          throw new Error('No suitable method found for querying RAG module');
+        // UBC 0.1.5 ignores RetrievalOptions.filter in its Qdrant provider.
+        // Use the configured client directly so scope is applied before top-K;
+        // post-filtering global results can starve selected course evidence.
+        const provider = this.ragModule.ragProvider;
+        if (!provider?.client?.search || !provider.config?.collectionName) {
+          throw new Error('The vector provider does not support scoped retrieval.');
         }
+        const filter = materialIds.length
+          ? qdrantMetadataFilter('materialId', materialIds)
+          : qdrantMetadataFilter('quizId', quizId ? [quizId] : []);
+        const [embedding] = await this.embeddings.embed([searchQuery]);
+        const vector = convertEmbeddingToArray(embedding);
+        if (!vector.length || vector.some(value => !Number.isFinite(value))) {
+          throw new Error('No valid embedding was returned for material retrieval.');
+        }
+        const points = await provider.client.search(provider.config.collectionName, {
+          vector,
+          filter,
+          limit: topK,
+          score_threshold: minScore,
+          with_payload: true,
+          with_vector: false
+        });
+        results = points.map(readQdrantChunk);
       } catch (error) {
         console.error('❌ RAG search failed completely:', error.message);
-        console.log('🔄 Returning empty results to allow fallback to template generation');
         return {
           query: searchQuery,
           chunks: [],
@@ -546,12 +536,19 @@ export class QuizRAGService {
 
       // Filter and process results
       const relevantChunks = results
+        // Defense in depth: never expose a point outside the requested scope.
+        .filter(result => materialIds.length
+          ? materialIds.map(String).includes(String(result.metadata?.materialId))
+          : String(result.metadata?.quizId) === String(quizId))
         .filter(result => result.score >= minScore)
         .slice(0, topK)
         .map(result => ({
           content: result.content || result.pageContent, // Try both field names for compatibility
           score: result.score,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            sectionTitle: getChunkSectionLabel(result.metadata)
+          },
           source: `${result.metadata?.materialName || 'Unknown'} (${result.metadata?.materialType || 'unknown'})`
         }));
 
@@ -1103,7 +1100,7 @@ export class QuizRAGService {
             chunks.push({
               content: currentChunk.trim(),
               section: `chunk_${chunkIndex}`,
-              sectionTitle: `Chunk ${chunkIndex++}`
+              sectionTitle: `Chunk ${++chunkIndex}`
             });
           }
           
@@ -1120,7 +1117,7 @@ export class QuizRAGService {
                   chunks.push({
                     content: currentChunk.trim() + '.',
                     section: `chunk_${chunkIndex}`,
-                    sectionTitle: `Chunk ${chunkIndex++}`
+                    sectionTitle: `Chunk ${++chunkIndex}`
                   });
                 }
                 currentChunk = sentence.trim();
@@ -1137,7 +1134,7 @@ export class QuizRAGService {
         chunks.push({
           content: currentChunk.trim(),
           section: `chunk_${chunkIndex}`,
-          sectionTitle: `Chunk ${chunkIndex}`
+          sectionTitle: `Chunk ${chunkIndex + 1}`
         });
       }
     }
@@ -1151,6 +1148,18 @@ export class QuizRAGService {
    * This replaces the job queue approach with immediate processing
    */
   async processAndEmbedMaterial(material) {
+    const materialId = material._id.toString();
+    if (this.materialProcessing.has(materialId)) return this.materialProcessing.get(materialId);
+    const processing = this.processMaterialChunks(material);
+    this.materialProcessing.set(materialId, processing);
+    try {
+      return await processing;
+    } finally {
+      this.materialProcessing.delete(materialId);
+    }
+  }
+
+  async processMaterialChunks(material) {
     console.log(`🔄 Processing and embedding material: ${material.name}`);
     
     if (!this.ragModule || !this.embeddings || !this.documentParser) {
@@ -1228,6 +1237,10 @@ export class QuizRAGService {
             chunksCount: 0
           };
         }
+      } else if ((material.type === 'pdf' || material.type === 'docx') && material.content) {
+        // Historical queued jobs removed original files after parsing. Preserve
+        // their cached text as a retry path; new jobs retain the original source.
+        content = material.content;
       }
 
       if (!content || content.trim().length === 0) {
@@ -1241,8 +1254,17 @@ export class QuizRAGService {
       // Split content into chunks for better retrieval
       const chunks = preparedChunks || this.chunkContent(content, material);
       console.log(`📊 Created ${chunks.length} chunks from material`);
+
+      // addDocument allocates new vector IDs, including for its internal chunks.
+      // Complete deletion must precede every attempt so retries cannot duplicate
+      // vectors, even when the previous write succeeded before its response failed.
+      const cleanup = await this.cleanupMaterialEmbeddings(material._id.toString());
+      if (!cleanup.success) {
+        return { success: false, error: `Could not prepare material for indexing: ${cleanup.error}. Please retry.`, chunksCount: 0 };
+      }
       
       let successCount = 0;
+      const failedChunkIndices = [];
       
       // Add each chunk to the vector database
       for (const [index, chunk] of chunks.entries()) {
@@ -1252,9 +1274,10 @@ export class QuizRAGService {
             materialName: material.name,
             materialType: material.type,
             chunkIndex: index,
+            sourceChunkIndex: index,
             totalChunks: chunks.length,
             section: chunk.section || 'main',
-            sectionTitle: chunk.sectionTitle || chunk.section || 'main',
+            sectionTitle: getChunkSectionLabel(chunk, index) || 'main',
             sectionNumber: chunk.sectionNumber || undefined,
             sectionLevel: typeof chunk.sectionLevel === 'number' ? chunk.sectionLevel : undefined,
             pageNumber: chunk.pageNumber || undefined,
@@ -1268,29 +1291,24 @@ export class QuizRAGService {
           
           // Add document to RAG system
           const chunkIds = await this.ragModule.addDocument(chunk.content, metadata);
+          if (!Array.isArray(chunkIds) || chunkIds.length === 0) {
+            throw new Error('Embedding service returned no vectors');
+          }
           successCount++;
           const pageLabel = metadata.pageNumber ? `page ${metadata.pageNumber}, ` : '';
           console.log(`✅ Added chunk ${successCount}/${chunks.length}: ${pageLabel}${metadata.sectionTitle}, ${chunkIds.length} embeddings created`);
         } catch (addError) {
           console.error(`❌ Failed to add chunk ${index + 1}:`, addError.message);
-          // Continue with other chunks even if one fails
+          failedChunkIndices.push(index);
         }
       }
-
-      if (successCount === 0) {
-        return {
-          success: false,
-          error: 'Failed to embed any chunks',
-          chunksCount: chunks.length
-        };
-      }
-
-      console.log(`✅ Successfully processed material: ${successCount}/${chunks.length} chunks embedded`);
 
       material.processingMetadata = {
         ...(material.processingMetadata?.toObject?.() || material.processingMetadata || {}),
         pageCount: parsedPages.length || material.processingMetadata?.pageCount,
         chunkCount: chunks.length,
+        embeddedChunkCount: successCount,
+        failedChunkIndices,
         parserVersion: parsedPages.length ? 'page-aware-v1' : 'section-aware-v1',
         processedAt: new Date(),
         embeddingProvider: this.embeddingConfig.provider,
@@ -1299,6 +1317,18 @@ export class QuizRAGService {
         embeddingCollection: this.embeddingConfig.collectionName
       };
       await material.save();
+
+      if (failedChunkIndices.length || chunks.length === 0) {
+        return {
+          success: false,
+          partial: successCount > 0,
+          error: `Material indexing incomplete: ${successCount} of ${chunks.length} chunks embedded. Retry processing to rebuild the complete material.`,
+          chunksCount: successCount,
+          totalChunks: chunks.length,
+          failedChunkIndices
+        };
+      }
+      console.log(`✅ Successfully processed material: ${successCount}/${chunks.length} chunks embedded`);
       
       return {
         success: true,
@@ -1347,18 +1377,9 @@ export class QuizRAGService {
         }
         
         // Delete points by material ID filter
-        const deleteUrl = `${qdrantUrl}/collections/${collectionName}/points/delete`;
+        const deleteUrl = `${qdrantUrl}/collections/${collectionName}/points/delete?wait=true`;
         const deletePayload = {
-          filter: {
-            must: [
-              {
-                key: "metadata.materialId",
-                match: {
-                  value: materialId
-                }
-              }
-            ]
-          }
+          filter: qdrantMetadataFilter('materialId', [materialId])
         };
         
         console.log(`🔄 Making DELETE request to: ${deleteUrl}`);
@@ -1385,26 +1406,18 @@ export class QuizRAGService {
           const errorText = await response.text();
           console.error(`❌ Qdrant API error (${response.status}):`, errorText);
           
-          // Fall back to logging if direct API fails
-          console.log(`📝 Falling back to cleanup logging for material ${materialId}`);
           return {
-            success: true,
-            message: `Cleanup logged for material ${materialId} (API fallback)`,
-            note: `Direct API failed: ${response.status} ${errorText}`,
-            method: 'fallback_logging'
+            success: false,
+            error: `Vector cleanup failed (${response.status})`
           };
         }
         
       } catch (apiError) {
         console.error(`❌ Direct Qdrant API error:`, apiError.message);
         
-        // Fall back to logging if API approach fails
-        console.log(`📝 Falling back to cleanup logging for material ${materialId}`);
         return {
-          success: true,
-          message: `Cleanup logged for material ${materialId} (error fallback)`,
-          note: `Direct API failed: ${apiError.message}`,
-          method: 'fallback_logging'
+          success: false,
+          error: 'Vector cleanup could not reach the database'
         };
       }
     } catch (error) {
@@ -1493,6 +1506,7 @@ export class QuizRAGService {
           metadata: {
             ...metadata,
             chunkIndex: chunks.length,
+            sourceChunkIndex: chunks.length,
             documentId
           }
         });

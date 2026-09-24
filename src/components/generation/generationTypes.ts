@@ -15,6 +15,7 @@ export interface QuestionGenerationProps {
   quizId: string;
   courseId?: string;
   onQuestionsGenerated?: () => void;
+  isActive?: boolean;
 }
 
 // NEW: Plan item for manual/AI plan mode
@@ -31,6 +32,7 @@ export interface PlanItem {
   selectionMode?: 'single' | 'multiple'; // multiple-choice only
   branchingLayers?: number;      // branching-scenario only, default 2
   branchingChoices?: number;     // branching-scenario only, default 2
+  supportingLearningObjectiveIds?: string[]; // other LOs covered by one scenario
   customPrompt?: string;         // used when LO is absent or as supplemental context
   useCustomPromptOnly?: boolean; // true when learningObjectiveId is empty
 }
@@ -68,6 +70,7 @@ export interface StreamingState {
   sessionId: string | null;
   questionsInProgress: Map<string, { questionId: string; type: string; progress: string; chunks: string[] }>;
   completedQuestions: Question[];
+  readyCount?: number;
   totalQuestions: number;
   batchStarted: boolean;
 }

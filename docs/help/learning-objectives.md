@@ -10,6 +10,12 @@ Assign and finish processing the relevant materials first. Leave the instruction
 
 Generation is a draft, not approval. Check every objective against the intended curriculum and the source material.
 
+## Safely replace learning objectives
+
+When you replace a set of learning objectives, CREATE validates and saves the complete new set before switching the saved list. Invalid input, a failed save, or another edit during preparation leaves the previous objectives available. AI replacement also keeps the existing questions until the new objectives are ready; only a successful replacement clears the question list as described by the confirmation.
+
+If replacement fails, inspect the existing Learning Objectives and Review tabs before trying again. Unpublished drafts and retired objectives are excluded from the current objectives, search, planning, and coverage. Existing questions may still refer to their original objectives after a manual objective replacement, so check their alignment before delivery.
+
 ## Understand the generation log
 
 The **Live generation log** explains what CREATE is doing before model text appears. It first resolves generation settings, reads the assigned material chunks, builds a source inventory, groups related sections into instructional clusters, and cleans document noise into a teaching-focused digest. The log reports safe aggregate results such as section, chunk, cluster, and topic counts; it does not display course source text or private model reasoning.
@@ -61,4 +67,4 @@ Open a reference to confirm the excerpt actually supports the objective. A citat
 
 Edit weak objectives before building the Blueprint. If an objective already has linked questions, editing or regenerating it asks whether those questions should also be regenerated. Select **OK** to update the linked questions after the objective is saved, or **Cancel** to save the objective while keeping the existing questions unchanged. Review any regenerated questions and their evidence before export.
 
-Deleting an objective that already has questions can also delete its dependent questions after confirmation. Review the warning carefully; this is a structural change, not only a text edit.
+Deleting a saved objective always opens a confirmation, even when it has no linked questions. Cancel keeps the objective. When linked questions exist, a separate dependent-question warning may follow according to your warning preference; disabling that extra warning does not disable the first deletion confirmation. Review the warning carefully because deletion can also remove the dependent questions.

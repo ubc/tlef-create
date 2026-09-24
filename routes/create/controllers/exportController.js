@@ -77,6 +77,9 @@ router.post('/h5p/:quizId', authenticateToken, validateQuizId, asyncHandler(asyn
         HTTP_STATUS.BAD_REQUEST
       );
     }
+    if (['QUESTION_TYPE_UNAVAILABLE', 'MISSING_H5P_PACKAGE_ASSETS'].includes(error?.code)) {
+      return errorResponse(res, error.message, error.code, HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
     return errorResponse(res, 'Failed to generate H5P export', 'EXPORT_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
 }));

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { QUESTION_TYPES, DIFFICULTY_LEVELS, REVIEW_STATUS } from '../config/constants.js';
 import { QUESTION_TEXT_LIMITS } from '../utils/questionTextLimits.js';
+import { beginQuestionMutation } from '../services/questionPublication.js';
 
 const questionSchema = new mongoose.Schema({
   // Relationships
@@ -10,6 +11,7 @@ const questionSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  generationJob: { type: mongoose.Schema.Types.ObjectId, index: true, immutable: true },
   
   learningObjective: {
     type: mongoose.Schema.Types.ObjectId,
@@ -180,6 +182,10 @@ const questionSchema = new mongoose.Schema({
     }], // Which materials were used to generate this question
     llmModel: { type: String }, // e.g., "llama3.1:8b"
     generationPrompt: { type: String }, // The prompt used
+    instructorPrompt: { type: String }, // Original custom-only instructions, without system/course additions
+    supportingLearningObjectives: [{ type: mongoose.Schema.Types.ObjectId, ref: 'LearningObjective' }],
+    useCustomPromptOnly: { type: Boolean },
+    qualityReview: { type: String, enum: ['ai-feedback-reviewed'] },
     sourceReferences: [{
       materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' },
       materialName: { type: String },
@@ -337,16 +343,53 @@ questionSchema.statics.getByLearningObjective = function(learningObjectiveId) {
   return this.find({ learningObjective: learningObjectiveId }).sort({ order: 1 });
 };
 
-questionSchema.statics.reorderQuestions = async function(quizId, orderedIds) {
-  const promises = orderedIds.map((id, index) => 
-    this.findByIdAndUpdate(id, { order: index })
-  );
+questionSchema.statics.reorderQuestions = async function(quizId, orderedIds, leaseUntil) {
+  const promises = orderedIds.map(async (id, index) => {
+    const question = await this.findOneAndUpdate({ _id: id, quiz: quizId,
+      $expr: { $lte: ['$$NOW', leaseUntil] } }, { order: index });
+    if (!question) throw Object.assign(new Error('The question reorder lease expired. Refresh before reordering again.'), { status: 409, code: 'QUESTION_EDIT_EXPIRED' });
+    return question;
+  });
   return Promise.all(promises);
 };
 
 questionSchema.statics.getByReviewStatus = function(quizId, status) {
   return this.find({ quiz: quizId, reviewStatus: status });
 };
+
+// Existing question edits invalidate generation snapshots before the write and
+// hold a short lease until the cross-document edit has finished. New generated
+// candidates are unpublished until the job atomically swaps Quiz.questions.
+questionSchema.pre('save', async function() {
+  if (this.isNew || !this.isModified()) return;
+  const Quiz = mongoose.model('Quiz');
+  if (!await Quiz.exists({ _id: this.quiz, createdBy: this.createdBy, questions: this._id })) {
+    throw Object.assign(new Error('This question is no longer in the published learning object. Refresh before editing.'), { status: 409, code: 'QUESTION_LIST_CHANGED' });
+  }
+  this.$locals.questionMutation = await beginQuestionMutation(Quiz, this.quiz, this.createdBy);
+  if (!this.$locals.questionMutation.quiz.questions.some(id => String(id) === String(this._id))) {
+    throw Object.assign(new Error('The published question list changed before this edit.'), { status: 409, code: 'QUESTION_LIST_CHANGED' });
+  }
+  await this.$locals.questionMutation.assertActive();
+});
+questionSchema.post('save', async function(doc) {
+  const mutation = doc.$locals.questionMutation;
+  delete doc.$locals.questionMutation;
+  if (mutation) {
+    try {
+      await mutation.assertActive();
+      if (!await mongoose.model('Quiz').exists({ _id: doc.quiz, createdBy: doc.createdBy, questions: doc._id })) {
+        throw Object.assign(new Error('The published question list changed before this edit could be confirmed.'), { status: 409, code: 'QUESTION_LIST_CHANGED' });
+      }
+    } finally { await mutation.finish(); }
+  }
+});
+questionSchema.post('save', function(error, doc, next) {
+  const mutation = doc?.$locals?.questionMutation;
+  if (doc?.$locals) delete doc.$locals.questionMutation;
+  if (!mutation) return next(error);
+  mutation.finish().then(() => next(error), () => next(error));
+});
 
 // Ensure virtual fields are serialized
 questionSchema.set('toJSON', {

@@ -22,6 +22,7 @@ describe('Teaching purpose and layout preview', () => {
     expect(container.querySelectorAll('svg.generation-layout-preview')).toHaveLength(4);
     expect(screen.getByText('Chapters and pages')).toBeInTheDocument();
     expect(screen.getByText('One scrolling page')).toBeInTheDocument();
+    expect(screen.getByText(/dedicated player for a Branching Scenario/)).toBeInTheDocument();
   });
 
   it('lets teachers select purpose and layout independently with accessible radio inputs', () => {

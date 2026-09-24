@@ -16,9 +16,15 @@ File upload and content processing are separate stages. After a file reaches 100
 
 If processing remains pending, refresh once before retrying. If a source shows **Processing failed**, read the visible reason and select **Retry** on its material card. Re-uploading the same source repeatedly can create duplicate evidence and should be avoided. Learning-objective generation stays unavailable while an assigned source is pending or failed, but objectives can still be imported or entered manually.
 
+All chunks must finish indexing before a material is ready. If embedding stops partway through, including a connection error such as **Premature close**, the material remains failed rather than appearing complete. Retry rebuilds its index after removing the previous partial result. A successful text split alone does not mean embeddings were saved.
+
+If adding a URL or pasted text fails, the form stays open and retains your input. Correct the visible problem and submit again; a failed request is not reported as a successful upload.
+
 If an administrator changes CREATE's retrieval model, previously completed
 materials may need to be reprocessed once before they can supply evidence from
-the new vector index. The original material does not need to be uploaded again.
+the new vector index. CREATE retains newly processed source files. Existing
+extracted text can also be reused for re-indexing. If an older upload's file and
+extracted text are both unavailable, upload that original again.
 
 ## Assign materials to a learning object
 
@@ -35,6 +41,8 @@ The extracted-text preview is useful for confirming that headings and important 
 ## Page numbers and source locations
 
 PDF evidence retains page numbers when the parser can identify them. DOC/DOCX documents may not have stable printed page numbers, so their references can use sections or extracted chunks. URL and pasted-text materials use a section or chunk location. These differences are expected and do not by themselves mean grounding failed.
+
+Visible chunk labels start at **Chunk 1** in both references and evidence graphs. They identify extracted sections, not printed page numbers.
 
 ## Replace or remove a material
 

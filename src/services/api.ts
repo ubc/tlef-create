@@ -80,6 +80,8 @@ export interface Material {
   processingMetadata?: {
     pageCount?: number;
     chunkCount?: number;
+    embeddedChunkCount?: number;
+    failedChunkIndices?: number[];
     parserVersion?: string;
     processedAt?: string;
   };
@@ -177,7 +179,7 @@ export interface CoverageMap {
 export interface Quiz {
   _id: string;
   name: string;
-  folder: string;
+  folder: string | Pick<Folder, '_id' | 'name'>;
   materials: string[] | Material[];
   learningObjectives: string[];
   questions: string[];
@@ -213,6 +215,7 @@ export interface Quiz {
       useCustomPromptOnly?: boolean;
       branchingLayers?: number;
       branchingChoices?: number;
+      supportingLearningObjectives?: string[];
     }>;
     aiConfig?: {
       autoRecommendTotalQuestions?: boolean;
@@ -912,6 +915,11 @@ export const quizApi = {
     return response.data;
   },
 
+  completeReview: async (id: string): Promise<{ quiz: Quiz }> => {
+    const response = await apiClient.put<{ success: boolean; data: { quiz: Quiz }; message: string }>(`/quizzes/${id}/review`, {});
+    return response.data;
+  },
+
   // DELETE /api/create/quizzes/:id - Delete quiz
   deleteQuiz: async (id: string): Promise<{ message: string }> => {
     const response = await apiClient.delete<{ success: boolean; message: string }>(`/quizzes/${id}`);
@@ -1198,6 +1206,7 @@ export interface QuestionConfig {
   useCustomPromptOnly?: boolean;
   branchingLayers?: number;
   branchingChoices?: number;
+  supportingLearningObjectiveIds?: string[];
 }
 
 export interface GenerationPlanReference {
@@ -1206,8 +1215,79 @@ export interface GenerationPlanReference {
   breakdown: GenerationPlan['breakdown'];
 }
 
+export interface StreamingQuestionConfig {
+  questionType: string;
+  difficulty?: string;
+  learningObjective?: string;
+  learningObjectiveId?: string;
+  customPrompt?: string;
+  useCustomPromptOnly?: boolean;
+}
+
+export interface QuestionGenerationJob {
+  requestId: string;
+  jobId: string;
+  abandoned?: boolean;
+  quizId: string;
+  sessionId: string;
+  mode: 'append' | 'replace';
+  status: 'running' | 'committing' | 'succeeded' | 'failed' | 'interrupted' | 'conflict';
+  totalQuestions: number;
+  completedQuestions: number;
+  failedQuestions: number;
+  questionIds: string[];
+  items: Array<{ index: number; questionId: string; status: 'queued' | 'generating' | 'ready' | 'failed'; savedQuestionId?: string; code?: string; message?: string }>;
+  message?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Question API
 export const questionsApi = {
+  startQuestionGeneration: async (
+    quizId: string, sessionId: string, questionConfigs: StreamingQuestionConfig[],
+    options: { requestId: string; mode: 'append' | 'replace' }
+  ): Promise<{ success: boolean; sessionId: string; job: QuestionGenerationJob }> => {
+    return apiClient.post('/streaming/generate-questions', { quizId, sessionId, questionConfigs, ...options });
+  },
+
+  getGenerationJob: async (requestId: string): Promise<QuestionGenerationJob> => {
+    const response = await apiClient.get<{ data: { job: QuestionGenerationJob } }>(
+      `/streaming/generation-jobs/${encodeURIComponent(requestId)}`
+    );
+    return response.data.job;
+  },
+
+  abandonUnconfirmedGeneration: async (quizId: string, requestId: string): Promise<QuestionGenerationJob> => {
+    const response = await apiClient.post<{ data: { job: QuestionGenerationJob } }>(
+      `/streaming/generation-jobs/${encodeURIComponent(requestId)}/abandon`, { quizId }
+    );
+    return response.data.job;
+  },
+
+  listGenerationJobs: async (quizId: string): Promise<QuestionGenerationJob[]> => {
+    const response = await apiClient.get<{ data: { jobs: QuestionGenerationJob[] } }>(
+      `/streaming/generation-jobs?quizId=${encodeURIComponent(quizId)}`
+    );
+    return response.data.jobs;
+  },
+
+  checkGenerationReadiness: async (
+    quizId: string,
+    questionConfigs: Array<{
+      questionType: string;
+      difficulty?: string;
+      learningObjectiveId?: string;
+      customPrompt?: string;
+      useCustomPromptOnly?: boolean;
+    }>
+  ): Promise<{ ready: boolean }> => {
+    const response = await apiClient.post<{ success: boolean; data: { ready: boolean } }>(
+      '/streaming/generation-readiness', { quizId, questionConfigs }
+    );
+    return response.data;
+  },
+
   // GET /api/create/questions/quiz/:quizId - Get quiz questions
   getQuestions: async (quizId: string): Promise<{ questions: Question[] }> => {
     const response = await apiClient.get<{ success: boolean; data: { questions: Question[] }; message: string }>(`/questions/quiz/${quizId}`);
@@ -1417,6 +1497,8 @@ export interface Question {
   order: number;
   reviewStatus: 'pending' | 'approved' | 'needs-review' | 'rejected';
   generationMetadata?: {
+    instructorPrompt?: string;
+    useCustomPromptOnly?: boolean;
     generatedFrom: string[];
     llmModel: string;
     generationPrompt: string;
@@ -1484,6 +1566,7 @@ export interface H5PStudioActivityType {
   mode: 'generate' | 'template' | 'unavailable';
   guidance: string;
   problems: string[];
+  questionTypes?: Array<{ type: string; title: string; containers: string[] }>;
 }
 
 export interface H5PStudioAIRequest {
@@ -1491,9 +1574,110 @@ export interface H5PStudioAIRequest {
   instructions: string;
   templateContentId?: string;
   quizId?: string;
+  objectiveIds?: string[];
+  materialIds?: string[];
+  questionPlan?: Array<{ questionType: string; count: number }>;
 }
 
+export interface StudioGenerationJob {
+  requestId: string;
+  status: 'running' | 'succeeded' | 'failed' | 'interrupted';
+  contentId: string | null;
+  message: string;
+}
+
+export interface StudioSourceStatus {
+  independent: boolean;
+  quizId: string | null;
+  folderId: string | null;
+  title: string | null;
+  state: 'standalone' | 'unavailable' | 'unknown' | 'changed' | 'current';
+}
+
+export interface StudioAssistantObjective {
+  id: string;
+  text: string;
+  sourceReferences?: SourceReference[];
+}
+
+export interface StudioAssistantPlanItem {
+  id: string;
+  title: string;
+  questionType: string;
+  count: number;
+  objectiveIds: string[];
+  instructions: string;
+}
+
+export interface StudioAssistantSession {
+  id: string;
+  requestId?: string;
+  courseId: string;
+  materialIds: string[];
+  quizId?: string;
+  quizName?: string;
+  sourceRevision?: number;
+  sourceChanged?: boolean;
+  instructions: string;
+  revision: number;
+  phase?: 'planning' | 'generating';
+  status: 'planning' | 'awaiting_approval' | 'generating' | 'completed' | 'failed' | 'interrupted';
+  objectives: StudioAssistantObjective[];
+  plan: StudioAssistantPlanItem[];
+  outputs: Array<{ planItemId?: string; index?: number; contentId: string; title: string }>;
+  events: Array<{ stage: string; message: string; createdAt: string }>;
+  error?: { code?: string; message: string } | string | null;
+  currentJobId?: string | null;
+  previewVersion?: number;
+  generation?: {
+    requestId: string;
+    jobId?: string;
+    sessionId?: string;
+    status: string;
+    readyCount: number;
+    totalQuestions: number;
+    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string }>;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StudioAssistantCapabilities {
+  questionTypes: Array<{ type: string; title: string }>;
+  maxObjectives: number;
+  maxPlanRows: number;
+  maxQuestions: number;
+  maxMaterials?: number;
+}
+
+export const studioAssistantApi = {
+  getCapabilities: (): Promise<ApiResponse<StudioAssistantCapabilities>> =>
+    apiClient.get('/h5p-editor/assistant/capabilities'),
+  createSession: (request: { courseId: string; quizId?: string; materialIds: string[]; instructions: string; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
+    apiClient.post('/h5p-editor/assistant/sessions', request),
+  listSessions: (): Promise<ApiResponse<{ sessions: StudioAssistantSession[] }>> =>
+    apiClient.get('/h5p-editor/assistant/sessions'),
+  getSession: (id: string): Promise<ApiResponse<{ session: StudioAssistantSession; job?: unknown }>> =>
+    apiClient.get(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}`),
+  savePlan: (id: string, request: { revision: number; objectives: StudioAssistantObjective[]; plan: StudioAssistantPlanItem[] }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
+    apiClient.put(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/plan`, request),
+  approve: (id: string, request: { revision: number; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
+    apiClient.post(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/approve`, request),
+  resume: (id: string, request: { revision: number; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
+    apiClient.post(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/resume`, request),
+};
+
 export const h5pEditorApi = {
+  suggestPrompt: (request: { messages: Array<{ role: 'user' | 'assistant'; content: string }>; kind: 'single' | 'collection'; layout: string; activityType: string; selectedQuestionTypes: string[]; evidenceSelected: boolean; quizId?: string; objectiveIds?: string[]; materialIds?: string[]; currentInstructions: string; generateNow: boolean }): Promise<ApiResponse<{ reply: string; nextStep: 'continue' | 'offer' | 'draft'; draft: string }>> =>
+    apiClient.post('/h5p-editor/ai/brief', request),
+  planActivity: (request: { library: string; kind: 'collection' | 'same-type' | 'mixed'; instructions: string; preferredQuestionType?: string; selectedQuestionTypes?: string[]; quizId?: string; objectiveIds?: string[]; materialIds?: string[] }): Promise<ApiResponse<{ plan: Array<{ questionType: string; count: number; title: string }> }>> =>
+    apiClient.post('/h5p-editor/ai/plan', request),
+  startGeneration: async (request: H5PStudioAIRequest & { requestId: string }): Promise<ApiResponse<{ job: StudioGenerationJob }>> =>
+    apiClient.post('/h5p-editor/ai/jobs', request),
+  getGeneration: async (requestId: string): Promise<ApiResponse<{ job: StudioGenerationJob; content: H5PStudioContent | null }>> =>
+    apiClient.get(`/h5p-editor/ai/jobs/${encodeURIComponent(requestId)}`),
+  getSourceStatus: async (contentId: string): Promise<ApiResponse<{ source: StudioSourceStatus }>> =>
+    apiClient.get(`/h5p-editor/contents/${encodeURIComponent(contentId)}/source`),
   getActivityCatalog: async (): Promise<ApiResponse<{ types: H5PStudioActivityType[] }>> => {
     return await apiClient.get('/h5p-editor/ai/catalog');
   },
@@ -1504,8 +1688,11 @@ export const h5pEditorApi = {
   prepareTemplate: async (library: string): Promise<ApiResponse<{ content: H5PStudioContent }>> => {
     return await apiClient.post('/h5p-editor/ai/template', { library });
   },
-  listContents: async (): Promise<ApiResponse<{ contents: H5PStudioContent[] }>> => {
-    return await apiClient.get('/h5p-editor/contents');
+  listContents: async (scope?: { folderId?: string; quizId?: string }): Promise<ApiResponse<{ contents: H5PStudioContent[] }>> => {
+    const query = new URLSearchParams();
+    if (scope?.folderId) query.set('folderId', scope.folderId);
+    if (scope?.quizId) query.set('quizId', scope.quizId);
+    return await apiClient.get(`/h5p-editor/contents${query.size ? `?${query}` : ''}`);
   },
 
   getEditorModel: async (contentId: string): Promise<ApiResponse<{ model: Record<string, unknown> }>> => {
@@ -1588,7 +1775,7 @@ export const canvasApi = {
     return await apiClient.get(`/canvas/courses/${courseId}/modules`);
   },
 
-  exportToCanvas: async (quizId: string, courseId: string, moduleId: string): Promise<ApiResponse<{ moduleItemId: string; lumiContentId: string; quizName: string; canvasUrl: string }>> => {
+  exportToCanvas: async (quizId: string, courseId: string, moduleId: string): Promise<ApiResponse<{ moduleItemId: string; lumiContentId: string | null; quizName: string; canvasUrl: string }>> => {
     return await apiClient.post(`/canvas/export/${quizId}`, { courseId, moduleId });
   },
 
@@ -1640,19 +1827,34 @@ export interface AdminCourseSummary {
   updatedAt: string;
 }
 
-export interface AdminCourseDetail extends AdminCourseSummary {
-  instructor?: { _id: string; cwlId: string; displayName?: string; email?: string };
-  materials: Array<Record<string, any>>;
-  quizzes: Array<Record<string, any>>;
-}
-
-export interface AdminQuizDetail extends Record<string, any> {
+export interface AdminMaterialMetadata {
   _id: string;
   name: string;
-  materials: Array<Record<string, any>>;
-  learningObjectives: Array<Record<string, any>>;
-  questions: Array<Record<string, any>>;
-  generationPlans: Array<Record<string, any>>;
+  type?: Material['type'];
+  fileSize?: number;
+  processingStatus?: Material['processingStatus'];
+  processingMetadata?: Material['processingMetadata'];
+}
+
+export interface AdminCourseDetail extends Omit<AdminCourseSummary, 'materials' | 'quizzes'> {
+  instructor?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  materials: AdminMaterialMetadata[];
+  quizzes: Array<Pick<Quiz, '_id' | 'name' | 'status' | 'questions' | 'learningObjectives'>>;
+}
+
+export interface AdminQuizDetail {
+  _id: string;
+  name: string;
+  status?: string;
+  settings?: { pedagogicalApproach?: string };
+  materials: AdminMaterialMetadata[];
+  learningObjectives: Array<Pick<LearningObjective, '_id' | 'text'> & {
+    generationMetadata?: { subpoints?: string[] };
+  }>;
+  questions: Array<Pick<Question, '_id' | 'questionText' | 'type' | 'difficulty' | 'explanation' | 'reviewStatus'> & {
+    content?: { front?: string; question?: string };
+  }>;
+  generationPlans: Array<Pick<GenerationPlan, '_id' | 'approach' | 'totalQuestions' | 'status'>>;
 }
 
 export const adminApi = {
@@ -1695,7 +1897,7 @@ export const adminApi = {
     return await apiClient.get(`/admin/activity${query.size ? `?${query}` : ''}`);
   },
 
-  getUserCourses: async (userId: string): Promise<ApiResponse<{ user: Record<string, any>; courses: AdminCourseSummary[] }>> => {
+  getUserCourses: async (userId: string): Promise<ApiResponse<{ user: { _id: string; cwlId: string; displayName?: string; email?: string }; courses: AdminCourseSummary[] }>> => {
     return await apiClient.get(`/admin/users/${userId}/courses`);
   },
 

@@ -57,6 +57,7 @@ const h5pContentSchema = new mongoose.Schema({
     default: null,
     maxlength: 80
   },
+  assistantSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'StudioAssistantSession' },
   aiGeneration: {
     model: { type: String, maxlength: 200 },
     library: { type: String, maxlength: 200 },
@@ -76,5 +77,8 @@ const h5pContentSchema = new mongoose.Schema({
 
 h5pContentSchema.index({ owner: 1, updatedAt: -1 });
 h5pContentSchema.index({ owner: 1, quiz: 1, source: 1 });
+h5pContentSchema.index({ owner: 1, assistantSessionId: 1 }, {
+  unique: true, partialFilterExpression: { assistantSessionId: { $type: 'objectId' } }
+});
 
 export default mongoose.model('H5PContent', h5pContentSchema);

@@ -148,6 +148,9 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
     subscribe(PUBSUB_EVENTS.QUESTIONS_CHANGED, () => {
       loadFolders();
     });
+    subscribe('course-created', () => { loadFolders(); });
+    subscribe('course-updated', () => { loadFolders(); });
+    subscribe('materials-updated', () => { loadFolders(); });
     subscribe(PUBSUB_EVENTS.OBJECTIVES_DELETED, () => {
       loadFolders();
     });

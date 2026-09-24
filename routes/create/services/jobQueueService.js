@@ -182,7 +182,6 @@ class JobQueueService {
         // Import models and services
         const Material = (await import('../models/Material.js')).default;
         const ragService = (await import('../services/ragService.js')).default;
-        const FileService = (await import('../services/fileService.js')).default;
 
         // Check if material still exists (may have been deleted)
         const material = await Material.findById(materialId);
@@ -209,13 +208,8 @@ class JobQueueService {
           console.log(`✅ Material processed and embedded: ${material.name}`);
           console.log(`📊 Created ${result.chunksCount} chunks, embedded successfully`);
 
-          // Clean up original file after successful processing
-          if (material.filePath) {
-            await FileService.deleteFile(material.filePath);
-            console.log(`🗑️ Original file cleaned up: ${material.filePath}`);
-            material.filePath = null;
-            await material.save();
-          }
+          // Keep the original source for cited-page previews and later reindexing.
+          // The material deletion route owns its file lifecycle.
         } else {
           await material.markAsFailed(result.error);
           console.error(`❌ Failed to process material: ${result.error}`);

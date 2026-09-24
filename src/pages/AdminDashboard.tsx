@@ -92,7 +92,9 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (!user?.isAdmin) {
+    // The authenticated route can mount before the shared user profile hydrates.
+    if (!user) return;
+    if (!user.isAdmin) {
       navigate('/account');
       return;
     }
@@ -234,7 +236,7 @@ const AdminDashboard = () => {
           <div className="card" style={{ marginTop: '1.5rem' }}>
             <div className="card-header">
               <h3 className="card-title">User Activity</h3>
-              <p className="card-description">Question generation stats per user</p>
+              <p className="card-description">Current saved content per user. Deleted items are excluded.</p>
             </div>
             <div className="admin-table-wrapper">
               <table className="admin-table">

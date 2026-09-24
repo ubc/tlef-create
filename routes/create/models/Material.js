@@ -76,6 +76,8 @@ const materialSchema = new mongoose.Schema({
   processingMetadata: {
     pageCount: { type: Number },
     chunkCount: { type: Number },
+    embeddedChunkCount: { type: Number },
+    failedChunkIndices: [{ type: Number }],
     parserVersion: { type: String },
     processedAt: { type: Date },
     embeddingProvider: { type: String },

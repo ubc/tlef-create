@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, X, Wand2 } from 'lucide-react';
 import { questionsApi, Question } from '../../services/api';
 import { ExtendedQuestion } from './reviewTypes';
-import { QuestionTypeOption } from '../../constants/questionTypeCapabilities';
+import { isGenerationOutcomeUnconfirmed } from '../../utils/questionGenerationOutcome';
+import { QuestionTypeOption, UNAVAILABLE_QUESTION_TYPES } from '../../constants/questionTypeCapabilities';
 
 interface MCOption {
   text: string;
@@ -116,6 +117,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
   };
 
   const handleClose = () => {
+    if (aiLoading) return;
     resetForm();
     onClose();
   };
@@ -253,10 +255,15 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
     setAiLoading(true);
     try {
       await onGenerateAI(aiLoIndex, aiPrompt, aiQuestionType);
-      handleClose();
+      resetForm();
+      onClose();
     } catch (error) {
       console.error('Failed to generate AI question:', error);
-      showNotification('error', 'Generation Failed', 'Failed to generate question with AI');
+      if (isGenerationOutcomeUnconfirmed(error)) {
+        showNotification('warning', 'Generation Result Unconfirmed', error.message);
+      } else {
+        showNotification('error', 'Generation Failed', error instanceof Error ? error.message : 'Failed to generate question with AI');
+      }
     } finally {
       setAiLoading(false);
     }
@@ -303,7 +310,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
       <div className="modal-content add-question-modal-content">
         <div className="modal-header">
           <h4>Add New Question</h4>
-          <button className="btn btn-ghost btn-sm" onClick={handleClose}>
+          <button className="btn btn-ghost btn-sm" disabled={aiLoading} onClick={handleClose}>
             <X size={20} />
           </button>
         </div>
@@ -312,6 +319,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
         <div className="aq-mode-selector">
           <button
             className={`aq-mode-btn ${mode === 'manual' ? 'active' : ''}`}
+            disabled={aiLoading}
             onClick={() => setMode('manual')}
           >
             <Plus size={18} />
@@ -320,7 +328,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
           <button
             className={`aq-mode-btn ${mode === 'ai' ? 'active' : ''}`}
             onClick={() => setMode('ai')}
-            disabled={!onGenerateAI}
+            disabled={!onGenerateAI || aiLoading}
           >
             <Wand2 size={18} />
             AI Generate
@@ -355,6 +363,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                     <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
+                <p className="aq-hint">{UNAVAILABLE_QUESTION_TYPES['branching-scenario']}</p>
               </div>
 
               {/* Learning Objective - full width */}
@@ -955,7 +964,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
               )}
 
               <div className="modal-actions">
-                <button className="btn btn-outline" onClick={handleClose}>
+                <button className="btn btn-outline" disabled={aiLoading} onClick={handleClose}>
                   Cancel
                 </button>
                 <button
@@ -975,6 +984,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                 <label>Learning Objective</label>
                 <select
                   className="select-input aq-lo-select"
+                  disabled={aiLoading}
                   value={aiLoIndex}
                   onChange={(e) => setAiLoIndex(parseInt(e.target.value))}
                   title={aiLoIndex >= 0 && learningObjectives[aiLoIndex] ? `LO ${aiLoIndex + 1}: ${learningObjectives[aiLoIndex].text}` : 'No LO reference'}
@@ -998,6 +1008,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                 <label>Question Type</label>
                 <select
                   className="select-input"
+                  disabled={aiLoading}
                   value={aiQuestionType}
                   onChange={(e) => setAiQuestionType(e.target.value)}
                 >
@@ -1005,6 +1016,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                     <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </select>
+                <p className="aq-hint">{UNAVAILABLE_QUESTION_TYPES['branching-scenario']}</p>
               </div>
 
               <div className="form-field">
@@ -1014,6 +1026,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
                   placeholder={aiLoIndex === -1
                     ? "Describe what you want the question to be about... (required)"
                     : "Optionally add instructions to refine the AI output..."}
+                  disabled={aiLoading}
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   rows={4}
@@ -1024,7 +1037,7 @@ const ManualQuestionForm = ({ isOpen, onClose, quizId, learningObjectives, avail
               </div>
 
               <div className="modal-actions">
-                <button className="btn btn-outline" onClick={handleClose}>
+                <button className="btn btn-outline" disabled={aiLoading} onClick={handleClose}>
                   Cancel
                 </button>
                 <button

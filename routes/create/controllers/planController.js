@@ -98,6 +98,7 @@ function buildCompactPlanningHistory(existingQuestions = []) {
 router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => {
   const { quizId, totalQuestions, approach, additionalInstructions, sessionId } = req.body;
   const userId = req.user.id;
+  if (sessionId) sseService.claimSession(sessionId, userId);
   const progressQuestionId = 'quiz-blueprint';
   const streamProgress = (status, message, metadata = {}) => {
     if (!sessionId) return;
@@ -263,7 +264,7 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       ? `Course materials: ${quiz.materials.map(m => m.name || m.title || 'Untitled').join(', ')}`
       : 'No course materials assigned.';
 
-    const existingQuestions = await Question.find({ quiz: quizId })
+    const existingQuestions = await Question.find({ quiz: quizId, _id: { $in: quiz.questions || [] } })
       .select('questionText type generationMetadata.focusArea generationMetadata.plannedSlice generationMetadata.subObjective generationMetadata.bloomLevel')
       .sort({ order: 1 })
       .lean();
@@ -663,7 +664,7 @@ router.post('/generate', authenticateToken, validateGeneratePlan, asyncHandler(a
   }
 
   // Get learning objectives
-  const objectives = await LearningObjective.find({ quiz: quizId }).sort({ order: 1 });
+  const objectives = await LearningObjective.find({ quiz: quizId, _id: { $in: quiz.learningObjectives || [] } }).sort({ order: 1 });
   if (objectives.length === 0) {
     return errorResponse(res, 'Quiz must have learning objectives before generating a plan', 'NO_OBJECTIVES', HTTP_STATUS.BAD_REQUEST);
   }

@@ -144,6 +144,9 @@ describe('native H5P document pipeline', () => {
             alternatives: [{
               text: '<img src=x onerror="window.top.hacked=true">',
               nextContentId: -1
+            }, {
+              text: 'Take the other path',
+              nextContentId: -1
             }]
           }
         ]
@@ -199,6 +202,35 @@ describe('native H5P document pipeline', () => {
       await fs.rm(temporaryDirectory, { recursive: true, force: true });
     }
   });
+
+  test.each(['column', 'question-set', 'interactive-book', 'standalone'])(
+    '%s packages every declared runtime/editor dependency and its browser assets', async containerMode => {
+      const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'tlef-package-integrity-'));
+      try {
+        const quiz = createQuiz({ containerMode, ...(containerMode === 'standalone' ? {
+          questions: [{ type: 'sort-paragraphs', questionText: 'Put these steps in order.', content: { paragraphs: ['First', 'Second', 'Third'] } }]
+        } : {}) });
+        const outputPath = path.join(temporaryDirectory, 'complete.h5p');
+        await createH5PPackage(quiz, outputPath);
+        const archive = new AdmZip(outputPath);
+        const metadata = JSON.parse(archive.readAsText('h5p.json'));
+        const queue = [...metadata.preloadedDependencies];
+        const visited = new Set();
+        while (queue.length) {
+          const dependency = queue.shift();
+          const directory = `${dependency.machineName}-${dependency.majorVersion}.${dependency.minorVersion}`;
+          if (visited.has(directory)) continue;
+          visited.add(directory);
+          expect(archive.getEntry(`${directory}/library.json`)).not.toBeNull();
+          const descriptor = JSON.parse(archive.readAsText(`${directory}/library.json`));
+          for (const asset of [...(descriptor.preloadedJs || []), ...(descriptor.preloadedCss || [])]) {
+            expect(archive.getEntry(`${directory}/${asset.path}`)).not.toBeNull();
+          }
+          queue.push(...(descriptor.preloadedDependencies || []), ...(descriptor.editorDependencies || []));
+        }
+      } finally { await fs.rm(temporaryDirectory, { recursive: true, force: true }); }
+    }
+  );
 
   test('saves and reloads the generated document through Lumi without importing a package', async () => {
     await initializeLumi();
@@ -283,6 +315,8 @@ describe('native H5P document pipeline', () => {
 
     expect(document.library).toBe('H5P.Dialogcards 1.9');
     expect(document.parameters.dialogs).toHaveLength(1);
+    expect(document.parameters.dialogs[0]).not.toHaveProperty('image');
+    expect(document.parameters.dialogs[0]).not.toHaveProperty('audio');
     expect(document.parameters).not.toHaveProperty('content');
   });
 });

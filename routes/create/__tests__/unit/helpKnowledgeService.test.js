@@ -3,6 +3,73 @@ import helpKnowledgeService from '../../services/helpKnowledgeService.js';
 import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
+  test.each([
+    ['Recovered unsaved edits View recovered content Copy draft Download draft Save as new question', 'review-and-export', 'Recovered unsaved edits'],
+    ['Create with AI', 'h5p-studio', 'Create with AI'],
+    ['One activity Question collection multiple question type cards Add course evidence', 'h5p-studio', 'Create with AI'],
+    ['AI Link Missing', 'learning-objectives', 'Evidence and enrichment'],
+    ['rate limit timeout incomplete Blueprint', 'troubleshooting', 'AI generation does not start']
+  ])('ranks the specific action or error above broad workflow mentions: %s', async (query, documentId, section) => {
+    const [first] = await helpKnowledgeService.retrieve(query, {}, 1);
+    expect(first).toMatchObject({ documentId, section });
+    expect(first.navigationPath).toContain(`/help?doc=${documentId}&section=`);
+  });
+  test.each([
+    ['Create with AI Use course materials Quick activity keep teaching task unsaved plan New blank activity Import .h5p', 'h5p-studio', 'Create with AI'],
+    ['Question collection select multiple types AI chooses when no cards selected quantities plan', 'h5p-studio', 'Create with AI'],
+    ['Prompt helper conversation context selected objectives Yes generate prompt Not now Copy prompt Use this prompt', 'h5p-studio', 'Create with AI'],
+    ['Quick activity Generate AI draft independent Quiz questions native activity Find a type Teaching instructions', 'h5p-studio', 'Quick activity'],
+    ['AI assistant Upload PDF or DOCX Ready Course Learning Object Teaching task Plan learning objectives questions', 'h5p-studio', 'Use course materials: course and teaching task'],
+    ['Approve generate questions Save plan Number of questions Linked learning objectives eight twenty', 'h5p-studio', 'Review and approve an assistant question plan'],
+    ['Question progress prepared Question preview combined Column Edit activity Preview activity', 'h5p-studio', 'Watch assistant question progress and open the Studio draft'],
+    ['Live AI draft live updates connected interrupted Check status durable task no duplicate generation', 'h5p-studio', 'Watch assistant question progress and open the Studio draft'],
+    ['Retry same request Retry planning Retry question batch Retry Studio draft Recent tasks Check status', 'h5p-studio', 'Recover an AI assistant task'],
+    ['Add Question AI Generate 30 seconds unconfirmed Question Saved refresh duplicate', 'review-and-export', 'Add or regenerate a question'],
+    ['Custom Prompt scenario exclusions instruction-check failure novelty constraints', 'review-and-export', 'Add or regenerate a question'],
+    ['Generation task status Check task status safe Replace Existing Questions Saved questions preserved after refresh', 'quiz-blueprint', 'Recover question generation and safely replace questions'],
+    ['Close unregistered request no saved receipt delayed submission accepted generation', 'quiz-blueprint', 'Close unregistered request'],
+    ['Recovered unsaved edits View recovered content Copy draft Download draft Save as new question', 'review-and-export', 'Recovered unsaved edits'],
+    ['Safely replace learning objectives invalid input failed save previous objectives questions preserved', 'learning-objectives', 'Safely replace learning objectives'],
+    ['H5P Studio activities Continue in Studio Course source Separate Studio version course page', 'h5p-studio', 'Find Studio activities from a course'],
+    ['URL request failed retain input Retry incomplete embedding Premature close', 'materials', 'Upload and processing states'],
+    ['Generate Plan fixed count empty fractional minimum maximum 100', 'quiz-blueprint', 'Set a fixed question count'],
+    ['failed pending materials generation replaces existing questions custom-prompt-only', 'quiz-blueprint', 'Generate questions'],
+    ['Cancel unsaved question edits restore options feedback', 'review-and-export', 'Cancel edits and delete questions'],
+    ['Move up Move down reorder All Objectives saves automatically', 'review-and-export', 'Reorder questions'],
+    ['Mark review complete exclamation mark step four check all objectives', 'review-and-export', 'Review order and completeness'],
+    ['AI feedback check selecting omitting option instructor review', 'review-and-export', 'Multiple-choice answer modes'],
+    ['deleting objective confirmation no linked questions warning preference', 'learning-objectives', 'Editing and deleting objectives'],
+    ['Administrator per-user statistics currently saved deleted content excluded', 'account-and-support', 'Administrator content statistics'],
+    ['Create a new activity saved brief different template Documentation Tool pages', 'h5p-studio', 'Return to Quick activity'],
+    ['Preview Save changes and preview unchanged Edited time no save notification', 'h5p-studio', 'Preview and download'],
+    ['Mixed Activity isolated H5P players standalone types not Column Canvas preview', 'review-and-export', 'H5P export'],
+    ['Mixed Activity shared minimal H5P core question libraries once standalone runnable instances', 'review-and-export', 'H5P export'],
+    ['Coverage Map LO 1 Chunk 1 displayed sequence named sections', 'coverage-and-references', 'Coverage Map'],
+    ['Question retrieval assigned materials before most relevant other course evidence', 'coverage-and-references', 'Resolve weak or missing evidence']
+  ])('retrieves recovery guidance: %s', async (query, documentId, section) => {
+    const sources = await helpKnowledgeService.retrieve(query, {}, 5);
+    expect(sources.some(source => source.documentId === documentId && source.section === section)).toBe(true);
+  });
+  test('retrieves Studio preview width and automatic height guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve('H5P Studio preview cut off fixed height inner scrolling Back to editor fullscreen', { route: '/h5p-studio' }, 4);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Media preview and save troubleshooting')).toBe(true);
+  });
+  test('explains retained teaching instructions and missing Documentation Tool elements', async () => {
+    const sources = await helpKnowledgeService.retrieve('Return to Quick activity Teaching instructions Documentation Tool Elements Heading', { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.section === 'Return to Quick activity')).toBe(true);
+  });
+  test('retrieves media save rules and retired external services', async () => {
+    const media = await helpKnowledgeService.retrieve('Multimedia Choice Poster image hidden picture options Image Hotspots save', { route: '/h5p-studio' }, 5);
+    expect(media.some(source => source.section === 'Media preview and save troubleshooting')).toBe(true);
+    const retired = await helpKnowledgeService.retrieve('Twitter User Feed no longer supported API needs maintenance', { route: '/h5p-studio' }, 5);
+    expect(retired.some(source => source.section === 'AI media templates and availability')).toBe(true);
+  });
+  test('retrieves Studio receipt recovery and independent draft boundaries', async () => {
+    const recovered = await helpKnowledgeService.retrieve('Check generation status after refresh or disconnection in Studio', { route: '/h5p-studio' }, 5);
+    expect(recovered.some(source => source.section === 'Recover a Studio generation after refresh or disconnection')).toBe(true);
+    const sources = await helpKnowledgeService.retrieve('Independent Studio draft source Quiz has changed', { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.section === 'Independent Studio draft and source Quiz')).toBe(true);
+  });
   test('loads curated help documents and generated capability facts', async () => {
     const status = await helpKnowledgeService.getStatus();
 
@@ -122,6 +189,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     const source = sources.find(item => item.documentId === 'quiz-blueprint' && item.section === 'Visual layout previews');
     expect(source?.content).toContain('not screenshots');
     expect(source?.content).toContain('Standalone');
+    expect(source?.content).toContain('Branching Scenario');
     expect(source?.navigationPath).toBe('/help?doc=quiz-blueprint&section=visual-layout-previews');
   });
 
@@ -157,12 +225,12 @@ describe('CREATE Guide knowledge retrieval', () => {
     ))).toBe(true);
   });
 
-  test('retrieves native Create with AI workflow without promising Quiz synchronization', async () => {
+  test('retrieves the unified AI entrance and distinguishes its two saving boundaries', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I Create with AI in H5P Studio and does the new AI draft replace my Quiz questions?',
       { route: '/h5p-studio', activeTab: 'H5P Studio' }, 4
     );
-    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Create with AI')).toBe(true);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Create with AI' && source.content.includes('native AI draft does not replace or update Quiz questions'))).toBe(true);
   });
 
   test('retrieves real-media template and maintenance limitations for Studio AI', async () => {
@@ -371,9 +439,12 @@ describe('CREATE Guide knowledge retrieval', () => {
       source.sourcePath === 'src/constants/questionTypeCapabilities.ts'
       && source.section === 'Question type catalogue'
     ));
-    expect(compatibilitySource?.content).toContain('standalone: branching-scenario, crossword, sort-paragraphs');
+    expect(compatibilitySource?.content).toContain('standalone: crossword, sort-paragraphs');
+    expect(compatibilitySource?.content).toMatch(/standalone:.*branching-scenario/);
     expect(compatibilitySource?.navigationPath).toBe('/help?doc=question-types&section=delivery-target-compatibility');
-    expect(catalogueSource?.content).toContain('CREATE currently exposes 16 question types.');
+    expect(catalogueSource?.content).toContain('16 question types; 16 are currently available');
+    expect(catalogueSource?.content).toContain('Branching Scenario (branching-scenario)');
+    expect(catalogueSource?.content).not.toContain('temporarily unavailable');
   });
 
   test('retrieves the question catalogue for a natural Chinese count question', async () => {
@@ -396,7 +467,15 @@ describe('CREATE Guide knowledge retrieval', () => {
     const exportFacts = await helpKnowledgeService.getVerifiedFacts('如何 export');
 
     expect(typeFacts[0]).toContain('16 种题型');
+    expect(typeFacts[0]).toContain('16 种可用于新建');
+    expect(typeFacts[0]).toContain('Branching Scenario');
+    expect(typeFacts[0]).not.toContain('暂停使用');
     expect(exportFacts[0]).toContain('H5P Package、PDF、Markdown 和 Canvas LTI');
+    expect(exportFacts[0]).toContain('第 5 步 Preview & Export');
+    expect(exportFacts[0]).not.toContain('Review & Edit 页面底部');
+    const english = await helpKnowledgeService.getVerifiedFacts('How do I export questions without answers?');
+    expect(english[0]).toContain('Step 5, Preview & Export');
+    expect(english[0]).toContain('without the answer section');
   });
 
   test('answers foundational facts without depending on an LLM', async () => {
@@ -412,5 +491,38 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(result.model).toBe('verified-product-facts');
     expect(result.answer).toContain('16 种题型');
     expect(chunks.join('')).toContain('Multiple Choice');
+  });
+
+  test('cites actual export guidance for a Chinese handout question from Dashboard', async () => {
+    const result = await answerHelpQuestion({
+      message: '如何导出不带答案的题目？', history: [],
+      context: { route: '/', pageTitle: 'Dashboard', activeTab: 'Dashboard' }, userId: 'not-needed'
+    });
+    expect(result.model).toBe('verified-product-facts');
+    expect(result.sources.map(source => source.section)).toEqual([
+      'Review, Edit, and Export', 'PDF and Markdown export', 'H5P export', 'Canvas export'
+    ]);
+    const handout = result.sources.find(source => source.section === 'PDF and Markdown export');
+    expect(result.answer).toContain(`Questions（仅题目，不含答案区）、Answers 或 Combined。[${handout.citationIndex}]`);
+    expect(handout.navigationPath).toBe('/help?doc=review-and-export&section=pdf-and-markdown-export');
+    expect(handout.content).toContain('questions-only for a learner handout');
+    expect(result.sources.every(source => source.documentId === 'review-and-export')).toBe(true);
+  });
+
+  test('combined type-count and export answers keep distinct supporting citation indexes', async () => {
+    const result = await answerHelpQuestion({
+      message: '现在支持多少种题型？如何导出不带答案的题目？', history: [],
+      context: { route: '/', pageTitle: 'Dashboard', activeTab: 'Dashboard' }, userId: 'not-needed'
+    });
+    const catalogue = result.sources.find(source => source.section === 'Question type catalogue');
+    const handout = result.sources.find(source => source.section === 'PDF and Markdown export');
+    expect(catalogue.sourcePath).toBe('src/constants/questionTypeCapabilities.ts');
+    expect(catalogue.navigationPath).toBe('/help?doc=question-types&section=question-type-catalogue');
+    expect(handout.citationIndex).not.toBe(catalogue.citationIndex);
+    expect(result.answer).toContain(`Documentation Tool。[${catalogue.citationIndex}]`);
+    expect(result.answer).toContain(`Questions（仅题目，不含答案区）、Answers 或 Combined。[${handout.citationIndex}]`);
+    const markers = [...result.answer.matchAll(/\[(\d+)\]/g)].map(match => Number(match[1]));
+    expect(new Set(markers)).toEqual(new Set(result.sources.map(source => source.citationIndex)));
+    expect(result.sources.some(source => source.documentId === 'overview')).toBe(false);
   });
 });

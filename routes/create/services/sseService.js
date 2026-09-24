@@ -10,12 +10,30 @@ class SSEService extends EventEmitter {
     super();
     this.clients = new Map(); // sessionId -> response object
     this.sessions = new Map(); // sessionId -> session info
+    this.sessionOwners = new Map(); // retain ownership across reconnects
+  }
+
+  claimSession(sessionId, userId) {
+    if (!/^[a-zA-Z0-9-]{10,120}$/.test(sessionId || '') || !userId) {
+      throw Object.assign(new Error('Invalid streaming session.'), { status: 400, code: 'INVALID_STREAMING_SESSION' });
+    }
+    const now = Date.now();
+    for (const [id, owner] of this.sessionOwners) {
+      if (owner.expiresAt < now && !this.clients.has(id)) this.sessionOwners.delete(id);
+    }
+    const owner = this.sessionOwners.get(sessionId);
+    if (owner && owner.userId !== String(userId)) {
+      throw Object.assign(new Error('This streaming session belongs to another user.'), { status: 403, code: 'SSE_SESSION_FORBIDDEN' });
+    }
+    this.sessionOwners.set(sessionId, { userId: String(userId), expiresAt: now + 2 * 60 * 60 * 1000 });
+    return true;
   }
 
   /**
    * Add SSE client connection
    */
   addClient(sessionId, res, metadata = {}) {
+    if (metadata.userId) this.claimSession(sessionId, metadata.userId);
     console.log(`[SSE] Client connected: ${sessionId}`);
 
     // Store client response object
@@ -65,12 +83,12 @@ class SSEService extends EventEmitter {
     // Handle client disconnect
     res.on('close', () => {
       console.log(`[SSE] Client disconnected: ${sessionId}`);
-      this.removeClient(sessionId);
+      if (this.clients.get(sessionId) === res) this.removeClient(sessionId);
     });
 
     res.on('error', (error) => {
       console.error(`[SSE] Client error for ${sessionId}:`, error);
-      this.removeClient(sessionId);
+      if (this.clients.get(sessionId) === res) this.removeClient(sessionId);
     });
 
     return sessionId;

@@ -6,10 +6,11 @@ import LearningObjective from '../models/LearningObjective.js';
 import Question from '../models/Question.js';
 import GenerationPlan from '../models/GenerationPlan.js';
 import { authenticateToken, attachUser } from '../middleware/auth.js';
-import { validateCreateQuiz, validateUpdateQuiz, validateAssignMaterials, validateMongoId } from '../middleware/validator.js';
+import { validateCreateQuiz, validateUpdateQuiz, validateAssignMaterials, validateMongoId, validateFolderId } from '../middleware/validator.js';
 import { successResponse, errorResponse, notFoundResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS, QUIZ_STATUS } from '../config/constants.js';
+import { freeQuestionMutation } from '../services/questionPublication.js';
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ const router = express.Router();
  * GET /api/quizzes/folder/:folderId
  * Get folder's quizzes
  */
-router.get('/folder/:folderId', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
+router.get('/folder/:folderId', authenticateToken, validateFolderId, asyncHandler(async (req, res) => {
   const folderId = req.params.folderId;
   const userId = req.user.id;
 
@@ -93,6 +94,7 @@ router.get('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
   const userId = req.user.id;
 
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId })
+    .populate('folder', 'name')
     .populate({
       path: 'materials',
       select: 'name type processingStatus fileSize createdAt'
@@ -119,6 +121,41 @@ router.get('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
   }
 
   return successResponse(res, { quiz }, 'Quiz retrieved successfully');
+}));
+
+/**
+ * PUT /api/quizzes/:id/review
+ * The instructor confirms that the current published question set was reviewed.
+ */
+router.put('/:id/review', authenticateToken, validateMongoId, asyncHandler(async (req, res) => {
+  const quizId = req.params.id;
+  const userId = req.user.id;
+  const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId });
+  if (!quiz) return notFoundResponse(res, 'Quiz');
+  if (!quiz.questions.length) {
+    return errorResponse(res, 'Add at least one question before completing review.', 'REVIEW_EMPTY', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const publishedCount = await Question.countDocuments({ quiz: quizId, createdBy: userId, _id: { $in: quiz.questions } });
+  if (publishedCount !== quiz.questions.length) {
+    return errorResponse(res, 'The question list changed. Refresh before completing review.', 'QUESTION_LIST_CHANGED', HTTP_STATUS.CONFLICT);
+  }
+
+  const updated = await Quiz.findOneAndUpdate({
+    _id: quizId, createdBy: userId, questionRevision: quiz.questionRevision, __v: quiz.__v,
+    ...freeQuestionMutation(new Date()),
+    'questionGenerationLease.token': { $exists: false }
+  }, { $set: { 'progress.reviewCompleted': true }, $inc: { __v: 1 } }, { new: true })
+    .populate('folder', 'name')
+    .populate('materials', 'name type processingStatus fileSize createdAt')
+    .populate({ path: 'learningObjectives', select: 'text order generationMetadata createdAt', options: { sort: { order: 1 } } })
+    .populate({ path: 'questions', select: 'type difficulty questionText reviewStatus order createdAt', options: { sort: { order: 1 } } })
+    .populate({ path: 'generationPlans', select: 'approach totalQuestions status createdAt', options: { sort: { createdAt: -1 } } })
+    .populate('activePlan');
+  if (!updated) {
+    return errorResponse(res, 'Questions are changing. Wait for the edit or generation to finish, then review the saved questions.', 'REVIEW_CHANGED', HTTP_STATUS.CONFLICT);
+  }
+  return successResponse(res, { quiz: updated }, 'Review completed');
 }));
 
 /**
@@ -175,6 +212,7 @@ router.put('/:id', authenticateToken, validateUpdateQuiz, asyncHandler(async (re
   });
 
   await quiz.save();
+  await quiz.populate('folder', 'name');
 
   return successResponse(res, { quiz }, 'Quiz updated successfully');
 }));
@@ -279,6 +317,7 @@ router.put('/:id/materials', authenticateToken, validateAssignMaterials, asyncHa
   );
 
   const updatedQuiz = await Quiz.findById(quizId)
+    .populate('folder', 'name')
     .populate('materials', 'name type processingStatus');
 
   return successResponse(res, { quiz: updatedQuiz }, 'Materials assigned successfully');
@@ -293,7 +332,7 @@ router.get('/:id/progress', authenticateToken, validateMongoId, asyncHandler(asy
   const userId = req.user.id;
 
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId })
-    .select('progress status createdAt updatedAt');
+    .select('progress status materials questions createdAt updatedAt');
 
   if (!quiz) {
     return notFoundResponse(res, 'Quiz');
@@ -304,7 +343,7 @@ router.get('/:id/progress', authenticateToken, validateMongoId, asyncHandler(asy
     Material.countDocuments({ _id: { $in: quiz.materials || [] } }),
     (await import('../models/LearningObjective.js')).default.countDocuments({ quiz: quizId }),
     (await import('../models/GenerationPlan.js')).default.countDocuments({ quiz: quizId }),
-    (await import('../models/Question.js')).default.countDocuments({ quiz: quizId })
+    (await import('../models/Question.js')).default.countDocuments({ quiz: quizId, _id: { $in: quiz.questions || [] } })
   ]);
 
   const progress = {

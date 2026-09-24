@@ -5,6 +5,7 @@ import { RATE_LIMITS, HTTP_STATUS, ERROR_CODES } from './config/constants.js';
 import { resolveEmbeddingConfig } from './config/embeddingConfig.js';
 import { errorResponse } from './utils/responseFormatter.js';
 import { auditMutations } from './middleware/audit.js';
+import { allowSandboxedH5PAsset } from './middleware/h5pAssetHeaders.js';
 
 // Import controllers
 import authController from './controllers/authController.js';
@@ -19,6 +20,7 @@ import streamingController from './controllers/streamingController.js';
 import searchController from './controllers/searchController.js';
 import h5pPreviewController from './controllers/h5pPreviewController.js';
 import h5pEditorController from './controllers/h5pEditorController.js';
+import studioAssistantController from './controllers/studioAssistantController.js';
 import canvasController from './controllers/canvasController.js';
 import adminController from './controllers/adminController.js';
 import apiKeyController from './controllers/apiKeyController.js'
@@ -30,6 +32,10 @@ const router = express.Router();
 
 // Security middleware
 router.use(helmet({
+  // The Vite page and proxied API share one browser origin in development.
+  // Requesting an origin-keyed agent cluster only on API responses makes that
+  // origin switch cluster modes and produces a warning for every H5P frame.
+  originAgentCluster: false,
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
@@ -112,6 +118,7 @@ router.use('/export', exportController);
 router.use('/streaming', streamingController);
 router.use('/search', searchController);
 router.use('/h5p-preview', h5pPreviewController);
+router.use('/h5p-editor/assistant', studioAssistantController);
 router.use('/h5p-editor', h5pEditorController);
 router.use('/canvas', canvasController);
 router.use('/admin', adminController);
@@ -137,13 +144,13 @@ const __lumiFilename = fileURLToPath(import.meta.url);
 const __lumiDirname = path.dirname(__lumiFilename);
 
 // Serve H5P content files (images, videos, etc. inside H5P packages)
-router.use('/h5p/content', express.static(path.join(__lumiDirname, 'uploads', 'h5p-content')));
+router.use('/h5p/content', allowSandboxedH5PAsset, express.static(path.join(__lumiDirname, 'uploads', 'h5p-content')));
 
 // Serve H5P library files (JS, CSS for H5P content types)
-router.use('/h5p/libraries', express.static(path.join(__lumiDirname, 'h5p-libs')));
+router.use('/h5p/libraries', allowSandboxedH5PAsset, express.static(path.join(__lumiDirname, 'h5p-libs')));
 
 // Serve H5P core files
-router.use('/h5p/core', express.static(path.join(__lumiDirname, 'h5p-core')));
+router.use('/h5p/core', allowSandboxedH5PAsset, express.static(path.join(__lumiDirname, 'h5p-core')));
 
 // Lumi download endpoint — serves content files by contentId
 router.get('/h5p/download/:contentId', async (req, res) => {

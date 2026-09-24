@@ -211,32 +211,34 @@ const QuizView = () => {
   const workflowSteps: WorkflowStep[] = [
     {
       id: 'materials',
-      label: 'Materials',
+      label: 'Sources',
       detail: materialsReady ? `Ready · ${readyAssignedCount} assigned` : failedAssignedCount > 0 ? `${failedAssignedCount} failed · check sources` : assignedMaterials.length > 0 ? 'Checking or processing sources' : 'Start here · assign sources',
       state: materialsReady ? 'complete' : failedAssignedCount > 0 ? 'attention' : 'available'
     },
     {
       id: 'objectives',
-      label: 'Learning Objectives',
+      label: 'Objectives',
       detail: learningObjectives.length > 0 ? `Ready · ${learningObjectives.length} LOs` : 'Create measurable outcomes',
       state: learningObjectives.length > 0 ? 'complete' : assignedMaterials.length > 0 ? 'available' : 'blocked',
       disabled: !canProceed('objectives')
     },
     {
       id: 'generation',
-      label: 'Blueprint & Generate',
+      label: 'Generate',
       detail: questionCount > 0
         ? `Complete · ${questionCountLabel}`
         : currentQuiz.progress?.planGenerated
-          ? 'Blueprint ready · generate next'
-          : 'Plan the activity mix',
+          ? 'Question plan ready'
+          : 'Choose format and question mix',
       state: questionCount > 0 ? 'complete' : canProceed('generation') ? 'available' : 'blocked',
       disabled: !canProceed('generation')
     },
     {
       id: 'review',
       label: 'Review',
-      detail: questionCount > 0 ? `${questionCountLabel} to check` : 'Waiting for questions',
+      detail: questionCount > 0
+        ? currentQuiz.progress?.reviewCompleted ? `Reviewed · ${questionCountLabel}` : `${questionCountLabel} to check`
+        : 'Waiting for questions',
       state: questionCount > 0 && currentQuiz.progress?.reviewCompleted
         ? 'complete'
         : questionCount > 0
@@ -246,7 +248,7 @@ const QuizView = () => {
     },
     {
       id: 'preview',
-      label: 'Preview & Export',
+      label: 'Preview',
       detail: questionCount > 0 ? 'Preview and choose delivery' : 'Waiting for questions',
       state: questionCount > 0 ? 'available' : 'blocked',
       disabled: !canProceed('preview')
@@ -262,14 +264,20 @@ const QuizView = () => {
         description: 'Inspect how materials, evidence, objectives, and questions connect without losing your place in the main workflow.'
       }
     : {
-        eyebrow: `Step ${activeStepNumber} of 5`,
-        title: workflowSteps[activeStepNumber - 1]?.label || 'Quiz workflow',
+        eyebrow: `${currentQuiz.name} · Stage ${activeStepNumber} of 5`,
+        title: {
+          materials: 'Choose source materials',
+          objectives: 'Define learning objectives',
+          generation: 'Plan and generate questions',
+          review: 'Review and edit questions',
+          preview: 'Preview and export'
+        }[activeWorkflowStep],
         description: {
-          materials: 'Choose the course sources that should ground this Quiz.',
-          objectives: 'Generate, import, or write the measurable outcomes this Quiz should address.',
-          generation: 'Choose ASSESS, SUPPORT or GAMIFY, compare activity layouts, then build your Blueprint and generate questions.',
+          materials: 'Choose the course sources that should ground this Quiz. You can return to completed stages at any time.',
+          objectives: 'Generate, import, or write measurable outcomes. You can return to completed stages at any time.',
+          generation: 'Choose the teaching purpose, activity format, and question mix, then start generation.',
           review: 'Check accuracy, feedback, evidence, and ordering before learners see the content.',
-          preview: 'Experience the final activity, then export it to H5P, PDF, Markdown, or Canvas.'
+          preview: 'Experience the final activity, then choose an export or delivery option.'
         }[activeWorkflowStep]
       };
 
@@ -330,7 +338,7 @@ const QuizView = () => {
             )}
           </div>
           <p className="quiz-description">
-            {currentQuiz.folder?.name || 'Course'} • {questionCountLabel}
+            {(typeof currentQuiz.folder === 'object' ? currentQuiz.folder?.name : undefined) || 'Course'} • {questionCountLabel}
           </p>
         </div>
 
@@ -339,6 +347,7 @@ const QuizView = () => {
           activeStepId={activeWorkflowStep}
           ariaLabel="Quiz creation steps"
           onStepSelect={(stepId) => handleTabChange(stepId as WorkflowTab)}
+          compact
         />
 
         <div className={`quiz-workflow-context ${activeTab === 'coverage' ? 'is-coverage' : ''}`}>
@@ -417,6 +426,7 @@ const QuizView = () => {
 
           <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
             <QuestionGeneration
+                isActive={activeTab === 'generation'}
                 learningObjectives={learningObjectives}
                 assignedMaterials={assignedMaterials}
                 quizId={quizId!}
