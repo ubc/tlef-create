@@ -1207,44 +1207,63 @@ const LearningObjectives = ({
                             onChange={(e) => setTextInput(e.target.value)}
                         />
 
-                        <div className="objective-command-controls">
-                          <label className="auto-objective-count-toggle">
-                            <input
-                              type="checkbox"
-                              checked={autoRecommendObjectiveCount}
-                              onChange={(e) => setAutoRecommendObjectiveCount(e.target.checked)}
-                              disabled={detectedCommandIntent === 'Import pasted learning objectives'}
-                            />
-                            Let CREATE recommend the number of learning objectives
-                          </label>
+                        {detectedCommandIntent === 'Import pasted learning objectives' ? (
+                          <p className="objective-count-note">
+                            The number of learning objectives will match what you pasted.
+                          </p>
+                        ) : (
+                          <fieldset className="objective-count-choice">
+                            <legend className="input-label">Number of learning objectives</legend>
 
-                          <div className="objective-target-count">
-                            <label htmlFor="objectiveCount" className="input-label">
-                              Optional target number:
-                            </label>
-                            <input
-                              id="objectiveCount"
-                              type="number"
-                              min="1"
-                              max="20"
-                              value={targetObjectiveCount}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (value === '') {
+                            <label className="objective-count-option">
+                              <input
+                                type="radio"
+                                name="objectiveCountMode"
+                                checked={autoRecommendObjectiveCount}
+                                onChange={() => {
+                                  setAutoRecommendObjectiveCount(true);
                                   setTargetObjectiveCount('');
-                                } else {
-                                  const numValue = parseInt(value);
-                                  if (!isNaN(numValue)) {
-                                    setTargetObjectiveCount(numValue);
+                                }}
+                              />
+                              Let CREATE decide based on the materials
+                            </label>
+
+                            <label className="objective-count-option">
+                              <input
+                                type="radio"
+                                name="objectiveCountMode"
+                                checked={!autoRecommendObjectiveCount}
+                                onChange={() => setAutoRecommendObjectiveCount(false)}
+                              />
+                              Choose a number:
+                              <input
+                                type="number"
+                                min="1"
+                                max="20"
+                                aria-label="Target number of learning objectives"
+                                value={targetObjectiveCount}
+                                onFocus={() => setAutoRecommendObjectiveCount(false)}
+                                onChange={(e) => {
+                                  setAutoRecommendObjectiveCount(false);
+                                  const value = e.target.value;
+                                  if (value === '') {
+                                    setTargetObjectiveCount('');
+                                  } else {
+                                    const numValue = parseInt(value);
+                                    if (!isNaN(numValue)) {
+                                      setTargetObjectiveCount(numValue);
+                                    }
                                   }
-                                }
-                              }}
-                              className="input number-input"
-                              placeholder={autoRecommendObjectiveCount ? 'Auto' : 'Enter number'}
-                              disabled={autoRecommendObjectiveCount || detectedCommandIntent === 'Import pasted learning objectives'}
-                            />
-                          </div>
-                        </div>
+                                }}
+                                className="input number-input"
+                                placeholder="e.g. 6"
+                              />
+                              {typeof targetObjectiveCount === 'number' && (targetObjectiveCount < 1 || targetObjectiveCount > 20) && (
+                                <span className="objective-count-error" role="alert">Enter a number from 1 to 20</span>
+                              )}
+                            </label>
+                          </fieldset>
+                        )}
 
                         <small className="input-hint objective-command-hint">
                           {detectedCommandIntent === 'Import pasted learning objectives'

@@ -98,29 +98,55 @@
     background: var(--color-background);
 }
 
-.objective-command-controls {
+.objective-count-choice {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--spacing-md);
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    margin: 0;
+    padding: 0;
+    border: none;
+    text-align: left;
 }
 
-.objective-target-count {
+.objective-count-choice legend {
+    margin-bottom: var(--spacing-md);
+    padding: 0;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-foreground);
+}
+
+.objective-count-option {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-}
-
-.objective-target-count .input-label {
-    font-size: var(--font-size-sm);
-    font-weight: 600;
     color: var(--color-foreground);
-    white-space: nowrap;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
 }
 
-.objective-target-count .number-input {
-    width: 160px;
+.objective-count-option input[type="radio"] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+}
+
+.objective-count-option .number-input {
+    width: 90px;
     text-align: center;
+}
+
+.objective-count-error {
+    color: var(--color-destructive);
+    font-size: var(--font-size-xs);
+}
+
+.objective-count-note {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--font-size-sm);
+    text-align: left;
 }
 
 .objective-command-hint {
@@ -311,23 +337,6 @@
     margin: var(--spacing-md) 0;
     width: 100%;
     max-width: 300px;
-}
-
-.auto-objective-count-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-    color: var(--color-foreground);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    text-align: left;
-    cursor: pointer;
-}
-
-.auto-objective-count-toggle input {
-    width: 1rem;
-    height: 1rem;
 }
 
 .objective-count-input .input-label {
@@ -636,19 +645,13 @@
 }
 
 @media (max-width: 768px) {
-    .objective-command-header,
-    .objective-command-controls,
-    .objective-target-count {
+    .objective-command-header {
         flex-direction: column;
         align-items: stretch;
     }
 
     .objective-intent-pill {
         width: fit-content;
-    }
-
-    .objective-target-count .number-input {
-        width: 100%;
     }
 
     .objectives-header {
