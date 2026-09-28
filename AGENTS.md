@@ -184,6 +184,16 @@ Canvas LTI Mixed Activity is a CREATE runtime and is not an official H5P
 container. See `docs/create-supported-question-types.md` for the detailed
 compatibility rationale.
 
+## Canvas integration
+
+Canvas OAuth and REST requests use the official UBC LMS integration toolkit via
+`canvasToolkitConnection.js` and `canvasApiService.js`. `canvasTokenStore.js`
+adapts the existing encrypted token collection. Keep Canvas tokens bound to their
+issuing instance and keep Canvas expiry separate from CREATE login expiry.
+The toolkit does not replace `ltiService.js` or the H5P/Mixed Activity player.
+See `docs/canvas-toolkit-integration.md` and `vendor/README.md` for setup,
+the pinned upstream source, and package provenance.
+
 ## Two different reference systems
 
 Do not mix these concepts:

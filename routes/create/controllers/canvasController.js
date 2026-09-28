@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
+import { canvas } from '@ubc/ubc-genai-toolkit-lms-integration';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
@@ -15,7 +16,7 @@ import { createMixedActivitySnapshot, validateMixedActivitySnapshot } from '../s
 const router = express.Router();
 
 // Check if Canvas integration is configured
-const CANVAS_CONFIGURED = !!(process.env.CANVAS_CLIENT_ID && process.env.CANVAS_CLIENT_SECRET);
+const CANVAS_CONFIGURED = canvasApiService.isConfigured();
 
 // ============================================================
 // Public config endpoint (no auth required)
@@ -28,7 +29,7 @@ const CANVAS_CONFIGURED = !!(process.env.CANVAS_CLIENT_ID && process.env.CANVAS_
 router.get('/config', (req, res) => {
   return successResponse(res, {
     enabled: CANVAS_CONFIGURED,
-    canvasBaseUrl: process.env.CANVAS_BASE_URL || null,
+    canvasBaseUrl: canvasApiService.getBaseUrl(),
     ltiConfigured: !!process.env.LTI_CLIENT_ID
   }, 'Canvas configuration');
 });
@@ -57,12 +58,15 @@ router.get('/auth/status', asyncHandler(async (req, res) => {
  * Redirect to Canvas OAuth2 authorization page
  */
 router.get('/auth/connect', asyncHandler(async (req, res) => {
+  if (!CANVAS_CONFIGURED) return errorResponse(res, 'Canvas integration is not configured.', 'CANVAS_NOT_CONFIGURED', 503);
   // Generate state token for CSRF protection
   const state = crypto.randomBytes(32).toString('hex');
 
   // Store state in session for verification on callback
   req.session.canvasOAuthState = state;
-  req.session.save();
+  req.session.canvasOAuthUser = String(req.user.id);
+  req.session.canvasOAuthStartedAt = Date.now();
+  await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 
   const authUrl = canvasApiService.getAuthorizationUrl(state);
   return successResponse(res, { authUrl }, 'Canvas authorization URL');
@@ -75,23 +79,28 @@ router.get('/auth/connect', asyncHandler(async (req, res) => {
 router.get('/oauth/callback', asyncHandler(async (req, res) => {
   const { code, state, error: oauthError } = req.query;
 
-  if (oauthError) {
-    // Redirect to frontend with error
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
-    return res.redirect(`${frontendUrl}/canvas-callback?error=${encodeURIComponent(oauthError)}`);
-  }
-
-  if (!code || !state) {
+  if (typeof state !== 'string' || (!oauthError && typeof code !== 'string')) {
     return errorResponse(res, 'Missing code or state parameter', ERROR_CODES.VALIDATION_ERROR, HTTP_STATUS.BAD_REQUEST);
   }
 
   // Verify state matches
-  if (state !== req.session.canvasOAuthState) {
+  if (state !== req.session.canvasOAuthState
+    || req.session.canvasOAuthUser !== String(req.user.id)
+    || !req.session.canvasOAuthStartedAt
+    || Date.now() - req.session.canvasOAuthStartedAt > 10 * 60 * 1000) {
     return errorResponse(res, 'Invalid state parameter', ERROR_CODES.AUTH_ERROR, HTTP_STATUS.FORBIDDEN);
   }
 
   // Clear state from session
   delete req.session.canvasOAuthState;
+  delete req.session.canvasOAuthUser;
+  delete req.session.canvasOAuthStartedAt;
+  await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+
+  if (oauthError) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
+    return res.redirect(`${frontendUrl}/canvas-callback?error=access_denied`);
+  }
 
   // Exchange code for tokens
   await canvasApiService.exchangeCode(code, req.user.id);
@@ -106,8 +115,8 @@ router.get('/oauth/callback', asyncHandler(async (req, res) => {
  * Disconnect Canvas account
  */
 router.delete('/auth/disconnect', asyncHandler(async (req, res) => {
-  await canvasApiService.deleteToken(req.user.id);
-  return successResponse(res, null, 'Canvas disconnected');
+  const result = await canvasApiService.deleteToken(req.user.id);
+  return successResponse(res, result, 'Canvas disconnected');
 }));
 
 // ============================================================
@@ -166,7 +175,7 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
   // Verify Canvas connection
   const connected = await canvasApiService.hasValidToken(req.user.id);
   if (!connected) {
-    return errorResponse(res, 'Please connect to Canvas first', ERROR_CODES.AUTH_ERROR, HTTP_STATUS.UNAUTHORIZED);
+    return errorResponse(res, 'Please connect to Canvas first', 'CANVAS_RECONNECT_REQUIRED', 409);
   }
 
   // Load quiz with questions
@@ -240,7 +249,7 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
   await quiz.save();
 
   // Build a link to the Canvas modules page
-  const canvasBaseUrl = process.env.CANVAS_BASE_URL || 'http://localhost';
+  const canvasBaseUrl = canvasApiService.getBaseUrl();
   const canvasModulesUrl = `${canvasBaseUrl}/courses/${courseId}/modules`;
 
   return successResponse(res, {
@@ -250,5 +259,20 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
     canvasUrl: canvasModulesUrl
   }, 'Quiz exported to Canvas successfully', HTTP_STATUS.CREATED);
 }));
+
+router.use((error, req, res, next) => {
+  if (error.code === 'CANVAS_RECONNECT_REQUIRED' || (error instanceof canvas.CanvasApiError && error.statusCode === 401)) {
+    // Canvas expiry must not log the instructor out of their CREATE session.
+    return errorResponse(res, 'Please reconnect Canvas, then retry.', 'CANVAS_RECONNECT_REQUIRED', 409);
+  }
+  if (error instanceof canvas.CanvasApiError) {
+    const status = error.statusCode === 403 ? 403 : 502;
+    return errorResponse(res, status === 403 ? 'Your Canvas account or Developer Key lacks permission for this operation.' : 'Canvas could not complete the request. Please try again.', 'CANVAS_API_ERROR', status);
+  }
+  if (error instanceof canvas.CanvasOAuthError) {
+    return errorResponse(res, 'Canvas authorization could not be completed. Check the Developer Key configuration or try reconnecting.', 'CANVAS_OAUTH_ERROR', 502);
+  }
+  next(error);
+});
 
 export default router;

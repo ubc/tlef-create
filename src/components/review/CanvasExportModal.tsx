@@ -96,6 +96,8 @@ const CanvasExportModal = ({
         // Open Canvas OAuth in a popup
         const popup = window.open(res.data.authUrl, 'canvas-auth', 'width=600,height=700');
 
+        if (!popup) throw new Error('Your browser blocked the Canvas sign-in window. Allow pop-ups for CREATE, then try again.');
+
         // Poll for popup close
         const interval = setInterval(() => {
           if (popup?.closed) {

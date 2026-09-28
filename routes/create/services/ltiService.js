@@ -1,6 +1,8 @@
 import { createRequire } from 'module';
-import { renderContent } from './lumiService.js';
+import { rewriteLtiAssetUrls, renderContent } from './lumiService.js';
 import Quiz from '../models/Quiz.js';
+import { addCanvasResizeBridge } from './canvasPlayerPage.js';
+import { canvasBaseUrl } from './canvasToolkitConnection.js';
 import { submitScore } from './gradePassbackService.js';
 import { renderMixedActivityPreview, renderNativeH5PPreview } from './h5pNativePreviewService.js';
 import { buildMixedActivityItemDocument } from './mixedActivityService.js';
@@ -103,12 +105,12 @@ export async function startLtiServer() {
       }
 
       // Render H5P content via Lumi
-      const html = await renderContent(exportRecord.lumiContentId);
+      const html = rewriteLtiAssetUrls(await renderContent(exportRecord.lumiContentId));
 
       // Remove CSP header to allow H5P inline scripts
       res.removeHeader('Content-Security-Policy');
       res.setHeader('Content-Type', 'text/html');
-      return res.send(html);
+      return res.send(addCanvasResizeBridge(html, token.platformUrl || canvasBaseUrl()));
     } catch (error) {
       console.error('❌ LTI launch error:', error);
       return res.status(500).send('Error loading quiz content');
@@ -190,7 +192,7 @@ export async function startLtiServer() {
  * Register Canvas as an LTI platform
  */
 async function registerCanvasPlatform() {
-  const canvasUrl = process.env.CANVAS_BASE_URL || 'https://canvas.instructure.com';
+  const canvasUrl = canvasBaseUrl();
   const clientId = process.env.LTI_CLIENT_ID;
 
   if (!clientId) {

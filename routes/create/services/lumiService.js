@@ -350,6 +350,13 @@ export async function renderContent(contentId, user = systemUser, options) {
   return html;
 }
 
+/** Use the existing read-only player assets when Canvas hosts the document. */
+export function rewriteLtiAssetUrls(html, origin = process.env.H5P_ASSETS_URL || `http://localhost:${process.env.PORT || 8051}`) {
+  const base = origin.replace(/\/$/, '');
+  return html.replace(/(["'])(\/api\/create\/h5p-editor\/runtime)(?=[/"'])/g,
+    (_match, quote) => `${quote}${base}/api/create/h5p`);
+}
+
 /**
  * Get the H5P Editor instance (for advanced operations)
  */

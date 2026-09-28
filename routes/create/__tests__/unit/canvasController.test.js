@@ -1,0 +1,77 @@
+import { beforeEach, afterEach, expect, jest, test } from '@jest/globals';
+import express from 'express';
+import request from 'supertest';
+import session from 'express-session';
+import { canvas } from '@ubc/ubc-genai-toolkit-lms-integration';
+
+const exchangeCode = jest.fn();
+const listCourses = jest.fn();
+const hasValidToken = jest.fn().mockResolvedValue(true);
+let currentUser = 'owner';
+jest.unstable_mockModule('../../middleware/auth.js', () => ({ authenticateToken: (req, _res, next) => { req.user = { id: currentUser }; next(); } }));
+jest.unstable_mockModule('../../services/canvasApiService.js', () => ({
+  isConfigured: () => true, getBaseUrl: () => 'https://canvas.example.edu',
+  getAuthorizationUrl: state => `https://canvas.example.edu/login/oauth2/auth?state=${state}`,
+  exchangeCode, listCourses, hasValidToken
+}));
+jest.unstable_mockModule('../../services/lumiService.js', () => ({ importH5PContent: jest.fn(), renderContent: jest.fn() }));
+jest.unstable_mockModule('../../services/h5pExportService.js', () => ({ createH5PPackage: jest.fn() }));
+jest.unstable_mockModule('../../services/mixedActivityService.js', () => ({ createMixedActivitySnapshot: jest.fn(), validateMixedActivitySnapshot: jest.fn() }));
+const { default: router } = await import('../../controllers/canvasController.js');
+let agent;
+let sessions;
+beforeEach(() => {
+  jest.clearAllMocks(); hasValidToken.mockResolvedValue(true); currentUser = 'owner';
+  sessions = new session.MemoryStore();
+  const app = express();
+  app.use(express.json());
+  app.use(session({ secret: 'local-test-session-secret', resave: false, saveUninitialized: false, store: sessions }));
+  app.use('/canvas', router);
+  agent = request.agent(app);
+});
+afterEach(() => sessions.clear());
+async function connect() {
+  const response = await agent.get('/canvas/auth/connect').expect(200);
+  return new URL(response.body.data.authUrl).searchParams.get('state');
+}
+test('preserves the connect/callback URLs and consumes persisted OAuth state', async () => {
+  const state = await connect();
+  await agent.get('/canvas/oauth/callback').query({ state, code: 'test-code' }).expect(302);
+  expect(exchangeCode).toHaveBeenCalledWith('test-code', 'owner');
+  await agent.get('/canvas/oauth/callback').query({ state, code: 'test-code' }).expect(403);
+  expect(exchangeCode).toHaveBeenCalledTimes(1);
+});
+test('rejects invalid state before calling the toolkit', async () => {
+  await connect();
+  await agent.get('/canvas/oauth/callback').query({ state: 'wrong', code: 'code' }).expect(403);
+  expect(exchangeCode).not.toHaveBeenCalled();
+});
+test('rejects a callback after the signed-in CREATE user changes', async () => {
+  const state = await connect(); currentUser = 'other';
+  await agent.get('/canvas/oauth/callback').query({ state, code: 'code' }).expect(403);
+  expect(exchangeCode).not.toHaveBeenCalled();
+});
+test('consumes cancelled authorization without saving tokens', async () => {
+  const state = await connect();
+  const response = await agent.get('/canvas/oauth/callback').query({ state, error: 'access_denied' }).expect(302);
+  expect(response.headers.location).toContain('error=access_denied');
+  expect(exchangeCode).not.toHaveBeenCalled();
+  await agent.get('/canvas/oauth/callback').query({ state, code: 'code' }).expect(403);
+});
+test('Canvas expiry does not send the CREATE-login-expired status', async () => {
+  listCourses.mockRejectedValueOnce(new canvas.CanvasApiError('Unauthorized', 401));
+  const response = await agent.get('/canvas/courses').expect(409);
+  expect(response.body.error.code).toBe('CANVAS_RECONNECT_REQUIRED');
+});
+test('reports a Developer Key permission error without exposing Canvas response content', async () => {
+  listCourses.mockRejectedValueOnce(new canvas.CanvasApiError('private upstream detail', 403));
+  const response = await agent.get('/canvas/courses').expect(403);
+  expect(response.body.error.message).toContain('permission');
+  expect(JSON.stringify(response.body)).not.toContain('private upstream detail');
+});
+
+test('export without a Canvas connection preserves the CREATE login', async () => {
+  hasValidToken.mockResolvedValueOnce(false);
+  const response = await agent.post('/canvas/export/507f1f77bcf86cd799439011').send({ courseId: '2', moduleId: '8' }).expect(409);
+  expect(response.body.error.code).toBe('CANVAS_RECONNECT_REQUIRED');
+});

@@ -27,7 +27,8 @@ const canvasTokenSchema = new mongoose.Schema({
   canvasBaseUrl: {
     type: String,
     required: true
-  }
+  },
+  canvasUserId: { type: String, default: '' }
 }, {
   timestamps: true,
   collection: 'canvas_tokens',
@@ -46,11 +47,11 @@ canvasTokenSchema.methods.needsRefresh = function () {
 };
 
 canvasTokenSchema.methods.getAccessToken = function () {
-  return decrypt(this.accessToken);
+  return this.accessToken;
 };
 
 canvasTokenSchema.methods.getRefreshToken = function () {
-  return this.refreshToken ? decrypt(this.refreshToken) : null;
+  return this.refreshToken || null;
 };
 
 export default mongoose.model('CanvasToken', canvasTokenSchema);

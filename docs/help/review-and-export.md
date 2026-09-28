@@ -76,6 +76,8 @@ PDF exports preserve the learner-facing content for every supported type. Mark t
 
 ## Canvas export
 
+Use **Connect to Canvas** to authorize your Canvas account, then choose a course and module for the learning object. CREATE uses the UBC GenAI Toolkit for Canvas authorization and API requests, including token refresh and loading all pages of courses and modules. If Canvas asks you to reconnect, reconnect Canvas and retry; your CREATE login and saved learning object are separate. Disconnecting Canvas removes the local connection and attempts to revoke its authorization in Canvas. If Canvas is unavailable, you can also revoke CREATE access from your Canvas account settings. An administrator must configure the Canvas Developer Key permissions and install the CREATE LTI tool when instructor accounts cannot install tools themselves.
+
 Canvas export opens the Canvas connection and destination workflow. It requires a valid Canvas connection and appropriate permissions. Canvas LTI supplies the secure Canvas launch, learner identity and grade-return boundary. CREATE's Mixed Activity player supplies the learner rendering. The course Preview runs without requiring Canvas. Canvas delivery uses its own launch path with LTI authentication and grade passback; check the deployed activity separately when comparing it with the course Preview. This is different from uploading a standard H5P package into Canvas.
 
 ## If export fails
@@ -86,3 +88,7 @@ Confirm the learning object contains questions, the selected types are compatibl
 ## Recover an AI question addition
 
 An AI addition in Review uses a saved generation task. You can refresh or return to the learning object while it runs; **Generation task status** checks its result without repeating the AI request. A question appears in the saved list only after the full task succeeds. A failed or interrupted task preserves existing questions. If status is unavailable, restore your connection and choose **Check task status** before trying to generate again.
+
+### Connecting Canvas when creating a course
+
+When Canvas is configured, Create Course includes an optional Canvas step even before you connect your account. Choose Connect to Canvas there, or connect from Export to Canvas. You can skip linking and create a local course. If the sign-in window is blocked, allow pop-ups for CREATE and try again.

@@ -6,6 +6,11 @@ import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import archiver from 'archiver';
+import { H5PConfig } from '@lumieducation/h5p-server';
+
+// Match the receiving H5P validator; development sources are not package assets.
+const packageConfig = new H5PConfig();
+const libraryAssetGlob = `**/*.{${[packageConfig.contentWhitelist, packageConfig.libraryWhitelist].join(' ').split(/\s+/).join(',')}}`;
 import { createWriteStream } from 'fs';
 import { fileURLToPath } from 'url';
 
@@ -432,14 +437,14 @@ export async function createH5PPackage(quiz, outputPath, options = {}) {
         for (const lib of allLibs.values()) {
           const libDir = path.join(libraryPath, lib.dirName);
           await fs.access(libDir);
-          archive.glob('**/*', { cwd: libDir, nodir: true }, { prefix: lib.dirName });
+          archive.glob(libraryAssetGlob, { cwd: libDir, nodir: true, nocase: true }, { prefix: lib.dirName });
         }
 
         if (questionTypes.has('crossword')) {
           const advancedTextDir = path.join(libraryPath, 'H5P.AdvancedText-1.1');
           try {
             await fs.access(advancedTextDir);
-            archive.glob('**/*', { cwd: advancedTextDir, nodir: true }, { prefix: 'H5P.AdvancedText-1.1' });
+            archive.glob(libraryAssetGlob, { cwd: advancedTextDir, nodir: true, nocase: true }, { prefix: 'H5P.AdvancedText-1.1' });
           } catch {
             // Optional compatibility dependency is unavailable.
           }

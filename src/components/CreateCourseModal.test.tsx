@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import CreateCourseModal from './CreateCourseModal';
+import { canvasApi } from '../services/api';
 
 vi.mock('./MaterialUpload', () => ({
   default: () => <div>Course material uploader</div>,
@@ -38,4 +39,15 @@ describe('CreateCourseModal workflow', () => {
     expect(screen.getByRole('button', { name: /Course materials/ })).toHaveAttribute('aria-current', 'step');
     expect(screen.getByText('Course material uploader')).toBeInTheDocument();
   });
+  it('offers Canvas connection before the user is connected', async () => {
+    vi.mocked(canvasApi.getConfig).mockResolvedValueOnce({ data: { enabled: true } } as never);
+    vi.mocked(canvasApi.getAuthStatus).mockResolvedValueOnce({ data: { connected: false } } as never);
+    render(<CreateCourseModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} />);
+    await screen.findByRole('button', { name: /Canvas Optional connection/ });
+    fireEvent.change(screen.getByLabelText('Course Name'), { target: { value: 'Canvas QA' } });
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+    expect(screen.getByRole('button', { name: 'Connect to Canvas' })).toBeInTheDocument();
+  });
+
 });

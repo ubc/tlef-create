@@ -42,6 +42,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   const [canvasEnabled, setCanvasEnabled] = useState(false);
   const [canvasConnected, setCanvasConnected] = useState(false);
   const [canvasLoading, setCanvasLoading] = useState(false);
+  const [canvasError, setCanvasError] = useState('');
   const [canvasCourses, setCanvasCourses] = useState<CanvasCourse[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CanvasCourse | null>(null);
   const [canvasModuleId, setCanvasModuleId] = useState<string | null>(null);
@@ -129,10 +130,12 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
 
   const handleCanvasConnect = async () => {
     setCanvasLoading(true);
+    setCanvasError('');
     try {
       const res = await canvasApi.getConnectUrl();
       if (res.data?.authUrl) {
         const popup = window.open(res.data.authUrl, 'canvas-auth', 'width=600,height=700');
+        if (!popup) throw new Error('Your browser blocked the Canvas sign-in window. Allow pop-ups for CREATE, then try again.');
         const interval = setInterval(() => {
           if (popup?.closed) {
             clearInterval(interval);
@@ -147,7 +150,8 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
           }
         }, 500);
       }
-    } catch {
+    } catch (error) {
+      setCanvasError(error instanceof Error ? error.message : 'Unable to connect to Canvas. Please try again.');
       setCanvasLoading(false);
     }
   };
@@ -214,7 +218,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   };
 
   const handleSkipMaterials = async () => {
-    if (canvasEnabled && canvasConnected) {
+    if (canvasEnabled) {
       // Go to Canvas step instead of creating immediately
       handleGoToCanvasStep();
     } else {
@@ -254,7 +258,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       state: currentStep > 2 ? 'complete' : currentStep === 2 ? 'current' : 'available',
       disabled: currentStep < 2
     },
-    ...(canvasEnabled && canvasConnected ? [{
+    ...(canvasEnabled ? [{
       id: '3',
       label: 'Canvas',
       detail: selectedCourse ? selectedCourse.name : 'Optional connection',
@@ -360,7 +364,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
                 <button type="button" className="btn btn-ghost" onClick={handleSkipMaterials} disabled={isCreating}>
                   {isCreating ? 'Creating...' : 'Skip for Now'}
                 </button>
-                {canvasEnabled && canvasConnected ? (
+                {canvasEnabled ? (
                   <button type="button" className="btn btn-primary" onClick={handleGoToCanvasStep} disabled={isCreating}>
                     Next <ArrowRight size={16} />
                   </button>
@@ -384,6 +388,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
               {!canvasConnected ? (
                 <div className="canvas-connect-step">
                   <p>Connect your Canvas account to link courses.</p>
+                  {canvasError && <p role="alert">{canvasError}</p>}
                   <button className="btn btn-primary" onClick={handleCanvasConnect} disabled={canvasLoading}>
                     {canvasLoading ? <Loader2 size={16} className="spinner" /> : <ExternalLink size={16} />}
                     Connect to Canvas

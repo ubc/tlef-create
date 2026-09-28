@@ -48,6 +48,7 @@
     "@lumieducation/h5p-server": "^10.0.4",
     "@reduxjs/toolkit": "^2.8.2",
     "@tanstack/react-query": "^5.56.2",
+    "@ubc/ubc-genai-toolkit-lms-integration": "file:vendor/ubc-ubc-genai-toolkit-lms-integration-1.4.0.tgz",
     "@xyflow/react": "^12.11.2",
     "adm-zip": "^0.5.16",
     "agenda": "^5.0.0",

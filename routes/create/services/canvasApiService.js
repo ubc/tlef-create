@@ -1,146 +1,35 @@
-import CanvasToken from '../models/CanvasToken.js';
+import { canvas } from '@ubc/ubc-genai-toolkit-lms-integration';
+import { canvasConfig, createCanvasConnection } from './canvasToolkitConnection.js';
+import { createCanvasTokenStore } from './canvasTokenStore.js';
 
-// Supports both canvas.instructure.com (cloud) and local Canvas instances
-const CANVAS_BASE_URL = process.env.CANVAS_BASE_URL || 'https://canvas.instructure.com';
-const CANVAS_CLIENT_ID = process.env.CANVAS_CLIENT_ID;
-const CANVAS_CLIENT_SECRET = process.env.CANVAS_CLIENT_SECRET;
-const CANVAS_REDIRECT_URI = process.env.CANVAS_REDIRECT_URI || `http://localhost:${process.env.PORT || 7736}/api/create/canvas/oauth/callback`;
+const config = canvasConfig();
+const connection = createCanvasConnection({ config, tokenStore: createCanvasTokenStore(config.canvasDomain) });
 
-/**
- * Check if Canvas integration is properly configured
- */
-export function isConfigured() {
-  return !!(CANVAS_CLIENT_ID && CANVAS_CLIENT_SECRET);
-}
+export const isConfigured = () => Boolean(config.clientId && config.clientSecret);
+export const getBaseUrl = () => config.canvasDomain;
+export const getAuthorizationUrl = state => connection.getAuthorizationUrl(state);
+export const exchangeCode = (code, userId) => connection.exchangeCode(code, userId);
+export const hasValidToken = userId => connection.hasValidToken(userId);
+export const deleteToken = userId => connection.disconnect(userId);
 
-/**
- * Build Canvas OAuth2 authorization URL
- */
-export function getAuthorizationUrl(state) {
-  const params = new URLSearchParams({
-    client_id: CANVAS_CLIENT_ID,
-    response_type: 'code',
-    redirect_uri: CANVAS_REDIRECT_URI,
-    state,
-    scope: 'url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/modules url:POST|/api/v1/courses/:course_id/pages url:POST|/api/v1/courses/:course_id/modules/:module_id/items url:GET|/api/v1/courses/:course_id/external_tools url:GET|/api/v1/accounts/:account_id/external_tools'
-  });
-  return `${CANVAS_BASE_URL}/login/oauth2/auth?${params.toString()}`;
-}
-
-/**
- * Exchange authorization code for tokens and save to DB
- */
-export async function exchangeCode(code, userId) {
-  const response = await fetch(`${CANVAS_BASE_URL}/login/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      client_id: CANVAS_CLIENT_ID,
-      client_secret: CANVAS_CLIENT_SECRET,
-      redirect_uri: CANVAS_REDIRECT_URI,
-      code
-    })
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Canvas OAuth2 token exchange failed: ${error}`);
-  }
-
-  const data = await response.json();
-
-  // Canvas tokens expire in 1 hour by default
-  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000);
-
-  const token = await CanvasToken.findOneAndUpdate(
-    { user: userId },
-    {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token || null,
-      expiresAt,
-      canvasBaseUrl: CANVAS_BASE_URL
-    },
-    { upsert: true, new: true }
-  );
-
-  return token;
-}
-
-/**
- * Refresh token if needed, return valid access token
- */
-async function getValidToken(userId) {
-  const tokenDoc = await CanvasToken.findOne({ user: userId });
-  if (!tokenDoc) {
-    throw new Error('No Canvas token found. Please connect to Canvas first.');
-  }
-
-  if (tokenDoc.needsRefresh() && tokenDoc.getRefreshToken()) {
-    const response = await fetch(`${CANVAS_BASE_URL}/login/oauth2/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        client_id: CANVAS_CLIENT_ID,
-        client_secret: CANVAS_CLIENT_SECRET,
-        refresh_token: tokenDoc.getRefreshToken()
-      })
-    });
-
-    if (!response.ok) {
-      // Refresh failed — delete token, force re-auth
-      await CanvasToken.deleteOne({ user: userId });
-      throw new Error('Canvas token expired. Please reconnect to Canvas.');
-    }
-
-    const data = await response.json();
-    tokenDoc.accessToken = data.access_token;
-    if (data.refresh_token) {
-      tokenDoc.refreshToken = data.refresh_token;
-    }
-    tokenDoc.expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000);
-    await tokenDoc.save();
-  }
-
-  return tokenDoc.getAccessToken();
-}
-
-/**
- * Make authenticated Canvas API request
- */
+// Modules/pages/LTI placement are CREATE-specific operations, sent through
+// the toolkit's authenticated client. Lists always follow Canvas pagination.
 async function canvasRequest(userId, path, options = {}) {
-  const accessToken = await getValidToken(userId);
-  const url = `${CANVAS_BASE_URL}/api/v1${path}`;
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Canvas API error (${response.status}): ${error}`);
-  }
-
-  return response.json();
+  const client = await connection.getClient(userId);
+  if (options.method === 'POST') return client.post(path, JSON.parse(options.body));
+  return client.getAll(path);
 }
 
 /**
  * List courses where user is an instructor
  */
 export async function listCourses(userId) {
-  // Include teacher + admin enrollments; also include all states for local Canvas dev instances
-  const courses = await canvasRequest(userId, '/courses?per_page=100');
+  const courses = await canvas.getCourses(await connection.getClient(userId));
   return courses.map(c => ({
-    id: c.id,
+    id: c.raw.id,
     name: c.name,
-    courseCode: c.course_code,
-    term: c.term?.name
+    courseCode: c.code,
+    term: c.raw.term?.name
   }));
 }
 
@@ -277,21 +166,4 @@ export async function createExternalToolModuleItem(userId, courseId, moduleId, e
       }
     })
   });
-}
-
-/**
- * Delete stored Canvas token for a user
- */
-export async function deleteToken(userId) {
-  return CanvasToken.deleteOne({ user: userId });
-}
-
-/**
- * Check if user has a valid Canvas token
- */
-export async function hasValidToken(userId) {
-  const token = await CanvasToken.findOne({ user: userId });
-  if (!token) return false;
-  if (token.isExpired() && !token.getRefreshToken()) return false;
-  return true;
 }
