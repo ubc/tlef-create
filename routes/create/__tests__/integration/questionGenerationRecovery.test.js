@@ -76,6 +76,7 @@ async function fixture() {
 }
 async function stage({ job, assertActive, updateItem }, owner, quizId, options = {}) {
   for (const item of job.items) {
+    if (item.status === 'ready') continue;
     await updateItem(item.index, { status: 'generating' });
     if (options.failIndex === item.index) {
       await updateItem(item.index, { status: 'failed', code: 'QUESTION_GENERATION_FAILED', message: 'Synthetic provider failure.' });
@@ -112,6 +113,56 @@ afterAll(async () => {
 });
 
 describe('durable question generation and atomic publication on standalone MongoDB', () => {
+  test('explicit retry reuses prepared candidates and generates only the missing items', async () => {
+    const f = await fixture(); const jobs = service(); const firstId = randomUUID(); const retryId = randomUUID();
+    const two = [configs[0], configs[0]];
+    const first = await jobs.start({ owner: f.owner, quizId: f.quizId, requestId: firstId, questionConfigs: two,
+      work: context => stage(context, f.owner, f.quizId, { objectiveId: f.objective._id, failIndex: 1 }) });
+    await jobs.waitForIdle();
+    const failed = await jobs.get(f.owner, firstId);
+    expect(failed.status).toBe('failed');
+    expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+    const work = jest.fn(async context => {
+      expect(context.job.items.map(item => item.status)).toEqual(['ready', 'queued']);
+      const reused = await Question.findById(context.job.items[0].savedQuestionId);
+      expect(reused.questionText).toBe('New candidate 1');
+      expect(String(reused.generationJob)).toBe(String(context.job._id));
+      await stage(context, f.owner, f.quizId, { objectiveId: f.objective._id });
+    });
+    await jobs.start({ owner: f.owner, quizId: f.quizId, requestId: retryId, questionConfigs: two,
+      retryFromRequestId: firstId, work });
+    await jobs.waitForIdle();
+    const completed = await jobs.get(f.owner, retryId);
+    expect(completed.status).toBe('succeeded');
+    expect(serializeQuestionJob(completed).reusedQuestions).toBe(1);
+    expect((await Quiz.findById(f.quizId)).questions).toHaveLength(3);
+    expect(await Question.countDocuments({ generationJob: first._id })).toBe(1);
+    await jobs.start({ owner: f.owner, quizId: f.quizId, requestId: retryId, questionConfigs: two,
+      retryFromRequestId: firstId, work });
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+  test('retry refuses stale course snapshots and changed generation instructions without calling work', async () => {
+    const f = await fixture(); const jobs = service(); const firstId = randomUUID(); const work = jest.fn();
+    await jobs.start({ owner: f.owner, quizId: f.quizId, requestId: firstId, questionConfigs: configs,
+      work: context => stage(context, f.owner, f.quizId, { failIndex: 0 }) });
+    await jobs.waitForIdle();
+    await expect(jobs.start({ owner: f.owner, quizId: f.quizId, requestId: randomUUID(),
+      questionConfigs: [{ ...configs[0], customPrompt: 'Changed instructions' }], retryFromRequestId: firstId, work }))
+      .rejects.toMatchObject({ code: 'GENERATION_SNAPSHOT_CHANGED' });
+    await Quiz.updateOne({ _id: f.quizId }, { $inc: { questionRevision: 1 } });
+    await expect(jobs.start({ owner: f.owner, quizId: f.quizId, requestId: randomUUID(),
+      questionConfigs: configs, retryFromRequestId: firstId, work })).rejects.toMatchObject({ code: 'GENERATION_SNAPSHOT_CHANGED' });
+    expect(work).not.toHaveBeenCalled();
+    expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+  });
+  test('keeps the safe quality diagnosis in the durable receipt', async () => {
+    const f = await fixture(); const jobs = service(); const requestId = randomUUID();
+    await jobs.start({ owner: f.owner, quizId: f.quizId, requestId, questionConfigs: configs,
+      work: async ({ updateItem }) => updateItem(0, { status: 'failed', code: 'QUESTION_QUALITY_REVIEW',
+        reason: 'INSTRUCTION_MISMATCH', message: 'The draft did not follow the instructions for this question.' }) });
+    await jobs.waitForIdle();
+    expect(serializeQuestionJob(await jobs.get(f.owner, requestId)).items[0]).toMatchObject({ reason: 'INSTRUCTION_MISMATCH' });
+  });
   test('publishing another batch reopens instructor review', async () => {
     const f = await fixture();
     await Quiz.updateOne({ _id: f.quizId }, { $set: { 'progress.reviewCompleted': true } });
@@ -921,8 +972,12 @@ describe('Studio assistant reuses durable course question generation', () => {
     const expanded = expandAssistantQuestionPlan({ settings: { planItems: [{ type: 'essay', learningObjective: objective,
       count: 2, customPrompt: 'Compare two examples.', rationale: 'Evidence comparison', difficulty: 'challenging' }] } });
     expect(expanded).toHaveLength(2);
-    expect(expanded[0]).toMatchObject({ questionType: 'essay', learningObjectiveId: String(objective), customPrompt: 'Compare two examples.',
+    expect(expanded[0]).toMatchObject({ questionType: 'essay', learningObjectiveId: String(objective), customPrompt: expect.stringContaining('Compare two examples.'),
       planRationale: 'Evidence comparison', difficulty: 'challenging', useCustomPromptOnly: false });
+    expect(expanded[0].customPrompt).toContain('Generate exactly one essay question');
+    expect(expanded[0].customPrompt).toContain('one of 2 items');
+    // Equal group instructions preserve the existing per-row slice planner.
+    expect(expanded[1].customPrompt).toBe(expanded[0].customPrompt);
     expect(() => expandAssistantQuestionPlan({ settings: { planItems: [{ type: 'essay', learningObjective: objective, count: 21 }] } })).toThrow();
   });
 });

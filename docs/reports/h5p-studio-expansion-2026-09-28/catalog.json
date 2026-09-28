@@ -1,0 +1,445 @@
+{
+  "source": "https://h5p.org/content-types-and-applications",
+  "targetCount": 54,
+  "availableTargets": 54,
+  "installedRunnableTypes": 56,
+  "usableEditorTypes": 55,
+  "extraUsableTypes": [
+    "H5P.Audio"
+  ],
+  "passed": true,
+  "results": [
+    {
+      "machineName": "H5P.Accordion",
+      "title": "Accordion",
+      "library": "H5P.Accordion 1.0",
+      "version": "1.0.33",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.AdventCalendar",
+      "title": "Advent Calendar (beta)",
+      "library": "H5P.AdventCalendar 0.3",
+      "version": "0.3.4",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Agamotto",
+      "title": "Agamotto",
+      "library": "H5P.Agamotto 1.6",
+      "version": "1.6.8",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ARScavenger",
+      "title": "AR Scavenger (beta)",
+      "library": "H5P.ARScavenger 1.4",
+      "version": "1.4.1",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ArithmeticQuiz",
+      "title": "Arithmetic Quiz",
+      "library": "H5P.ArithmeticQuiz 1.1",
+      "version": "1.1.25",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.AudioRecorder",
+      "title": "Audio Recorder",
+      "library": "H5P.AudioRecorder 1.0",
+      "version": "1.0.33",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Chart",
+      "title": "Chart",
+      "library": "H5P.Chart 1.2",
+      "version": "1.2.22",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Collage",
+      "title": "Collage",
+      "library": "H5P.Collage 0.3",
+      "version": "0.3.25",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Cornell",
+      "title": "Cornell Notes",
+      "library": "H5P.Cornell 0.3",
+      "version": "0.3.2",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Crossword",
+      "title": "Crossword",
+      "library": "H5P.Crossword 0.5",
+      "version": "0.5.13",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Dialogcards",
+      "title": "Dialog Cards",
+      "library": "H5P.Dialogcards 1.9",
+      "version": "1.9.18",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Dictation",
+      "title": "Dictation",
+      "library": "H5P.Dictation 1.3",
+      "version": "1.3.9",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.DocumentationTool",
+      "title": "Documentation Tool",
+      "library": "H5P.DocumentationTool 1.8",
+      "version": "1.8.27",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.DragQuestion",
+      "title": "Drag and Drop",
+      "library": "H5P.DragQuestion 1.15",
+      "version": "1.15.16",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.DragText",
+      "title": "Drag the Words",
+      "library": "H5P.DragText 1.10",
+      "version": "1.10.17",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Essay",
+      "title": "Essay",
+      "library": "H5P.Essay 1.5",
+      "version": "1.5.13",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Blanks",
+      "title": "Fill in the Blanks",
+      "library": "H5P.Blanks 1.14",
+      "version": "1.14.13",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageMultipleHotspotQuestion",
+      "title": "Find Multiple Hotspots",
+      "library": "H5P.ImageMultipleHotspotQuestion 1.0",
+      "version": "1.0.1",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageHotspotQuestion",
+      "title": "Find the Hotspot",
+      "library": "H5P.ImageHotspotQuestion 1.8",
+      "version": "1.8.22",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.FindTheWords",
+      "title": "Find The Words",
+      "library": "H5P.FindTheWords 1.4",
+      "version": "1.4.4",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Flashcards",
+      "title": "Flashcards",
+      "library": "H5P.Flashcards 1.7",
+      "version": "1.7.23",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.GameMap",
+      "title": "Game Map",
+      "library": "H5P.GameMap 1.5",
+      "version": "1.5.4",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.GuessTheAnswer",
+      "title": "Guess the Answer",
+      "library": "H5P.GuessTheAnswer 1.5",
+      "version": "1.5.3",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.IFrameEmbed",
+      "title": "Iframe Embedder",
+      "library": "H5P.IFrameEmbed 1.0",
+      "version": "1.0.29",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageHotspots",
+      "title": "Image Hotspots",
+      "library": "H5P.ImageHotspots 1.10",
+      "version": "1.10.17",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageJuxtaposition",
+      "title": "Image Juxtaposition",
+      "library": "H5P.ImageJuxtaposition 1.5",
+      "version": "1.5.4",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImagePair",
+      "title": "Image Pair",
+      "library": "H5P.ImagePair 1.4",
+      "version": "1.4.0",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageSequencing",
+      "title": "Image Sequencing",
+      "library": "H5P.ImageSequencing 1.1",
+      "version": "1.1.0",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImageSlider",
+      "title": "Image Slider",
+      "library": "H5P.ImageSlider 1.1",
+      "version": "1.1.9",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ImpressPresentation",
+      "title": "Impressive Presentation",
+      "library": "H5P.ImpressPresentation 1.0",
+      "version": "1.0.3",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.InfoWall",
+      "title": "Information Wall",
+      "library": "H5P.InfoWall 0.4",
+      "version": "0.4.9",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.InteractiveBook",
+      "title": "Interactive Book",
+      "library": "H5P.InteractiveBook 1.11",
+      "version": "1.11.8",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.KewArCode",
+      "title": "KewAr Code",
+      "library": "H5P.KewArCode 1.2",
+      "version": "1.2.2",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.MarkTheWords",
+      "title": "Mark the Words",
+      "library": "H5P.MarkTheWords 1.11",
+      "version": "1.11.9",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.MemoryGame",
+      "title": "Memory Game",
+      "library": "H5P.MemoryGame 1.3",
+      "version": "1.3.29",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.MultiMediaChoice",
+      "title": "Multimedia Choice",
+      "library": "H5P.MultiMediaChoice 0.3",
+      "version": "0.3.44",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.MultiChoice",
+      "title": "Multiple Choice",
+      "library": "H5P.MultiChoice 1.16",
+      "version": "1.16.27",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Column",
+      "title": "Page",
+      "library": "H5P.Column 1.20",
+      "version": "1.20.0",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.PersonalityQuiz",
+      "title": "Personality Quiz",
+      "library": "H5P.PersonalityQuiz 1.0",
+      "version": "1.0.8",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Questionnaire",
+      "title": "Questionnaire",
+      "library": "H5P.Questionnaire 1.3",
+      "version": "1.3.11",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.QuestionSet",
+      "title": "Question Set",
+      "library": "H5P.QuestionSet 1.21",
+      "version": "1.21.11",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.SingleChoiceSet",
+      "title": "Single Choice Set",
+      "library": "H5P.SingleChoiceSet 1.11",
+      "version": "1.11.86",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.SortParagraphs",
+      "title": "Sort the Paragraphs",
+      "library": "H5P.SortParagraphs 0.11",
+      "version": "0.11.9",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.SpeakTheWords",
+      "title": "Speak the Words",
+      "library": "H5P.SpeakTheWords 1.5",
+      "version": "1.5.7",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.SpeakTheWordsSet",
+      "title": "Speak the Words Set",
+      "library": "H5P.SpeakTheWordsSet 1.3",
+      "version": "1.3.4",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.StructureStrip",
+      "title": "Structure Strip",
+      "library": "H5P.StructureStrip 1.0",
+      "version": "1.0.6",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Summary",
+      "title": "Summary",
+      "library": "H5P.Summary 1.10",
+      "version": "1.10.32",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.Timeline",
+      "title": "Timeline",
+      "library": "H5P.Timeline 1.1",
+      "version": "1.1.25",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.TrueFalse",
+      "title": "True/False Question",
+      "library": "H5P.TrueFalse 1.8",
+      "version": "1.8.11",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.ThreeImage",
+      "title": "Virtual Tour (360)",
+      "library": "H5P.ThreeImage 0.5",
+      "version": "0.5.8",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.AdvancedBlanks",
+      "title": "Advanced Fill in the Blanks",
+      "library": "H5P.AdvancedBlanks 1.4",
+      "version": "1.4.0",
+      "mode": "manual",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.InteractiveVideo",
+      "title": "Interactive Video",
+      "library": "H5P.InteractiveVideo 1.28",
+      "version": "1.28.37",
+      "mode": "template",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.CoursePresentation",
+      "title": "Course Presentation",
+      "library": "H5P.CoursePresentation 1.27",
+      "version": "1.27.25",
+      "mode": "generate",
+      "problems": []
+    },
+    {
+      "machineName": "H5P.BranchingScenario",
+      "title": "Branching Scenario",
+      "library": "H5P.BranchingScenario 1.10",
+      "version": "1.10.1",
+      "mode": "generate",
+      "problems": []
+    }
+  ]
+}

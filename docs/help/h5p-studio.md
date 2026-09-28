@@ -30,13 +30,59 @@ H5P Studio stores the complete native H5P document. Advanced changes are not con
 
 ## Content type availability
 
+**New blank activity** includes all 54 content types in the public H5P.org showcase checked in September 2026, plus the existing Audio type: 55 selectable types. These include activities and lesson containers, not just graded questions. Search the official editor's type picker for **Cornell Notes**, **Virtual Tour**, **Flashcards**, **Game Map**, **Complex Fill the Blanks** (shown as **Advanced Fill in the Blanks**), or the other installed types. Twitter User Feed remains unavailable.
+
+The 19 newly added types are available for manual authoring in the official editor. They are not automatically added to **Create with AI**, **Advanced types**, the normal question-generation menu, or every lesson container. Save and preview a completed activity before using it with learners. Speech recognition, AR, and media activities need suitable browsers, permissions, and real media; Impressive Presentation is an experimental upstream type, so use Chrome and check the result carefully.
+
+If an installed type is missing after a library update, reload Studio and open **New blank activity** again. Ask an administrator to check library assets and dependencies if its form fails to load. Library maintenance does not automatically migrate existing saved activities.
+
 H5P Studio can author locally installed, open H5P libraries. H5P.com premium or server-backed multiplayer activities are not made available merely by embedding the editor.
 
 CREATE's AI workflow can also generate **Guess the Answer** as a native `H5P.GuessTheAnswer 1.5` activity inside Column or Interactive Book. After generation, choose **Advanced H5P Editor** to fine-tune the official reveal label, answer, and other library fields in H5P Studio.
 
 ## Create with AI
 
-**Create with AI** is one creation form. First choose **One activity** or **Question collection**. For a collection, choose an illustrated **Column**, **Question Set**, or **Interactive Book** layout. The illustrated question-type cards allow multiple selections: choose one type for several questions of that type, or several types for a mix. Leave all cards unselected to let AI choose compatible types. Write **Teaching instructions**, including an exact total or quantities per type if needed. AI proposes a type-and-count plan that includes every selected type. Review and edit each count before choosing **Generate AI draft**. A collection can contain at most eight generated items. The saved native H5P draft opens in the official editor.
+**Create with AI** opens the conversational **Studio AI workspace**. Start with **Add course materials**: choose or create a course, upload PDF/DOCX files or select existing materials, and optionally choose an existing Learning Object. You can leave the message empty. CREATE waits for processing, generates grounded learning objectives when needed, proposes a teaching plan, and prepares an H5P Column activity using the course question-generation workflow.
+
+Use the **+** button at the lower left of the message box to open the tools menu. **Upload files** accepts PDF and DOCX, **Choose course materials** opens existing course evidence, **Create a course** makes a home for new materials, and **Conversation history** opens saved tasks. You can also drag PDF or DOCX files onto the Studio AI workspace. If a course is selected, uploading starts automatically and the new materials are selected for the activity. If no course is selected, the files wait in the attachment list until you choose or create one; you can remove files before upload. A task can use up to 20 materials. After upload, materials may still need processing before generation starts.
+
+An existing conversation keeps its original evidence. Files added while viewing a saved task wait for a **new activity**; choose **Start new activity with these files** to upload and use them. This keeps earlier messages and versions attached to their original task.
+
+By default, review **Teaching plan** and choose **Accept plan & generate**. You can edit objective wording and question counts, then **Save plan**, or ask in the conversation to change the proposed question mix. Existing course objectives are reused. Existing questions are preserved and newly generated questions are appended only when the complete batch succeeds. **Generate draft automatically** authorizes generation within the recommended initial plan without a second approval; it does not authorize publishing or future revisions.
+
+**Preview** runs the saved H5P activity. **Questions & sources** shows the course questions and their evidence; source buttons open the material reference preview. **Download H5P** downloads the selected version. **Open course workspace** returns to the standard workflow. The activity is saved before download; no external deployment happens automatically.
+
+For native types, media templates, or a different container, choose **Advanced types**. That opens the previous One activity / Question collection composer. A native AI draft does not replace or update Quiz questions. The conversational workflow, by contrast, initially creates linked course questions.
+
+## Revise an activity and restore a version
+
+Describe a change in the conversation, for example “Make question 2 simpler.” A single-question revision of a linked version preserves the other questions and retrieves supporting material. The proposal appears beside the conversation while the accepted version stays current. Choose **Accept changes** or **Keep current**. Switch **Viewing** to compare the previews before deciding.
+
+An explicit whole-activity revision produces an **Independent Studio version**. Advanced native H5P edits are not converted back into course question records or coverage links. The **Questions & sources** view explains this boundary instead of showing stale course questions as the native revision. Use Preview to inspect it.
+
+**Version history** contains accepted versions. **Restore version** creates a new version from the selected saved content; earlier versions remain available. Restoring a linked course version also restores its saved questions and plan. Restoring an independent Studio version changes the Studio activity only. Downloads or external deployments are not undone. If the course changed elsewhere, CREATE blocks replacement and preserves the proposal.
+
+**Advanced editor** opens a saved version in the official editor. Saving a changed managed activity creates a new independent Studio version and preserves the original. An older editor or an unresolved proposal cannot overwrite the current version. Return through **Return to AI workspace** to see the new version.
+
+## Resume a conversational workspace
+
+The conversation, task state and version history are stored on the server for the signed-in author. **History** opens recent conversations, lets you search their titles or statuses, and restores the selected task. The workspace URL also restores the selected task after refresh. Leaving the page does not stop generation. Files still waiting in the browser's attachment list are not yet saved; choose a course to upload them before leaving. **Stop task** requests cancellation; completed work and versions remain saved.
+
+**Check status** reads saved progress without starting another model request. After an ambiguous network error, **Retry same request** resends the original command identifier. After an interrupted or failed run, **Resume task** explicitly retries the failed step and may use model credits. Saved generated output is reused when only H5P packaging failed. An uncertain model call is not automatically replayed after a server restart.
+
+If material processing fails, retry it in the course Materials tab before resuming. If a task changed in another tab, refresh its status and review the latest plan or version. Save plan edits before leaving. A disconnected initial submission can be found in Task history; resubmitting the same request identifier with a different brief is rejected, so use **New task** for a different brief.
+
+### Questions needing attention
+
+When a batch has failed questions, **Questions needing attention** lists each affected question number and its saved diagnosis. The message distinguishes an answer flagged as incorrect or ambiguous, an instruction mismatch, incomplete option feedback, an unverifiable calculation, and an unavailable feedback review service. A review flag is a reason to inspect the draft and sources, not proof that the reviewer is always correct. Older tasks may show a general failure message because they do not contain the newer diagnosis.
+
+The whole batch must pass before its questions are published. **Resume task** reuses confirmed prepared questions when the approved plan, course snapshot and generation contract are unchanged. Only the remaining questions are generated again, using additional model credits. If a prepared candidate is no longer available or comes from an older generation contract, it must be regenerated. A failed status read is retried automatically without starting generation; **Check status** can also refresh the saved result.
+
+In the teaching plan, **Number of questions** controls the quantity. Write instructions that apply to one question in that row. Use separate rows for different required tasks. CREATE executes and reviews one question at a time while preserving the row's source requirements, scenarios and exclusions.
+
+## Advanced types
+
+**Advanced types** opens the native creation form. First choose **One activity** or **Question collection**. For a collection, choose an illustrated **Column**, **Question Set**, or **Interactive Book** layout. The illustrated question-type cards allow multiple selections: choose one type for several questions of that type, or several types for a mix. Leave all cards unselected to let AI choose compatible types. Write **Teaching instructions**, including an exact total or quantities per type if needed. AI proposes a type-and-count plan that includes every selected type. Review and edit each count before choosing **Generate AI draft**. A collection can contain at most eight generated items. The saved native H5P draft opens in the official editor.
 
 **Add course evidence** is optional. Choose **Use a course** to select or create a course and Learning Object, upload PDF/DOCX materials, select already processed materials, generate Learning Objectives from those materials, and choose up to eight existing objectives. Review or edit objective wording in the course Learning Objectives tab. A single activity may use several selected objectives; AI is asked to combine their concepts. Selected processed material excerpts and selected objective text are sent as bounded context for planning and drafting. Wait until selected materials say **Ready**.
 
@@ -54,7 +100,7 @@ The former **Create a draft** step bar has been removed. Edit the selected activ
 
 ## Quick activity
 
-Choose **Create with AI → One activity**, or **Explore AI activities** in a Quiz's Generate Questions page. This beta builder uses installed H5P semantics to create native activity parameters, rather than the smaller set of normalized Quiz question types.
+Choose **Create with AI → Advanced types → One activity**, or **Explore AI activities** in a Quiz's Generate Questions page. This beta builder uses installed H5P semantics to create native activity parameters, rather than the smaller set of normalized Quiz question types.
 
 A new **Quick activity** draft does not replace your Quiz questions. The generated activity is a separate Studio draft. It does not overwrite its source Quiz or template, add rows to the Quiz Blueprint, change Quiz question counts, or inherit Quiz evidence/coverage links. Continue editing and downloading the native activity in Studio. The ordinary Quiz flow remains the better choice for evidence-linked question sets and PDF/Markdown/Canvas exports.
 
@@ -65,7 +111,7 @@ A new **Quick activity** draft does not replace your Quiz questions. The generat
 
 ## Return to Quick activity
 
-Returning from the editor to **Create with AI** restores the creation shape, layout, activity type, **Teaching instructions**, selected course evidence, reviewed question plan, search and saved-activity selection in the same browser tab. These settings survive refresh and are kept separately for each activity and signed-in author. After generation, the new activity is selected as the saved starting point so you can extend your instructions and generate a separate revision. Save manual editor changes before returning if you want the next revision to include them.
+Returning from the editor to **Create with AI → Advanced types** restores the creation shape, layout, activity type, **Teaching instructions**, selected course evidence, reviewed question plan, search and saved-activity selection in the same browser tab. These settings survive refresh and are kept separately for each activity and signed-in author. After generation, the new activity is selected as the saved starting point so you can extend your instructions and generate a separate revision. Save manual editor changes before returning if you want the next revision to include them.
 
 The brief is stored in this browser tab, not permanently on the server. A different browser or a closed tab may not retain it. Older activities without a retained brief still select their type and saved activity automatically, but CREATE cannot reconstruct instructions that were never saved.
 
@@ -79,7 +125,7 @@ New Documentation Tool AI drafts use a focused page structure for reading text, 
 
 **Prepare a template in the editor** creates an empty saved draft and opens the
 selected compatible type directly. It does not call the AI yet.
-Add your real media, save it, then return to **Create with AI → One activity** and choose that
+Add your real media, save it, then return to **Create with AI → Advanced types → One activity** and choose that
 saved template. For Dictation, provide and verify the transcript yourself; AI
 does not listen to the audio. The builder currently uses Dictation 1.3.9, which
 matches CREATE's installed core, rather than the newer incompatible 1.4 library.
@@ -94,7 +140,7 @@ If those fields cannot load, check your connection and choose **Try again**.
 An unused blank subtitle row does not prevent an Interactive Video from saving;
 add a real subtitle file when you want captions in the exported activity.
 
-Types labelled **needs a saved template** require a real prepared activity. Examples include Memory Game, Image Hotspots, Interactive Video and Multimedia Choice. Use **New blank activity**, select that type, upload your actual media and save. Then return to **Create with AI → One activity** and select the activity under **Saved template (required)**. You can also import an owned `.h5p` package as a template.
+Types labelled **needs a saved template** require a real prepared activity. Examples include Memory Game, Image Hotspots, Interactive Video and Multimedia Choice. Use **New blank activity**, select that type, upload your actual media and save. Then return to **Create with AI → Advanced types → One activity** and select the activity under **Saved template (required)**. You can also import an owned `.h5p` package as a template.
 
 AI uses the saved template version, creates a separate draft and retains referenced files. It does not create new images, generate speech, watch videos or inspect images. Describe what your media shows in the brief, and inspect timing, hotspot positions and answer mappings in the editor afterward. External embeds still require a valid URL/account and the external service's permission to embed; an AI draft cannot make an unavailable service work.
 
@@ -114,7 +160,7 @@ AI drafts are structurally checked, not certified correct. Always test the speci
 
 ## Recover a Studio generation after refresh or disconnection
 
-If you refresh during Studio AI generation, return to **Create with AI** in the same browser tab. CREATE checks the original request and opens its saved draft when ready. It does not submit another AI generation just because the browser disconnected. The request identifier and your activity brief are retained in this browser tab; the generation receipt on the server does not store your teaching instructions.
+If you refresh during Studio AI generation, return to **Create with AI → Advanced types** in the same browser tab. CREATE checks the original request and opens its saved draft when ready. It does not submit another AI generation just because the browser disconnected. The request identifier and your activity brief are retained in this browser tab; the generation receipt on the server does not store your teaching instructions.
 
 If a status lookup fails, restore your connection and choose **Check generation status**. This button checks the existing request; it does not spend additional AI credits. One Studio generation per user may run at a time, including across server instances. New attempts are also rate-limited.
 
@@ -169,7 +215,7 @@ The assistant saves its task and teaching brief on the server under the signed-i
 
 **Check status** reads the existing task without submitting another AI request. If the initial planning submission loses its response, **Retry same request** explicitly resends the original request identifier and the in-memory original brief. The server treats matching retries as one task. After a refresh, fill in the original course, materials and teaching task before using this action; if a saved request already exists with different instructions, CREATE recovers that task instead of treating the changed instructions as a new request. A request is not automatically retried just because the network disconnects.
 
-If planning is **Failed** or **Interrupted**, **Retry planning** explicitly starts planning again, reusing the current course objectives where available. If question generation fails before publication, **Retry question batch** retries the whole approved question batch and may use additional model credits; the earlier course questions remain intact. Prepared candidates from a failed batch are not added individually.
+If planning is **Failed** or **Interrupted**, **Retry planning** explicitly starts planning again, reusing the current course objectives where available. If question generation fails before publication, **Retry question batch** reuses confirmed prepared candidates when the course and approved generation contract are unchanged, then regenerates the remaining questions using additional model credits; the earlier course questions remain intact. Prepared candidates from a failed batch are not added individually.
 
 If questions were already committed but the final H5P package could not be prepared, the assistant says the questions are saved and offers **Retry Studio draft**. This retries package preparation using the saved questions, without generating duplicate questions. Check the actual status message before retrying.
 

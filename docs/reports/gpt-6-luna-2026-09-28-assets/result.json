@@ -1,0 +1,75 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T15:44:37.326Z",
+  "finishedAt": "2026-09-28T15:45:22.335Z",
+  "passed": true,
+  "taskId": "4e8e0f4a18efc784525b80d8",
+  "quizId": "6aba8b65c5329c2d8fd86a8b",
+  "materialId": "6aba8b66c5329c2d8fd86aa9",
+  "questionCount": 1,
+  "versionCount": 3,
+  "steps": [
+    {
+      "title": "打开对话工作区",
+      "status": "passed",
+      "detail": "真实前端页面显示 Create with AI 新入口。",
+      "screenshot": "01-workspace.png",
+      "elapsedMs": 714
+    },
+    {
+      "title": "上传并处理 PDF",
+      "status": "passed",
+      "detail": "浏览器上传合成课程材料；Mongo 状态为 completed，材料进入隔离 Qdrant collection。",
+      "screenshot": "02-material-ready.png",
+      "elapsedMs": 3682
+    },
+    {
+      "title": "模型提出教学计划",
+      "status": "passed",
+      "detail": "真实 gpt-6-luna 在已有课程 LO 与 PDF 证据基础上生成计划，并等待教师确认。",
+      "screenshot": "03-plan-review.png",
+      "elapsedMs": 11590
+    },
+    {
+      "title": "确认后生成 H5P",
+      "status": "passed",
+      "detail": "真实模型生成 1 道问题，并保存可运行的 H5P 活动。",
+      "screenshot": "04-h5p-preview.png",
+      "elapsedMs": 28032
+    },
+    {
+      "title": "检查问题与来源",
+      "status": "passed",
+      "detail": "核对生成问题、解释及来源面板。",
+      "screenshot": "05-questions-sources.png",
+      "elapsedMs": 28113
+    },
+    {
+      "title": "下载标准 H5P 包",
+      "status": "passed",
+      "detail": "验证归档包含 h5p.json、content/content.json 和 H5P Column/MultiChoice。",
+      "elapsedMs": 28308
+    },
+    {
+      "title": "提出单题修改",
+      "status": "passed",
+      "detail": "模型将修改生成为候选版本；原版本仍可在预览中选择。",
+      "screenshot": "06-proposed-version.png",
+      "elapsedMs": 42183
+    },
+    {
+      "title": "接受候选版本",
+      "status": "passed",
+      "detail": "候选版本被明确接受，历史内容保留。",
+      "screenshot": "07-accepted-version.png",
+      "elapsedMs": 44630
+    },
+    {
+      "title": "恢复旧版本",
+      "status": "passed",
+      "detail": "恢复创建了新版本；版本历史现在有 3 项。",
+      "screenshot": "08-restored-version.png",
+      "elapsedMs": 45009
+    }
+  ]
+}

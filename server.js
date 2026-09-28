@@ -35,6 +35,12 @@ connectDB().catch(err => {
   }
 });
 
+// Durable authoring commands are claimed with Mongo leases across instances.
+// Polling also recovers safe checkpoints after a server restart.
+import('./routes/create/services/authoring/authoringService.js')
+  .then(({ startAuthoringWorker }) => startAuthoringWorker())
+  .catch(() => console.error('Studio authoring worker could not start.'));
+
 // Initialize RAG service on server startup
 console.log('🔧 Initializing RAG service...');
 import('./routes/create/services/ragService.js')

@@ -26,16 +26,34 @@ export function serializeQuestionJob(job) {
     jobId: String(job._id), requestId: job.requestId, quizId: String(job.quiz), sessionId: job.sessionId,
     mode: job.mode, status: job.status, abandoned: job.abandoned === true, totalQuestions: job.items.length,
     completedQuestions: job.items.filter(item => item.status === 'ready').length,
+    reusedQuestions: job.items.filter(item => item.reused).length,
     failedQuestions: job.items.filter(item => item.status === 'failed').length,
     questionIds: job.status === 'succeeded' ? (job.questionIds || []).map(String) : [],
     items: job.items.map(item => ({ index: item.index, questionId: item.questionId, status: item.status,
       ...(job.status === 'succeeded' ? { savedQuestionId: String(item.savedQuestionId) } : {}),
-      ...(item.code ? { code: item.code } : {}), ...(item.message ? { message: item.message } : {}) })),
+      ...(item.code ? { code: item.code } : {}), ...(item.reason ? { reason: item.reason } : {}), ...(item.message ? { message: item.message } : {}) })),
     message: job.message || '', createdAt: job.createdAt, updatedAt: job.updatedAt
   };
 }
 
 export function safeQuestionJobFailure(error) {
+  // Only application-owned diagnoses cross the receipt/API boundary. Never
+  // persist model review prose, prompts, sources or provider error messages.
+  const reviewReasons = {
+    REVIEW_UNAVAILABLE: 'The feedback review service could not finish. No unchecked question was published.',
+    REVIEW_INVALID_RESPONSE: 'The feedback review returned an incomplete or unreadable result.',
+    ANSWER_INVALID: 'The answer key or question was flagged as incorrect or ambiguous. Review its evidence and wording.',
+    INSTRUCTION_MISMATCH: 'The draft did not follow the instructions for this question. Review its topic and constraints.',
+    FEEDBACK_INVALID: 'The feedback review did not match every original answer option or returned incomplete feedback.',
+    ARITHMETIC_INVALID_SCHEMA: 'The feedback review omitted required calculation details.',
+    ARITHMETIC_FALSE_EQUALITY: 'A feedback calculation produced an incorrect result.',
+    ARITHMETIC_DIVISION_BY_ZERO: 'A feedback calculation divided by zero.',
+    ARITHMETIC_UNSUPPORTED_EXPRESSION: 'A feedback calculation used an expression that could not be verified.',
+    FEEDBACK_TEXT_LIMIT: 'The reviewed feedback exceeded the supported text length.'
+  };
+  if (error?.code === 'QUESTION_QUALITY_REVIEW' && Object.hasOwn(reviewReasons, error.qualityFailureReason)) {
+    return { code: error.code, reason: error.qualityFailureReason, message: reviewReasons[error.qualityFailureReason] };
+  }
   const known = {
     GENERATION_TIMEOUT: 'This question exceeded its generation deadline. No question from this batch was published.',
     QUESTION_QUALITY_REVIEW: 'This question did not pass the feedback check. Refine its instructions before starting a new attempt.',
@@ -164,7 +182,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
         return recover(winner);
       }
     },
-    async start({ owner, quizId, requestId, mode = 'append', questionConfigs, expectedQuizVersion, signal,
+    async start({ owner, quizId, requestId, mode = 'append', questionConfigs, expectedQuizVersion, signal, retryFromRequestId,
       assertContextActive = async () => {}, work, onSettled }) {
       if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) throw jobError('A valid generation request ID is required.', 'INVALID_GENERATION_REQUEST', 400);
       if (!['append', 'replace'].includes(mode) || !Array.isArray(questionConfigs) || questionConfigs.length < 1 || questionConfigs.length > 100) {
@@ -182,11 +200,16 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
         if (previous.requestHash !== requestHash) throw jobError('This request ID was already used for different generation instructions.', 'REQUEST_ID_CONFLICT');
         return recover(previous);
       }
+      const retrySource = retryFromRequestId ? await service.get(owner, retryFromRequestId) : null;
+      if (retryFromRequestId && (!retrySource || retrySource.status !== 'failed'
+        || String(retrySource.quiz) !== String(quizId) || retrySource.requestHash !== requestHash)) {
+        throw jobError('The previous batch cannot be reused with this question plan. Review the current plan before starting a new task.', 'GENERATION_SNAPSHOT_CHANGED');
+      }
       if (signal?.aborted) throw jobError(interruptedMessage, 'GENERATION_INTERRUPTED');
       await service.list(owner, quizId);
       let job;
       try {
-        job = await JobModel.create({ owner, quiz: quizId, requestId, requestHash, mode,
+        job = await JobModel.create({ owner, quiz: quizId, requestId, requestHash, mode, retryFromRequestId,
           sessionId: randomUUID(), leaseToken: randomUUID(), leaseUntil: new Date(+now() + LEASE_MS), status: 'running', active: true,
           items: questionConfigs.map((_config, index) => ({ index, questionId: `question-${index + 1}`, savedQuestionId: new mongoose.Types.ObjectId(), status: 'queued' })) });
       } catch (error) {
@@ -214,6 +237,12 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
           throw jobError('The learning object changed before generation started. Refresh its materials, objectives and settings before starting a new attempt.', 'GENERATION_SNAPSHOT_CHANGED');
         }
         throw jobError('A question edit or another generation is still finishing. Please try again.', 'QUESTION_GENERATION_BUSY');
+      }
+      if (retrySource && (retrySource.baseQuizVersion !== (quiz.__v || 0)
+        || retrySource.baseRevision !== (quiz.questionRevision || 0)
+        || JSON.stringify(retrySource.baseQuestionIds.map(String)) !== JSON.stringify(quiz.questions.map(String)))) {
+        await terminal(job, 'conflict', conflictMessage);
+        throw jobError('The learning object changed since the failed batch. Review the current plan before starting a new task.', 'GENERATION_SNAPSHOT_CHANGED');
       }
       job.baseQuestionIds = [...(quiz.questions || [])];
       job.baseRevision = quiz.questionRevision || 0;
@@ -254,9 +283,29 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
 
       const execution = (async () => {
         try {
+          // Copy confirmed unpublished candidates under the new receipt. Never
+          // reassign the old receipt's documents or publish a partial batch.
+          if (retrySource) for (const previousItem of retrySource.items) {
+            if (previousItem.status !== 'ready') continue;
+            await assertActive();
+            const candidate = await QuestionModel.findOne({ _id: previousItem.savedQuestionId,
+              generationJob: retrySource._id, quiz: quizId, createdBy: owner }).lean();
+            if (!candidate) continue;
+            const item = job.items[previousItem.index];
+            if (!item) continue;
+            const content = { ...candidate };
+            for (const field of ['_id', '__v', 'createdAt', 'updatedAt']) delete content[field];
+            await QuestionModel.create({ ...content, _id: item.savedQuestionId, generationJob: job._id });
+            await assertActive();
+            const updated = await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, {
+              $set: { [`items.${item.index}.status`]: 'ready', [`items.${item.index}.reused`]: true }
+            });
+            if (!updated.matchedCount) throw jobError(interruptedMessage, 'GENERATION_INTERRUPTED');
+            item.status = 'ready'; item.reused = true;
+          }
           await work({ job, signal: abortController.signal, assertActive, async updateItem(index, values) {
             await assertActive();
-            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'message'].includes(key)));
+            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message'].includes(key)));
             const result = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, {
               $set: Object.fromEntries(Object.entries(allowed).map(([key, value]) => [`items.${index}.${key}`, value]))
             });

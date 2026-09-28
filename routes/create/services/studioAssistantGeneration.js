@@ -26,7 +26,12 @@ export function expandAssistantQuestionPlan(quiz) {
         .filter(key => row[key] !== undefined && row[key] !== null).map(key => [key, row[key]])),
       ...(row.rationale ? { planRationale: row.rationale } : {})
     };
-    for (let index = 0; index < row.count; index++) configs.push({ ...config });
+    for (let index = 0; index < row.count; index++) configs.push({ ...config, customPrompt: [
+      `SINGLE-QUESTION TASK: Generate exactly one ${row.type} question, one of ${row.count} items in this approved plan row.`,
+      'The application creates the other items separately. Any total question counts or distribution across questions in the row instructions below describe the whole row, not the output of this call. Do not generate a collection.',
+      'Use the assigned planned slice for this item when supplied. Preserve the row’s subject, source requirements, scenario, answer constraints and exclusions. Do not omit evidence or change the requested topic to achieve variety.',
+      `APPROVED ROW INSTRUCTIONS:\n${row.customPrompt || ''}`
+    ].join('\n\n') });
   }
   return configs;
 }
@@ -37,7 +42,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
     .populate('materials').populate('learningObjectives')
     .populate({ path: 'questions', populate: { path: 'learningObjective', select: 'text order' }, options: { sort: { order: 1 } } });
 
-  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs,
+  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs, retryFromRequestId,
     assertActive = async () => {}, assertQuizSnapshot = async () => {}, onProgress = async () => {}, signal }) {
     const owner = String(userId || user?.id || user?._id || '');
     if (!mongoose.isValidObjectId(owner) || !mongoose.isValidObjectId(quizId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) {
@@ -105,7 +110,15 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
         if (!readiness.ready) throw failure(readiness.message, readiness.code, readiness.status);
       }
       await checkContext();
+      // Older receipts may predate the single-question prompt contract. The
+      // approved Quiz snapshot was checked above; regenerate those items on
+      // an explicit retry instead of reusing candidates from another contract.
+      const retrySource = retryFromRequestId ? await jobs.get(owner, retryFromRequestId) : null;
+      const reusableRequestId = retrySource?.status === 'failed' && String(retrySource.quiz) === String(quizId)
+        && retrySource.requestHash === questionGenerationRequestHash({ quizId, mode: 'append', questionConfigs: configs })
+        ? retryFromRequestId : undefined;
       let job = await jobs.start({ owner, quizId, requestId, mode: 'append', questionConfigs: configs,
+        retryFromRequestId: reusableRequestId,
         expectedQuizVersion: quiz.__v || 0, signal: controller.signal, assertContextActive: checkContext,
         work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append' }) });
       while (true) {
@@ -118,7 +131,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
       }
       if (job.status !== 'succeeded') {
         throw Object.assign(failure(job.status === 'failed'
-          ? 'The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.'
+          ? 'The question batch failed. No questions from this batch were added. An explicit retry reuses confirmed prepared questions when the plan and course are unchanged, and regenerates the remaining questions using additional AI credits.'
           : job.message || 'Generation did not complete. Existing questions are unchanged.',
         job.status === 'conflict' ? 'GENERATION_SNAPSHOT_CHANGED' : job.status === 'interrupted' ? 'GENERATION_INTERRUPTED' : 'ASSISTANT_QUESTION_BATCH_FAILED'), {
           job: serializeQuestionJob(job)

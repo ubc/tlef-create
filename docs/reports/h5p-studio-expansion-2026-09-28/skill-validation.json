@@ -1,0 +1,8 @@
+{
+  "skillFrontmatter": "quick_validate passed",
+  "missingTypeRepair": "Flashcards restored in isolated staging with prepare/apply and lock verification",
+  "idempotence": "same package prepared again: zero changes",
+  "maintenanceSafetyTests": "16 passed (traversal, core requirements, asset integrity, stale base/candidate guards)",
+  "nativeEditorEvidence": "browser/editor-acceptance.json",
+  "lockDrift": []
+}

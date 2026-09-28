@@ -3,13 +3,13 @@
   "description": "A configurable editor element that can be used to describe an input field.",
   "majorVersion": 1,
   "minorVersion": 2,
-  "patchVersion": 17,
+  "patchVersion": 24,
   "runnable": 0,
   "author": "Joubel",
   "license": "MIT",
   "coreApi": {
     "majorVersion": 1,
-    "minorVersion": 27
+    "minorVersion": 28
   },
   "machineName": "H5P.TextInputField",
   "preloadedCss": [

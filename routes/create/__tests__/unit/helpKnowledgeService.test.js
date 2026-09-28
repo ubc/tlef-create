@@ -4,11 +4,13 @@ import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
   test.each([
+    ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
+    ['Questions needing attention instruction mismatch incomplete option feedback review service unavailable', 'h5p-studio', 'Questions needing attention'],
     ['Create Course optional Canvas step Connect to Canvas sign-in window blocked pop-ups', 'review-and-export', 'Connecting Canvas when creating a course'],
     ['Connect Canvas UBC GenAI Toolkit reconnect authorization disconnect Developer Key permissions', 'review-and-export', 'Canvas export'],
     ['Recovered unsaved edits View recovered content Copy draft Download draft Save as new question', 'review-and-export', 'Recovered unsaved edits'],
     ['Create with AI', 'h5p-studio', 'Create with AI'],
-    ['One activity Question collection multiple question type cards Add course evidence', 'h5p-studio', 'Create with AI'],
+    ['One activity Question collection multiple question type cards Add course evidence', 'h5p-studio', 'Advanced types'],
     ['AI Link Missing', 'learning-objectives', 'Evidence and enrichment'],
     ['rate limit timeout incomplete Blueprint', 'troubleshooting', 'AI generation does not start']
   ])('ranks the specific action or error above broad workflow mentions: %s', async (query, documentId, section) => {
@@ -17,9 +19,9 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(first.navigationPath).toContain(`/help?doc=${documentId}&section=`);
   });
   test.each([
-    ['Create with AI Use course materials Quick activity keep teaching task unsaved plan New blank activity Import .h5p', 'h5p-studio', 'Create with AI'],
-    ['Question collection select multiple types AI chooses when no cards selected quantities plan', 'h5p-studio', 'Create with AI'],
-    ['Prompt helper conversation context selected objectives Yes generate prompt Not now Copy prompt Use this prompt', 'h5p-studio', 'Create with AI'],
+    ['Create with AI Use course materials Quick activity keep teaching task unsaved plan New blank activity Import .h5p', 'h5p-studio', 'Advanced types'],
+    ['Question collection select multiple types AI chooses when no cards selected quantities plan', 'h5p-studio', 'Advanced types'],
+    ['Prompt helper conversation context selected objectives Yes generate prompt Not now Copy prompt Use this prompt', 'h5p-studio', 'Advanced types'],
     ['Quick activity Generate AI draft independent Quiz questions native activity Find a type Teaching instructions', 'h5p-studio', 'Quick activity'],
     ['AI assistant Upload PDF or DOCX Ready Course Learning Object Teaching task Plan learning objectives questions', 'h5p-studio', 'Use course materials: course and teaching task'],
     ['Approve generate questions Save plan Number of questions Linked learning objectives eight twenty', 'h5p-studio', 'Review and approve an assistant question plan'],
@@ -225,6 +227,17 @@ describe('CREATE Guide knowledge retrieval', () => {
       source.title === 'H5P Studio'
       && ['Upload an H5P package', 'Create new H5P content'].includes(source.section)
     ))).toBe(true);
+  });
+
+  test.each([
+    ['Studio AI workspace Add course materials Accept plan generate Teaching plan', 'Create with AI'],
+    ['Studio AI workspace plus button Upload files drag PDF DOCX choose course automatic upload', 'Create with AI'],
+    ['Version history Restore version Accept changes Keep current Independent Studio version', 'Revise an activity and restore a version'],
+    ['Resume conversational workspace Task history Stop task Resume task Check status interrupted', 'Resume a conversational workspace'],
+    ['History search saved conversations restore task after refresh', 'Resume a conversational workspace']
+  ])('retrieves conversational authoring guidance: %s', async (query, section) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === section)).toBe(true);
   });
 
   test('retrieves the unified AI entrance and distinguishes its two saving boundaries', async () => {

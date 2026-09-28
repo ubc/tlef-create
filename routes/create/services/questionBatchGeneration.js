@@ -148,7 +148,8 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
     const assertActive = async () => { await assertContextActive(); await assertJobActive(); };
     const finalSessionId = receipt.sessionId;
     const Question = (await import('../models/Question.js')).default;
-    const existingQuestions = await Question.find({ quiz: quizId, _id: { $in: receipt.baseQuestionIds } })
+    const existingQuestions = await Question.find({ quiz: quizId, _id: { $in: [...receipt.baseQuestionIds,
+      ...receipt.items.filter(item => item.status === 'ready').map(item => item.savedQuestionId)] } })
       .select('questionText type explanation learningObjective generationMetadata.focusArea generationMetadata.plannedSlice generationMetadata.subObjective generationMetadata.sourceReferences')
       .sort({ order: 1 }).lean();
     const questionHistory = buildQuestionMemory(existingQuestions);
@@ -170,6 +171,7 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
     const worker = async () => {
       while (nextIndex < configs.length) {
         const index = nextIndex++;
+        if (receipt.items[index].status === 'ready') continue;
         const config = configs[index];
         const questionId = receipt.items[index].questionId;
         await assertActive();

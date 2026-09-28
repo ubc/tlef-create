@@ -37,7 +37,6 @@ H5P.JoubelTip = (function ($) {
     // Create Tip button
     var $tipButton = $('<div/>', {
       class: 'joubel-tip-container' + (behaviour.showSpeechBubble ? '' : ' be-quiet'),
-      title: behaviour.tipLabel,
       'aria-label': behaviour.tipLabel,
       'aria-expanded': false,
       role: 'button',
@@ -60,7 +59,9 @@ H5P.JoubelTip = (function ($) {
         }
       },
       // Add markup to render icon
-      html: '<span class="joubel-icon-tip-normal ' + (behaviour.helpIcon ? ' help-icon': '') + '">' +
+      html: '<span class="joubel-icon-tip-normal ' +
+              (behaviour.helpIcon ? ' help-icon': '') +
+            '">' +
               '<span class="h5p-icon-shadow"></span>' +
               '<span class="h5p-icon-speech-bubble"></span>' +
               '<span class="h5p-icon-info"></span>' +

@@ -1,0 +1,183 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T18:21:19.030Z",
+  "materialCount": 20,
+  "questionCount": 0,
+  "passed": false,
+  "courseId": "6abab01fd456132208070ce4",
+  "materialProcessing": "20/20 completed",
+  "twentyFirstRejected": true,
+  "taskId": "283deee44610d51d9019243b",
+  "planningStatus": "awaiting_approval",
+  "proposedPlan": [
+    {
+      "type": "multiple-choice",
+      "count": 4
+    },
+    {
+      "type": "true-false",
+      "count": 4
+    },
+    {
+      "type": "multiple-choice",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    },
+    {
+      "type": "multiple-choice",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    }
+  ],
+  "proposedQuestionCount": 20,
+  "finalStatus": "needs_attention",
+  "finalError": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "generation": {
+    "jobId": "6abab062d4561322080714a1",
+    "requestId": "asst-q-6abab021d456132208070f1a-2",
+    "quizId": "6abab021d456132208070f1b",
+    "sessionId": "b1271a45-3a27-4a3d-8cf1-3af972d334cd",
+    "mode": "append",
+    "status": "failed",
+    "abandoned": false,
+    "totalQuestions": 20,
+    "completedQuestions": 10,
+    "failedQuestions": 10,
+    "questionIds": [],
+    "items": [
+      {
+        "index": 0,
+        "questionId": "question-1",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 1,
+        "questionId": "question-2",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 2,
+        "questionId": "question-3",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 3,
+        "questionId": "question-4",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 4,
+        "questionId": "question-5",
+        "status": "ready"
+      },
+      {
+        "index": 5,
+        "questionId": "question-6",
+        "status": "ready"
+      },
+      {
+        "index": 6,
+        "questionId": "question-7",
+        "status": "ready"
+      },
+      {
+        "index": 7,
+        "questionId": "question-8",
+        "status": "ready"
+      },
+      {
+        "index": 8,
+        "questionId": "question-9",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 9,
+        "questionId": "question-10",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 10,
+        "questionId": "question-11",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 11,
+        "questionId": "question-12",
+        "status": "ready"
+      },
+      {
+        "index": 12,
+        "questionId": "question-13",
+        "status": "ready"
+      },
+      {
+        "index": 13,
+        "questionId": "question-14",
+        "status": "ready"
+      },
+      {
+        "index": 14,
+        "questionId": "question-15",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 15,
+        "questionId": "question-16",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 16,
+        "questionId": "question-17",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 17,
+        "questionId": "question-18",
+        "status": "ready"
+      },
+      {
+        "index": 18,
+        "questionId": "question-19",
+        "status": "ready"
+      },
+      {
+        "index": 19,
+        "questionId": "question-20",
+        "status": "ready"
+      }
+    ],
+    "message": "This batch could not be completed. Your previous questions are unchanged. Review the failed items before starting a new attempt.",
+    "createdAt": "2026-09-28T18:22:26.873Z",
+    "updatedAt": "2026-09-28T18:23:25.362Z",
+    "readyCount": 10
+  },
+  "assistantErrorCode": "ASSISTANT_QUESTION_BATCH_FAILED",
+  "failure": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "finishedAt": "2026-09-28T18:23:26.952Z"
+}

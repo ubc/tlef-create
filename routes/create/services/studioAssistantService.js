@@ -19,6 +19,7 @@ import { getEditor, getSystemUser, toLumiUser, finalizeContentOwnership } from '
 import { buildAssistantContext, proposeAssistantObjectives, proposeAssistantPlan,
   validateAssistantApproval, fingerprintAssistantMaterials } from './studioAssistantPlanning.js';
 import { runAssistantGeneration } from './studioAssistantGeneration.js';
+import { generateCourseObjectives } from './authoring/courseObjectiveService.js';
 
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (message, status = 409, code = 'STUDIO_ASSISTANT_CONFLICT') => { throw Object.assign(new Error(message), { status, code }); };
@@ -134,7 +135,8 @@ async function saveBlueprint(session, proposed, expectedFingerprint, assertActiv
     } else {
       const candidate = new LearningObjective({ quiz: session.quizId, createdBy: session.owner,
         text: objective.text, order: objectives.length, generatedFrom: session.materialIds,
-        generationMetadata: { isAIGenerated: true, sourceReferences: objective.sourceReferences, generationPrompt: 'Studio assistant approved teaching brief' }
+        generationMetadata: { ...(session.objectives?.find(item => item.id === objective.id)?.metadata || previous?.generationMetadata?.toObject?.() || previous?.generationMetadata || {}),
+          isAIGenerated: true, sourceReferences: objective.sourceReferences, generationPrompt: 'Studio assistant approved teaching brief' }
       });
       await candidate.validate(); candidates.push(candidate); mapping.set(objective.id, String(candidate._id));
       objectives.push({ ...objective, id: String(candidate._id) });
@@ -183,9 +185,16 @@ async function planSession(session, assertActive) {
   const sources = [...context.sources, ...reused.flatMap(objective => objective.sourceReferences)];
   session = await patchActive(session, { sources, materialSignature: fingerprintAssistantMaterials(materials), materialFingerprint: context.materialFingerprint },
     event('objectives', reused.length ? 'Reusing the learning objectives already saved in this learning object.' : 'Drafting learning objectives from the selected materials.'));
-  const objectives = reused.length ? reused : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner) });
+  const objectives = reused.length ? reused : session.canonicalObjectives
+    ? await generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: session.instructions })
+    : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner) });
+  // Canonical LO generation may cite inventory chunks outside the small chat
+  // sample. These references came from the server-owned generation pipeline.
+  if (session.canonicalObjectives) sources.push(...objectives.flatMap(objective => objective.sourceReferences || []));
+  session.objectives = objectives;
+  session.sources = sources;
   await assertActive();
-  await patchActive(session, { objectives }, event('plan', 'Recommending question types and quantities for the learning objectives.'));
+  await patchActive(session, { objectives, sources }, event('plan', 'Recommending question types and quantities for the learning objectives.'));
   const plan = await proposeAssistantPlan({ instructions: session.instructions, objectives, context: context.context, userId: String(session.owner) });
   await assertActive(); await assertSources(session);
   const saved = await saveBlueprint(session, { objectives, plan }, before, assertActive);
@@ -224,6 +233,7 @@ async function generateSession(session, user, assertActive) {
   await assertSources(session); await assertActive();
   await patchActive(session, {}, event('generating', 'Building the approved questions. Live previews are drafts until the whole batch succeeds.'));
   const result = await runAssistantGeneration({ user, quizId: String(session.quizId), requestId: session.questionJobRequestId,
+    retryFromRequestId: session.questionJobRetryFromRequestId,
     materialIds: session.materialIds.map(String),
     assertQuizSnapshot: quiz => { if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged(); },
     assertActive: async () => { await assertActive(); await assertSources(session); },
@@ -328,7 +338,8 @@ export async function createAssistantSession(user, body) {
     session = await Session.create({ ...draft, _id: id, requestId: body.requestId, requestHash,
       quizId: existingQuiz?._id || new mongoose.Types.ObjectId(), createdQuiz: !existingQuiz,
       quizName: existingQuiz?.name || `Studio learning object ${String(id).slice(-6)}`,
-      instructions: body.instructions.trim(), status: 'planning', phase: 'planning', events: [event('started', 'Preparing the course workspace.')] });
+      instructions: body.instructions.trim(), canonicalObjectives: body.canonicalObjectives === true,
+      status: 'planning', phase: 'planning', events: [event('started', 'Preparing the course workspace.')] });
   } catch (error) {
     if (error.code !== 11000) throw error;
     const duplicate = await Session.findOne({ owner, requestId: body.requestId });
@@ -393,9 +404,11 @@ export async function resumeAssistantSession(user, id, body) {
     if (!previous || !['running', 'succeeded'].includes(previous.status)) {
       const quiz = await loadQuiz(session.quizId, session.owner);
       if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged();
+      session.questionJobRetryFromRequestId = previous?.status === 'failed' ? session.questionJobRequestId : undefined;
       session.questionJobRequestId = `asst-q-${session._id}-${session.attempt + 1}`;
       const saved = await Session.findOneAndUpdate({ _id: session._id, owner: session.owner, revision: session.revision, status: session.status }, {
-        $set: { questionJobRequestId: session.questionJobRequestId }, $inc: { revision: 1 }
+        $set: { questionJobRequestId: session.questionJobRequestId,
+          questionJobRetryFromRequestId: session.questionJobRetryFromRequestId || null }, $inc: { revision: 1 }
       }, { new: true });
       if (!saved) fail('This task changed before retry.');
       session = saved;

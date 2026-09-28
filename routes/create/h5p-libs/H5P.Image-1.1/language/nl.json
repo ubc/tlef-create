@@ -4,7 +4,11 @@
       "label": "Afbeelding"
     },
     {
-      "label": "Alt-tekst",
+      "label": "Slechts decoratief",
+      "description": "Schakel deze optie in als de afbeelding puur decoratief is en geen informatie aan de inhoud van de pagina toevoegt. Schermlezers negeren de afbeelding dan en geven ook geen alternatieve tekst."
+    },
+    {
+      "label": "Alternatieve tekst",
       "description": "Vereist. Als de browser deze afbeelding niet kan laden wordt deze tekst getoond. Ook gebruikt door \"tekst-naar-spraak\" lezers."
     },
     {
@@ -12,8 +16,16 @@
       "description": "Optioneel. Deze tekst wordt getoond wanneer een gebruiker zijn muisaanwijzer beweegt over de afbeelding."
     },
     {
-      "label": "Afbeelding inhoud naam",
+      "label": "Naam afbeeldingsinhoud",
       "default": "Afbeelding"
+    },
+    {
+      "label": "Expand Image",
+      "default": "Expand Image"
+    },
+    {
+      "label": "Minimize Image",
+      "default": "Minimize Image"
     }
   ]
 }

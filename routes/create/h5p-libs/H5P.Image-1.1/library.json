@@ -4,13 +4,13 @@
   "description": "Simple library that displays an image.",
   "majorVersion": 1,
   "minorVersion": 1,
-  "patchVersion": 11,
+  "patchVersion": 33,
   "runnable": 0,
   "machineName": "H5P.Image",
   "author": "Joubel",
   "coreApi": {
     "majorVersion": 1,
-    "minorVersion": 19
+    "minorVersion": 28
   },
   "preloadedJs": [
     {
@@ -22,8 +22,22 @@
       "path": "image.css"
     }
   ],
+  "preloadedDependencies": [
+    {
+      "machineName": "H5P.Components",
+      "majorVersion": 1,
+      "minorVersion": 0
+    }
+  ],
   "metadataSettings": {
     "disable": 0,
     "disableExtraTitleField": 1
-  }
+  },
+  "editorDependencies": [
+    {
+      "machineName": "H5PEditor.ShowWhen",
+      "majorVersion": 1,
+      "minorVersion": 0
+    }
+  ]
 }

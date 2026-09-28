@@ -34,6 +34,7 @@ const quizSchema = new mongoose.Schema({
     ref: 'Question'
   }],
   questionRevision: { type: Number, default: 0 },
+  authoringCommitId: String,
   questionMutation: { token: String, leaseUntil: Date },
   questionGenerationLease: { jobId: mongoose.Schema.Types.ObjectId, token: String, leaseUntil: Date },
   lastQuestionGenerationJob: mongoose.Schema.Types.ObjectId,

@@ -1,0 +1,22 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T16:14:01.413Z",
+  "finishedAt": "2026-09-28T16:15:51.243Z",
+  "materialsProcessed": 3,
+  "generatedObjectives": 6,
+  "objectiveEvidenceMaterials": 3,
+  "modelProposedPlan": [
+    { "type": "multiple-choice", "count": 1 },
+    { "type": "multiple-choice", "count": 1 },
+    { "type": "true-false", "count": 1 },
+    { "type": "true-false", "count": 1 }
+  ],
+  "testEditedPlan": [
+    { "type": "multiple-choice", "count": 2, "instructions": "Two different teaching tasks in one row" },
+    { "type": "true-false", "count": 2, "instructions": "Two different teaching tasks in one row" }
+  ],
+  "explicitRetries": 1,
+  "outcome": "needs_attention",
+  "error": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "diagnosis": "The test edit combined two distinct requested tasks in each plan row. The independent question feedback reviewer rejected generated drafts as not following the full row instruction. This diagnosis is an inference from the edited plan and QUESTION_QUALITY_REVIEW failures; the successful rerun kept the model's one-question-per-row plan."
+}

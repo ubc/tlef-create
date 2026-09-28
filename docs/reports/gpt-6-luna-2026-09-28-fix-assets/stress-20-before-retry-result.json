@@ -1,0 +1,170 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T18:54:58.305Z",
+  "materialCount": 20,
+  "questionCount": 0,
+  "questionMix": "mixed",
+  "passed": false,
+  "courseId": "6abab80285845be1c7dc1b00",
+  "materialProcessing": "20/20 completed",
+  "twentyFirstRejected": true,
+  "taskId": "1601139a89734f13dc68ec2b",
+  "planningStatus": "awaiting_approval",
+  "proposedPlan": [
+    {
+      "type": "multiple-choice",
+      "count": 4
+    },
+    {
+      "type": "true-false",
+      "count": 4
+    },
+    {
+      "type": "multiple-choice",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    },
+    {
+      "type": "multiple-choice",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    }
+  ],
+  "proposedQuestionCount": 20,
+  "finalStatus": "needs_attention",
+  "finalError": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "generation": {
+    "jobId": "6abab84385845be1c7dc228e",
+    "requestId": "asst-q-6abab80685845be1c7dc1d3e-2",
+    "quizId": "6abab80685845be1c7dc1d3f",
+    "sessionId": "f0f2e691-b96c-41bf-bfd7-34f46e2d717e",
+    "mode": "append",
+    "status": "failed",
+    "abandoned": false,
+    "totalQuestions": 20,
+    "completedQuestions": 18,
+    "failedQuestions": 2,
+    "questionIds": [],
+    "items": [
+      {
+        "index": 0,
+        "questionId": "question-1",
+        "status": "ready"
+      },
+      {
+        "index": 1,
+        "questionId": "question-2",
+        "status": "ready"
+      },
+      {
+        "index": 2,
+        "questionId": "question-3",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "reason": "ANSWER_INVALID",
+        "message": "The answer key or question was flagged as incorrect or ambiguous. Review its evidence and wording."
+      },
+      {
+        "index": 3,
+        "questionId": "question-4",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "reason": "INSTRUCTION_MISMATCH",
+        "message": "The draft did not follow the instructions for this question. Review its topic and constraints."
+      },
+      {
+        "index": 4,
+        "questionId": "question-5",
+        "status": "ready"
+      },
+      {
+        "index": 5,
+        "questionId": "question-6",
+        "status": "ready"
+      },
+      {
+        "index": 6,
+        "questionId": "question-7",
+        "status": "ready"
+      },
+      {
+        "index": 7,
+        "questionId": "question-8",
+        "status": "ready"
+      },
+      {
+        "index": 8,
+        "questionId": "question-9",
+        "status": "ready"
+      },
+      {
+        "index": 9,
+        "questionId": "question-10",
+        "status": "ready"
+      },
+      {
+        "index": 10,
+        "questionId": "question-11",
+        "status": "ready"
+      },
+      {
+        "index": 11,
+        "questionId": "question-12",
+        "status": "ready"
+      },
+      {
+        "index": 12,
+        "questionId": "question-13",
+        "status": "ready"
+      },
+      {
+        "index": 13,
+        "questionId": "question-14",
+        "status": "ready"
+      },
+      {
+        "index": 14,
+        "questionId": "question-15",
+        "status": "ready"
+      },
+      {
+        "index": 15,
+        "questionId": "question-16",
+        "status": "ready"
+      },
+      {
+        "index": 16,
+        "questionId": "question-17",
+        "status": "ready"
+      },
+      {
+        "index": 17,
+        "questionId": "question-18",
+        "status": "ready"
+      },
+      {
+        "index": 18,
+        "questionId": "question-19",
+        "status": "ready"
+      },
+      {
+        "index": 19,
+        "questionId": "question-20",
+        "status": "ready"
+      }
+    ],
+    "message": "This batch could not be completed. Your previous questions are unchanged. Review the failed items before starting a new attempt.",
+    "createdAt": "2026-09-28T18:56:03.359Z",
+    "updatedAt": "2026-09-28T18:57:04.661Z",
+    "readyCount": 18
+  },
+  "assistantErrorCode": "ASSISTANT_QUESTION_BATCH_FAILED",
+  "failure": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"ready\"\u001b[39m\nReceived: \u001b[31m\"needs_attention\"\u001b[39m",
+  "finishedAt": "2026-09-28T18:57:08.764Z"
+}

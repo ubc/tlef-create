@@ -154,7 +154,7 @@ function collectionItemLibraries(library, parameters) {
 
 export async function generateStudioActivity({ library, instructions, context = '', template, templateContentId, questionPlan, userId, complete, catalog = getStudioCatalog() }) {
   const type = catalog.types.find(item => item.library === library);
-  if (!type || type.mode === 'unavailable') throw studioAIError(type?.guidance || 'Choose an available installed H5P type.');
+  if (!type || type.mode === 'unavailable' || type.mode === 'manual') throw studioAIError(type?.guidance || 'Choose an available installed H5P type.');
   if (typeof instructions !== 'string' || instructions.trim().length < 10 || instructions.length > 12000) {
     throw studioAIError('Describe the activity in 10–12,000 characters.', 'H5P_AI_INPUT', 400);
   }

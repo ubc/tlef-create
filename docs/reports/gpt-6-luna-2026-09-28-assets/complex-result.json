@@ -1,0 +1,114 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T16:17:37.396Z",
+  "materialIds": [
+    "6aba93270ffc875a4421a517",
+    "6aba93250ffc875a4421a4f7",
+    "6aba93220ffc875a4421a4d4"
+  ],
+  "retryCount": 0,
+  "steps": [
+    {
+      "title": "三份材料已处理",
+      "detail": "从 Studio 页面上传原理、场地观察与维护约束 PDF；三份材料均达到 completed。",
+      "screenshot": "09-complex-materials.png",
+      "elapsedMs": 9730,
+      "status": "passed"
+    },
+    {
+      "title": "长任务可恢复",
+      "detail": "在模型建立学习目标与计划时刷新页面，再从保存的 session 继续观察进度。",
+      "screenshot": "10-complex-running.png",
+      "elapsedMs": 9996,
+      "status": "passed"
+    },
+    {
+      "title": "自动生成 LO 与计划",
+      "detail": "从三份 PDF 自动建立 6 个 LO，提出 4 行题目计划，并等待教师审批。",
+      "screenshot": "11-complex-plan.png",
+      "elapsedMs": 60020,
+      "status": "passed"
+    },
+    {
+      "title": "教师核对复杂计划",
+      "detail": "模型本身建议 2 道多选 + 2 道判断题；教师在审批边界核对后直接接受。",
+      "screenshot": "12-complex-approved-plan.png",
+      "elapsedMs": 60217,
+      "status": "passed"
+    },
+    {
+      "title": "四题混合 H5P 可运行",
+      "detail": "系统保存 4 道题，包含 multiple-choice 和 true-false；正式 H5P 预览可运行。",
+      "screenshot": "14-complex-preview.png",
+      "elapsedMs": 80269,
+      "status": "passed"
+    },
+    {
+      "title": "逐题核对来源",
+      "detail": "最终问题引用 3/3 份材料；每题的来源与解释可在页面查看。",
+      "screenshot": "15-complex-sources.png",
+      "elapsedMs": 80382,
+      "status": "passed"
+    },
+    {
+      "title": "下载多题型 H5P 包",
+      "detail": "下载文件包含 H5P.Column、MultiChoice 与 TrueFalse 运行内容。",
+      "elapsedMs": 80646,
+      "status": "passed"
+    }
+  ],
+  "courseId": "6aba93210ffc875a4421a4b4",
+  "taskId": "4f746c16a07f9e95261a805e",
+  "quizId": "6aba932b0ffc875a4421a56e",
+  "objectiveCount": 6,
+  "objectiveEvidenceMaterials": 3,
+  "proposedPlan": [
+    {
+      "type": "multiple-choice",
+      "count": 1
+    },
+    {
+      "type": "multiple-choice",
+      "count": 1
+    },
+    {
+      "type": "true-false",
+      "count": 1
+    },
+    {
+      "type": "true-false",
+      "count": 1
+    }
+  ],
+  "approvedPlan": [
+    {
+      "type": "multiple-choice",
+      "count": 1
+    },
+    {
+      "type": "multiple-choice",
+      "count": 1
+    },
+    {
+      "type": "true-false",
+      "count": 1
+    },
+    {
+      "type": "true-false",
+      "count": 1
+    }
+  ],
+  "questionCount": 4,
+  "questionTypes": [
+    "multiple-choice",
+    "true-false"
+  ],
+  "questionEvidenceMaterials": 3,
+  "evidenceByMaterial": {
+    "6aba93270ffc875a4421a517": 5,
+    "6aba93250ffc875a4421a4f7": 4,
+    "6aba93220ffc875a4421a4d4": 3
+  },
+  "passed": true,
+  "finishedAt": "2026-09-28T16:18:58.042Z"
+}

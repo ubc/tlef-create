@@ -7,11 +7,13 @@
 .joubel-tip-container:hover {
   color: #333;
 }
+
 .joubel-tip-container:focus {
   outline: 0;
-  box-shadow: 0px 0px 5px 2px rgba(140,185,240,1);
-  outline: rgba(140,185,240,1) solid 1px;
+  box-shadow: 0px 0px 5px 2px rgba(140, 185, 240, 1);
+  outline: rgba(140, 185, 240, 1) solid 1px;
 }
+
 .using-mouse .joubel-tip-container:focus {
   box-shadow: none;
 }
@@ -31,7 +33,7 @@
 }
 .joubel-tip-icon:before {
   font-family: Joubel;
-  content: "\e888";
+  content: '\e888';
 
   /* Better Font Rendering */
   -webkit-font-smoothing: antialiased;
@@ -39,7 +41,7 @@
 }
 .joubel-tip-icon.help-icon:before {
   font-family: 'H5PFontAwesome4';
-  content: "\f059";
+  content: '\f059';
 }
 
 .joubel-tip-container * {
@@ -53,4 +55,27 @@
   width: 0;
   height: 0;
   overflow: hidden;
+}
+
+/* H5P Theme */
+
+.h5p-theme .joubel-tip-container {
+  margin-left: 0.25rem;
+}
+
+.h5p-theme .joubel-icon-tip-normal .h5p-icon-speech-bubble:before {
+  color: var(--h5p-theme-main-cta-base);
+}
+
+.h5p-theme .joubel-icon-tip-normal:hover .h5p-icon-speech-bubble:before {
+  color: var(--h5p-theme-main-cta-light);
+}
+
+.h5p-theme .joubel-icon-tip-normal .h5p-icon-info:before {
+  color: var(--h5p-theme-contrast-cta);
+}
+
+.h5p-theme .joubel-tip-container:focus-visible {
+  outline: 4px ridge var(--h5p-theme-contrast-cta-white);
+  border-radius: 4px;
 }

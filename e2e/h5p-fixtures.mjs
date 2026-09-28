@@ -54,9 +54,20 @@ export function fixtureFor(library) {
     if (field.type === 'number') return field.min ?? 1;
     if (field.type === 'boolean') return false;
     if (field.type === 'select') {
-      if (!field.options && field.multiple) return ['0'];
+      if ((!field.options || field.options.length === 0) && field.multiple) return [];
+      if (!field.options || field.options.length === 0) return '';
       const choice = (field.options[0].options || field.options)[0].value;
       return field.multiple ? [choice] : choice;
+    }
+    if (field.regexp?.pattern) {
+      const name = String(field.name || '').toLowerCase();
+      if (name.includes('date')) return '2026/09/28';
+      if (name.includes('time')) return '12:30';
+      if (name.includes('email')) return 'qa@example.com';
+      if (name.includes('url')) return 'https://example.com';
+      if (name.includes('number')) return '+1 604 5551234';
+      if (name.includes('latitude') || name.includes('longitude')) return '0';
+      if (name.includes('maxsize')) return '10px';
     }
     if (/color/i.test(field.name || '')) return '#222222';
     return `Fixture ${++count}`;

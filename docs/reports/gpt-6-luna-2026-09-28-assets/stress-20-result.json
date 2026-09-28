@@ -1,0 +1,412 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T18:24:33.064Z",
+  "materialCount": 20,
+  "questionCount": 20,
+  "questionMix": "true-false",
+  "passed": true,
+  "courseId": "6abab0e14f4f8c77b0504bb4",
+  "materialProcessing": "20/20 completed",
+  "twentyFirstRejected": true,
+  "taskId": "608d015514b755a630e6a3ee",
+  "planningStatus": "awaiting_approval",
+  "proposedPlan": [
+    {
+      "type": "true-false",
+      "count": 4
+    },
+    {
+      "type": "true-false",
+      "count": 4
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    },
+    {
+      "type": "true-false",
+      "count": 3
+    }
+  ],
+  "proposedQuestionCount": 20,
+  "finalStatus": "ready",
+  "finalError": "",
+  "generation": {
+    "jobId": "6abab12b4f4f8c77b05053af",
+    "requestId": "asst-q-6abab0e54f4f8c77b0504df2-2",
+    "quizId": "6abab0e54f4f8c77b0504df3",
+    "sessionId": "e4940367-448d-4423-addb-60ed6ceb7c37",
+    "mode": "append",
+    "status": "succeeded",
+    "abandoned": false,
+    "totalQuestions": 20,
+    "completedQuestions": 20,
+    "failedQuestions": 0,
+    "questionIds": [
+      "6abab12b4f4f8c77b050539b",
+      "6abab12b4f4f8c77b050539c",
+      "6abab12b4f4f8c77b050539d",
+      "6abab12b4f4f8c77b050539e",
+      "6abab12b4f4f8c77b050539f",
+      "6abab12b4f4f8c77b05053a0",
+      "6abab12b4f4f8c77b05053a1",
+      "6abab12b4f4f8c77b05053a2",
+      "6abab12b4f4f8c77b05053a3",
+      "6abab12b4f4f8c77b05053a4",
+      "6abab12b4f4f8c77b05053a5",
+      "6abab12b4f4f8c77b05053a6",
+      "6abab12b4f4f8c77b05053a7",
+      "6abab12b4f4f8c77b05053a8",
+      "6abab12b4f4f8c77b05053a9",
+      "6abab12b4f4f8c77b05053aa",
+      "6abab12b4f4f8c77b05053ab",
+      "6abab12b4f4f8c77b05053ac",
+      "6abab12b4f4f8c77b05053ad",
+      "6abab12b4f4f8c77b05053ae"
+    ],
+    "items": [
+      {
+        "index": 0,
+        "questionId": "question-1",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b050539b"
+      },
+      {
+        "index": 1,
+        "questionId": "question-2",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b050539c"
+      },
+      {
+        "index": 2,
+        "questionId": "question-3",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b050539d"
+      },
+      {
+        "index": 3,
+        "questionId": "question-4",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b050539e"
+      },
+      {
+        "index": 4,
+        "questionId": "question-5",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b050539f"
+      },
+      {
+        "index": 5,
+        "questionId": "question-6",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a0"
+      },
+      {
+        "index": 6,
+        "questionId": "question-7",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a1"
+      },
+      {
+        "index": 7,
+        "questionId": "question-8",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a2"
+      },
+      {
+        "index": 8,
+        "questionId": "question-9",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a3"
+      },
+      {
+        "index": 9,
+        "questionId": "question-10",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a4"
+      },
+      {
+        "index": 10,
+        "questionId": "question-11",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a5"
+      },
+      {
+        "index": 11,
+        "questionId": "question-12",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a6"
+      },
+      {
+        "index": 12,
+        "questionId": "question-13",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a7"
+      },
+      {
+        "index": 13,
+        "questionId": "question-14",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a8"
+      },
+      {
+        "index": 14,
+        "questionId": "question-15",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053a9"
+      },
+      {
+        "index": 15,
+        "questionId": "question-16",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053aa"
+      },
+      {
+        "index": 16,
+        "questionId": "question-17",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053ab"
+      },
+      {
+        "index": 17,
+        "questionId": "question-18",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053ac"
+      },
+      {
+        "index": 18,
+        "questionId": "question-19",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053ad"
+      },
+      {
+        "index": 19,
+        "questionId": "question-20",
+        "status": "ready",
+        "savedQuestionId": "6abab12b4f4f8c77b05053ae"
+      }
+    ],
+    "message": "All questions were saved successfully.",
+    "createdAt": "2026-09-28T18:25:47.535Z",
+    "updatedAt": "2026-09-28T18:26:25.289Z",
+    "readyCount": 20
+  },
+  "assistantErrorCode": "",
+  "questionTypes": [
+    "true-false"
+  ],
+  "citedMaterialCount": 12,
+  "questions": [
+    {
+      "type": "true-false",
+      "text": "On Plot 01, the rain-garden card identifies a paved path as the source of runoff reaching the planting bed.",
+      "explanation": "The Plot 01 card states that runoff reaches the planting bed from a paved path. It identifies the runoff source and destination, not a measured amount of runoff or infiltration.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d28"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 01, runoff from a paved path reaches the rain-garden planting bed; the card also says to inspect the inlet after storms.",
+      "explanation": "Rain Garden Card 01 says runoff reaches the planting bed from a paved path and that the inlet needs inspection after storms so sediment does not block it. The card does not provide measured runoff or infiltration amounts.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "Rain Garden Card 01 confirms that runoff from a paved path reaches the planting bed, but it does not state how much water infiltrates into the soil.",
+      "explanation": "Card 01 says runoff reaches the planting bed from a paved path. Reaching the bed is not the same as infiltrating into the soil, and the card gives no measured infiltration amount.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d28"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "For Plot 17, the paved path is identified as the source of runoff arriving at the planting bed, rather than the planting bed being identified as the source.",
+      "explanation": "Rain Garden Card 17 states that runoff reaches the planting bed from a paved path. The card identifies the path as the runoff source and the planting bed as where runoff arrives; it gives no measured runoff or infiltration amounts.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d28"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 17, a rain garden may slow some runoff when the soil accepts water, but this does not guarantee that flooding will be stopped in every storm.",
+      "explanation": "The Plot 17 card says a rain garden can slow some runoff when the soil accepts water, but cannot promise to stop flooding in every storm.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d28",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "If runoff reaches a rain garden’s planting bed, that alone means the soil has accepted the water and the garden will slow some runoff.",
+      "explanation": "The cards say a rain garden can slow some runoff when the soil accepts water. Runoff merely reaching the planting bed does not establish that the soil has accepted it, so it does not by itself support the claim that runoff will be slowed.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d28",
+        "6abab0e24f4f8c77b0504d3d",
+        "6abab0e24f4f8c77b0504d14"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "A site plan says that because the soil accepts water, all runoff will infiltrate and flooding will be prevented in every storm. Is that conclusion supported by the rain-garden card?",
+      "explanation": "The card supports only the conditional claim that a rain garden can slow some runoff when the soil accepts water. It explicitly says the garden cannot promise to stop flooding in every storm, so the site plan overstates what the evidence supports.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d28",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 19, the soil accepts water. According to the card, this means the rain garden will slow all runoff from the plot.",
+      "explanation": "The card says a rain garden can slow some runoff when the soil accepts water. It does not say it will slow all runoff, and it cannot promise to stop flooding in every storm.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d28",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 08, the rain-garden inlet should be inspected after storms.",
+      "explanation": "True. Rain Garden Card 08 states that the inlet at Plot 08 needs inspection after storms.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c69",
+        "6abab0e24f4f8c77b0504c26",
+        "6abab0e14f4f8c77b0504bd4"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 08, the inlet should be inspected after storms because sediment carried in runoff can block it.",
+      "explanation": "Rain Garden Card 08 states that runoff reaches the planting bed from a paved path and that the inlet needs inspection after storms so sediment does not block it.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c69",
+        "6abab0e24f4f8c77b0504cd2",
+        "6abab0e14f4f8c77b0504bd4"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 08, inspecting the inlet after storms is a maintenance action to prevent sediment from blocking it, not evidence that garden performance was measured.",
+      "explanation": "Rain Garden Card 08 says the inlet needs inspection after storms so sediment does not block it. This describes a maintenance action; the card does not report a measurement of garden performance.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c69",
+        "6abab0e24f4f8c77b0504c26",
+        "6abab0e14f4f8c77b0504bd4"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "After a storm, a maintenance owner checks the rain garden’s plants and sediment but can skip checking its overflow.",
+      "explanation": "The cards state that a maintenance owner must check plants, sediment, and overflow. Checking plants and sediment does not remove the responsibility to check overflow.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d",
+        "6abab0e24f4f8c77b0504d68"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "Because it can slow some runoff when the soil accepts water, Plot 16’s rain garden can be relied on to stop flooding in every storm.",
+      "explanation": "The card says the rain garden can slow some runoff when the soil accepts water, but it cannot promise to stop flooding in every storm. Slowing runoff does not support a guarantee of preventing all flooding.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d3d",
+        "6abab0e24f4f8c77b0504d68"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "A Plot 18 card says the maintenance owner must check overflow, so it establishes that the overflow has enough capacity to prevent flooding in every storm.",
+      "explanation": "The card lists overflow as something the maintenance owner must check, but it gives no overflow-capacity information. It says the garden may slow some runoff when the soil accepts water and cannot promise to stop flooding in every storm.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504d3d",
+        "6abab0e24f4f8c77b0504d14",
+        "6abab0e24f4f8c77b0504d68"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "Even when Plot 04’s rain garden slows runoff, the accessible route beside it is still required to stay firm.",
+      "explanation": "The Plot 04 card says the accessible route beside the rain garden must stay firm. The garden’s ability to slow some runoff does not remove that requirement.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c10",
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504c7e"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 04, the accessible route meets the card’s stated requirements if it is firm and free of standing water, even when it is obstructed.",
+      "explanation": "The card says the accessible route beside Plot 04 must stay firm, clear, and free of standing water. Being firm and free of standing water is not enough if the route is obstructed; it must also be clear.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c10",
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504c7e"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "A route beside Plot 04 is firm and clear, but standing water remains on it. It still meets the card’s guidance because it satisfies two of the three stated conditions. True or false?",
+      "explanation": "The Plot 04 card says the accessible route must stay firm, clear, and free of standing water. Standing water means one of the stated requirements is not met, even if the route is firm and clear.",
+      "sourceMaterialIds": [
+        "6abab0e24f4f8c77b0504c10",
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504c7e"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 01, the maintenance owner must check the plants, sediment, and overflow.",
+      "explanation": "The card states that a maintenance owner must check plants, sediment, and overflow.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504cbd",
+        "6abab0e24f4f8c77b0504cff"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "A maintenance log records checks of plants and overflow but omits sediment. Does it include every item the maintenance owner is stated to check?",
+      "explanation": "The cards state that the maintenance owner must check plants, sediment, and overflow. Since the log omits sediment, it does not include every listed item.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504cbd",
+        "6abab0e24f4f8c77b0504cff"
+      ]
+    },
+    {
+      "type": "true-false",
+      "text": "At Plot 15, the card says the inlet should be inspected after storms so sediment does not block it.",
+      "explanation": "The Plot 15 card specifically says the inlet needs inspection after storms so sediment does not block it. It also states that the maintenance owner must check sediment.",
+      "sourceMaterialIds": [
+        "6abab0e14f4f8c77b0504bd4",
+        "6abab0e24f4f8c77b0504cbd",
+        "6abab0e24f4f8c77b0504cff"
+      ]
+    }
+  ],
+  "packageEntries": 179,
+  "packageHasManifest": true,
+  "finishedAt": "2026-09-28T18:26:27.737Z"
+}

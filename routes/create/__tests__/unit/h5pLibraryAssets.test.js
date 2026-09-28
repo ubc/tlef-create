@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from '@jest/globals';
+import { getStudioCatalog } from '../../services/h5pStudioCatalog.js';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../../config/h5pLibraryRegistry.js';
 
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,37 @@ function expectDeclaredAssetsToExist(machineName) {
 }
 
 describe('vendored H5P library assets', () => {
+  test('Studio types with CREATE icon patches provide real SVG picker icons', () => {
+    for (const directory of [
+      'H5P.ImageMultipleHotspotQuestion-1.0',
+      'H5P.ImpressPresentation-1.0',
+      'H5P.PersonalityQuiz-1.0'
+    ]) {
+      const icon = fs.readFileSync(path.join(LIBRARIES_DIRECTORY, directory, 'icon.svg'), 'utf8');
+      expect(icon).toMatch(/<svg\b/);
+      expect(icon).toMatch(/<\/svg>/);
+    }
+  });
+
+  test('all Studio target types include their complete dependency assets and CSS resources', () => {
+    const targets = JSON.parse(fs.readFileSync(path.resolve(LIBRARIES_DIRECTORY, '../config/h5p-studio-targets.json'), 'utf8'));
+    const checked = new Set();
+    const visit = name => {
+      if (checked.has(name)) return;
+      checked.add(name);
+      expectDeclaredDirectoryAssetsToExist(name);
+      const descriptor = JSON.parse(fs.readFileSync(path.join(LIBRARIES_DIRECTORY, name, 'library.json'), 'utf8'));
+      for (const dependency of [...(descriptor.preloadedDependencies || []), ...(descriptor.editorDependencies || []), ...(descriptor.dynamicDependencies || [])]) {
+        visit(`${dependency.machineName}-${dependency.majorVersion}.${dependency.minorVersion}`);
+      }
+    };
+    for (const target of targets.types) {
+      const selected = getStudioCatalog().types.find(type => type.machineName === target.machineName);
+      expect(selected).toBeDefined();
+      expect(selected.mode).not.toBe('unavailable');
+      visit(selected.library.replace(' ', '-'));
+    }
+  });
   test('Branching Scenario advertises its actual upstream core and editor requirements', () => {
     const { libraryJson } = readLibraryJson('H5P.BranchingScenario');
     expect(libraryJson.coreApi).toEqual({ majorVersion: 1, minorVersion: 28 });

@@ -1,0 +1,17 @@
+{
+  "date": "2026-09-28",
+  "environment": "Authenticated CREATE Studio at localhost:8092",
+  "machineName": "H5P.Flashcards",
+  "contentId": "1159879311",
+  "title": "QA Flashcards manual browser test",
+  "checks": {
+    "blankFormKeyboardEntry": "passed",
+    "savedToStudioContentList": "passed",
+    "reloadRetainedQuestionAndAnswer": "passed",
+    "previewRenderedQuestion": "passed",
+    "previewCorrectAnswer": "The Sun is correct."
+  },
+  "question": "Closest star to Earth?",
+  "answer": "The Sun",
+  "scope": "One manually keyed activity in the live CREATE account. All 19 new types also had a browser-submitted, keyboard-titled form with synthetic prefilled content in isolated storage."
+}

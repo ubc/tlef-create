@@ -1,0 +1,4 @@
+interface:
+  display_name: "CREATE H5P Maintenance"
+  short_description: "Update CREATE H5P types and verify native editor forms"
+  default_prompt: "Use $create-h5p-maintenance to update this CREATE checkout's H5P libraries and verify its official Studio editor, preserving existing work and recording compatibility findings."

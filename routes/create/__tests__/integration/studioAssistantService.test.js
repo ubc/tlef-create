@@ -136,6 +136,24 @@ describe('assistant and canonical course workflow share the same records', () =>
     await expect(quiz.validate()).resolves.toBeUndefined();
   });
 
+  test('conversational tasks retain canonical objective subpoints, evidence and coverage provenance', async () => {
+    const f = await fixture();
+    const generate = jest.spyOn(llmService, 'generateLearningObjectives').mockResolvedValue({
+      objectives: [{ text: 'Explain evaporation.', subpoints: ['Energy transfer'], bloomLevel: 'understand',
+        sourceReferences: [{ materialId: String(f.material._id), materialName: f.material.name,
+          excerpt: 'Water evaporates into the atmosphere.', pageNumber: 1, chunkIndex: 0 }] }],
+      coverageDiagnostics: { requiredSectionCount: 1, coveredSectionCount: 1 }, llmModel: 'fixture-model'
+    });
+    const session = await createAssistantSession(f.user, { ...f.body, canonicalObjectives: true });
+    expect(session.status).toBe('awaiting_approval');
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(completion).toHaveBeenCalledTimes(1);
+    const quiz = await Quiz.findById(session.quizId).populate('learningObjectives');
+    expect(quiz.learningObjectives[0].generationMetadata).toMatchObject({ subpoints: ['Energy transfer'],
+      bloomLevel: 'understand', llmModel: 'fixture-model', coverageDiagnostics: { requiredSectionCount: 1, coveredSectionCount: 1 } });
+    expect(quiz.learningObjectives[0].generationMetadata.sourceReferences[0].pageNumber).toBe(1);
+  });
+
   test('request replay recovers the same session and does not repeat paid planning or create a second learning object', async () => {
     const f = await fixture();
     const first = await createAssistantSession(f.user, f.body);

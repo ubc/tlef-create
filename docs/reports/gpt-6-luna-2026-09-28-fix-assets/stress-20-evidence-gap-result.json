@@ -1,0 +1,16 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T19:02:04.912Z",
+  "materialCount": 20,
+  "questionCount": 0,
+  "questionMix": "mixed",
+  "passed": false,
+  "courseId": "6abab9add1e3d90e3160c19f",
+  "materialProcessing": "20/20 completed",
+  "twentyFirstRejected": true,
+  "taskId": "94357281df42af3ae62231c6",
+  "planningStatus": "needs_attention",
+  "proposedPlan": [],
+  "failure": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: /Accept plan & generate/ })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: /Accept plan & generate/ })\u001b[22m\n",
+  "finishedAt": "2026-09-28T19:03:54.629Z"
+}

@@ -58,6 +58,8 @@ const h5pContentSchema = new mongoose.Schema({
     maxlength: 80
   },
   assistantSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'StudioAssistantSession' },
+  authoringSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'StudioAuthoringSession' },
+  authoringOperation: String,
   aiGeneration: {
     model: { type: String, maxlength: 200 },
     library: { type: String, maxlength: 200 },
@@ -76,6 +78,9 @@ const h5pContentSchema = new mongoose.Schema({
 });
 
 h5pContentSchema.index({ owner: 1, updatedAt: -1 });
+// Version content is immutable. Replayed packaging finds the same saved asset.
+h5pContentSchema.index({ owner: 1, authoringOperation: 1 }, { unique: true,
+  partialFilterExpression: { authoringOperation: { $type: 'string' } } });
 h5pContentSchema.index({ owner: 1, quiz: 1, source: 1 });
 h5pContentSchema.index({ owner: 1, assistantSessionId: 1 }, {
   unique: true, partialFilterExpression: { assistantSessionId: { $type: 'objectId' } }

@@ -21,6 +21,7 @@ import searchController from './controllers/searchController.js';
 import h5pPreviewController from './controllers/h5pPreviewController.js';
 import h5pEditorController from './controllers/h5pEditorController.js';
 import studioAssistantController from './controllers/studioAssistantController.js';
+import authoringController from './controllers/authoringController.js';
 import canvasController from './controllers/canvasController.js';
 import adminController from './controllers/adminController.js';
 import apiKeyController from './controllers/apiKeyController.js'
@@ -118,6 +119,7 @@ router.use('/export', exportController);
 router.use('/streaming', streamingController);
 router.use('/search', searchController);
 router.use('/h5p-preview', h5pPreviewController);
+router.use('/h5p-editor/authoring', authoringController);
 router.use('/h5p-editor/assistant', studioAssistantController);
 router.use('/h5p-editor', h5pEditorController);
 router.use('/canvas', canvasController);

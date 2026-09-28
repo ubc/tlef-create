@@ -4,11 +4,11 @@
   "description": "UI utility library",
   "majorVersion": 1,
   "minorVersion": 3,
-  "patchVersion": 10,
+  "patchVersion": 45,
   "runnable": 0,
   "coreApi": {
     "majorVersion": 1,
-    "minorVersion": 3
+    "minorVersion": 28
   },
   "machineName": "H5P.JoubelUI",
   "author": "Joubel",
@@ -90,11 +90,6 @@
     },
     {
       "machineName": "H5P.Transition",
-      "majorVersion": 1,
-      "minorVersion": 0
-    },
-    {
-      "machineName": "Drop",
       "majorVersion": 1,
       "minorVersion": 0
     },

@@ -1,0 +1,5 @@
+{
+  "excluded": {
+    "H5P.TwitterUserFeed": "Retired external service; CREATE Studio already marks this activity unavailable. Do not reinstall it automatically."
+  }
+}

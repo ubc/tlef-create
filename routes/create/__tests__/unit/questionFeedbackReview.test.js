@@ -15,6 +15,22 @@ const reviewed = { answerIsCorrect: true, followsInstructorRequest: true, issues
 const complete = payload => jest.fn().mockResolvedValue({ content: JSON.stringify(payload), model: 'test-model' });
 
 describe('independent question feedback review', () => {
+  test.each([
+    [{ ...reviewed, answerIsCorrect: false }, 'ANSWER_INVALID'],
+    [{ ...reviewed, followsInstructorRequest: false }, 'INSTRUCTION_MISMATCH'],
+    [{ ...reviewed, feedback: [] }, 'FEEDBACK_INVALID'],
+    [{}, 'REVIEW_INVALID_RESPONSE']
+  ])('reports a structured failure without storing review prose', async (payload, reason) => {
+    await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(payload) }))
+      .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: reason });
+  });
+  test('scopes review to one item without dropping the instructor constraints', async () => {
+    const model = complete(reviewed);
+    await reviewQuestionFeedback(question, { questionType: 'multiple-choice',
+      instructorRequest: 'SINGLE-QUESTION TASK. Row: create two questions; do not invent measurements.', complete: model });
+    expect(model.mock.calls[0][0].prompt).toContain('assess only this item and its assigned planned slice');
+    expect(model.mock.calls[0][0].prompt).toContain('do not invent measurements');
+  });
   test('repairs contradictory feedback without changing answer flags or mutating the input', async () => {
     const model = complete(reviewed);
     const result = await reviewQuestionFeedback(question, { questionType: 'multiple-choice', relevantContent: [{ content: 'Condensation is gas to liquid.' }], complete: model });

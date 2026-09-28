@@ -1,0 +1,67 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T18:17:55.804Z",
+  "passed": false,
+  "courseId": "6abaaf54e27b395f5c4d9e0f",
+  "taskId": "2e6c5aaed27065fed9b43eec",
+  "planningStatus": "awaiting_approval",
+  "objectives": [
+    "Students will be able to compare the infiltration rates reported by Study A and Study B for East Lawn on 15 September 2025 and identify the discrepancy.",
+    "Students will be able to explain why the conflicting reports leave East Lawn’s infiltration rate uncertain rather than establishing either reported rate as correct.",
+    "Students will be able to identify plausible measurement-related explanations for the difference between the two reported infiltration rates.",
+    "Students will be able to identify records and checks that could help evaluate the conflicting field-test results.",
+    "Students will be able to propose a retesting approach that produces comparable evidence for resolving the conflicting infiltration measurements.",
+    "Students will be able to determine whether the reported infiltration evidence is sufficient to approve a rain-garden design and justify their decision."
+  ],
+  "plan": [
+    {
+      "id": "activity-1",
+      "title": "Interpreting Conflicting East Lawn Results",
+      "questionType": "multiple-choice",
+      "count": 2,
+      "objectiveIds": [
+        "6abaaf76e27b395f5c4da0a8"
+      ],
+      "instructions": "Create exactly two first-year-level multiple-choice questions using both sources: East Lawn Study A (east-lawn-study-a.pdf), which reports 50 mm/hour, and East Lawn Study B (east-lawn-study-b.pdf), which reports 5 mm/hour for East Lawn on 15 September 2025. Do not present either rate as settled fact. Ask learners to interpret what the discrepancy means and what records, checks, or comparable retesting could help evaluate or reconcile the results. Explain that the conflicting preliminary field-test reports leave the infiltration rate uncertain; neither report alone establishes which rate is correct. Cite both studies in the question feedback or explanation. Do not add questions beyond these two.",
+      "difficulty": "easy"
+    }
+  ],
+  "finalStatus": "needs_attention",
+  "finalError": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "generation": {
+    "jobId": "6abaaf7ee27b395f5c4da1ce",
+    "requestId": "asst-q-6abaaf56e27b395f5c4d9e9d-2",
+    "quizId": "6abaaf56e27b395f5c4d9e9e",
+    "sessionId": "0a03104e-70d7-4f58-bd31-c21d8160112f",
+    "mode": "append",
+    "status": "failed",
+    "abandoned": false,
+    "totalQuestions": 2,
+    "completedQuestions": 0,
+    "failedQuestions": 2,
+    "questionIds": [],
+    "items": [
+      {
+        "index": 0,
+        "questionId": "question-1",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      },
+      {
+        "index": 1,
+        "questionId": "question-2",
+        "status": "failed",
+        "code": "QUESTION_QUALITY_REVIEW",
+        "message": "This question did not pass the feedback check. Refine its instructions before starting a new attempt."
+      }
+    ],
+    "message": "This batch could not be completed. Your previous questions are unchanged. Review the failed items before starting a new attempt.",
+    "createdAt": "2026-09-28T18:18:38.980Z",
+    "updatedAt": "2026-09-28T18:18:56.426Z",
+    "readyCount": 0
+  },
+  "assistantErrorCode": "ASSISTANT_QUESTION_BATCH_FAILED",
+  "failure": "The question batch failed. No questions from this batch were added. An explicit retry generates the whole batch again and may use additional AI credits.",
+  "finishedAt": "2026-09-28T18:18:58.667Z"
+}

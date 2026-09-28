@@ -5,6 +5,7 @@ import { H5P_CORE_API } from '../config/h5pRuntime.js';
 import { listH5PTypeAdapters } from '../config/h5pTypeAdapterRegistry.js';
 
 const libraryRoot = fileURLToPath(new URL('../h5p-libs/', import.meta.url));
+const editorOnlyTypes = new Set(JSON.parse(fs.readFileSync(new URL('../config/h5p-studio-targets.json', import.meta.url), 'utf8')).types.filter(type => type.editorOnly).map(type => type.machineName));
 const mediaTypes = new Set(['Agamotto', 'Audio', 'Collage', 'Dictation', 'DragQuestion', 'ImageHotspotQuestion', 'ImageHotspots', 'ImageSlider', 'InteractiveVideo', 'MemoryGame', 'MultiMediaChoice']);
 const externalTypes = new Set(['IFrameEmbed', 'TwitterUserFeed']);
 const containers = new Set(['Column', 'InteractiveBook', 'QuestionSet', 'CoursePresentation', 'BranchingScenario']);
@@ -72,14 +73,15 @@ export function buildStudioCatalog(libraries) {
     // Do not reject a container merely because it lists this retired type as
     // an optional dependency; block authoring the retired activity itself.
     if (name === 'TwitterUserFeed') problems.push('Twitter User Feed is no longer supported: its required Twitter API is no longer available.');
+    const editorOnly = editorOnlyTypes.has(entry.descriptor.machineName);
     const needsTemplate = mediaTypes.has(name) || externalTypes.has(name);
     return {
       library: entry.library, machineName: entry.descriptor.machineName,
       title: entry.descriptor.title, version: `${entry.descriptor.majorVersion}.${entry.descriptor.minorVersion}.${entry.descriptor.patchVersion}`,
       category: containers.has(name) ? 'Lessons & collections' : externalTypes.has(name) ? 'External content' : mediaTypes.has(name) ? 'Media activities' : 'Questions & text activities',
       questionTypes: adapters.filter(adapter => adapter.mainLibrary === entry.library).map(adapter => ({ type: adapter.type, title: adapter.label, containers: adapter.containers })),
-      mode: problems.length ? 'unavailable' : needsTemplate ? 'template' : 'generate',
-      guidance: problems.length ? problems[0] : externalTypes.has(name)
+      mode: problems.length ? 'unavailable' : editorOnly ? 'manual' : needsTemplate ? 'template' : 'generate',
+      guidance: problems.length ? problems[0] : editorOnly ? 'Create this activity manually with New blank activity in the official editor. AI generation has not been validated for this type.' : externalTypes.has(name)
         ? 'Save a working activity with your real URL or account first. AI can adapt its text; the external service must allow embedding.'
         : needsTemplate ? 'Create and save a template with real media first. AI can adapt the activity while keeping those files.'
           : 'Generate an editable draft from your teaching instructions, then check it in the official editor.',

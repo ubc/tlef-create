@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import H5PStudio from './H5PStudio';
 
 const mocks = vi.hoisted(() => ({
+  downloadContent: vi.fn(),
   getEditorModel: vi.fn(),
   getSourceStatus: vi.fn(),
   listContents: vi.fn(),
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../hooks/redux', () => ({ useAppSelector: () => 'test-author' }));
+vi.mock('../components/h5p/authoring/AuthoringWorkspace', () => ({ default: function MockAuthoring({ initialQuizId }: { initialQuizId?: string }) {
+  return <section aria-label="Studio AI workspace">Source: {initialQuizId || 'none'}</section>;
+} }));
 
 vi.mock('../components/h5p/StudioAssistant', () => ({ default: function MockStudioAssistant({ sessionId, initialQuizId, initialInstructions, initialMaterialIds, onSessionChange, onOpenActivity, onDirtyChange }: {
   sessionId?: string; initialQuizId?: string; initialInstructions?: string; initialMaterialIds?: string[]; onSessionChange: (id: string) => void; onOpenActivity: (id: string, preview: boolean) => void; onDirtyChange: (dirty: boolean) => void;
@@ -71,7 +75,7 @@ vi.mock('../services/api', () => ({
     createContent: vi.fn(),
     createFromQuiz: vi.fn(),
     deleteContent: vi.fn(),
-    downloadContent: vi.fn(),
+    downloadContent: mocks.downloadContent,
     getEditorModel: mocks.getEditorModel,
     getSourceStatus: mocks.getSourceStatus,
     importContent: vi.fn(),
@@ -192,6 +196,16 @@ describe('H5PStudio', () => {
     );
   });
 
+  it('downloads the newly saved immutable version instead of the editor’s old content ID', async () => {
+    mocks.save.mockResolvedValue({ contentId: 'new-version-content' });
+    mocks.downloadContent.mockRejectedValue(new Error('Download fixture stops after verifying the requested ID'));
+    render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1&authoringSession=task1']}><H5PStudio /></MemoryRouter>);
+    const download = await screen.findByRole('button', { name: 'Download' });
+    await waitFor(() => expect(download).toBeEnabled());
+    fireEvent.click(download);
+    await waitFor(() => expect(mocks.downloadContent).toHaveBeenCalledWith('new-version-content'));
+  });
+
   it('warns about changed source content and links to the actual source, not URL context', async () => {
     mocks.getSourceStatus.mockResolvedValue({ data: { source: { state: 'changed', quizId: 'source-quiz', folderId: 'source-course', title: 'Original Quiz' } } });
     render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1&quizId=unrelated']}><H5PStudio /></MemoryRouter>);
@@ -200,11 +214,11 @@ describe('H5PStudio', () => {
     expect(screen.getByText(/They do not update Quiz questions/)).toBeInTheDocument();
   });
 
-it('opens the unified AI builder from a linked Quiz', async () => {
+it('opens the conversational AI workspace from a linked Quiz', async () => {
   render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1&quizId=quiz1']}><H5PStudio /></MemoryRouter>);
   await screen.findByTestId('h5p-editor');
   fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }));
-  expect(screen.getByRole('region', { name: 'Create with AI workspace' })).toHaveTextContent('Source: quiz1');
+  expect(screen.getByRole('region', { name: 'Studio AI workspace' })).toHaveTextContent('Source: quiz1');
   expect(screen.queryByRole('tab', { name: /Use course materials/ })).not.toBeInTheDocument();
 });
 

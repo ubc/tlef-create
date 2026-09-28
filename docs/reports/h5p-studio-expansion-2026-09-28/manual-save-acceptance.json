@@ -1,0 +1,138 @@
+{
+  "scope": "Native editor browser submit with synthetic prefilled content fields and a keyboard-typed title in every form; saved and reopened from temporary storage. Does not prove manually entering every content field, media playback, scoring, or external services.",
+  "results": [
+    {
+      "machineName": "H5P.AdvancedBlanks",
+      "library": "H5P.AdvancedBlanks 1.4",
+      "version": "1.4.0",
+      "typedTitle": "Browser QA typed Advanced Fill in the Blanks",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.AdventCalendar",
+      "library": "H5P.AdventCalendar 0.3",
+      "version": "0.3.4",
+      "typedTitle": "Browser QA typed Advent Calendar (beta)",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ARScavenger",
+      "library": "H5P.ARScavenger 1.4",
+      "version": "1.4.1",
+      "typedTitle": "Browser QA typed AR Scavenger (beta)",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.Cornell",
+      "library": "H5P.Cornell 0.3",
+      "version": "0.3.2",
+      "typedTitle": "Browser QA typed Cornell Notes",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ImageMultipleHotspotQuestion",
+      "library": "H5P.ImageMultipleHotspotQuestion 1.0",
+      "version": "1.0.1",
+      "typedTitle": "Browser QA typed Find Multiple Hotspots",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.FindTheWords",
+      "library": "H5P.FindTheWords 1.4",
+      "version": "1.4.4",
+      "typedTitle": "Browser QA typed Find The Words",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.Flashcards",
+      "library": "H5P.Flashcards 1.7",
+      "version": "1.7.23",
+      "typedTitle": "Browser QA typed Flashcards",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.GameMap",
+      "library": "H5P.GameMap 1.5",
+      "version": "1.5.4",
+      "typedTitle": "Browser QA typed Game Map",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ImageJuxtaposition",
+      "library": "H5P.ImageJuxtaposition 1.5",
+      "version": "1.5.4",
+      "typedTitle": "Browser QA typed Image Juxtaposition",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ImagePair",
+      "library": "H5P.ImagePair 1.4",
+      "version": "1.4.0",
+      "typedTitle": "Browser QA typed Image Pair",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ImageSequencing",
+      "library": "H5P.ImageSequencing 1.1",
+      "version": "1.1.0",
+      "typedTitle": "Browser QA typed Image Sequencing",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ImpressPresentation",
+      "library": "H5P.ImpressPresentation 1.0",
+      "version": "1.0.3",
+      "typedTitle": "Browser QA typed Impressive Presentation",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.InfoWall",
+      "library": "H5P.InfoWall 0.4",
+      "version": "0.4.9",
+      "typedTitle": "Browser QA typed Information Wall",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.KewArCode",
+      "library": "H5P.KewArCode 1.2",
+      "version": "1.2.2",
+      "typedTitle": "Browser QA typed KewAr Code",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.PersonalityQuiz",
+      "library": "H5P.PersonalityQuiz 1.0",
+      "version": "1.0.8",
+      "typedTitle": "Browser QA typed Personality Quiz",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.SpeakTheWords",
+      "library": "H5P.SpeakTheWords 1.5",
+      "version": "1.5.7",
+      "typedTitle": "Browser QA typed Speak the Words",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.SpeakTheWordsSet",
+      "library": "H5P.SpeakTheWordsSet 1.3",
+      "version": "1.3.4",
+      "typedTitle": "Browser QA typed Speak the Words Set",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.StructureStrip",
+      "library": "H5P.StructureStrip 1.0",
+      "version": "1.0.6",
+      "typedTitle": "Browser QA typed Structure Strip",
+      "status": "saved-reopened-via-browser"
+    },
+    {
+      "machineName": "H5P.ThreeImage",
+      "library": "H5P.ThreeImage 0.5",
+      "version": "0.5.8",
+      "typedTitle": "Browser QA typed Virtual Tour (360)",
+      "status": "saved-reopened-via-browser"
+    }
+  ]
+}

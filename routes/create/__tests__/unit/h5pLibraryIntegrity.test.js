@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import AdmZip from 'adm-zip';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, test } from '@jest/globals';
@@ -49,4 +50,24 @@ describe('H5P export asset integrity', () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+});
+
+test('packages runtime assets but excludes development files rejected by H5P import', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'h5p-package-files-'));
+  const library = 'H5P.Test-1.0';
+  const directory = path.join(root, library);
+  try {
+    await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory, 'library.json'), JSON.stringify({preloadedJs: [{path: 'runtime.js'}], preloadedCss: [{path: 'runtime.css'}]}));
+    for (const [name, body] of Object.entries({'runtime.js':'/* runtime */','runtime.css':'.icon{background:url(icon.svg)}','icon.svg':'<svg/>','theme.scss':'$color: red;', 'crowdin.yml':'files: []'})) {
+      await fs.writeFile(path.join(directory, name), body);
+    }
+    const output = path.join(root, 'valid.h5p');
+    await createH5PPackage({}, output, {document: {metadata: {}, parameters: {}, packaging: {
+      allLibs: new Map([[library,{dirName:library}]]), libraryPath:root, questionTypes:new Set()
+    }}});
+    const entries = new AdmZip(output).getEntries().map(entry => entry.entryName);
+    expect(entries).toEqual(expect.arrayContaining([`${library}/library.json`,`${library}/runtime.js`,`${library}/runtime.css`,`${library}/icon.svg`]));
+    expect(entries.some(name => /\.(scss|yml)$/.test(name))).toBe(false);
+  } finally {await fs.rm(root,{recursive:true,force:true});}
 });

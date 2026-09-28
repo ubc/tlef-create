@@ -4,8 +4,12 @@
       "label": "Imagem"
     },
     {
+      "label": "Apenas decorativa",
+      "description": "Selecionar esta opção se a imagem for apenas decorativa e não acrescentar qualquer informação ao conteúdo da página. Será assim ignorada pelos leitores de ecrã, e não lhe será atribuído um texto alternativo.."
+    },
+    {
       "label": "Texto alternativo",
-      "description": "Obrigatório. Se o navegador não puder carregar a imagem, será mostrado este texto. Também é usado por leitores \"text-to-speech\" readers."
+      "description": "Obrigatório. Se o navegador não puder carregar a imagem, será mostrado este texto. Também é usado por leitores de \"texto para voz\"."
     },
     {
       "label": "Passar rato pelo texto",
@@ -14,6 +18,14 @@
     {
       "label": "Nome do conteúdo da imagem",
       "default": "Imagem"
+    },
+    {
+      "label": "Expand Image",
+      "default": "Expand Image"
+    },
+    {
+      "label": "Minimize Image",
+      "default": "Minimize Image"
     }
   ]
 }

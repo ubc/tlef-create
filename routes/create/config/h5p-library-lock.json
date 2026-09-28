@@ -1,0 +1,2631 @@
+{
+  "schemaVersion": 1,
+  "coreApi": "1.28",
+  "runtimeSha256": {
+    "h5p-core": "ea04c4d5ee7bc901ed9ea055f201a0a12c5bbc5fd77911e1e9fd169ef4068869",
+    "h5p-editor-core": "d288ec04cfeacb28c6c2577084c8f1a16377c7eaf93db84fcbdfb9a366abccec"
+  },
+  "libraries": {
+    "Drop-1.0": {
+      "machineName": "Drop",
+      "version": "1.0.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "Tether-1.0"
+      ],
+      "sha256": "5ac08e9ba936658ddb0fb7486340f55e537c75d1a3994c4c1d6b7e5313f12952",
+      "problems": []
+    },
+    "FontAwesome-4.5": {
+      "machineName": "FontAwesome",
+      "version": "4.5.4",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "678373ada93e956fbb5778d5a2b2ac9c5cca4cd6399e2da2be080f594c080f40",
+      "problems": []
+    },
+    "H5P.Accordion-1.0": {
+      "machineName": "H5P.Accordion",
+      "version": "1.0.33",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 5
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "8663f5c453e6a21cc42009bdf40d59093f7ce0b20f15783abe45a30a30699195",
+      "problems": []
+    },
+    "H5P.AdvancedText-1.1": {
+      "machineName": "H5P.AdvancedText",
+      "version": "1.1.14",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "bb585dfdb2ba469cda83c78efd8726d816882dbacf224b8c9dca957801bac9e2",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.AdventCalendar",
+      "archiveSha256": "7f1f9932b1cfc3bca6e745a488d6317573829f3324d69e87dc9aa97b0bd26d61"
+    },
+    "H5P.Agamotto-1.6": {
+      "machineName": "H5P.Agamotto",
+      "version": "1.6.8",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "H5P.Question-1.5",
+        "H5PEditor.AudioRecorder-1.0",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "e246ea283fd077324396e0289c9432170d4cfff7b808aa63c24f03d56d59db74",
+      "problems": []
+    },
+    "H5P.ArithmeticQuiz-1.1": {
+      "machineName": "H5P.ArithmeticQuiz",
+      "version": "1.1.25",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "0bd2fa0fcf9118800ac665991e16e4d2a2c7ce3ae9c179b6e212df178b76eea8",
+      "problems": []
+    },
+    "H5P.Audio-1.5": {
+      "machineName": "H5P.Audio",
+      "version": "1.5.28",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "e1d6791b58f351cbed1d0cb7929b977b06dcabc90725b01422e81c43d2f39404",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.AdventCalendar",
+      "archiveSha256": "7f1f9932b1cfc3bca6e745a488d6317573829f3324d69e87dc9aa97b0bd26d61"
+    },
+    "H5P.AudioRecorder-1.0": {
+      "machineName": "H5P.AudioRecorder",
+      "version": "1.0.33",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.FontIcons-1.0"
+      ],
+      "sha256": "26e416c894194b29713b5485604c4c64176969c8a9113317298266d39a5a69a5",
+      "problems": []
+    },
+    "H5P.Blanks-1.14": {
+      "machineName": "H5P.Blanks",
+      "version": "1.14.13",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.TextUtilities-1.3",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "124921ec6c89973e8ffef2a93c31c5d79ca8e691c97c9749edd01265a3436ebd",
+      "problems": []
+    },
+    "H5P.BranchingQuestion-1.0": {
+      "machineName": "H5P.BranchingQuestion",
+      "version": "1.0.20",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5PEditor.BranchingQuestion-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "92aff7b3a06874bfee76e3db39deb76d07a2b0ca8946e15f8e99ce6f7d8b17d7",
+      "problems": []
+    },
+    "H5P.BranchingScenario-1.10": {
+      "machineName": "H5P.BranchingScenario",
+      "version": "1.10.1",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.BranchingScenario-1.10",
+        "H5PEditor.BranchingScenario-1.5",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "3f62f7f5e857c0364d7c0247707d6daeb5380977d0adc623747d05a932818318",
+      "problems": []
+    },
+    "H5P.BranchingScenario-1.9": {
+      "machineName": "H5P.BranchingScenario",
+      "version": "1.9.2",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.BranchingScenario-1.9",
+        "H5PEditor.BranchingScenario-1.5",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "5abd85e4f6f9a2710d91f78fe708710664916b69cfb1abacd29195001fea3c01",
+      "problems": []
+    },
+    "H5P.CKEditor-1.0": {
+      "machineName": "H5P.CKEditor",
+      "version": "1.0.24",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "1fba701d95e17588c347b81db30899d48257a0bd5cdf1aff7423239c7616337d",
+      "problems": []
+    },
+    "H5P.Chart-1.2": {
+      "machineName": "H5P.Chart",
+      "version": "1.2.22",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 21
+      },
+      "dependencies": [
+        "H5PEditor.ColorSelector-1.3"
+      ],
+      "sha256": "cc97374e672a107ff30f242805d3eb87ee7c44a0f49d8fc08ec3f3bb8601ea9a",
+      "problems": []
+    },
+    "H5P.Collage-0.3": {
+      "machineName": "H5P.Collage",
+      "version": "0.3.25",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 7
+      },
+      "dependencies": [
+        "H5PEditor.Collage-0.3"
+      ],
+      "sha256": "d96e66e2176abbd4c804763d9cd0b32418b8d8527f3b616121a0dd7c41f7c403",
+      "problems": []
+    },
+    "H5P.Column-1.18": {
+      "machineName": "H5P.Column",
+      "version": "1.18.1",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "b5c90c2751e4baa284da3d2730ebc6dcbc90b919fabf63f4f83371e214033028",
+      "problems": []
+    },
+    "H5P.Column-1.20": {
+      "machineName": "H5P.Column",
+      "version": "1.20.0",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "cf2ae31aaecd38883a4655a60c7f25821b36929c81499c7c764ee07c495173e6",
+      "problems": []
+    },
+    "H5P.Components-1.0": {
+      "machineName": "H5P.Components",
+      "version": "1.0.96",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "4d198f7657f34e5258f038e69b21c137ba0e9419fb5fa9d9ceaab85fa0a943a8",
+      "problems": []
+    },
+    "H5P.ContinuousText-1.2": {
+      "machineName": "H5P.ContinuousText",
+      "version": "1.2.16",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "14a9ab608dd2637f6a2d24d4eb38a377157df288a0b0ace78ef5239d2fd24898",
+      "problems": []
+    },
+    "H5P.CoursePresentation-1.26": {
+      "machineName": "H5P.CoursePresentation",
+      "version": "1.26.3",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.CoursePresentation-1.26",
+        "H5P.FontIcons-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.CoursePresentation-1.25",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "cf134e684dc62b5bf93551d490863e521fe906155259b58a6685150cfe713e30",
+      "problems": []
+    },
+    "H5P.CoursePresentation-1.27": {
+      "machineName": "H5P.CoursePresentation",
+      "version": "1.27.25",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.CoursePresentation-1.27",
+        "H5P.FontIcons-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.CoursePresentation-1.26",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "7751508ca0c933ff8af48e76c79500df842749876746e82f688c447be5784806",
+      "problems": []
+    },
+    "H5P.Crossword-0.4": {
+      "machineName": "H5P.Crossword",
+      "version": "0.4.9",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5P.Image-1.1",
+        "H5P.JoubelUI-1.3",
+        "H5P.MaterialDesignIcons-1.0",
+        "H5P.Question-1.4",
+        "H5PEditor.ColorSelector-1.2",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "c1340f65ddc5214e11b38fb3f7c476d7573ec8ec989f4cbca6ae766e22993738",
+      "problems": [
+        "missing asset: dist/h5p-crossword.css",
+        "missing asset: dist/h5p-crossword.js"
+      ]
+    },
+    "H5P.Crossword-0.5": {
+      "machineName": "H5P.Crossword",
+      "version": "0.5.13",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5P.Image-1.1",
+        "H5P.JoubelUI-1.3",
+        "H5P.MaterialDesignIcons-1.0",
+        "H5P.Question-1.5",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "c8ef60ff5310ad3346d9f2e8cfa3443eaf2929520485686810c5dea2e2ef4f7f",
+      "problems": []
+    },
+    "H5P.Dialogcards-1.9": {
+      "machineName": "H5P.Dialogcards",
+      "version": "1.9.18",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 26
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Audio-1.5",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "bd4e0b873abf8351a8e05ee7ef5689d5e2e09929e22b28932eed5d2394dac610",
+      "problems": []
+    },
+    "H5P.Dictation-1.3": {
+      "machineName": "H5P.Dictation",
+      "version": "1.3.9",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "H5P.Audio-1.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.TextUtilities-1.3",
+        "H5PEditor.AudioRecorder-1.0",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "a724ac90172e90ceebf84d69d083ab2b972f28e153e5236f13eba3fc391618dd",
+      "problems": []
+    },
+    "H5P.Dictation-1.4": {
+      "machineName": "H5P.Dictation",
+      "version": "1.4.0",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "H5P.Audio-1.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.TextUtilities-1.3",
+        "H5PEditor.AudioRecorder-1.0",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "445f9c068122a6acbe7fd18eb584cb4597d28dad137fdbe2fd09cf8c15640029",
+      "problems": [
+        "missing asset: dist/h5p-dictation.css",
+        "missing asset: dist/h5p-dictation.js"
+      ]
+    },
+    "H5P.DocumentExportPage-1.5": {
+      "machineName": "H5P.DocumentExportPage",
+      "version": "1.5.19",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "e16a276b6760f31e2a1a2ce62c583fdf091c86dd3043ac2be2a0e0522008f586",
+      "problems": []
+    },
+    "H5P.DocumentationTool-1.8": {
+      "machineName": "H5P.DocumentationTool",
+      "version": "1.8.27",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.DocumentExportPage-1.5",
+        "H5P.GoalsAssessmentPage-1.4",
+        "H5P.GoalsPage-1.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.StandardPage-1.5",
+        "H5P.TextInputField-1.2"
+      ],
+      "sha256": "53b3f1f35f3de58ea965410f5533752c122060e828ae5db3dac5174d2b9692aa",
+      "problems": []
+    },
+    "H5P.DragNBar-1.5": {
+      "machineName": "H5P.DragNBar",
+      "version": "1.5.22",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [
+        "H5P.DragNDrop-1.1",
+        "H5P.DragNResize-1.2",
+        "H5P.FontIcons-1.0"
+      ],
+      "sha256": "9a74eccb54d02bc491be5d679ade202deb86d97b2bc2f6520b34cca1b8682eef",
+      "problems": []
+    },
+    "H5P.DragNDrop-1.1": {
+      "machineName": "H5P.DragNDrop",
+      "version": "1.1.5",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "30266c476531aaf25b4af39aff8d5b9927bb5b997aa649daf02c413a9fa90d69",
+      "problems": []
+    },
+    "H5P.DragNResize-1.2": {
+      "machineName": "H5P.DragNResize",
+      "version": "1.2.6",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "1479641d3247cea1511c4a1ec26ec5c396107ca0e886311553dcf7323c1dde51",
+      "problems": []
+    },
+    "H5P.DragQuestion-1.14": {
+      "machineName": "H5P.DragQuestion",
+      "version": "1.14.22",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 23
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.DragQuestion-1.10",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "ce3f49f6bdb46dcf0a48382054effc0ed274fc0bddc68f338d65ad95bc16c89c",
+      "problems": []
+    },
+    "H5P.DragQuestion-1.15": {
+      "machineName": "H5P.DragQuestion",
+      "version": "1.15.16",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 23
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.DragQuestion-1.10",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "96da375a1c0ab51b8998fc744b01074022db4cbad154af4374fa80f73b5bc3b8",
+      "problems": []
+    },
+    "H5P.DragText-1.10": {
+      "machineName": "H5P.DragText",
+      "version": "1.10.17",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "62e9d79c5cbf853319f856fa86a0dc5d2c67fe5f6b43655de620c282bff3c9b6",
+      "problems": []
+    },
+    "H5P.Essay-1.5": {
+      "machineName": "H5P.Essay",
+      "version": "1.5.13",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.TextUtilities-1.3",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "db2d4318e7f26ea69dface4035ed4c66975bda9290b473a7d6970625aee1eef5",
+      "problems": []
+    },
+    "H5P.ExportableTextArea-1.3": {
+      "machineName": "H5P.ExportableTextArea",
+      "version": "1.3.18",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [],
+      "sha256": "b7df9374e42afcd928c64f482f61d987f4839b02ceb98719a7e5615094c1b74e",
+      "problems": []
+    },
+    "H5P.FontIcons-1.0": {
+      "machineName": "H5P.FontIcons",
+      "version": "1.0.6",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "79b0ebc5e105d810b422fe5a9fd06abc3d92b6437884058951928660b9178e2a",
+      "problems": []
+    },
+    "H5P.FreeTextQuestion-1.0": {
+      "machineName": "H5P.FreeTextQuestion",
+      "version": "1.0.16",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 13
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.CKEditor-1.0"
+      ],
+      "sha256": "4e1eada918b019ad1bb14e3a19fecf3d2e094467cf8ae58748116a86a4dbb2a7",
+      "problems": []
+    },
+    "H5P.GoToQuestion-1.3": {
+      "machineName": "H5P.GoToQuestion",
+      "version": "1.3.15",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.Timecode-1.2"
+      ],
+      "sha256": "ddc0dac724a0a1453f2029e0ed3ee7dd393904b294a6cca34a2cf7ece3261201",
+      "problems": []
+    },
+    "H5P.GoalsAssessmentPage-1.4": {
+      "machineName": "H5P.GoalsAssessmentPage",
+      "version": "1.4.17",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [],
+      "sha256": "757167116e10486859373b0d711729241c813f7b51442ce25f6cc1d20d7997d9",
+      "problems": []
+    },
+    "H5P.GoalsPage-1.5": {
+      "machineName": "H5P.GoalsPage",
+      "version": "1.5.21",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "a54add08804c5e3518512bb11083f7a4eeca2971f64c28157f46f0a75957e8ee",
+      "problems": []
+    },
+    "H5P.GuessTheAnswer-1.5": {
+      "machineName": "H5P.GuessTheAnswer",
+      "version": "1.5.3",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "cbf4777c8e7e006977aa9a6f1011365236351f42c17cfa14a04a69cb805bdf94",
+      "problems": []
+    },
+    "H5P.GuidedTour-1.0": {
+      "machineName": "H5P.GuidedTour",
+      "version": "1.0.6",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "Shepherd-1.0"
+      ],
+      "sha256": "08876473881fe1e20e919f75159693c50e65360f8a29e655954a370c48928854",
+      "problems": []
+    },
+    "H5P.IFrameEmbed-1.0": {
+      "machineName": "H5P.IFrameEmbed",
+      "version": "1.0.29",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "7b47ccb006b99071e2c0d25c8a55be49050a86d0a4ce81742cf7fe865ded1adb",
+      "problems": []
+    },
+    "H5P.IVHotspot-1.2": {
+      "machineName": "H5P.IVHotspot",
+      "version": "1.2.17",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "H5P.Link-1.3",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.SelectToggleFields-1.1",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.Timecode-1.2",
+        "H5PEditor.UrlField-1.2"
+      ],
+      "sha256": "2e46eb557600a56dffd02f3e653a8a9e4f05b60142368412c8103cc6bb24c37a",
+      "problems": []
+    },
+    "H5P.Image-1.1": {
+      "machineName": "H5P.Image",
+      "version": "1.1.33",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "H5P.Components-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "a46db6747d438fe01721199c82b02f96dc0c9db4bb01dffdf787223a354b2b0b",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.ImageHotspotQuestion-1.8": {
+      "machineName": "H5P.ImageHotspotQuestion",
+      "version": "1.8.22",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 23
+      },
+      "dependencies": [
+        "H5P.Question-1.5",
+        "H5PEditor.ImageHotspotQuestion-1.8",
+        "H5PEditor.Wizard-1.2"
+      ],
+      "sha256": "fb08edc03fc2a50dab96cb2b0de6ecabbc701e615da1d60fe2164371e4b7e8bf",
+      "problems": []
+    },
+    "H5P.ImageHotspots-1.10": {
+      "machineName": "H5P.ImageHotspots",
+      "version": "1.10.17",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Transition-1.0",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.ImageCoordinateSelector-1.2",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "70fd175421d35c24141b9fcd3c197418d43f9ffdf7e538d2567dab7b2053270e",
+      "problems": []
+    },
+    "H5P.ImageSlide-1.1": {
+      "machineName": "H5P.ImageSlide",
+      "version": "1.1.4",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "13f5736b1cf470ca8d134f2a3895394e4470d800ac67bdd380d995bcc6361508",
+      "problems": []
+    },
+    "H5P.ImageSlider-1.1": {
+      "machineName": "H5P.ImageSlider",
+      "version": "1.1.9",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "e87156ff651101058a136ad2ca6581afe2364b94744da7f09273e5fcf26f9daa",
+      "problems": []
+    },
+    "H5P.InteractiveBook-1.11": {
+      "machineName": "H5P.InteractiveBook",
+      "version": "1.11.8",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "63fce92cc254c86444a82a883b93a60bac3e39f3f274161a2e5fa6ac6588d696",
+      "problems": []
+    },
+    "H5P.InteractiveBook-1.13": {
+      "machineName": "H5P.InteractiveBook",
+      "version": "1.13.5",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "64d39f99046e697eeb4b93c0021bc4b0280939d79730a2c9352ef0192ee91842",
+      "problems": [
+        "missing asset: dist/h5p-interactive-book.css",
+        "missing asset: dist/h5p-interactive-book.js"
+      ]
+    },
+    "H5P.InteractiveVideo-1.27": {
+      "machineName": "H5P.InteractiveVideo",
+      "version": "1.27.9",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.DragNBar-1.5",
+        "H5P.InteractiveVideo-1.27",
+        "H5P.Video-1.6",
+        "H5PEditor.InteractiveVideo-1.25",
+        "H5PEditor.Wizard-1.2",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "edcdc43140239311a0508205c065b073b215aba01ae89045ee1764b9b59e16d9",
+      "problems": []
+    },
+    "H5P.InteractiveVideo-1.28": {
+      "machineName": "H5P.InteractiveVideo",
+      "version": "1.28.37",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.DragNBar-1.5",
+        "H5P.InteractiveVideo-1.28",
+        "H5P.Video-1.6",
+        "H5PEditor.InteractiveVideo-1.26",
+        "H5PEditor.Wizard-1.2",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "4f2e796c92033669cef96b5c4560a80b5a758abc6a83edbe43f1707ca3075992",
+      "problems": []
+    },
+    "H5P.JoubelUI-1.3": {
+      "machineName": "H5P.JoubelUI",
+      "version": "1.3.45",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.FontIcons-1.0",
+        "H5P.Transition-1.0"
+      ],
+      "sha256": "be4549577f4c5ffd54ed8e82a5309e39e44bf5a069ed921e4d4c0303ba416f6f",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.Link-1.3": {
+      "machineName": "H5P.Link",
+      "version": "1.3.25",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "H5PEditor.UrlField-1.2"
+      ],
+      "sha256": "69bd0d6c50ed95645c17aeff7ba6a72d65c988105efec990dee9788235a7bb0f",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.AdventCalendar",
+      "archiveSha256": "7f1f9932b1cfc3bca6e745a488d6317573829f3324d69e87dc9aa97b0bd26d61"
+    },
+    "H5P.MarkTheWords-1.11": {
+      "machineName": "H5P.MarkTheWords",
+      "version": "1.11.9",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "2f4c93372a4a80a85962bd4ba8812246101dfc65569927dd55103400d3a967e8",
+      "problems": []
+    },
+    "H5P.MaterialDesignIcons-1.0": {
+      "machineName": "H5P.MaterialDesignIcons",
+      "version": "1.0.0",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "d237ce1ab09215ba763e65b86e043c7a8f457379288add7756c17dbf55356fc7",
+      "problems": []
+    },
+    "H5P.MemoryGame-1.3": {
+      "machineName": "H5P.MemoryGame",
+      "version": "1.3.29",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Timer-0.4",
+        "H5PEditor.AudioRecorder-1.0",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "c569eb0d0d18fc4b63935ec8fe19c61c5a4cdd040f093b8fe43ccbdb159c0f3f",
+      "problems": []
+    },
+    "H5P.MultiChoice-1.16": {
+      "machineName": "H5P.MultiChoice",
+      "version": "1.16.27",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "f88240393914f35fed1bfcad470313b9da0bfa858e04afabdb77ae80a1b8dc24",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.MultiMediaChoice-0.3": {
+      "machineName": "H5P.MultiMediaChoice",
+      "version": "0.3.44",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "H5P.Image-1.1",
+        "H5P.JoubelUI-1.3",
+        "H5P.MaterialDesignIcons-1.0",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "2078ac11cfd404a1f7d7eed7cd10f6c8dd4bdab37c9fa0578aea297893922cdd",
+      "problems": []
+    },
+    "H5P.Nil-1.0": {
+      "machineName": "H5P.Nil",
+      "version": "1.0.14",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "5d27fb5218b5297b0ca5a5b62bb28eab2d2d03963c0c864b654dd2bf28e7f75b",
+      "problems": []
+    },
+    "H5P.OpenEndedQuestion-1.0": {
+      "machineName": "H5P.OpenEndedQuestion",
+      "version": "1.0.28",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "efcc3263b966db3c2a4c482d0fe111a3cd23cbe89774400c404ac0fc73fa5e29",
+      "problems": []
+    },
+    "H5P.Question-1.4": {
+      "machineName": "H5P.Question",
+      "version": "1.4.10",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 7
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "a6fc8d395f5f013dd08846017c4fd5f04839f3fbdecfeb75291b44abe956aecf",
+      "problems": []
+    },
+    "H5P.Question-1.5": {
+      "machineName": "H5P.Question",
+      "version": "1.5.53",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "2c13c1b7ac559aab6fa63da27b3667747281bff1cb02f8c2c1c331a7e8f866ad",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.QuestionSet-1.20": {
+      "machineName": "H5P.QuestionSet",
+      "version": "1.20.31",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 26
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Video-1.6",
+        "H5PEditor.QuestionSetTextualEditor-1.3",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "1e4c91eacbd49ca9ec1df39b6ed700cac3f2eb77f1428cc554aa122297233aca",
+      "problems": []
+    },
+    "H5P.QuestionSet-1.21": {
+      "machineName": "H5P.QuestionSet",
+      "version": "1.21.11",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5P.Video-1.6"
+      ],
+      "sha256": "20849fe4c85a5b9851217e0e17c6c983cb1939e72a83fa066532afc022a537dd",
+      "problems": []
+    },
+    "H5P.Questionnaire-1.3": {
+      "machineName": "H5P.Questionnaire",
+      "version": "1.3.11",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.OpenEndedQuestion-1.0",
+        "H5P.SimpleMultiChoice-1.1",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "203e04b5d6257c9ca39c7af8d100744a6861418544d35fc52be2bfe95784a795",
+      "problems": []
+    },
+    "H5P.Row-1.0": {
+      "machineName": "H5P.Row",
+      "version": "1.0.12",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "186713f788cb9a7d8554cb0e14746cede67bcfb018484e8d2f9f63d0d8cab01d",
+      "problems": []
+    },
+    "H5P.RowColumn-1.0": {
+      "machineName": "H5P.RowColumn",
+      "version": "1.0.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "a675f21381b80825dda7548f4c57f75508f855bea28a75f5b6c7b06586f96064",
+      "problems": []
+    },
+    "H5P.Shape-1.0": {
+      "machineName": "H5P.Shape",
+      "version": "1.0.5",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.Shape-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "03533c7afd47923e71e0218391c70c687863a95ca5cf37c647ce8c18387fceca",
+      "problems": []
+    },
+    "H5P.SimpleMultiChoice-1.1": {
+      "machineName": "H5P.SimpleMultiChoice",
+      "version": "1.1.22",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "4b3786a6544c89ba4cc5effdcfde3f0df48732546567a604e151d329dac6dff7",
+      "problems": []
+    },
+    "H5P.SingleChoiceSet-1.11": {
+      "machineName": "H5P.SingleChoiceSet",
+      "version": "1.11.86",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.Transition-1.0",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.SingleChoiceSetTextualEditor-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "d91738dab3734334e0697184b5d8d7fd1f9214360e0d9a3f1e62141d88929b74",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.SortParagraphs-0.11": {
+      "machineName": "H5P.SortParagraphs",
+      "version": "0.11.9",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "46873392824f676e6545f27bf946f0835f2f3d26165a467eed107ab2af923bd0",
+      "problems": []
+    },
+    "H5P.StandardPage-1.5": {
+      "machineName": "H5P.StandardPage",
+      "version": "1.5.16",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "H5P.Image-1.1",
+        "H5P.Text-1.1",
+        "H5P.TextInputField-1.2"
+      ],
+      "sha256": "2920924fd80a124b81cfb2526d504ce88f045c9634bcde5020c22950a4072375",
+      "problems": []
+    },
+    "H5P.Summary-1.10": {
+      "machineName": "H5P.Summary",
+      "version": "1.10.32",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.SummaryTextualEditor-1.1"
+      ],
+      "sha256": "90474a7c55493cae87fb9ef3f576cfeb9fbb27be1e2ed9091218b98f242488a4",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.Table-1.2": {
+      "machineName": "H5P.Table",
+      "version": "1.2.2",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "9396660950d02b80e14c7f2b117e74d0d9ac87b9805c3638b71db2d385e1230d",
+      "problems": []
+    },
+    "H5P.Text-1.1": {
+      "machineName": "H5P.Text",
+      "version": "1.1.17",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "7b9c7e6a4ba26826813518df2163baf0e2ca36a1464e67c005c624178d40d6c0",
+      "problems": []
+    },
+    "H5P.TextInputField-1.2": {
+      "machineName": "H5P.TextInputField",
+      "version": "1.2.24",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [],
+      "sha256": "062ff0a7e232ca2656bb8dbf54ef42ec6b5f6af18831e1cf1fc552855d1e28dc",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.Cornell",
+      "archiveSha256": "308ea80ba52fc71e86341e518413ea2704cf932e40fe374502a76dd84ae2e6e4"
+    },
+    "H5P.TextUtilities-1.3": {
+      "machineName": "H5P.TextUtilities",
+      "version": "1.3.0",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "1c2ff654af72e47ed9abb6e2c582486eb41ae06b0e4151d237b6aa4035ff1216",
+      "problems": []
+    },
+    "H5P.Timeline-1.1": {
+      "machineName": "H5P.Timeline",
+      "version": "1.1.25",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "TimelineJS-1.1"
+      ],
+      "sha256": "514fe8c1e7b71ddae992858ed79f184b7d381a5cc82e13b622d0b74eaba558a9",
+      "problems": []
+    },
+    "H5P.Timer-0.4": {
+      "machineName": "H5P.Timer",
+      "version": "0.4.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "1cbd92ddc50582727401c86afc7b0fa9522e470e0ad696b2f60bf415324f1f25",
+      "problems": []
+    },
+    "H5P.Transition-1.0": {
+      "machineName": "H5P.Transition",
+      "version": "1.0.4",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "a1cde06cb917c0d02032983dcc665adadc1a77931911e9447ad8e86fbc69214b",
+      "problems": []
+    },
+    "H5P.TrueFalse-1.8": {
+      "machineName": "H5P.TrueFalse",
+      "version": "1.8.11",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 19
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.FontIcons-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.RadioGroup-1.1",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "9114d829e89b3be710420b223010f5e367062ca2ff2d73ef4da7727ecafa9f0a",
+      "problems": []
+    },
+    "H5P.TwitterUserFeed-1.0": {
+      "machineName": "H5P.TwitterUserFeed",
+      "version": "1.0.21",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "88ceb392d9e7066912248fa4f2407c57c7837d8383b756d72b33821b6d278148",
+      "problems": []
+    },
+    "H5P.Video-1.6": {
+      "machineName": "H5P.Video",
+      "version": "1.6.68",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [],
+      "sha256": "3bd54b4134c05fccf775ebf0172fb927d57955a86f802f95234bd773036b4acc",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.AdventCalendar",
+      "archiveSha256": "7f1f9932b1cfc3bca6e745a488d6317573829f3324d69e87dc9aa97b0bd26d61"
+    },
+    "H5PEditor.AudioRecorder-1.0": {
+      "machineName": "H5PEditor.AudioRecorder",
+      "version": "1.0.11",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 20
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.FontIcons-1.0"
+      ],
+      "sha256": "2d7ee9ab881bbf4db370a91df2a96fb0553d6ea773d46f47664c4eafd49ddedb",
+      "problems": []
+    },
+    "H5PEditor.BranchingQuestion-1.0": {
+      "machineName": "H5PEditor.BranchingQuestion",
+      "version": "1.0.5",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "5ff23bf72e84059f4dc0a53b03e64ca4edf17acda98e5d4741c55ac578ff0cbd",
+      "problems": []
+    },
+    "H5PEditor.BranchingScenario-1.5": {
+      "machineName": "H5PEditor.BranchingScenario",
+      "version": "1.5.13",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "H5P.AdvancedText-1.1",
+        "H5P.BranchingQuestion-1.0",
+        "H5P.CoursePresentation-1.27",
+        "H5P.Image-1.1",
+        "H5P.ImageHotspots-1.10",
+        "H5P.InteractiveVideo-1.28",
+        "H5P.MaterialDesignIcons-1.0",
+        "H5P.Video-1.6"
+      ],
+      "sha256": "9c5433e07cc6fafaf80ec9e5c1c8141bf5411742b3cb03f9eedd9da4779034f0",
+      "problems": []
+    },
+    "H5PEditor.Collage-0.3": {
+      "machineName": "H5PEditor.Collage",
+      "version": "0.3.22",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Collage-0.3"
+      ],
+      "sha256": "28a441789df8061f4d5116c48ae052742fdef879185f20b6acf8f6d902f2a5cf",
+      "problems": []
+    },
+    "H5PEditor.ColorSelector-1.2": {
+      "machineName": "H5PEditor.ColorSelector",
+      "version": "1.2.7",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "19523050e477c8a033caaa93b3f9ac906bcb0a58c06b6a1d6905590e4777eec1",
+      "problems": []
+    },
+    "H5PEditor.ColorSelector-1.3": {
+      "machineName": "H5PEditor.ColorSelector",
+      "version": "1.3.1",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "8574d61f3bccfbad406984a4ecffcb45d9a4480729ac5a01ca2dcbcf4600e04a",
+      "problems": []
+    },
+    "H5PEditor.CoursePresentation-1.25": {
+      "machineName": "H5PEditor.CoursePresentation",
+      "version": "1.25.14",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.AdvancedText-1.1",
+        "H5P.Audio-1.5",
+        "H5P.AudioRecorder-1.0",
+        "H5P.Blanks-1.14",
+        "H5P.ContinuousText-1.2",
+        "H5P.Dialogcards-1.9",
+        "H5P.DragNBar-1.5",
+        "H5P.DragQuestion-1.14",
+        "H5P.DragText-1.10",
+        "H5P.ExportableTextArea-1.3",
+        "H5P.FontIcons-1.0",
+        "H5P.Image-1.1",
+        "H5P.InteractiveVideo-1.27",
+        "H5P.Link-1.3",
+        "H5P.MarkTheWords-1.11",
+        "H5P.MultiChoice-1.16",
+        "H5P.MultiMediaChoice-0.3",
+        "H5P.Shape-1.0",
+        "H5P.SingleChoiceSet-1.11",
+        "H5P.Summary-1.10",
+        "H5P.Table-1.2",
+        "H5P.TrueFalse-1.8",
+        "H5P.TwitterUserFeed-1.0",
+        "H5P.Video-1.6",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.RadioSelector-1.2"
+      ],
+      "sha256": "4066024ebc93dac12100a5c83e43fe0fc7e83c6f10faa671a4b77861b175983f",
+      "problems": []
+    },
+    "H5PEditor.CoursePresentation-1.26": {
+      "machineName": "H5PEditor.CoursePresentation",
+      "version": "1.26.6",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.AdvancedText-1.1",
+        "H5P.Audio-1.5",
+        "H5P.AudioRecorder-1.0",
+        "H5P.Blanks-1.14",
+        "H5P.ContinuousText-1.2",
+        "H5P.Dialogcards-1.9",
+        "H5P.DragNBar-1.5",
+        "H5P.DragQuestion-1.15",
+        "H5P.DragText-1.10",
+        "H5P.ExportableTextArea-1.3",
+        "H5P.FontIcons-1.0",
+        "H5P.Image-1.1",
+        "H5P.InteractiveVideo-1.28",
+        "H5P.Link-1.3",
+        "H5P.MarkTheWords-1.11",
+        "H5P.MultiChoice-1.16",
+        "H5P.MultiMediaChoice-0.3",
+        "H5P.Shape-1.0",
+        "H5P.SingleChoiceSet-1.11",
+        "H5P.Summary-1.10",
+        "H5P.Table-1.2",
+        "H5P.TrueFalse-1.8",
+        "H5P.TwitterUserFeed-1.0",
+        "H5P.Video-1.6",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.RadioSelector-1.2"
+      ],
+      "sha256": "34875e01f8d93e9564f5b445a87c840de6d9fdebadb590650d747d82b76279dd",
+      "problems": []
+    },
+    "H5PEditor.DragQuestion-1.10": {
+      "machineName": "H5PEditor.DragQuestion",
+      "version": "1.10.21",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.AdvancedText-1.1",
+        "H5P.DragNBar-1.5",
+        "H5P.Image-1.1",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.Wizard-1.2",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "83937a2d4e14fc0c43c0f3a7eba18a9d010e593a195767080ae2a5c996d9db32",
+      "problems": []
+    },
+    "H5PEditor.Duration-1.1": {
+      "machineName": "H5PEditor.Duration",
+      "version": "1.1.14",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "374bd97ed128e0f9d00c8dae690766dcb67a6c5cfe2c39bbdefa59866a14c44e",
+      "problems": []
+    },
+    "H5PEditor.ImageCoordinateSelector-1.2": {
+      "machineName": "H5PEditor.ImageCoordinateSelector",
+      "version": "1.2.7",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "f7462f529cc40d130a9d0924a0ac094dab32b7caac1083f6bc45ec42bd56419d",
+      "problems": []
+    },
+    "H5PEditor.ImageHotspotQuestion-1.8": {
+      "machineName": "H5PEditor.ImageHotspotQuestion",
+      "version": "1.8.12",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "H5P.DragNBar-1.5",
+        "H5P.DragNResize-1.2",
+        "H5P.ImageHotspotQuestion-1.8"
+      ],
+      "sha256": "b1b9999cb31e68d7fd47367f1d78d8761e40bdbd3c58022262c8c691f5a85a3e",
+      "problems": []
+    },
+    "H5PEditor.InteractiveVideo-1.25": {
+      "machineName": "H5PEditor.InteractiveVideo",
+      "version": "1.25.11",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Audio-1.5",
+        "H5P.Blanks-1.14",
+        "H5P.DragNBar-1.5",
+        "H5P.DragQuestion-1.14",
+        "H5P.DragText-1.10",
+        "H5P.FontIcons-1.0",
+        "H5P.FreeTextQuestion-1.0",
+        "H5P.GoToQuestion-1.3",
+        "H5P.GuidedTour-1.0",
+        "H5P.IVHotspot-1.2",
+        "H5P.Image-1.1",
+        "H5P.Link-1.3",
+        "H5P.MarkTheWords-1.11",
+        "H5P.MultiChoice-1.16",
+        "H5P.MultiMediaChoice-0.3",
+        "H5P.Nil-1.0",
+        "H5P.Questionnaire-1.3",
+        "H5P.SingleChoiceSet-1.11",
+        "H5P.Summary-1.10",
+        "H5P.Table-1.2",
+        "H5P.Text-1.1",
+        "H5P.TrueFalse-1.8",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.Duration-1.1",
+        "H5PEditor.SelectToggleFields-1.1",
+        "H5PEditor.Timecode-1.2"
+      ],
+      "sha256": "7c4d8633629a0282e3bb8fca8f68a607651b38c072bf53deff4a302cb8f15efe",
+      "problems": []
+    },
+    "H5PEditor.InteractiveVideo-1.26": {
+      "machineName": "H5PEditor.InteractiveVideo",
+      "version": "1.26.3",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Audio-1.5",
+        "H5P.Blanks-1.14",
+        "H5P.DragNBar-1.5",
+        "H5P.DragQuestion-1.15",
+        "H5P.DragText-1.10",
+        "H5P.FontIcons-1.0",
+        "H5P.FreeTextQuestion-1.0",
+        "H5P.GoToQuestion-1.3",
+        "H5P.GuidedTour-1.0",
+        "H5P.IVHotspot-1.2",
+        "H5P.Image-1.1",
+        "H5P.Link-1.3",
+        "H5P.MarkTheWords-1.11",
+        "H5P.MultiChoice-1.16",
+        "H5P.MultiMediaChoice-0.3",
+        "H5P.Nil-1.0",
+        "H5P.Questionnaire-1.3",
+        "H5P.SingleChoiceSet-1.11",
+        "H5P.Summary-1.10",
+        "H5P.Table-1.2",
+        "H5P.Text-1.1",
+        "H5P.TrueFalse-1.8",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.Duration-1.1",
+        "H5PEditor.SelectToggleFields-1.1",
+        "H5PEditor.Timecode-1.2"
+      ],
+      "sha256": "99a34b7f87f6fbf5047f1eb0fd7e803f5fe50ce900d70080307f91a0feb341c6",
+      "problems": []
+    },
+    "H5PEditor.QuestionSetTextualEditor-1.3": {
+      "machineName": "H5PEditor.QuestionSetTextualEditor",
+      "version": "1.3.18",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "1981ad1548f22c9ddce595d85e53f3a9572d4c5de8f43fe381486f3f6f7760bd",
+      "problems": []
+    },
+    "H5PEditor.RadioGroup-1.1": {
+      "machineName": "H5PEditor.RadioGroup",
+      "version": "1.1.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "6acf2dae1f2d6674f558a7bc8aad58275703053736942a26b2d2339c9de2cc7c",
+      "problems": []
+    },
+    "H5PEditor.RadioSelector-1.2": {
+      "machineName": "H5PEditor.RadioSelector",
+      "version": "1.2.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "6255ea2643f075425be0d97d3617420b3f604125626288ad1445bc7538179cc5",
+      "problems": []
+    },
+    "H5PEditor.RangeList-1.0": {
+      "machineName": "H5PEditor.RangeList",
+      "version": "1.0.13",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 14
+      },
+      "dependencies": [
+        "H5PEditor.TableList-1.0"
+      ],
+      "sha256": "464599c1846126d9f76804105ebd572048cd9023e1ae176934488b859d4d5569",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.SelectToggleFields-1.1": {
+      "machineName": "H5PEditor.SelectToggleFields",
+      "version": "1.1.1",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "ffce37a65ba932b6d3e24f75e32b00efa97df47765bf5a45031ac40cd2b71201",
+      "problems": []
+    },
+    "H5PEditor.Shape-1.0": {
+      "machineName": "H5PEditor.Shape",
+      "version": "1.0.0",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "18daacecf68b32f1d6dbb9d2ac66e93292dbeee42845535285b0d13cf826035f",
+      "problems": []
+    },
+    "H5PEditor.ShowWhen-1.0": {
+      "machineName": "H5PEditor.ShowWhen",
+      "version": "1.0.9",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "ac434335b7f9d778bc2527a2afcb0a3b2650cdc5c8ce98af7e1017ae851e93ad",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.SingleChoiceSetTextualEditor-1.0": {
+      "machineName": "H5PEditor.SingleChoiceSetTextualEditor",
+      "version": "1.0.10",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "666e41c678e89c9a2fb355d616c744034be90ddfc2336a77b2d2921cfd8786a5",
+      "problems": []
+    },
+    "H5PEditor.SummaryTextualEditor-1.1": {
+      "machineName": "H5PEditor.SummaryTextualEditor",
+      "version": "1.1.12",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [],
+      "sha256": "b8c5ba43c8b49950aa38e20ea190c01e7d29de5a68803dec6fd6fec397fd5a30",
+      "problems": []
+    },
+    "H5PEditor.TableList-1.0": {
+      "machineName": "H5PEditor.TableList",
+      "version": "1.0.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 14
+      },
+      "dependencies": [],
+      "sha256": "947f9c6608d067d2610f68732c4bf089aede0f1587f3aa32394e3ca29bafa769",
+      "problems": []
+    },
+    "H5PEditor.Timecode-1.2": {
+      "machineName": "H5PEditor.Timecode",
+      "version": "1.2.14",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "3c88a639a835abb8b15db8d547e23b367a414716e2ea853a9ed3979f18f72c82",
+      "problems": []
+    },
+    "H5PEditor.UrlField-1.2": {
+      "machineName": "H5PEditor.UrlField",
+      "version": "1.2.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "b6cd49da2f1130b77d13b9632003e996a904a73fb2bfd7c58a76de7838376d53",
+      "problems": []
+    },
+    "H5PEditor.VerticalTabs-1.3": {
+      "machineName": "H5PEditor.VerticalTabs",
+      "version": "1.3.14",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 24
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "09469f4ec7de335667a5f436db25b8e45bca4e87c2c4f3c254099e56adf5b774",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.Wizard-1.2": {
+      "machineName": "H5PEditor.Wizard",
+      "version": "1.2.17",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 23
+      },
+      "dependencies": [
+        "H5P.FontIcons-1.0"
+      ],
+      "sha256": "10832499e8497094eb7f01e82d1711bb6577e462d0f69ab11fa036ac6948dd5f",
+      "problems": []
+    },
+    "Shepherd-1.0": {
+      "machineName": "Shepherd",
+      "version": "1.0.7",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "dc3b03b5c4e7ffb23a53ff7760558576899e2a6fbe10596ddfcc471ee3eaa1b9",
+      "problems": []
+    },
+    "Tether-1.0": {
+      "machineName": "Tether",
+      "version": "1.0.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "876281a1ac7e9396915a14dd3923cec6a3d6ed212a2bdf1aaed99fb290868618",
+      "problems": []
+    },
+    "TimelineJS-1.1": {
+      "machineName": "TimelineJS",
+      "version": "1.1.1",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "faf669f15dd6cb4d91644e3be2215ed18f82f13d2b3efa992b67ccdaf1be4303",
+      "problems": []
+    },
+    "jQuery.ui-1.10": {
+      "machineName": "jQuery.ui",
+      "version": "1.10.22",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "5932b7a93b8cbcfe2e8f47baabd446478c51d9a9a8de8a5398e50401e5e14688",
+      "problems": []
+    },
+    "H5P.AFrameOrbitControls-1.3": {
+      "machineName": "H5P.AFrameOrbitControls",
+      "version": "1.3.0",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "dff18ba448fece0cc48ea472713cae8514d33fce61328654df9509f22b83b4f2",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.ThreeDModelLoader-1.0": {
+      "machineName": "H5PEditor.ThreeDModelLoader",
+      "version": "1.0.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "H5P.AFrame-1.0",
+        "H5P.AFrameOrbitControls-1.3"
+      ],
+      "sha256": "59c80640acd74214a2828683fbf551b023f052f7171a3cc30526735091301be8",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.ARMarkerGenerator-1.0": {
+      "machineName": "H5PEditor.ARMarkerGenerator",
+      "version": "1.0.3",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "dce0d4ea19abbfa69ffac892ed785c4a9a47754b75ab8a379aaf6fc93d866c6b",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.ImportantDescription-0.1": {
+      "machineName": "H5PEditor.ImportantDescription",
+      "version": "0.1.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "71396795d6a6aa2e283d20ea4c6af6752d12c37fca66611a38c38345ea21c75c",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.AFrame-1.0": {
+      "machineName": "H5P.AFrame",
+      "version": "1.0.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "1788a2f0da16e3f235a48d99730cd8ee7ebb9aed9c0d090660aef708703f1398",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.ARScavenger-1.4": {
+      "machineName": "H5P.ARScavenger",
+      "version": "1.4.1",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5P.AFrame-1.0",
+        "H5P.AFrameAR-3.1",
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.ARMarkerGenerator-1.0",
+        "H5PEditor.ImportantDescription-0.1",
+        "H5PEditor.InputRow-1.0",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.ThreeDModelLoader-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "874ed13af2569896daf55b342d60dad16ae42e9559b43bb8e7ca99d5bde29ada",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.AFrameAR-3.1": {
+      "machineName": "H5P.AFrameAR",
+      "version": "3.1.1",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "f9d8d7f439e61377eb0290dfc5b136a7eb76ae2173e662ad0c8fd78142adba38",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5PEditor.InputRow-1.0": {
+      "machineName": "H5PEditor.InputRow",
+      "version": "1.0.1",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "602014a10c2b443ce8f80d5a53bf1436b1294061a9d439b65b8a53bc4d7eaf42",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ARScavenger",
+      "archiveSha256": "6499764b0465e53bc8d1cf31f989698c060f765a4bb9074944c5825d8bb297a5"
+    },
+    "H5P.AdventCalendar-0.3": {
+      "machineName": "H5P.AdventCalendar",
+      "version": "0.3.4",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Audio-1.5",
+        "H5P.Video-1.6",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "4da7e4b44e06dc900ce4a1bfb27129268572e6b9024327eb3eb8173b9d52173c",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.AdventCalendar",
+      "archiveSha256": "7f1f9932b1cfc3bca6e745a488d6317573829f3324d69e87dc9aa97b0bd26d61"
+    },
+    "H5P.Cornell-0.3": {
+      "machineName": "H5P.Cornell",
+      "version": "0.3.2",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5P.TextInputField-1.2"
+      ],
+      "sha256": "f75bc7856a7c709e0b579ca894c3e9e86d70529ee2c77921edbbc6cee4350d50",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.Cornell",
+      "archiveSha256": "308ea80ba52fc71e86341e518413ea2704cf932e40fe374502a76dd84ae2e6e4"
+    },
+    "H5P.FindTheWords-1.4": {
+      "machineName": "H5P.FindTheWords",
+      "version": "1.4.4",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5P.Timer-0.4"
+      ],
+      "sha256": "75c2ba1215a3a45b8aa4f8e5533ad63d36fb8c2e5a8f17837d108f6b0bf4c40a",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.FindTheWords",
+      "archiveSha256": "b015cc54b811c1ab2628fdc014d444873e7227d9ba6735b79e35f9edb7d24fc8"
+    },
+    "H5P.Flashcards-1.7": {
+      "machineName": "H5P.Flashcards",
+      "version": "1.7.23",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Components-1.0",
+        "H5P.FontIcons-1.0",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "e939e078685d9b9e5a41f5348759211f211dfa0285b69cfddbc02e4c2d2afd39",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.Flashcards",
+      "archiveSha256": "502ffcef4a9ca5abedde7f78bf7a4e0dd9a3d98eabf64fe42c6a1ece3983a274"
+    },
+    "H5P.GameMap-1.5": {
+      "machineName": "H5P.GameMap",
+      "version": "1.5.4",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Question-1.5",
+        "H5P.SoundJS-1.0",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.DateTime-1.0",
+        "H5PEditor.GameMap-1.2",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.VerticalTabs-1.3",
+        "H5PEditor.Wizard-1.2"
+      ],
+      "sha256": "6f3cf1bae01162c389674327185200cf56124f66f516d588346abd3894fdfa8e",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.GameMap",
+      "archiveSha256": "bdda634d421b401ce812fb938d55e9d2680b1d945c0582e3dcd9e8865a88d68e"
+    },
+    "H5PEditor.GameMap-1.2": {
+      "machineName": "H5PEditor.GameMap",
+      "version": "1.2.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.DragNBar-1.5",
+        "H5P.JoubelUI-1.3"
+      ],
+      "sha256": "85aacaf0bcf97e4da8acd6cbb304d689de156092a644f68eb6b29651e722e7db",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.GameMap",
+      "archiveSha256": "bdda634d421b401ce812fb938d55e9d2680b1d945c0582e3dcd9e8865a88d68e"
+    },
+    "H5P.SoundJS-1.0": {
+      "machineName": "H5P.SoundJS",
+      "version": "1.0.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "07f03d0bc87a1737e95e107116c0e4621c6000a4072ae576f83e79238179a7d7",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.GameMap",
+      "archiveSha256": "bdda634d421b401ce812fb938d55e9d2680b1d945c0582e3dcd9e8865a88d68e"
+    },
+    "H5PEditor.DateTime-1.0": {
+      "machineName": "H5PEditor.DateTime",
+      "version": "1.0.9",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [],
+      "sha256": "950502a6f815f50fedbc401021320a30795c0be963839560ca56b233d508108a",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.GameMap",
+      "archiveSha256": "bdda634d421b401ce812fb938d55e9d2680b1d945c0582e3dcd9e8865a88d68e"
+    },
+    "H5P.ImageJuxtaposition-1.5": {
+      "machineName": "H5P.ImageJuxtaposition",
+      "version": "1.5.4",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 15
+      },
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.ColorSelector-1.3"
+      ],
+      "sha256": "8b6d8691234b6a125da74c1198e5c20bda072328b67481d6acee422c594cc8e2",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageJuxtaposition",
+      "archiveSha256": "025d14c68381bb98f084d51e01c04e498ef6fd3c75b8bfe0f1556cfc5e64bc6f"
+    },
+    "H5P.ImageMultipleHotspotQuestion-1.0": {
+      "machineName": "H5P.ImageMultipleHotspotQuestion",
+      "version": "1.0.1",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "H5P.Question-1.4",
+        "H5PEditor.ImageMultipleHotspotQuestion-1.0",
+        "H5PEditor.Wizard-1.2"
+      ],
+      "sha256": "3f0b010f0f5ae93ce9aceed66a13d185db818c1082a0c847259cf51c1a3857a2",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageMultipleHotspotQuestion",
+      "archiveSha256": "c7eaeccabcffa0ebbd5af8a7efd7f1df72ec788a63a9c5c2e9fd17fa96ef24ac"
+    },
+    "H5P.DragNBar-1.4": {
+      "machineName": "H5P.DragNBar",
+      "version": "1.4.8",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 14
+      },
+      "dependencies": [
+        "H5P.DragNDrop-1.1",
+        "H5P.DragNResize-1.2",
+        "H5P.FontIcons-1.0"
+      ],
+      "sha256": "8712304c5d5e7ba7f905cb47aad6c8b8b8d586ad5dd5144faded7f7b185eeb98",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageMultipleHotspotQuestion",
+      "archiveSha256": "c7eaeccabcffa0ebbd5af8a7efd7f1df72ec788a63a9c5c2e9fd17fa96ef24ac"
+    },
+    "H5PEditor.ImageMultipleHotspotQuestion-1.0": {
+      "machineName": "H5PEditor.ImageMultipleHotspotQuestion",
+      "version": "1.0.0",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "H5P.DragNBar-1.4",
+        "H5P.DragNResize-1.2",
+        "H5P.ImageMultipleHotspotQuestion-1.0"
+      ],
+      "sha256": "9a26210c1685068a03d4887b06fe4b1cbdd436c807657d69d747157957819445",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageMultipleHotspotQuestion",
+      "archiveSha256": "c7eaeccabcffa0ebbd5af8a7efd7f1df72ec788a63a9c5c2e9fd17fa96ef24ac"
+    },
+    "H5P.ImagePair-1.4": {
+      "machineName": "H5P.ImagePair",
+      "version": "1.4.0",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.3",
+        "H5PEditor.VerticalTabs-1.3",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "ae875436342e6975d74bd1e9a2cd8c7cfe9b42d61548bb0395af4357fcfa2814",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImagePair",
+      "archiveSha256": "5b3e8324d2f27a43707cc8911906bb39838562fd8adbe5a28e31a95613e959e2"
+    },
+    "H5P.ImageSequencing-1.1": {
+      "machineName": "H5P.ImageSequencing",
+      "version": "1.1.0",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Audio-1.2",
+        "H5P.JoubelUI-1.3",
+        "H5P.Timer-0.4",
+        "H5PEditor.VerticalTabs-1.3",
+        "jQuery.ui-1.10"
+      ],
+      "sha256": "72d2d0a3a540ab9f183ff95a00927631826f423cdc1fbf1ea47b835c5b63a586",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageSequencing",
+      "archiveSha256": "651a8d160c1362184cc159cfbd0b996d9601f61e733a7558ccc5a4cc1967bf3a"
+    },
+    "flowplayer-1.0": {
+      "machineName": "flowplayer",
+      "version": "1.0.5",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "e6b14edb6a70e2192f733ef318c784e60be70c3cd44335c11c365d3c80089edd",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageSequencing",
+      "archiveSha256": "651a8d160c1362184cc159cfbd0b996d9601f61e733a7558ccc5a4cc1967bf3a"
+    },
+    "H5P.Audio-1.2": {
+      "machineName": "H5P.Audio",
+      "version": "1.2.14",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 4
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "flowplayer-1.0"
+      ],
+      "sha256": "c99377eed0e0132bde2eb32524fc74de69c0371e6c89a0e271ccda0df9e0e857",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ImageSequencing",
+      "archiveSha256": "651a8d160c1362184cc159cfbd0b996d9601f61e733a7558ccc5a4cc1967bf3a"
+    },
+    "H5PEditor.ImpressPresentation-1.0": {
+      "machineName": "H5PEditor.ImpressPresentation",
+      "version": "1.0.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.3",
+        "H5P.AdvancedText-1.1",
+        "H5P.Blanks-1.4",
+        "H5P.ImpressPresentation-1.0",
+        "H5P.JoubelUI-1.2",
+        "H5P.MarkTheWords-1.5",
+        "H5P.SingleChoiceSet-1.3"
+      ],
+      "sha256": "e9947228db94f41ac0848897874eef1dde4ae95b152882f4052f7e8e99105f14",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "FontAwesome-4.3": {
+      "machineName": "FontAwesome",
+      "version": "4.3.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "d5772df0761272bc49138708072c86d89e770accf0b381d7757f5a3d68d697eb",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5PEditor.VerticalTabs-1.1": {
+      "machineName": "H5PEditor.VerticalTabs",
+      "version": "1.1.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 4
+      },
+      "dependencies": [
+        "FontAwesome-4.5"
+      ],
+      "sha256": "2f4e0d65cdcf52fbd412bb568387699cb71975c1cd456aa26916e8bdfb416d33",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.Blanks-1.4": {
+      "machineName": "H5P.Blanks",
+      "version": "1.4.6",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.2",
+        "H5P.Question-1.1"
+      ],
+      "sha256": "09160eed84c54ac7fe04655a2f3bd235a6b841a69397c56e17f64f5d201e0d2d",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.ImpressPresentation-1.0": {
+      "machineName": "H5P.ImpressPresentation",
+      "version": "1.0.3",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.3",
+        "H5P.JoubelUI-1.2",
+        "H5PEditor.ColorSelector-1.0",
+        "H5PEditor.ImpressPresentation-1.0"
+      ],
+      "sha256": "f8bf644f6cffa94afaa01745b62350d90db9f14632e1ffaf59f99029a722a64d",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.Question-1.1": {
+      "machineName": "H5P.Question",
+      "version": "1.1.7",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.2"
+      ],
+      "sha256": "902cfb7b7d66f54d98ab63c5367ba4eccfafa7c3c2bfd19b77301d43dc583215",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.SingleChoiceSet-1.3": {
+      "machineName": "H5P.SingleChoiceSet",
+      "version": "1.3.6",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.2",
+        "H5P.Question-1.1",
+        "H5P.SoundJS-1.0",
+        "H5P.Transition-1.0",
+        "H5PEditor.VerticalTabs-1.1"
+      ],
+      "sha256": "f48174478838d322b41b1752c6866ca25ee0dabac60aeb2f47035885387584b3",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5PEditor.ColorSelector-1.0": {
+      "machineName": "H5PEditor.ColorSelector",
+      "version": "1.0.3",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "718abe2e6da067f96ebf84957a431b444d57f2658d6c99a9b3a914d075a27c00",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.MarkTheWords-1.5": {
+      "machineName": "H5P.MarkTheWords",
+      "version": "1.5.5",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.JoubelUI-1.2",
+        "H5P.Question-1.1"
+      ],
+      "sha256": "9d695648c7a7ab8b6d3eea3b7a448facba0aed9441aa8c01068e5a3ed8274848",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5P.JoubelUI-1.2": {
+      "machineName": "H5P.JoubelUI",
+      "version": "1.2.13",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 3
+      },
+      "dependencies": [
+        "Drop-1.0",
+        "FontAwesome-4.5",
+        "H5P.Transition-1.0"
+      ],
+      "sha256": "c8caf6c795c737840f3ff797963e3bf4e1fbc1299d558295dd6d30c12df314f9",
+      "problems": [],
+      "source": "https://h5p.org/sites/default/files/h5p/exports/impressive-presentation-7141.h5p",
+      "archiveSha256": "a742227bf56ff575b9c2f7c419a31382b263bee2acf1e8b40df23f1e30ae8a48"
+    },
+    "H5PEditor.InfoWallPassiveList-0.1": {
+      "machineName": "H5PEditor.InfoWallPassiveList",
+      "version": "0.1.5",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "50e64f3a913e01d3347c735f1a0821eb781999959a482667856545cb4991407d",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.InfoWall",
+      "archiveSha256": "fc62420d08b3c5d787290de493c27280a7536a8eb535ae1daf5e178f0c186c37"
+    },
+    "H5P.InfoWall-0.4": {
+      "machineName": "H5P.InfoWall",
+      "version": "0.4.9",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Image-1.1",
+        "H5P.TextUtilities-1.3",
+        "H5PEditor.InfoWall-0.2",
+        "H5PEditor.InfoWallPassiveList-0.1",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "54b3ac3395ed13a8c6a353a8c7d8546ad8a22be676f6841ae365444a14c3677c",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.InfoWall",
+      "archiveSha256": "fc62420d08b3c5d787290de493c27280a7536a8eb535ae1daf5e178f0c186c37"
+    },
+    "H5PEditor.InfoWall-0.2": {
+      "machineName": "H5PEditor.InfoWall",
+      "version": "0.2.4",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "792a5a48a1ec6309a5423aeadc6e721687edaa52c462a4f03d1a9df5f2897936",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.InfoWall",
+      "archiveSha256": "fc62420d08b3c5d787290de493c27280a7536a8eb535ae1daf5e178f0c186c37"
+    },
+    "H5P.KewArCode-1.2": {
+      "machineName": "H5P.KewArCode",
+      "version": "1.2.2",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.KewArCode-1.0",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "89c2da861df9c6fe4acc2ebdd42d4bb1f1bb93c2700135d4ccf7a54b001cd5a1",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.KewArCode",
+      "archiveSha256": "e38c1a1d6fc0690954dd4d34c6150319ab53597c93aee3a50810aa1ad4d39a5f"
+    },
+    "H5PEditor.KewArCode-1.0": {
+      "machineName": "H5PEditor.KewArCode",
+      "version": "1.0.0",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "1b5e5c6118e74f7099a557eabbde47225f8546a0be3516187e7931fb5f73ac73",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.KewArCode",
+      "archiveSha256": "e38c1a1d6fc0690954dd4d34c6150319ab53597c93aee3a50810aa1ad4d39a5f"
+    },
+    "H5P.PersonalityQuiz-1.0": {
+      "machineName": "H5P.PersonalityQuiz",
+      "version": "1.0.8",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "H5PEditor.ColorSelector-1.0"
+      ],
+      "sha256": "c2d7b33cff80512bd4ba51f3ab89932bf8ad2eb4d7311614f2e3520370631455",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.PersonalityQuiz",
+      "archiveSha256": "1a5666c134d53a627f539e06746ef9788b746577d230199b70f8725485125c90"
+    },
+    "H5P.SpeakTheWords-1.5": {
+      "machineName": "H5P.SpeakTheWords",
+      "version": "1.5.7",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Question-1.5",
+        "H5PEditor.ShowWhen-1.0"
+      ],
+      "sha256": "3cc991b387ecdb18c33db7d443b472230730537b1b6bd8dee1dc5775a0e6249f",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.SpeakTheWords",
+      "archiveSha256": "0a3338ca9523847a0bb2baa48d837d0abf1e0f687cbf8fca14932e57d15266b3"
+    },
+    "H5P.SpeakTheWordsSet-1.3": {
+      "machineName": "H5P.SpeakTheWordsSet",
+      "version": "1.3.4",
+      "runnable": true,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.Question-1.5",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "6740061e719de51bfd0463208ee45def85fa7e514d75e94a994e1bbf2e7b3227",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.SpeakTheWordsSet",
+      "archiveSha256": "65f5fb5760f75d3d6ff2df2c5ac5afa5fcbaacc77300d8230d47c1efd3e4e5e7"
+    },
+    "H5P.StructureStrip-1.0": {
+      "machineName": "H5P.StructureStrip",
+      "version": "1.0.6",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 27
+      },
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5P.MaterialDesignIcons-1.0",
+        "H5P.Question-1.5",
+        "H5PEditor.ColorSelector-1.3",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "f6a5b9eb7be3618c0fc21cd1f457d1927e493ddeb980af3eab32c119e106a68c",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.StructureStrip",
+      "archiveSha256": "64dab5f175124a84a7d0b3825ece8d04a51787f04a80aba86b2a510a7b1f1010"
+    },
+    "H5PEditor.ThreeImage-0.5": {
+      "machineName": "H5PEditor.ThreeImage",
+      "version": "0.5.2",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [
+        "FontAwesome-4.5",
+        "H5P.FontIcons-1.0",
+        "H5P.ThreeImage-0.5"
+      ],
+      "sha256": "dacd8864b31d8701f500f9b86a717030a250272b8b6b8012b83f9ffb810fa13e",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.GoToScene-0.1": {
+      "machineName": "H5P.GoToScene",
+      "version": "0.1.0",
+      "runnable": false,
+      "coreApi": null,
+      "dependencies": [],
+      "sha256": "8aca4561fcdba2c4af08fbf06a5a2755b1fb1111fbe5bd5ad54047877e521612",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.ThreeImage-0.5": {
+      "machineName": "H5P.ThreeImage",
+      "version": "0.5.8",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 20
+      },
+      "dependencies": [
+        "H5P.GoToScene-0.1",
+        "H5P.ThreeSixty-0.3",
+        "H5PEditor.AudioRecorder-1.0",
+        "H5PEditor.RadioGroup-1.1",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.ThreeImage-0.5"
+      ],
+      "sha256": "ea19164e228bb7b1e85d35dfb8fe331da30dd62a55ea7f2708bb2355ab590e00",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.ThreeJS-1.0": {
+      "machineName": "H5P.ThreeJS",
+      "version": "1.0.108",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [],
+      "sha256": "f70832b8ae539880cc95931fc8ded6b6feb44060fceb605b673218c663f94e3b",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.ThreeSixty-0.3": {
+      "machineName": "H5P.ThreeSixty",
+      "version": "0.3.7",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 12
+      },
+      "dependencies": [
+        "H5P.ThreeJS-1.0"
+      ],
+      "sha256": "f8a8bea8cfc15ac22fe9edaf8741a2a8cfd7fa6237b09b0b2a47103dec643360",
+      "problems": [],
+      "source": "https://hub-api.h5p.org/v1/content-types/H5P.ThreeImage",
+      "archiveSha256": "f683c04750f08d5349f0bf484c5a3438e8bb382a26277570d4a01460169d8818"
+    },
+    "H5P.AdvancedBlanks-1.4": {
+      "machineName": "H5P.AdvancedBlanks",
+      "version": "1.4.0",
+      "runnable": true,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 6
+      },
+      "dependencies": [
+        "H5P.JoubelUI-1.3",
+        "H5P.Question-1.5",
+        "H5PEditor.AdvancedBlanks-1.0",
+        "H5PEditor.RangeList-1.0",
+        "H5PEditor.ShowWhen-1.0",
+        "H5PEditor.VerticalTabs-1.3"
+      ],
+      "sha256": "2ba2e985fff8d9583c0ce37c5fdf3dea4216f2a7189f6077746c634d2693a51b",
+      "problems": [],
+      "source": "https://github.com/NDLANO/h5p-advanced-blanks/tree/9bd77ac4b2140a9b1b08d3393398a6fdf1e52ecc",
+      "repository": "https://github.com/NDLANO/h5p-advanced-blanks",
+      "commit": "9bd77ac4b2140a9b1b08d3393398a6fdf1e52ecc",
+      "archiveSha256": "9ef89cf707d9ae02564ad70b82e98416e0103b68583277e09ffe69dbcec226de",
+      "releaseStatus": "pinned source snapshot; no upstream release tag",
+      "build": {
+        "node": "22.22.3",
+        "lockSha256": "f099badfc209f9030ca740ebed5bd72c94eac6503083835a633acbce0f6d50ff",
+        "install": "npm ci --ignore-scripts --no-audit --no-fund",
+        "compile": "npm run build"
+      }
+    },
+    "H5PEditor.AdvancedBlanks-1.0": {
+      "machineName": "H5PEditor.AdvancedBlanks",
+      "version": "1.0.0",
+      "runnable": false,
+      "coreApi": {
+        "majorVersion": 1,
+        "minorVersion": 28
+      },
+      "dependencies": [],
+      "sha256": "e3aa898736162c7a0d60a4a52f4f87c7121cbb1f24d846c8a7fb2f999c1bc69a",
+      "problems": [],
+      "source": "https://github.com/NDLANO/h5p-editor-advanced-blanks/tree/270b587c88a2275e899cbeedcc616b7bde5a12e7",
+      "repository": "https://github.com/NDLANO/h5p-editor-advanced-blanks",
+      "commit": "270b587c88a2275e899cbeedcc616b7bde5a12e7",
+      "archiveSha256": "6d611cdb53bb0b0d288390522858fa75f491b8f5f0d97ad67ea9fc7569534a5d",
+      "releaseStatus": "pinned source snapshot; no upstream release tag",
+      "build": {
+        "node": "22.22.3",
+        "lockSha256": "39ed649ceb9a2f73d7ba993a452dab547367556b194d385b5e62f6f1ecd46e98",
+        "install": "npm ci --ignore-scripts --no-audit --no-fund",
+        "compile": "npm run build"
+      }
+    }
+  }
+}

@@ -22,6 +22,7 @@ import { isMaterialReady } from '../utils/generationReadiness.js';
 import { studioMediaPaths, validateStudioMediaTemplate } from '../services/h5pStudioSemantics.js';
 import llmService from '../services/llmService.js';
 import studioJobs, { serializeStudioJob } from '../services/studioGenerationJobs.js';
+import { saveManualVersion } from '../services/authoring/artifactVersionService.js';
 import {
   getEditor,
   getH5PExpressRouter,
@@ -125,7 +126,7 @@ async function removeImportedContentOnFailure(contentId) {
 
 router.use(authenticateToken);
 
-router.get('/ai/catalog', (_req, res) => successResponse(res, { types: getStudioCatalog().types }));
+router.get('/ai/catalog', (_req, res) => successResponse(res, { types: getStudioCatalog().types.filter(type => type.mode !== 'manual') }));
 
 const aiLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, max: 10,
@@ -478,6 +479,16 @@ router.patch('/contents/:contentId', asyncHandler(async (req, res) => {
     return errorResponse(res, 'The H5P editor is still starting.', 'H5P_EDITOR_NOT_READY', HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
 
+  if (record.authoringSessionId) {
+    try {
+      const saved = await saveManualVersion(record, normalized, req.user);
+      return successResponse(res, buildLumiSaveResult(saved.result, saved.record), 'New activity version saved');
+    } catch (error) {
+      return errorResponse(res, error.status ? error.message : 'The new version could not be saved. Return to the AI workspace to check its status.',
+        error.status ? error.code || 'AUTHORING_CONFLICT' : 'AUTHORING_SAVE_FAILED', error.status || 500);
+    }
+  }
+
   const result = await editor.saveOrUpdateContentReturnMetaData(
     req.params.contentId,
     normalized.parameters,
@@ -617,6 +628,7 @@ router.get('/contents/:contentId/download', asyncHandler(async (req, res) => {
 router.delete('/contents/:contentId', asyncHandler(async (req, res) => {
   const record = await getOwnedContent(req.params.contentId, req.user.id);
   if (!record) return notFoundResponse(res, 'H5P content');
+  if (record.authoringSessionId) return errorResponse(res, 'This activity belongs to saved version history and cannot be deleted independently.', 'AUTHORING_VERSION_PROTECTED', 409);
 
   const editor = getEditor();
   if (!editor) {

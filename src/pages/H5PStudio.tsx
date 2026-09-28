@@ -26,6 +26,7 @@ import { useSystemDialog } from '../components/system-dialog/SystemDialogProvide
 import StudioAIComposer from '../components/h5p/StudioAIComposer';
 import StudioAssistant from '../components/h5p/StudioAssistant';
 import StudioPreview from '../components/h5p/StudioPreview';
+import AuthoringWorkspace from '../components/h5p/authoring/AuthoringWorkspace';
 import '../styles/pages/H5PStudio.css';
 
 function formatStudioTimestamp(value: string) {
@@ -96,6 +97,8 @@ const H5PStudio = () => {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [showPreview, setShowPreview] = useState(searchParams.get('view') === 'preview');
+  const [showAuthoring, setShowAuthoring] = useState(searchParams.get('create') === 'workspace');
+  const [authoringSessionId, setAuthoringSessionId] = useState(searchParams.get('authoringSession') || '');
   const [showAI, setShowAI] = useState(searchParams.get('create') === 'ai' || (searchParams.get('create') === 'assistant' && !searchParams.get('assistantSession')));
   const [showAssistant, setShowAssistant] = useState(searchParams.get('create') === 'assistant' && !!searchParams.get('assistantSession'));
   const [assistantVisited, setAssistantVisited] = useState(searchParams.get('create') === 'assistant' && !!searchParams.get('assistantSession'));
@@ -111,6 +114,12 @@ const H5PStudio = () => {
   const { showConfirm } = useSystemDialog();
 
   const openAIMode = () => {
+    setShowAuthoring(true); setShowAI(false); setShowAssistant(false);
+    setSearchParams({ create: 'workspace', ...(authoringSessionId ? { authoringSession: authoringSessionId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}) });
+  };
+
+  const openAdvancedAIMode = () => {
+    setShowAuthoring(false);
     setShowAssistant(false); setShowAI(true); setQuickVisited(true);
     setSearchParams({ create: 'ai', ...(assistantSessionId ? { assistantSession: assistantSessionId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}) });
   };
@@ -125,7 +134,7 @@ const H5PStudio = () => {
     lastSaveWasUnchanged.current = false;
     setEditorDirty(selectedContentId === 'new');
     return () => { editorLoadVersion.current++; };
-  }, [selectedContentId, editorAttempt, showAI, showAssistant]);
+  }, [selectedContentId, editorAttempt, showAI, showAssistant, showAuthoring]);
 
   const handleEditorLoaded = async () => {
     const version = editorLoadVersion.current;
@@ -139,13 +148,13 @@ const H5PStudio = () => {
   useEffect(() => {
     let active = true;
     setSourceStatus(null);
-    if (selectedContentId !== 'new' && !showAI && !showAssistant) {
+    if (selectedContentId !== 'new' && !showAI && !showAssistant && !showAuthoring) {
       h5pEditorApi.getSourceStatus(selectedContentId).then(response => {
         if (active) setSourceStatus(response.data?.source || null);
       }).catch(() => { /* The editor remains available when source metadata cannot load. */ });
     }
     return () => { active = false; };
-  }, [selectedContentId, showAI, showAssistant]);
+  }, [selectedContentId, showAI, showAssistant, showAuthoring]);
 
   const loadContents = useCallback(async () => {
     try {
@@ -163,6 +172,7 @@ const H5PStudio = () => {
   }, [loadContents]);
 
   const selectContent = (contentId: string, forceReload = false) => {
+    setShowAuthoring(false);
     setShowAI(false);
     setShowAssistant(false);
     // Clicking the already-selected item must not reset the loading flags. The
@@ -284,7 +294,7 @@ const H5PStudio = () => {
     const unchanged = lastSaveWasUnchanged.current;
     lastSaveWasUnchanged.current = false;
     setSelectedContentId(contentId);
-    setSearchParams({ contentId, ...(assistantSessionId ? { assistantSession: assistantSessionId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}) });
+    setSearchParams({ contentId, ...(authoringSessionId ? { authoringSession: authoringSessionId } : {}), ...(assistantSessionId ? { assistantSession: assistantSessionId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}) });
     if (unchanged) return;
     await loadContents();
     showNotification('success', 'Changes saved', 'Your updated H5P content is ready to preview or download.');
@@ -325,14 +335,16 @@ const H5PStudio = () => {
   const handleDownload = async () => {
     if (!selectedContent || selectedContentId === 'new') return;
     try {
+      let downloadId = selectedContentId;
       if (!showPreview) {
         if (!editorReady || saving) return;
         setSaving(true);
         const result = await editorRef.current?.save();
         setSaving(false);
         if (!result?.contentId) return;
+        downloadId = result.contentId;
       }
-      const blob = await h5pEditorApi.downloadContent(selectedContentId);
+      const blob = await h5pEditorApi.downloadContent(downloadId);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -394,8 +406,15 @@ const H5PStudio = () => {
         </div>
       </header>
 
+      {showAuthoring && <AuthoringWorkspace key={ownerId} ownerId={ownerId} sessionId={authoringSessionId || undefined}
+        initialCourseId={sourceCourseId} initialQuizId={sourceQuizId} onAdvanced={openAdvancedAIMode}
+        onSessionChange={id => { setAuthoringSessionId(id || ''); setSearchParams({ create: 'workspace', ...(id ? { authoringSession: id } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}) }); }}
+        onOpenActivity={(contentId, preview) => { selectContent(contentId); setShowPreview(preview);
+          setSearchParams({ contentId, ...(preview ? { view: 'preview' } : {}), ...(authoringSessionId ? { authoringSession: authoringSessionId } : {}) }); void loadContents(); }} />}
+      {!showAuthoring && authoringSessionId && <button className="btn btn-ghost" onClick={openAIMode}>Return to AI workspace</button>}
+
       {showAI && sourceQuizId && sourceCourseId && <Link className="studio-back-link" to={`/course/${encodeURIComponent(sourceCourseId)}/quiz/${encodeURIComponent(sourceQuizId)}?tab=generation`}>Back to source Quiz</Link>}
-      {!showAI && !showAssistant && selectedContent && <div className="studio-ai-guidance" role="status">
+      {!showAuthoring && !showAI && !showAssistant && selectedContent && <div className="studio-ai-guidance" role="status">
         <strong>Independent Studio draft</strong>
         <p>Edits here affect only this H5P activity. They do not update Quiz questions, learning objectives or other drafts.</p>
         {sourceStatus?.state === 'changed' && <p>The source Quiz has changed since this draft was created. Your Studio edits are preserved; create a new draft if you want the latest Quiz content.</p>}
@@ -434,7 +453,7 @@ const H5PStudio = () => {
           }} />)}
         </div>
       </section>}
-      {!showAssistant && !showAI && (
+      {!showAuthoring && !showAssistant && !showAI && (
 
       <div className={`h5p-studio-workspace${showPreview ? ' is-preview' : ''}`}>
         <aside className="h5p-studio-library" aria-label="Your H5P content">

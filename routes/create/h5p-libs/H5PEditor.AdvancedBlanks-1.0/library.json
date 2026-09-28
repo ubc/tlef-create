@@ -1,0 +1,23 @@
+{
+  "title": "H5PEditor.AdvancedBlanks",
+  "majorVersion": 1,
+  "minorVersion": 0,
+  "patchVersion": 0,
+  "runnable": 0,
+  "machineName": "H5PEditor.AdvancedBlanks",
+  "coreApi": {
+    "majorVersion": 1,
+    "minorVersion": 28
+  },
+  "author": "NDLA, Oliver Tacke",
+  "preloadedJs": [
+    {
+      "path": "dist/h5p-editor-advanced-blanks.js"
+    }
+  ],
+  "preloadedCss": [
+    {
+      "path": "dist/h5p-editor-advanced-blanks.css"
+    }
+  ]
+}

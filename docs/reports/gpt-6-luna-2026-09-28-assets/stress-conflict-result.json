@@ -1,0 +1,157 @@
+{
+  "model": "gpt-6-luna",
+  "startedAt": "2026-09-28T18:28:32.416Z",
+  "passed": true,
+  "courseId": "6abab1d068d88a46685507c3",
+  "taskId": "529cc33bb2f23b8f88dbe789",
+  "planningStatus": "awaiting_approval",
+  "objectives": [
+    "Students will be able to compare the infiltration rates reported by Studies A and B for East Lawn on 15 September 2025 without treating either rate as confirmed.",
+    "Students will be able to explain why the difference between the two reported rates prevents a confident conclusion about East Lawn's infiltration rate.",
+    "Students will be able to distinguish possible explanations for the conflicting measurements from causes established by the available evidence.",
+    "Students will be able to identify records and checks that could help evaluate how the two reported rates were obtained.",
+    "Students will be able to recommend a retesting approach that could help determine whether the discrepancy persists.",
+    "Students will be able to explain how the unresolved infiltration measurements should affect a decision to approve a rain-garden design."
+  ],
+  "plan": [
+    {
+      "id": "activity-1",
+      "title": "Interpreting the East Lawn discrepancy",
+      "questionType": "multiple-choice",
+      "count": 1,
+      "objectiveIds": [
+        "6abab1f468d88a4668550a5c"
+      ],
+      "instructions": "Create one first-year multiple-choice question using both East Lawn Study A and East Lawn Study B. The reports give conflicting preliminary field-test rates for the same place and date: Study A reports 50 mm/hour and Study B reports 5 mm/hour for East Lawn on 15 September 2025. Ask what this discrepancy means for drawing a confident conclusion about East Lawn’s infiltration rate. Make clear that neither reported rate is confirmed; do not treat either as settled fact. The correct answer should recognize that the disagreement prevents a confident conclusion until the measurements are reconciled. Include plausible distractors that incorrectly accept one report as definitive or dismiss the discrepancy without evidence. Explain the uncertainty in feedback and cite both sources by name: East Lawn Study A and East Lawn Study B.",
+      "difficulty": "moderate"
+    },
+    {
+      "id": "activity-2",
+      "title": "Evidence and retesting for East Lawn",
+      "questionType": "multiple-choice",
+      "count": 1,
+      "objectiveIds": [
+        "6abab1f468d88a4668550a65"
+      ],
+      "instructions": "Create one first-year multiple-choice question using both East Lawn Study A and East Lawn Study B. They report conflicting preliminary field-test rates of 50 and 5 mm/hour for East Lawn on 15 September 2025. Ask which next step would best help determine whether the discrepancy persists. The correct answer should recommend checking relevant field-test records and methods and conducting a suitably consistent retest, without assuming either reported rate is correct. Include plausible distractors that choose one rate as established or propose a conclusion without additional evidence. Explain why the evidence or retesting is needed, state that both measurements remain unresolved, and cite both sources by name: East Lawn Study A and East Lawn Study B.",
+      "difficulty": "moderate"
+    }
+  ],
+  "finalStatus": "ready",
+  "finalError": "",
+  "generation": {
+    "jobId": "6abab1f668d88a4668550b73",
+    "requestId": "asst-q-6abab1d368d88a466855084e-2",
+    "quizId": "6abab1d368d88a466855084f",
+    "sessionId": "527951bb-9734-4d02-990c-6fa54908e9cb",
+    "mode": "append",
+    "status": "succeeded",
+    "abandoned": false,
+    "totalQuestions": 2,
+    "completedQuestions": 2,
+    "failedQuestions": 0,
+    "questionIds": [
+      "6abab1f668d88a4668550b71",
+      "6abab1f668d88a4668550b72"
+    ],
+    "items": [
+      {
+        "index": 0,
+        "questionId": "question-1",
+        "status": "ready",
+        "savedQuestionId": "6abab1f668d88a4668550b71"
+      },
+      {
+        "index": 1,
+        "questionId": "question-2",
+        "status": "ready",
+        "savedQuestionId": "6abab1f668d88a4668550b72"
+      }
+    ],
+    "message": "All questions were saved successfully.",
+    "createdAt": "2026-09-28T18:29:10.558Z",
+    "updatedAt": "2026-09-28T18:29:42.534Z",
+    "readyCount": 2
+  },
+  "assistantErrorCode": "",
+  "questions": [
+    {
+      "id": "6abab1f668d88a4668550b71",
+      "index": 1,
+      "type": "multiple-choice",
+      "text": "East Lawn Study A reports 50 mm/hour and East Lawn Study B reports 5 mm/hour for field tests at the same place and date, 15 September 2025. Both results are preliminary. What does their disagreement mean for drawing a confident conclusion about East Lawn’s infiltration rate?",
+      "explanation": "East Lawn Study A reports a preliminary field-test rate of 50 mm/hour, while East Lawn Study B reports 5 mm/hour for the same place and date. Neither rate is confirmed. Because the reports conflict, the discrepancy must be reconciled before you can draw a confident conclusion about East Lawn’s infiltration rate.",
+      "sourceReferences": [
+        {
+          "materialId": "6abab1d168d88a46685507f7",
+          "materialName": "east-lawn-study-b",
+          "sourceFile": "east-lawn-study-b.pdf",
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "pageStart": 1,
+          "pageEnd": 1,
+          "excerpt": "East Lawn Study B\n\nStudy B reports an infiltration rate of 5 millimetres per hour at East Lawn on 15 September 2025,\nbased on a field test.\n\nThis conflicts with Study A at the same location and date. The discrepancy may reflect method or\nmeasurement error; both reports need reconciliation.",
+          "relevanceScore": 0.64154285,
+          "section": "Introduction",
+          "_id": "6abab20568d88a4668550e19",
+          "id": "6abab20568d88a4668550e19"
+        },
+        {
+          "materialId": "6abab1d168d88a46685507e3",
+          "materialName": "east-lawn-study-a",
+          "sourceFile": "east-lawn-study-a.pdf",
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "pageStart": 1,
+          "pageEnd": 1,
+          "excerpt": "East Lawn Study A\n\nStudy A reports an infiltration rate of 50 millimetres per hour at East Lawn on 15 September 2025,\nbased on a field test.\n\nThis suggests East Lawn may accept runoff quickly. The result is preliminary and should be checked\nbefore a rain-garden design is approved.",
+          "relevanceScore": 0.55474854,
+          "section": "Introduction",
+          "_id": "6abab20568d88a4668550e1a",
+          "id": "6abab20568d88a4668550e1a"
+        }
+      ]
+    },
+    {
+      "id": "6abab1f668d88a4668550b72",
+      "index": 2,
+      "type": "multiple-choice",
+      "text": "A rain-garden team is preparing to revisit East Lawn after finding that East Lawn Study A and East Lawn Study B give different preliminary infiltration rates for 15 September 2025. Which follow-up plan would best test whether the disagreement persists?",
+      "explanation": "East Lawn Study A reports 50 mm/hour, while East Lawn Study B reports 5 mm/hour for a field test at the same location and date, 15 September 2025. Both measurements remain unresolved. Reviewing the field-test records and methods may help clarify the discrepancy; a suitably consistent, documented retest can provide comparable evidence about whether it persists. Neither reported rate is established by the supplied evidence, and averaging the values would not resolve why the reports differ.",
+      "sourceReferences": [
+        {
+          "materialId": "6abab1d168d88a46685507f7",
+          "materialName": "east-lawn-study-b",
+          "sourceFile": "east-lawn-study-b.pdf",
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "pageStart": 1,
+          "pageEnd": 1,
+          "excerpt": "East Lawn Study B\n\nStudy B reports an infiltration rate of 5 millimetres per hour at East Lawn on 15 September 2025,\nbased on a field test.\n\nThis conflicts with Study A at the same location and date. The discrepancy may reflect method or\nmeasurement error; both reports need reconciliation.",
+          "relevanceScore": 0.54068834,
+          "section": "Introduction",
+          "_id": "6abab21668d88a4668551105",
+          "id": "6abab21668d88a4668551105"
+        },
+        {
+          "materialId": "6abab1d168d88a46685507e3",
+          "materialName": "east-lawn-study-a",
+          "sourceFile": "east-lawn-study-a.pdf",
+          "chunkIndex": 0,
+          "pageNumber": 1,
+          "pageStart": 1,
+          "pageEnd": 1,
+          "excerpt": "East Lawn Study A\n\nStudy A reports an infiltration rate of 50 millimetres per hour at East Lawn on 15 September 2025,\nbased on a field test.\n\nThis suggests East Lawn may accept runoff quickly. The result is preliminary and should be checked\nbefore a rain-garden design is approved.",
+          "relevanceScore": 0.4645511,
+          "section": "Introduction",
+          "_id": "6abab21668d88a4668551106",
+          "id": "6abab21668d88a4668551106"
+        }
+      ]
+    }
+  ],
+  "mentionsUncertainty": true,
+  "mentionsBothRates": true,
+  "citedMaterialCount": 2,
+  "finishedAt": "2026-09-28T18:29:50.456Z"
+}

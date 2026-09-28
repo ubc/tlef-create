@@ -803,7 +803,7 @@ export const materialsApi = {
   // POST /api/create/materials/upload - Upload files (PDF, DOCX)
   uploadFiles: async (
     folderId: string,
-    files: FileList,
+    files: FileList | File[],
     onProgress?: (progress: number) => void
   ): Promise<{ materials: Material[] }> => {
     const formData = new FormData();
@@ -1240,9 +1240,10 @@ export interface QuestionGenerationJob {
   status: 'running' | 'committing' | 'succeeded' | 'failed' | 'interrupted' | 'conflict';
   totalQuestions: number;
   completedQuestions: number;
+  reusedQuestions?: number;
   failedQuestions: number;
   questionIds: string[];
-  items: Array<{ index: number; questionId: string; status: 'queued' | 'generating' | 'ready' | 'failed'; savedQuestionId?: string; code?: string; message?: string }>;
+  items: Array<{ index: number; questionId: string; status: 'queued' | 'generating' | 'ready' | 'failed'; savedQuestionId?: string; code?: string; reason?: string; message?: string }>;
   message?: string;
   createdAt: string;
   updatedAt: string;
@@ -1569,7 +1570,7 @@ export interface H5PStudioActivityType {
   title: string;
   version: string;
   category: string;
-  mode: 'generate' | 'template' | 'unavailable';
+  mode: 'generate' | 'template' | 'manual' | 'unavailable';
   guidance: string;
   problems: string[];
   questionTypes?: Array<{ type: string; title: string; containers: string[] }>;
@@ -1641,8 +1642,9 @@ export interface StudioAssistantSession {
     sessionId?: string;
     status: string;
     readyCount: number;
+    reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string }>;
+    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string }>;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -1671,6 +1673,33 @@ export const studioAssistantApi = {
     apiClient.post(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/approve`, request),
   resume: (id: string, request: { revision: number; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
     apiClient.post(`/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/resume`, request),
+};
+
+export interface AuthoringVersion {
+  id: string; number: number; parentId: string | null; restoredFromId: string | null;
+  contentId: string; title: string; summary: string; changes: string[];
+  representation: 'course-linked' | 'native-fork'; state: 'candidate' | 'accepted' | 'rejected'; createdAt: string;
+  questions: Array<{ id: string; index: number; type: string; text: string; explanation?: string; sourceReferences: SourceReference[] }>;
+}
+export interface AuthoringSession {
+  id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
+  instructions: string; autoApprove: boolean; revision: number;
+  status: 'waiting_for_materials' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
+  error: string; currentVersionId: string | null; candidateVersionId: string | null;
+  messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; createdAt: string }>;
+  versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;
+  run: { id: string; status: string; checkpoint: string; error?: string } | null; updatedAt: string;
+}
+export const studioAuthoringApi = {
+  list: (): Promise<ApiResponse<{ sessions: Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>> }>> =>
+    apiClient.get('/h5p-editor/authoring/sessions'),
+  get: (id: string): Promise<ApiResponse<{ session: AuthoringSession }>> => apiClient.get(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}`),
+  create: (body: { requestId: string; courseId: string; quizId?: string; materialIds: string[]; instructions: string; autoApprove: boolean }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+    apiClient.post('/h5p-editor/authoring/sessions', body),
+  command: (id: string, command: 'message' | 'approve' | 'retry' | 'accept' | 'reject' | 'restore', body: { requestId: string; revision: number; text?: string; versionId?: string; planRevision?: number }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+    apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/${command}`, body),
+  cancel: (id: string, revision: number): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+    apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/cancel`, { revision }),
 };
 
 export const h5pEditorApi = {

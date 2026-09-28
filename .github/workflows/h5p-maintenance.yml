@@ -1,0 +1,168 @@
+name: CREATE H5P maintenance
+
+on:
+  schedule:
+    - cron: '17 16 * * 3'
+  workflow_dispatch:
+    inputs:
+      library:
+        description: 'Official machine name (e.g. H5P.MultiChoice). Empty = check all installed activities.'
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/h5p-maintenance.yml'
+      - 'scripts/h5p/**'
+      - 'tests/h5p-maintenance/**'
+      - 'routes/create/h5p-*/**'
+      - 'routes/create/config/h5p*'
+      - 'routes/create/services/h5p*'
+      - 'routes/create/services/lumiService.js'
+      - 'routes/create/__tests__/unit/h5p*'
+      - 'src/constants/questionTypeCapabilities*'
+      - 'e2e/h5p*'
+      - 'package.json'
+      - 'package-lock.json'
+
+# Artifacts only: no pushes, PR creation, production deployment or site registration.
+permissions:
+  contents: read
+
+concurrency:
+  group: h5p-maintenance-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests/h5p-maintenance -v
+      - run: python3 scripts/h5p/maintain.py inventory --verify-lock
+      - name: Publish inventory summary
+        if: always()
+        run: |
+          if [ -f artifacts/h5p-maintenance/inventory.md ]; then
+            cat artifacts/h5p-maintenance/inventory.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: h5p-inventory
+          path: artifacts/h5p-maintenance/
+          retention-days: 30
+
+  upstream:
+    needs: inventory
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.library == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/h5p/maintain.py check
+      - name: Publish update summary
+        if: always()
+        run: |
+          if [ -f artifacts/h5p-maintenance/updates.md ]; then
+            cat artifacts/h5p-maintenance/updates.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: h5p-upstream-report
+          path: artifacts/h5p-maintenance/
+          retention-days: 30
+
+  validate:
+    needs: inventory
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.library != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    env:
+      E2E_MONGODB_URI: mongodb://localhost:27017/create-h5p-e2e
+      H5P_STORAGE_ROOT: /tmp/create-h5p-unit-storage
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: npm
+      - run: npm ci
+      - name: Prepare selected official package
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          H5P_REQUESTED_LIBRARY: ${{ inputs.library }}
+        run: python3 scripts/h5p/maintain.py prepare --library "$H5P_REQUESTED_LIBRARY" --out artifacts/h5p-candidate
+      - name: Materialize candidate in ephemeral runner checkout
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python3 scripts/h5p/maintain.py apply --candidate artifacts/h5p-candidate --allow-worktree-write
+          git add --intent-to-add --force -- routes/create/h5p-libs routes/create/config/h5p-runtime-manifest.json routes/create/config/h5p-library-lock.json
+          git diff --binary -- routes/create/h5p-libs routes/create/config/h5p-runtime-manifest.json routes/create/config/h5p-library-lock.json > artifacts/h5p-candidate/candidate.patch
+      - name: Verify candidate lock
+        run: python3 scripts/h5p/maintain.py inventory --verify-lock --out artifacts/h5p-after
+      - name: H5P backend regression
+        id: backend
+        run: npm run test:h5p:backend
+      - name: Frontend compatibility regression
+        id: frontend
+        run: npx vitest run src/constants/questionTypeCapabilities.test.ts src/utils/h5pEditorReady.test.ts
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Native editor, player and package round trips
+        id: browser
+        run: npx playwright test e2e/h5p-type-matrix.spec.ts --project=chromium
+      - name: Record acceptance outcome
+        if: always()
+        env:
+          BACKEND_OUTCOME: ${{ steps.backend.outcome }}
+          FRONTEND_OUTCOME: ${{ steps.frontend.outcome }}
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = {k: os.environ[k] for k in ('BACKEND_OUTCOME', 'FRONTEND_OUTCOME', 'BROWSER_OUTCOME')}
+          result['automatedChecksPassed'] = all(v == 'success' for v in result.values())
+          result['releaseApproval'] = False
+          result['remainingAcceptance'] = ['independent WordPress/UBC import and playback', 'affected existing content migration review', 'accessibility and pedagogical review']
+          result['commit'] = os.environ['GITHUB_SHA']
+          result['run'] = os.environ['GITHUB_RUN_ID']
+          target = Path('artifacts/h5p-acceptance.json')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_text(json.dumps(result, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## H5P acceptance\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: h5p-candidate-and-acceptance
+          path: |
+            artifacts/h5p-candidate/
+            artifacts/h5p-after/
+            artifacts/h5p-acceptance.json
+            playwright-report/
+            test-results/
+          retention-days: 30

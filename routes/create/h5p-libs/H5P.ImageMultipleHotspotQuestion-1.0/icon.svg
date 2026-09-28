@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Find Multiple Hotspots">
+  <rect x="6" y="10" width="84" height="76" rx="13" fill="#e8f3fa"/>
+  <rect x="12" y="17" width="72" height="61" rx="8" fill="#fff"/>
+  <path d="M18 67 37 44l12 12 13-20 16 31Z" fill="#84c593"/>
+  <circle cx="67" cy="31" r="7" fill="#f9c76e"/>
+  <g fill="#fff" stroke="#287cb4" stroke-width="3.5"><circle cx="31" cy="57" r="8"/><circle cx="60" cy="58" r="8"/><circle cx="64" cy="36" r="8"/></g>
+  <g fill="#287cb4"><circle cx="31" cy="57" r="2"/><circle cx="60" cy="58" r="2"/><circle cx="64" cy="36" r="2"/></g>
+</svg>

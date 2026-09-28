@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "source": "https://h5p.org/content-types-and-applications",
+  "observedOn": "2026-09-28",
+  "scope": "54 public showcase content types, including three featured types; not 54 AI question types or an H5P.com feature mirror.",
+  "types": [
+    {
+      "machineName": "H5P.Accordion",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.AdventCalendar",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.Agamotto",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ARScavenger",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.ArithmeticQuiz",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.AudioRecorder",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Chart",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Collage",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Cornell",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.Crossword",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Dialogcards",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Dictation",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.DocumentationTool",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.DragQuestion",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.DragText",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Essay",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Blanks",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ImageMultipleHotspotQuestion",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.ImageHotspotQuestion",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.FindTheWords",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.Flashcards",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.GameMap",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.GuessTheAnswer",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.IFrameEmbed",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ImageHotspots",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ImageJuxtaposition",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.ImagePair",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.ImageSequencing",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.ImageSlider",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ImpressPresentation",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.InfoWall",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.InteractiveBook",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.KewArCode",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.MarkTheWords",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.MemoryGame",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.MultiMediaChoice",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.MultiChoice",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Column",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.PersonalityQuiz",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.Questionnaire",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.QuestionSet",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.SingleChoiceSet",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.SortParagraphs",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.SpeakTheWords",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.SpeakTheWordsSet",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.StructureStrip",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.Summary",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.Timeline",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.TrueFalse",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.ThreeImage",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.AdvancedBlanks",
+      "editorOnly": true
+    },
+    {
+      "machineName": "H5P.InteractiveVideo",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.CoursePresentation",
+      "editorOnly": false
+    },
+    {
+      "machineName": "H5P.BranchingScenario",
+      "editorOnly": false
+    }
+  ]
+}

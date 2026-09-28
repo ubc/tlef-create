@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, jest, test } from '@jest/globals';
-import { getEditor, initializeLumi, renderPlayerPage } from '../../services/lumiService.js';
+import { getEditor, initializeLumi, renderPlayerPage, rewriteLtiAssetUrls } from '../../services/lumiService.js';
 import vm from 'node:vm';
 import { H5P_CORE_API, H5P_RUNTIME_REVISION, H5P_CORE_STYLES } from '../../config/h5pRuntime.js';
 
@@ -152,4 +152,15 @@ describe('H5P Studio runtime assets', () => {
     expect(ns.LibrarySelector.prototype.getParams.call({ form })).toBe(form.params);
   });
 
+});
+
+test('Canvas player assets use the public runtime origin, not authenticated Studio paths', () => {
+  const html = renderPlayerPage({contentId:'123', styles:['/api/create/h5p-editor/runtime/libraries/Test-1.0/style.css'],
+    scripts:['/api/create/h5p-editor/runtime/core/js/jquery.js'],
+    integration:{baseUrl:'/api/create/h5p-editor/runtime',contents:{'cid-123':{contentUrl:'/api/create/h5p-editor/runtime/content/123'}}}});
+  const result = rewriteLtiAssetUrls(html,'http://localhost:8051/');
+  expect(result).not.toContain('/h5p-editor/runtime');
+  expect(result).toContain('http://localhost:8051/api/create/h5p/core/js/jquery.js');
+  expect(result).toContain('http://localhost:8051/api/create/h5p/libraries/Test-1.0/style.css');
+  expect(result).toContain('http://localhost:8051/api/create/h5p/content/123');
 });

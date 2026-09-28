@@ -8,6 +8,8 @@ const itemSchema = new mongoose.Schema({
   savedQuestionId: { type: mongoose.Schema.Types.ObjectId, required: true },
   status: { type: String, enum: ['queued', 'generating', 'ready', 'failed'], default: 'queued' },
   code: String,
+  reason: { type: String, maxlength: 80 },
+  reused: { type: Boolean, default: false },
   message: String
 }, { _id: false });
 
@@ -16,6 +18,7 @@ const schema = new mongoose.Schema({
   quiz: { type: mongoose.Schema.Types.ObjectId, required: true },
   requestId: { type: String, required: true, maxlength: 80 },
   requestHash: { type: String, required: true },
+  retryFromRequestId: String,
   sessionId: { type: String, required: true },
   mode: { type: String, enum: ['append', 'replace'], required: true },
   status: { type: String, enum: ['running', 'committing', 'succeeded', 'failed', 'interrupted', 'conflict'], required: true },
