@@ -160,7 +160,7 @@ class SSEService extends EventEmitter {
   }
 
   /**
-   * Stream LLM text chunks (流式响应)
+   * Stream LLM text chunks
    */
   streamTextChunk(sessionId, questionId, textChunk, metadata = {}) {
     return this.sendToClient(sessionId, 'text-chunk', {

@@ -18,39 +18,39 @@ const systemPromptTemplateSchema = new mongoose.Schema({
     default: true
   },
 
-  // 外层 prompt - 控制输出格式，不可由用户编辑
+  // Outer prompt controls output format and cannot be edited by users.
   outerPrompt: {
     type: String,
     required: true
   },
 
-  // 内层 prompt - 用户可编辑的策略部分
+  // Inner prompt contains the user-editable strategy.
   innerPrompt: {
     type: String,
     required: true
   },
 
-  // 问题类型规则
+  // Question type rules
   questionTypeRules: {
     allowedTypes: [{
       type: String,
       enum: ['multiple-choice', 'true-false', 'flashcard', 'guess-the-answer', 'summary', 'discussion', 'matching', 'ordering', 'cloze', 'mark-the-words', 'single-choice-set', 'essay', 'question-set', 'free-text', 'open-ended', 'simple-multi-choice', 'sort-paragraphs', 'crossword', 'dictation', 'arithmetic-quiz', 'branching-scenario', 'documentation-tool']
     }],
 
-    // 建议的分布比例
+    // Recommended distribution
     distribution: {
       type: Map,
       of: Number
     },
 
-    // 每个 LO 的最大数量限制
+    // Maximum count per learning objective
     maxPerLO: {
       type: Map,
       of: Number
     }
   },
 
-  // 描述和帮助文本
+  // Description and help text
   description: {
     type: String
   },
@@ -63,7 +63,7 @@ const systemPromptTemplateSchema = new mongoose.Schema({
   collection: 'system_prompt_templates'
 });
 
-// 索引
+// Index
 systemPromptTemplateSchema.index({ approach: 1, isActive: 1 });
 
 export default mongoose.model('SystemPromptTemplate', systemPromptTemplateSchema);

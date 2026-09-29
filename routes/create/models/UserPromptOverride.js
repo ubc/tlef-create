@@ -13,7 +13,7 @@ const userPromptOverrideSchema = new mongoose.Schema({
     required: true
   },
 
-  // 用户自定义的内层 prompt
+  // User-defined inner prompt
   customInnerPrompt: {
     type: String,
     required: true
@@ -24,7 +24,7 @@ const userPromptOverrideSchema = new mongoose.Schema({
     default: true
   },
 
-  // 用户可以选择覆盖问题类型规则
+  // Users may override question type rules.
   customQuestionTypeRules: {
     allowedTypes: [{
       type: String
@@ -39,7 +39,7 @@ const userPromptOverrideSchema = new mongoose.Schema({
     }
   },
 
-  // 使用次数统计
+  // Usage count
   usageCount: {
     type: Number,
     default: 0
@@ -53,7 +53,7 @@ const userPromptOverrideSchema = new mongoose.Schema({
   collection: 'user_prompt_overrides'
 });
 
-// 复合索引
+// Compound index
 userPromptOverrideSchema.index({ user: 1, approach: 1, isActive: 1 });
 
 export default mongoose.model('UserPromptOverride', userPromptOverrideSchema);
