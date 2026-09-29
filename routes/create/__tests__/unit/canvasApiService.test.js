@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, afterEach, afterAll, expect, jest, test } from '@jest/globals';
+import { canvas } from '@ubc/ubc-genai-toolkit-lms-integration';
 import CanvasToken from '../../models/CanvasToken.js';
 
 const environment = Object.fromEntries(['CANVAS_DOMAIN', 'CANVAS_CLIENT_ID', 'CANVAS_CLIENT_SECRET', 'LTI_CLIENT_ID'].map(key => [key, process.env[key]]));
@@ -39,6 +40,15 @@ test('finds an installed LTI tool beyond the first page without installing a dup
   global.fetch.mockResolvedValueOnce(json([], { Link: '<https://canvas.example.edu/api/v1/courses/7/external_tools?page=2>; rel="next"' })).mockResolvedValueOnce(json([{ id: 9, developer_key_id: '10000000000002' }]));
   expect(await service.ensureLtiToolInstalled('owner', '7')).toBe(9);
   expect(global.fetch.mock.calls.every(([, req]) => req.method === 'GET')).toBe(true);
+});
+test('reports a missing Canvas LTI installation without hiding upstream failures', async () => {
+  global.fetch.mockResolvedValueOnce(json([])).mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ message: 'Invalid client ID' }] }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+  await expect(service.ensureLtiToolInstalled('owner', '7')).rejects.toMatchObject({ code: 'CANVAS_LTI_TOOL_UNAVAILABLE' });
+
+  global.fetch.mockResolvedValueOnce(json([])).mockResolvedValueOnce(json([]))
+    .mockRejectedValueOnce(new canvas.CanvasApiError('Canvas unavailable', 503));
+  await expect(service.ensureLtiToolInstalled('owner', '7')).rejects.toMatchObject({ statusCode: 503 });
 });
 test('creates the existing LTI launch module item through the toolkit', async () => {
   global.fetch.mockResolvedValue(json({ id: 10 }));

@@ -145,8 +145,13 @@ export async function ensureLtiToolInstalled(userId, courseId) {
     console.log('✅ LTI tool auto-installed:', installed.id, installed.name);
     return installed.id;
   } catch (installErr) {
-    console.log('❌ Auto-install failed:', installErr.message);
-    throw new Error('LTI tool not found. Please install the TLEF-CREATE LTI tool in Canvas first (Settings → Apps → +App → By Client ID).');
+    console.warn('Canvas LTI tool auto-install failed:', installErr.code || installErr.statusCode || installErr.name);
+    if (installErr instanceof canvas.CanvasApiError && [400, 404].includes(installErr.statusCode)) {
+      const error = new Error('CREATE LTI tool is unavailable in this Canvas course');
+      error.code = 'CANVAS_LTI_TOOL_UNAVAILABLE';
+      throw error;
+    }
+    throw installErr;
   }
 }
 

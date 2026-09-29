@@ -3,6 +3,7 @@ import { rewriteLtiAssetUrls, renderContent } from './lumiService.js';
 import Quiz from '../models/Quiz.js';
 import { addCanvasResizeBridge } from './canvasPlayerPage.js';
 import { canvasBaseUrl } from './canvasToolkitConnection.js';
+import { canvasLtiPlatformConfig } from './canvasLtiPlatformConfig.js';
 import { submitScore } from './gradePassbackService.js';
 import { renderMixedActivityPreview, renderNativeH5PPreview } from './h5pNativePreviewService.js';
 import { buildMixedActivityItemDocument } from './mixedActivityService.js';
@@ -192,7 +193,6 @@ export async function startLtiServer() {
  * Register Canvas as an LTI platform
  */
 async function registerCanvasPlatform() {
-  const canvasUrl = canvasBaseUrl();
   const clientId = process.env.LTI_CLIENT_ID;
 
   if (!clientId) {
@@ -201,8 +201,10 @@ async function registerCanvasPlatform() {
     return;
   }
 
+  const platformConfig = canvasLtiPlatformConfig(canvasBaseUrl(), clientId);
+
   try {
-    const existing = await lti.getPlatform(canvasUrl, clientId);
+    const existing = await lti.getPlatform(platformConfig.url, clientId);
     if (existing) {
       console.log('ℹ️  Canvas platform already registered');
       return;
@@ -211,17 +213,7 @@ async function registerCanvasPlatform() {
     // Not registered yet, continue
   }
 
-  await lti.registerPlatform({
-    url: canvasUrl,
-    name: 'Canvas LMS',
-    clientId,
-    authenticationEndpoint: `${canvasUrl}/api/lti/authorize_redirect`,
-    accesstokenEndpoint: `${canvasUrl}/login/oauth2/token`,
-    authConfig: {
-      method: 'JWK_SET',
-      key: `${canvasUrl}/api/lti/security/jwks`
-    }
-  });
+  await lti.registerPlatform(platformConfig);
 
   console.log('✅ Canvas platform registered for LTI 1.3');
 }

@@ -8,6 +8,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['Questions needing attention instruction mismatch incomplete option feedback review service unavailable', 'h5p-studio', 'Questions needing attention'],
     ['Create Course optional Canvas step Connect to Canvas sign-in window blocked pop-ups', 'review-and-export', 'Connecting Canvas when creating a course'],
     ['Connect Canvas UBC GenAI Toolkit reconnect authorization disconnect Developer Key permissions', 'review-and-export', 'Canvas export'],
+    ['Export to Canvas CREATE LTI tool unavailable public launch URL Internal server error', 'review-and-export', 'Canvas export'],
     ['Recovered unsaved edits View recovered content Copy draft Download draft Save as new question', 'review-and-export', 'Recovered unsaved edits'],
     ['Create with AI', 'h5p-studio', 'Create with AI'],
     ['One activity Question collection multiple question type cards Add course evidence', 'h5p-studio', 'Advanced types'],

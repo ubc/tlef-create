@@ -178,6 +178,10 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
     return errorResponse(res, 'Please connect to Canvas first', 'CANVAS_RECONNECT_REQUIRED', 409);
   }
 
+  if (!process.env.LTI_CLIENT_ID || (process.env.NODE_ENV === 'production' && !process.env.LTI_PUBLIC_URL)) {
+    return errorResponse(res, 'Canvas export requires a configured CREATE LTI tool and public launch URL. Ask the CREATE administrator to check the LTI setup.', 'CANVAS_LTI_NOT_CONFIGURED', 503);
+  }
+
   // Load quiz with questions
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id })
     .populate({
@@ -261,6 +265,9 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
 }));
 
 router.use((error, req, res, next) => {
+  if (error.code === 'CANVAS_LTI_TOOL_UNAVAILABLE') {
+    return errorResponse(res, 'The CREATE LTI tool is not available in this Canvas course. Ask a Canvas administrator to install it, then retry.', 'CANVAS_LTI_TOOL_UNAVAILABLE', 409);
+  }
   if (error.code === 'CANVAS_RECONNECT_REQUIRED' || (error instanceof canvas.CanvasApiError && error.statusCode === 401)) {
     // Canvas expiry must not log the instructor out of their CREATE session.
     return errorResponse(res, 'Please reconnect Canvas, then retry.', 'CANVAS_RECONNECT_REQUIRED', 409);

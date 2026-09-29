@@ -80,6 +80,8 @@ Use **Connect to Canvas** to authorize your Canvas account, then choose a course
 
 Canvas export opens the Canvas connection and destination workflow. It requires a valid Canvas connection and appropriate permissions. Canvas LTI supplies the secure Canvas launch, learner identity and grade-return boundary. CREATE's Mixed Activity player supplies the learner rendering. The course Preview runs without requiring Canvas. Canvas delivery uses its own launch path with LTI authentication and grade passback; check the deployed activity separately when comparing it with the course Preview. This is different from uploading a standard H5P package into Canvas.
 
+If Export to Canvas says the CREATE LTI tool is unavailable or its setup is incomplete, ask the CREATE or Canvas administrator to check the LTI Developer Key, install the tool in the selected course, and configure the public launch URL. Keep the selected course and module, then retry after the setup is corrected. A 500 Internal server error needs the CREATE server log from the time of the failed export; the message alone does not identify the failed step.
+
 ## If export fails
 
 Confirm the learning object contains questions, the selected types are compatible, and the Canvas connection is active when applicable. Retry once after saving recent edits. If the failure persists, report the target, format, export type, visible error, and the question type that was being exported.

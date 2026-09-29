@@ -20,6 +20,8 @@ jest.unstable_mockModule('../../services/mixedActivityService.js', () => ({ crea
 const { default: router } = await import('../../controllers/canvasController.js');
 let agent;
 let sessions;
+const originalLtiClientId = process.env.LTI_CLIENT_ID;
+const originalLtiPublicUrl = process.env.LTI_PUBLIC_URL;
 beforeEach(() => {
   jest.clearAllMocks(); hasValidToken.mockResolvedValue(true); currentUser = 'owner';
   sessions = new session.MemoryStore();
@@ -29,7 +31,13 @@ beforeEach(() => {
   app.use('/canvas', router);
   agent = request.agent(app);
 });
-afterEach(() => sessions.clear());
+afterEach(() => {
+  sessions.clear();
+  if (originalLtiClientId === undefined) delete process.env.LTI_CLIENT_ID;
+  else process.env.LTI_CLIENT_ID = originalLtiClientId;
+  if (originalLtiPublicUrl === undefined) delete process.env.LTI_PUBLIC_URL;
+  else process.env.LTI_PUBLIC_URL = originalLtiPublicUrl;
+});
 async function connect() {
   const response = await agent.get('/canvas/auth/connect').expect(200);
   return new URL(response.body.data.authUrl).searchParams.get('state');
@@ -74,4 +82,16 @@ test('export without a Canvas connection preserves the CREATE login', async () =
   hasValidToken.mockResolvedValueOnce(false);
   const response = await agent.post('/canvas/export/507f1f77bcf86cd799439011').send({ courseId: '2', moduleId: '8' }).expect(409);
   expect(response.body.error.code).toBe('CANVAS_RECONNECT_REQUIRED');
+});
+
+test('export reports missing LTI configuration before preparing content', async () => {
+  delete process.env.LTI_CLIENT_ID;
+  const response = await agent.post('/canvas/export/507f1f77bcf86cd799439011').send({ courseId: '2', moduleId: '8' }).expect(503);
+  expect(response.body.error.code).toBe('CANVAS_LTI_NOT_CONFIGURED');
+});
+
+test('Canvas routes report an unavailable LTI tool as a recoverable setup error', async () => {
+  listCourses.mockRejectedValueOnce(Object.assign(new Error('Canvas setup failure'), { code: 'CANVAS_LTI_TOOL_UNAVAILABLE' }));
+  const response = await agent.get('/canvas/courses').expect(409);
+  expect(response.body.error.code).toBe('CANVAS_LTI_TOOL_UNAVAILABLE');
 });
