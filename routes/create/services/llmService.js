@@ -11,6 +11,7 @@ import { GENERAL_SYSTEM_PROMPTS, LOCKED_PROMPT_GUARDRAILS } from './coursePrompt
 import { QUESTION_TYPES } from '../config/constants.js';
 import UserApiKey from '../models/UserApiKey.js';
 import User from '../models/User.js';
+import { isConfiguredAdmin } from '../utils/adminIdentity.js';
 import { normalizeGeneratedQuestionText } from '../utils/questionTextLimits.js';
 import { reviewQuestionFeedback } from './questionFeedbackReview.js';
 import { getQuestionTypeAvailability } from '../utils/questionTypeAvailability.js';
@@ -208,9 +209,7 @@ class QuizLLMService {
         const user = await User.findById(userId);
         if (!user) throw new Error('No user found');
 
-        const userIdentifiers = [user.cwlId, user.email, user.email?.split('@')[0]]
-          .filter(Boolean).map(s => s.toLowerCase());
-        const isAdmin = ADMIN_CWLS.some(a => userIdentifiers.includes(a.toLowerCase()));
+        const isAdmin = isConfiguredAdmin(user, ADMIN_CWLS);
 
         if (user.canUseEnvKey || isAdmin) return this.getEnvLLMConfig();
 

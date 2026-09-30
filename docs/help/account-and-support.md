@@ -52,3 +52,11 @@ Sign Out ends the authenticated session. If a session expires while CREATE is op
 ## Administrator content statistics
 
 The administrator's per-user course, learning-object and question counts describe currently saved content owned by that user. Deleted content is excluded; these are not lifetime generation totals. Refreshing the Admin page waits for your signed-in role to load before deciding whether you can access it. An expired session still requires sign-in.
+
+## Administrator user identity
+
+**Admin Dashboard → Overview → User Activity** shows each user's name, email, and **Login ID**. **Users & Courses**, **API Keys**, and the details in **Activity**, **Guide Insights**, and **Bug Reports** also show the saved identity. Users & Courses can search by name, email, Login ID, or released CWL username.
+
+Names and emails come from attributes released during CWL sign-in. Login ID is the stable account identifier (normally a UBC PUID), which remains visible for account matching. A released CWL username appears separately as **CWL**. If no name is available, CREATE shows the Login ID; missing email is labelled **Email unavailable**.
+
+Existing users should sign out and sign in through CWL again to refresh their saved name and email. Refreshing the Admin page alone does not fetch missing identity attributes. CREATE preserves previously saved details when a later login omits those attributes. If the details remain unavailable after a fresh sign-in, ask the deployment administrator to check which SAML attributes UBC releases to CREATE and contact UBC IAM about the CREATE service provider's attribute-release configuration. Auto-login accounts do not receive CWL profile attributes.

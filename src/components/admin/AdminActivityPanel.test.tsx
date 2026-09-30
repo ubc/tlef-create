@@ -16,7 +16,7 @@ describe('AdminActivityPanel', () => {
         actions: ['plan.generate_ai'],
         events: [{
           _id: 'event-1',
-          actor: { _id: 'user-1', cwlId: 'faculty-user' },
+          actor: { _id: 'user-1', cwlId: 'faculty-user', displayName: 'Professor Ada', email: 'ada@example.test' },
           action: 'plan.generate_ai',
           resourceType: 'plan',
           status: 'failed',
@@ -43,6 +43,7 @@ describe('AdminActivityPanel', () => {
 
     const eventButton = await screen.findByRole('button', { name: /plan\.generate_ai/i });
     expect(eventButton).toHaveAttribute('aria-expanded', 'false');
+    expect(eventButton).toHaveTextContent('Professor Ada');
     fireEvent.click(eventButton);
 
     expect(eventButton).toHaveAttribute('aria-expanded', 'true');
@@ -50,5 +51,7 @@ describe('AdminActivityPanel', () => {
     expect(screen.getByText('AI_OUTPUT_INCOMPLETE')).toBeInTheDocument();
     expect(screen.getByText('openai / gpt-5.4-nano')).toBeInTheDocument();
     expect(screen.getByText('request-123')).toBeInTheDocument();
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
+    expect(screen.getByText('Login ID: faculty-user')).toBeInTheDocument();
   });
 });

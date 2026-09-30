@@ -1,12 +1,9 @@
 import { useState } from 'react';
+import AdminUserIdentity from './AdminUserIdentity';
 import { BookOpen, ChevronRight, Eye, File, FileQuestion, Lock, Search, UserRound } from 'lucide-react';
-import { adminApi, AdminCourseDetail, AdminCourseSummary, AdminQuizDetail } from '../../services/api';
+import { adminApi, AdminCourseDetail, AdminCourseSummary, AdminQuizDetail, type AdminUserIdentity as UserIdentity } from '../../services/api';
 
-interface ManagedUser {
-  _id: string;
-  cwlId: string;
-  displayName?: string;
-  email?: string;
+interface ManagedUser extends UserIdentity {
   lastLogin?: string;
   createdAt?: string;
 }
@@ -60,7 +57,7 @@ const AdminUserExplorer = ({ users }: AdminUserExplorerProps) => {
     } finally { setLoading(false); }
   };
 
-  const filteredUsers = users.filter(user => `${user.cwlId} ${user.displayName || ''} ${user.email || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const filteredUsers = users.filter(user => `${user.cwlId} ${user.cwlUsername || ''} ${user.displayName || ''} ${user.email || ''}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="admin-explorer">
@@ -71,7 +68,7 @@ const AdminUserExplorer = ({ users }: AdminUserExplorerProps) => {
           {filteredUsers.map(user => (
             <button key={user._id} type="button" className={selectedUser?._id === user._id ? 'active' : ''} onClick={() => void selectUser(user)}>
               <span className="admin-user-avatar"><UserRound size={17} /></span>
-              <span><strong>{user.displayName || user.cwlId}</strong><small>{user.email || user.cwlId}</small></span>
+              <AdminUserIdentity user={user} />
               <ChevronRight size={15} />
             </button>
           ))}
@@ -86,7 +83,7 @@ const AdminUserExplorer = ({ users }: AdminUserExplorerProps) => {
 
         {selectedUser && !course && !loading && (
           <section className="admin-inspector-section">
-            <div className="admin-inspector-title"><div><span>Instructor</span><h2>{selectedUser.displayName || selectedUser.cwlId}</h2><p>{selectedUser.email || selectedUser.cwlId}</p></div><strong>{courses.length} courses</strong></div>
+            <div className="admin-inspector-title"><div><span>Instructor</span><h2>{selectedUser.displayName || selectedUser.cwlId}</h2><p>{selectedUser.email || 'Email unavailable'}</p><p>Login ID: {selectedUser.cwlId}{selectedUser.cwlUsername ? ` · CWL: ${selectedUser.cwlUsername}` : ''}</p></div><strong>{courses.length} courses</strong></div>
             <div className="admin-course-grid">
               {courses.map(item => (
                 <button key={item._id} type="button" onClick={() => void selectCourse(item._id)}>

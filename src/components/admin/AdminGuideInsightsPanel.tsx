@@ -1,3 +1,4 @@
+import AdminUserIdentity from './AdminUserIdentity';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Bot, MessageCircle, Search, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { adminApi, AdminGuideInteraction } from '../../services/api';
@@ -74,7 +75,7 @@ const AdminGuideInsightsPanel = () => {
             {interactions.map(interaction => (
               <details key={interaction._id} className="admin-conversation">
                 <summary>
-                  <div><strong>{interaction.question}</strong><span>{interaction.user?.cwlId || 'Unknown user'} · {new Date(interaction.createdAt).toLocaleString()}</span></div>
+                  <div><strong>{interaction.question}</strong><span>{interaction.user?.displayName || interaction.user?.email || interaction.user?.cwlId || 'Unknown user'} · {new Date(interaction.createdAt).toLocaleString()}</span></div>
                   <div className="admin-chip-row">
                     {interaction.rating?.value === 'helpful' && <span className="admin-chip success">Helpful</span>}
                     {interaction.rating?.value === 'not-helpful' && <span className="admin-chip danger">Not helpful</span>}
@@ -85,6 +86,7 @@ const AdminGuideInsightsPanel = () => {
                 <div className="admin-conversation-body">
                   <div className="admin-answer"><span>Answer</span><p>{interaction.answer || 'No answer was recorded.'}</p></div>
                   <dl className="admin-detail-grid">
+                    <div><dt>User</dt><dd><AdminUserIdentity user={interaction.user} /></dd></div>
                     <div><dt>Page</dt><dd>{interaction.context?.activeTab || interaction.context?.pageTitle || 'Unknown'}</dd></div>
                     <div><dt>Model</dt><dd>{interaction.model || 'Fallback only'}</dd></div>
                     <div><dt>Duration</dt><dd>{interaction.durationMs ? `${(interaction.durationMs / 1000).toFixed(1)}s` : '—'}</dd></div>

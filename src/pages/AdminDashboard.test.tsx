@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { configureStore } from '@reduxjs/toolkit';
 import { Provider } from 'react-redux';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -44,6 +44,31 @@ describe('admin profile hydration', () => {
     await waitFor(() => expect(api.getStats).toHaveBeenCalledOnce());
     expect(await screen.findByText('Current saved content per user. Deleted items are excluded.')).toBeInTheDocument();
     expect(screen.queryByText('Account destination')).not.toBeInTheDocument();
+  });
+
+  it('shows released names and email while retaining login IDs and missing-attribute fallbacks', async () => {
+    const named = { _id: 'p1', cwlId: 'PUID-123', cwlUsername: 'ada-cwl', displayName: 'Professor Ada', email: 'ada@example.test' };
+    const unnamed = { _id: 'p2', cwlId: 'PUID-456', displayName: null, email: null };
+    api.getStats.mockResolvedValue({ data: { platform: {}, users: [named, unnamed].map(identity => ({ ...identity, coursesCreated: 2, quizzesGenerated: 1, questionsCreated: 4 })) } });
+    api.getUsers.mockResolvedValue({ data: { users: [named, unnamed].map(identity => ({ ...identity, canUseEnvKey: false })) } });
+    api.getReports.mockResolvedValue({ data: { reports: [{ _id: 'report1', reporter: named, type: 'bug', status: 'open', description: 'Example issue', createdAt: '2026-09-30T12:00:00Z' }] } });
+    const store = renderAdmin();
+    act(() => store.dispatch(setUser(profile(true))));
+    const name = await screen.findByText('Professor Ada');
+    const row = within(name.closest('tr')!);
+    expect(row.getByText('ada@example.test')).toBeInTheDocument();
+    expect(row.getByText('Login ID: PUID-123')).toBeInTheDocument();
+    expect(row.getByText('CWL: ada-cwl')).toBeInTheDocument();
+    expect(screen.getByText('Login ID: PUID-456')).toBeInTheDocument();
+    expect(screen.getByText('Email unavailable')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'API Keys' }));
+    expect(screen.getByText('Professor Ada')).toBeInTheDocument();
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
+    expect(screen.getByText('Login ID: PUID-123')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Bug Reports/ }));
+    expect(screen.getByText('Professor Ada')).toBeInTheDocument();
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
   });
 
   it('redirects a resolved non-admin without requesting administrative data', async () => {

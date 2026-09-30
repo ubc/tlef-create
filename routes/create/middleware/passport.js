@@ -1,6 +1,8 @@
 import passport from 'passport';
 import { Strategy as SamlStrategy } from 'passport-saml';
 import User from '../models/User.js';
+import { createSamlVerify } from '../services/samlUserService.js';
+import { SAML_REQUESTED_ATTRIBUTES } from '../utils/samlIdentity.js';
 import dotenv from 'dotenv';
 import fs from 'fs';
 
@@ -63,51 +65,7 @@ if (process.env.NODE_ENV === 'development') {
     wantAssertionsSigned: true,
     wantAuthnResponseSigned: true,
     signatureAlgorithm: 'sha256'
-  }, async (profile, done) => {
-    try {
-      console.log('SAML Profile received:', JSON.stringify(profile, null, 2));
-
-      // Extract user information from SAML profile
-      const cwlId = profile.uid || profile.nameID;
-
-      if (!cwlId) {
-        return done(new Error('No CWL ID found in SAML profile'));
-      }
-
-      // Find or create user
-      let user = await User.findOne({ cwlId });
-
-      if (!user) {
-        // Create new user
-        user = new User({
-          cwlId,
-          password: 'saml-authenticated', // Placeholder - not used for SAML auth
-          stats: {
-            coursesCreated: 0,
-            quizzesGenerated: 0,
-            questionsCreated: 0,
-            totalUsageTime: 0,
-            lastActivity: new Date()
-          }
-        });
-        await user.save();
-      } else {
-        // Update last login
-        user.lastLogin = new Date();
-        user.stats.lastActivity = new Date();
-        await user.save();
-      }
-
-      return done(null, {
-        _id: user._id,
-        cwlId: user.cwlId,
-        stats: user.stats
-      });
-    } catch (error) {
-      console.error('SAML authentication error:', error);
-      return done(error);
-    }
-  });
+  }, createSamlVerify({ preferPuid: false }));
 
   passport.use('saml', samlStrategy);
   console.log('✅ Generic SAML strategy registered for development');
@@ -154,85 +112,12 @@ if (UBCShibStrategy && process.env.NODE_ENV !== 'development') {
           callbackUrl: ubcShibCallbackUrl,
           cert: ubcShibCert,
           privateKeyPath: ubcShibPrivateKeyPath,
-          attributeConfig: ['ubcEduCwlPuid', 'mail', 'eduPersonAffiliation'],
+          attributeConfig: SAML_REQUESTED_ATTRIBUTES,
           enableSLO: process.env.ENABLE_SLO !== 'false',
           validateInResponseTo: process.env.SAML_VALIDATE_IN_RESPONSE_TO !== 'false',
           acceptedClockSkewMs: parseInt(process.env.SAML_CLOCK_SKEW_MS) || 5000
         },
-        async (profile, done) => {
-          try {
-            console.log('🔍 UBC Shibboleth profile received:', JSON.stringify(profile, null, 2));
-
-            // Extract cwlId from SAML profile
-            // Log all available attributes for debugging
-            console.log('🔍 Profile keys:', Object.keys(profile));
-            console.log('🔍 Profile attributes:', JSON.stringify(profile.attributes || {}, null, 2));
-            console.log('🔍 profile.uid:', profile.uid);
-            console.log('🔍 profile.nameID:', profile.nameID?.substring?.(0, 20) || profile.nameID);
-
-            // Use PUID as stable unique identifier (UBC Shibboleth doesn't return CWL username)
-            const cwlId = profile.attributes?.ubcEduCwlPuid ||
-                         profile['urn:mace:dir:attribute-def:ubcEduCwlPuid'] ||
-                         profile.uid ||
-                         profile.attributes?.uid ||
-                         profile.nameID;
-
-            // Extract display name from email (e.g., "haocheng.fan@ubc.ca" → "haocheng.fan")
-            const email = profile.attributes?.mail || profile.mail || profile.email || null;
-            const displayName = email ? email.split('@')[0] : null;
-
-            if (!cwlId) {
-              console.error('❌ No CWL ID found in UBC Shibboleth profile');
-              console.error('Available profile keys:', Object.keys(profile));
-              console.error('Available attributes:', Object.keys(profile.attributes || {}));
-              return done(new Error('No CWL ID found in UBC Shibboleth profile'));
-            }
-
-            console.log(`✅ Extracted CWL ID: ${cwlId}`);
-
-            // Find or create user
-            let user = await User.findOne({ cwlId });
-
-            if (!user) {
-              user = new User({
-                cwlId,
-                displayName,
-                email,
-                password: 'saml-authenticated',
-                stats: { coursesCreated: 0, quizzesGenerated: 0, questionsCreated: 0, totalUsageTime: 0, lastActivity: new Date() }
-              });
-              await user.save();
-              console.log(`✅ Created new user: ${cwlId} (${displayName || 'no display name'})`);
-            } else {
-              user.lastLogin = new Date();
-              user.stats.lastActivity = new Date();
-              if (displayName && !user.displayName) user.displayName = displayName;
-              if (email && !user.email) user.email = email;
-              await user.save();
-              console.log(`✅ Updated existing user: ${cwlId} (${user.displayName || 'no display name'})`);
-            }
-
-            // Store SAML debug info in session for troubleshooting
-            const samlDebug = {
-              profileKeys: Object.keys(profile),
-              attributeKeys: Object.keys(profile.attributes || {}),
-              uid: profile.uid || null,
-              nameID: typeof profile.nameID === 'string' ? profile.nameID.substring(0, 30) : null,
-              email: profile.attributes?.mail || profile.mail || profile.email || null,
-              allAttributes: profile.attributes || {}
-            };
-            console.log('🔍 SAML Debug:', JSON.stringify(samlDebug, null, 2));
-
-            return done(null, {
-              _id: user._id,
-              cwlId: user.cwlId,
-              stats: user.stats
-            });
-          } catch (error) {
-            console.error('❌ UBC Shibboleth authentication error:', error);
-            return done(error);
-          }
-        }
+        createSamlVerify()
       );
 
       passport.use('ubcshib', ubcShibStrategy);

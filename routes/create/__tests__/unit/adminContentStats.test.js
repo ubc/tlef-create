@@ -5,7 +5,7 @@ describe('admin current content statistics', () => {
   test('joins counts by owner, ignores stale lifetime counters and ranks the real totals', () => {
     const users = [
       { _id: 'a', cwlId: 'alice', stats: { questionsCreated: 999 } },
-      { _id: 'b', cwlId: 'bob', stats: { questionsCreated: 0 } },
+      { _id: 'b', cwlId: 'bob', displayName: 'Professor Bob', email: 'bob@example.test', cwlUsername: 'bob-login', password: 'private', stats: { questionsCreated: 0 } },
       { _id: 'c', cwlId: 'carol' }
     ];
     const result = buildUserContentStats(users, {
@@ -17,6 +17,9 @@ describe('admin current content statistics', () => {
     expect(result[0]).toMatchObject({ coursesCreated: 1, quizzesGenerated: 2 });
     expect(result[2]).toMatchObject({ coursesCreated: 0, quizzesGenerated: 0 });
     expect(result[0]).not.toHaveProperty('stats');
+    expect(result[0]).not.toHaveProperty('password');
+    expect(result[0]).toMatchObject({ displayName: 'Professor Bob', email: 'bob@example.test', cwlUsername: 'bob-login' });
+    expect(result[2]).toMatchObject({ displayName: null, email: null, cwlUsername: null });
   });
 
   test('limits after ranking and reflects deletions without changing user documents', () => {

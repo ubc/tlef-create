@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AdminUserIdentity from './AdminUserIdentity';
 import { Activity, AlertTriangle, CheckCircle2, ChevronDown, XCircle } from 'lucide-react';
 import { adminApi, AdminAuditEvent } from '../../services/api';
 
@@ -43,12 +44,13 @@ const AdminActivityPanel = () => {
                 onClick={() => setExpandedEventId(current => current === event._id ? null : event._id)}
               >
                 <span className="admin-event-icon">{event.status === 'success' ? <CheckCircle2 size={17} /> : <XCircle size={17} />}</span>
-                <span className="admin-event-main"><strong>{event.action}</strong><span>{event.actor?.cwlId || 'Unknown user'} · {event.resourceType || 'resource'}{event.folder?.name ? ` · ${event.folder.name}` : ''}{event.quiz?.name ? ` / ${event.quiz.name}` : ''}</span></span>
+                <span className="admin-event-main"><strong>{event.action}</strong><span>{event.actor?.displayName || event.actor?.email || event.actor?.cwlId || 'Unknown user'} · {event.resourceType || 'resource'}{event.folder?.name ? ` · ${event.folder.name}` : ''}{event.quiz?.name ? ` / ${event.quiz.name}` : ''}</span></span>
                 <span className="admin-event-meta"><span>{event.method} {event.statusCode || ''}</span><time>{new Date(event.createdAt).toLocaleString()}</time></span>
                 <ChevronDown size={15} className={expandedEventId === event._id ? 'is-open' : ''} />
               </button>
               {expandedEventId === event._id && (
                 <div className="admin-event-details">
+                  <div><span>User</span><AdminUserIdentity user={event.actor} /></div>
                   <div><span>Route</span><code>{event.route || 'Not recorded'}</code></div>
                   <div><span>Error code</span><code>{String(event.metadata?.errorCode || 'None')}</code></div>
                   <div><span>Stage</span><code>{String(event.metadata?.errorStage || 'Not recorded')}</code></div>

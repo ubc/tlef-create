@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { adminApi } from '../services/api';
+import { adminApi, type AdminUserIdentity as UserIdentity } from '../services/api';
 import { ArrowLeft, Users, BookOpen, FileQuestion, MessageSquare, CheckCircle, Clock, AlertCircle, Key, Activity, Bot } from 'lucide-react';
+import AdminUserIdentity from '../components/admin/AdminUserIdentity';
 import AdminActivityPanel from '../components/admin/AdminActivityPanel';
 import AdminGuideInsightsPanel from '../components/admin/AdminGuideInsightsPanel';
 import AdminUserExplorer from '../components/admin/AdminUserExplorer';
@@ -22,9 +23,7 @@ interface PlatformStats {
   openReports: number;
 }
 
-interface UserStat {
-  _id: string;
-  cwlId: string;
+interface UserStat extends UserIdentity {
   coursesCreated: number;
   quizzesGenerated: number;
   questionsCreated: number;
@@ -34,7 +33,7 @@ interface UserStat {
 
 interface BugReport {
   _id: string;
-  reporter: { cwlId: string };
+  reporter: UserIdentity | null;
   type: string;
   description: string;
   email: string;
@@ -43,11 +42,7 @@ interface BugReport {
   createdAt: string;
 }
 
-interface ManagedUser {
-  _id: string;
-  cwlId: string;
-  displayName: string;
-  email: string;
+interface ManagedUser extends UserIdentity {
   canUseEnvKey: boolean;
   lastLogin: string;
   createdAt: string;
@@ -251,9 +246,9 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u, i) => (
-                    <tr key={u.cwlId || i}>
-                      <td className="user-cell">{u.cwlId}</td>
+                  {users.map(u => (
+                    <tr key={u._id}>
+                      <td className="user-cell"><AdminUserIdentity user={u} /></td>
                       <td>{u.coursesCreated}</td>
                       <td>{u.quizzesGenerated}</td>
                       <td><strong>{u.questionsCreated}</strong></td>
@@ -305,8 +300,8 @@ const AdminDashboard = () => {
                   .filter(u => !filterEnvOnly || u.canUseEnvKey)
                   .map(u => (
                     <tr key={u._id}>
-                      <td className="user-cell">{u.cwlId}</td>
-                      <td style={{ opacity: 0.7 }}>{u.email || '—'}</td>
+                      <td className="user-cell"><AdminUserIdentity user={u} showEmail={false} /></td>
+                      <td style={{ opacity: 0.7 }}>{u.email || 'Email unavailable'}</td>
                       <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
                       <td>
                         <button
@@ -343,7 +338,7 @@ const AdminDashboard = () => {
                     <div className="report-meta">
                       {statusIcon(report.status)}
                       <span className="report-type">{report.type}</span>
-                      <span className="report-user">by {report.reporter?.cwlId || 'unknown'}</span>
+                      <span className="report-user"><AdminUserIdentity user={report.reporter} /></span>
                       <span className="report-date">{new Date(report.createdAt).toLocaleDateString()}</span>
                     </div>
                     <div className="report-actions">

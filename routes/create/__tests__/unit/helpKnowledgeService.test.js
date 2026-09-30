@@ -44,6 +44,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['Mark review complete exclamation mark step four check all objectives', 'review-and-export', 'Review order and completeness'],
     ['AI feedback check selecting omitting option instructor review', 'review-and-export', 'Multiple-choice answer modes'],
     ['deleting objective confirmation no linked questions warning preference', 'learning-objectives', 'Editing and deleting objectives'],
+    ['Admin Dashboard user name email Login ID PUID CWL username Email unavailable sign out sign in SAML attributes', 'account-and-support', 'Administrator user identity'],
     ['Administrator per-user statistics currently saved deleted content excluded', 'account-and-support', 'Administrator content statistics'],
     ['Create a new activity saved brief different template Documentation Tool pages', 'h5p-studio', 'Return to Quick activity'],
     ['Preview Save changes and preview unchanged Edited time no save notification', 'h5p-studio', 'Preview and download'],

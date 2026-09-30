@@ -16,11 +16,14 @@ const userSchema = new mongoose.Schema({
     required: true
   },
   
-  // Display name (extracted from email, e.g., "haocheng.fan")
-  displayName: { type: String, default: null },
+  // Name released by the identity provider; older records may contain an email prefix.
+  displayName: { type: String, trim: true, default: null },
+
+  // Released CWL username, distinct from the stable PUID stored in cwlId.
+  cwlUsername: { type: String, trim: true, default: null },
 
   // Email from SAML profile
-  email: { type: String, default: null },
+  email: { type: String, trim: true, default: null },
 
   // TODO: role field — String enum ['admin', 'user'], default 'user'.
   //       Admins can manage other users' permissions.

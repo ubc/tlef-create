@@ -1,4 +1,5 @@
 import express from 'express';
+import { isConfiguredAdmin } from '../utils/adminIdentity.js';
 import UserApiKey from '../models/UserApiKey.js';
 import { authenticateToken, attachUser } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -106,8 +107,7 @@ router.get('/', authenticateToken, attachUser, asyncHandler(async (req, res) => 
 
     // Include env key info for admins or users with canUseEnvKey permission
     const user = req.user.fullUser || await (await import('../models/User.js')).default.findById(userId);
-    const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    const isAdmin = adminCwls.some(a => [user?.cwlId, user?.email?.split('@')[0]].filter(Boolean).map(s => s.toLowerCase()).includes(a));
+    const isAdmin = isConfiguredAdmin(user);
 
     let envKey = null;
     if (isAdmin || user?.canUseEnvKey) {

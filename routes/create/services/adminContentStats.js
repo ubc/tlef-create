@@ -5,6 +5,9 @@ export function buildUserContentStats(users, { folders, quizzes, questions }, li
   return users.map(user => ({
     _id: user._id,
     cwlId: user.cwlId,
+    cwlUsername: user.cwlUsername || null,
+    displayName: user.displayName || null,
+    email: user.email || null,
     coursesCreated: counts.folders.get(String(user._id)) || 0,
     quizzesGenerated: counts.quizzes.get(String(user._id)) || 0,
     questionsCreated: counts.questions.get(String(user._id)) || 0,

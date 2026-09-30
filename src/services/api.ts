@@ -1820,9 +1820,17 @@ export const canvasApi = {
 };
 
 // Admin API
+export interface AdminUserIdentity {
+  _id: string;
+  cwlId: string;
+  cwlUsername?: string | null;
+  displayName?: string | null;
+  email?: string | null;
+}
+
 export interface AdminGuideInteraction {
   _id: string;
-  user?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  user?: AdminUserIdentity | null;
   question: string;
   answer: string;
   context?: { route?: string; pageTitle?: string; activeTab?: string };
@@ -1837,7 +1845,7 @@ export interface AdminGuideInteraction {
 
 export interface AdminAuditEvent {
   _id: string;
-  actor?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  actor?: AdminUserIdentity | null;
   action: string;
   resourceType?: string;
   resourceId?: string;
@@ -1872,7 +1880,7 @@ export interface AdminMaterialMetadata {
 }
 
 export interface AdminCourseDetail extends Omit<AdminCourseSummary, 'materials' | 'quizzes'> {
-  instructor?: { _id: string; cwlId: string; displayName?: string; email?: string };
+  instructor?: AdminUserIdentity | null;
   materials: AdminMaterialMetadata[];
   quizzes: Array<Pick<Quiz, '_id' | 'name' | 'status' | 'questions' | 'learningObjectives'>>;
 }
@@ -1897,7 +1905,7 @@ export const adminApi = {
     return await apiClient.post('/admin/reports', { type, description, email });
   },
 
-  getReports: async (status?: string): Promise<ApiResponse<{ reports: Array<{ _id: string; reporter: { cwlId: string }; type: string; description: string; email: string; status: string; adminNotes: string; createdAt: string }> }>> => {
+  getReports: async (status?: string): Promise<ApiResponse<{ reports: Array<{ _id: string; reporter: AdminUserIdentity | null; type: string; description: string; email: string; status: string; adminNotes: string; createdAt: string }> }>> => {
     const query = status ? `?status=${status}` : '';
     return await apiClient.get(`/admin/reports${query}`);
   },
@@ -1908,12 +1916,12 @@ export const adminApi = {
 
   getStats: async (): Promise<ApiResponse<{
     platform: { totalUsers: number; totalFolders: number; totalQuizzes: number; totalQuestions: number; totalGuideInteractions: number; activeUsers30d: number; guideHelpful: number; guideNotHelpful: number; openReports: number };
-    users: Array<{ _id: string; cwlId: string; coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
+    users: Array<AdminUserIdentity & { coursesCreated: number; quizzesGenerated: number; questionsCreated: number; lastLogin: string; joinedAt: string }>;
   }>> => {
     return await apiClient.get('/admin/stats');
   },
 
-  getUsers: async (): Promise<ApiResponse<{ users: Array<{ _id: string; cwlId: string; displayName: string; email: string; canUseEnvKey: boolean; stats?: Record<string, number | string>; lastLogin: string; createdAt: string }> }>> => {
+  getUsers: async (): Promise<ApiResponse<{ users: Array<AdminUserIdentity & { canUseEnvKey: boolean; stats?: Record<string, number | string>; lastLogin: string; createdAt: string }> }>> => {
     return await apiClient.get('/admin/users');
   },
 
@@ -1932,7 +1940,7 @@ export const adminApi = {
     return await apiClient.get(`/admin/activity${query.size ? `?${query}` : ''}`);
   },
 
-  getUserCourses: async (userId: string): Promise<ApiResponse<{ user: { _id: string; cwlId: string; displayName?: string; email?: string }; courses: AdminCourseSummary[] }>> => {
+  getUserCourses: async (userId: string): Promise<ApiResponse<{ user: AdminUserIdentity; courses: AdminCourseSummary[] }>> => {
     return await apiClient.get(`/admin/users/${userId}/courses`);
   },
 

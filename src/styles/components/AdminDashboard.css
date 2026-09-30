@@ -333,3 +333,23 @@
   .admin-question-list summary { grid-template-columns: 24px 1fr; }
   .admin-question-list summary em { grid-column: 2; }
 }
+
+/* Keep names, contact details and the stable account key readable together. */
+.admin-user-identity {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.admin-user-identity > strong {
+  font-weight: 600;
+}
+
+.admin-user-identity > small {
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 400;
+}

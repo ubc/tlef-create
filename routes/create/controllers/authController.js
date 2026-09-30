@@ -1,4 +1,5 @@
 import express from 'express';
+import { isConfiguredAdmin } from '../utils/adminIdentity.js';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../config/constants.js';
@@ -140,14 +141,7 @@ router.get('/me', asyncHandler(async (req, res) => {
     const { default: User } = await import('../models/User.js');
     const user = await User.findById(req.user._id || req.user.id).select('-password');
     if (user) {
-      const adminCwls = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      const userIdentifiers = [
-        user.cwlId,
-        user.displayName,
-        user.email,
-        user.email?.split('@')[0]
-      ].filter(Boolean).map(s => s.toLowerCase());
-      const isAdmin = adminCwls.some(a => userIdentifiers.includes(a));
+      const isAdmin = isConfiguredAdmin(user);
       console.log('✅ /me - User authenticated:', user.cwlId, isAdmin ? '(admin)' : '');
       return successResponse(res, {
         authenticated: true,

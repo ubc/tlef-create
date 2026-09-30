@@ -1,4 +1,5 @@
 import express from 'express';
+import { isConfiguredAdmin } from '../utils/adminIdentity.js';
 import { buildUserContentStats } from '../services/adminContentStats.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -21,13 +22,7 @@ const ADMIN_CWLS = (process.env.ADMIN_CWLS || '').split(',').map(s => s.trim()).
 
 function requireAdmin(req, res, next) {
   const user = req.user?.fullUser || req.user;
-  const userIdentifiers = [
-    user?.cwlId,
-    user?.displayName,
-    user?.email,
-    user?.email?.split('@')[0]
-  ].filter(Boolean).map(s => s.toLowerCase());
-  const isAdmin = ADMIN_CWLS.some(a => userIdentifiers.includes(a.toLowerCase()));
+  const isAdmin = isConfiguredAdmin(user, ADMIN_CWLS);
   if (!isAdmin) {
     return errorResponse(res, 'Admin access required', 'FORBIDDEN', 403);
   }
@@ -82,7 +77,7 @@ router.get('/reports', authenticateToken, requireAdmin, asyncHandler(async (req,
   const { status } = req.query;
   const filter = status ? { status } : {};
   const reports = await BugReport.find(filter)
-    .populate('reporter', 'cwlId')
+    .populate('reporter', 'cwlId cwlUsername displayName email')
     .sort({ createdAt: -1 })
     .limit(100);
 
@@ -127,7 +122,7 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
   // Match the platform totals: current content, including manual questions and
   // excluding deleted records. Historical User.stats counters are not maintained.
   const [users, folders, quizzes, questions] = await Promise.all([
-    User.find({}, 'cwlId lastLogin createdAt').lean(),
+    User.find({}, 'cwlId cwlUsername displayName email lastLogin createdAt').lean(),
     Folder.aggregate([{ $group: { _id: '$instructor', count: { $sum: 1 } } }]),
     Quiz.aggregate([{ $group: { _id: '$createdBy', count: { $sum: 1 } } }]),
     Quiz.aggregate([{ $group: { _id: '$createdBy', count: { $sum: { $size: { $ifNull: ['$questions', []] } } } } }])
@@ -162,7 +157,7 @@ router.get('/stats', authenticateToken, requireAdmin, asyncHandler(async (req, r
  * List all users with their canUseEnvKey status (admin only)
  */
 router.get('/users', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
-  const users = await User.find({}, 'cwlId displayName email role canUseEnvKey stats lastLogin createdAt').sort({ createdAt: -1 });
+  const users = await User.find({}, 'cwlId cwlUsername displayName email role canUseEnvKey stats lastLogin createdAt').sort({ createdAt: -1 });
   return successResponse(res, { users }, 'Users retrieved');
 }));
 
@@ -181,7 +176,7 @@ router.get('/guide-insights', authenticateToken, requireAdmin, asyncHandler(asyn
 
   const [interactions, total, summaryRows, commonQuestions] = await Promise.all([
     HelpInteraction.find(filter)
-      .populate('user', 'cwlId displayName email')
+      .populate('user', 'cwlId cwlUsername displayName email')
       .sort({ createdAt: -1 })
       .limit(clampLimit(req.query.limit))
       .lean(),
@@ -229,7 +224,7 @@ router.get('/activity', authenticateToken, requireAdmin, asyncHandler(async (req
 
   const [events, actions] = await Promise.all([
     AuditEvent.find(filter)
-      .populate('actor', 'cwlId displayName email')
+      .populate('actor', 'cwlId cwlUsername displayName email')
       .populate('folder', 'name')
       .populate('quiz', 'name')
       .sort({ createdAt: -1 })
@@ -246,7 +241,7 @@ router.get('/activity', authenticateToken, requireAdmin, asyncHandler(async (req
  */
 router.get('/users/:id/courses', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const [targetUser, courses] = await Promise.all([
-    User.findById(req.params.id, 'cwlId displayName email lastLogin createdAt').lean(),
+    User.findById(req.params.id, 'cwlId cwlUsername displayName email lastLogin createdAt').lean(),
     Folder.find({ instructor: req.params.id }, 'name stats materials quizzes createdAt updatedAt').sort({ updatedAt: -1 }).lean()
   ]);
   if (!targetUser) return errorResponse(res, 'User not found', 'NOT_FOUND', 404);
@@ -267,7 +262,7 @@ router.get('/users/:id/courses', authenticateToken, requireAdmin, asyncHandler(a
  */
 router.get('/courses/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const course = await Folder.findById(req.params.id, 'name instructor stats createdAt updatedAt')
-    .populate('instructor', 'cwlId displayName email')
+    .populate('instructor', 'cwlId cwlUsername displayName email')
     .lean();
   if (!course) return errorResponse(res, 'Course not found', 'NOT_FOUND', 404);
 
@@ -294,7 +289,7 @@ router.get('/courses/:id', authenticateToken, requireAdmin, asyncHandler(async (
 router.get('/quizzes/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const quiz = await Quiz.findById(req.params.id, 'name folder status settings materials questions learningObjectives activePlan createdBy exports.format exports.exportedAt createdAt updatedAt')
     .populate('folder', 'name instructor')
-    .populate('createdBy', 'cwlId displayName email')
+    .populate('createdBy', 'cwlId cwlUsername displayName email')
     .lean();
   if (!quiz) return errorResponse(res, 'Quiz not found', 'NOT_FOUND', 404);
 
