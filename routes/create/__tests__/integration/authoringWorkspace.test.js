@@ -30,6 +30,11 @@ jest.unstable_mockModule('../../services/h5pExportService.js', () => ({
 }));
 const complete = jest.fn();
 const generate = jest.fn();
+const assess = jest.fn();
+jest.unstable_mockModule('../../services/authoring/authoringRequirements.js', () => ({
+  assessAuthoringRequirements: assess,
+  effectiveTeachingBrief: (session, answers = session.requirementAnswers || []) => [session.instructions, ...answers.map(answer => answer.text)].join('\n\n')
+}));
 jest.unstable_mockModule('../../services/llmService.js', () => ({ default: { streamCompletion: complete, generateQuestion: generate } }));
 jest.unstable_mockModule('../../services/ragService.js', () => ({ default: { retrieveRelevantContent: async () => ({ chunks: [{ content: 'Water evaporates.', metadata: { materialId: '000000000000000000000001', pageNumber: 1 } }] }) } }));
 const { AuthoringSession: Session, AuthoringRun: Run, AuthoringMessage: Message, AuthoringVersion: Version } = await import('../../models/StudioAuthoring.js');
@@ -58,6 +63,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await Promise.all(models.map(model => model.deleteMany({})));
   assets.clear(); legacy.clear(); start.mockClear(); approve.mockClear(); complete.mockReset(); generate.mockReset();
+  assess.mockReset().mockResolvedValue({ ready: true, reply: 'The brief is clear.', clarification: [] });
   complete.mockResolvedValue({ content: JSON.stringify({ action: 'reply', reply: 'The current activity uses your selected materials.' }) });
 });
 async function fixture() {
@@ -98,6 +104,76 @@ async function ready(f) {
 }
 
 describe('durable Studio authoring', () => {
+  test('rejects a foreign learning object before requirements assessment or paid planning', async () => {
+    const f = await fixture();
+    const foreign = await Quiz.create({ name: 'Foreign', folder: f.folder._id, createdBy: new mongoose.Types.ObjectId() });
+    await expect(createAuthoringSession(f.owner, { ...f.body, requestId: randomUUID(), quizId: String(foreign._id) }))
+      .rejects.toMatchObject({ status: 404 });
+    expect(assess).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+  test('asks for teaching choices before planning, then keeps the answers and waits for plan approval', async () => {
+    const f = await fixture();
+    const clarification = [{ question: 'How many questions?', options: ['One', 'Three'] }];
+    assess.mockResolvedValueOnce({ ready: false, reply: 'Please choose the size of your practice activity.', clarification });
+    const created = await createAuthoringSession(f.owner, f.body);
+    const waiting = await settle(f.owner, created.id);
+    expect(waiting.status).toBe('awaiting_requirements');
+    expect(waiting.assistant).toBeNull();
+    expect(waiting.messages.at(-1).clarification).toEqual(clarification);
+    expect(start).not.toHaveBeenCalled();
+    expect(approve).not.toHaveBeenCalled();
+    expect((await createAuthoringSession(f.owner, f.body)).id).toBe(created.id);
+    expect(assess).toHaveBeenCalledTimes(1);
+    const answer = { requestId: randomUUID(), revision: waiting.revision, text: 'One introductory multiple-choice practice question, with feedback.' };
+    await authoringCommand(f.owner, waiting.id, 'message', answer);
+    const planned = await settle(f.owner, waiting.id);
+    expect(planned.error).toBe('');
+    expect(planned.status).toBe('awaiting_approval');
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start.mock.calls[0][1].instructions).toContain(f.body.instructions);
+    expect(start.mock.calls[0][1].instructions).toContain(answer.text);
+    expect(approve).not.toHaveBeenCalled();
+    await authoringCommand(f.owner, waiting.id, 'message', answer);
+    expect(assess).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect((await Session.findById(waiting.id)).requirementAnswers.map(a => a.text)).toEqual([answer.text]);
+  });
+
+  test('honors explicit automatic-draft opt-in without a requirements conversation', async () => {
+    const f = await fixture();
+    const created = await createAuthoringSession(f.owner, { ...f.body, autoApprove: true });
+    const result = await settle(f.owner, created.id);
+    expect(result.status).toBe('ready');
+    expect(assess).not.toHaveBeenCalled();
+    expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  test('resumes planning after confirmed intake without replaying the answer as a paid modification', async () => {
+    const f = await fixture();
+    assess.mockResolvedValueOnce({ ready: false, reply: 'Choose a count.', clarification: [{ question: 'Count?', options: ['One', 'Three'] }] });
+    const created = await createAuthoringSession(f.owner, f.body);
+    const waiting = await settle(f.owner, created.id);
+    await authoringCommand(f.owner, waiting.id, 'message', { requestId: randomUUID(), revision: waiting.revision, text: 'One introductory practice question.' });
+    let dispatched;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      dispatched = await readAuthoringSession(f.owner, waiting.id);
+      if (dispatched.assistant && dispatched.run.status === 'waiting') break;
+    }
+    expect(dispatched.assistant).toBeTruthy();
+    expect(dispatched.run.status).toBe('waiting');
+    await Run.updateOne({ _id: dispatched.run.id }, { $set: { status: 'interrupted' } });
+    await Session.updateOne({ _id: waiting.id }, { $set: { status: 'needs_attention' } });
+    await authoringCommand(f.owner, waiting.id, 'retry', { requestId: randomUUID(), revision: dispatched.revision });
+    const resumed = await settle(f.owner, waiting.id);
+    expect(resumed.error).toBe('');
+    expect(resumed.status).toBe('awaiting_approval');
+    expect(assess).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(complete).not.toHaveBeenCalled();
+    expect(approve).not.toHaveBeenCalled();
+  });
   test('saves owner-visible clarification choices without changing the plan or approving generation', async () => {
     const f = await fixture();
     const created = await createAuthoringSession(f.owner, f.body);

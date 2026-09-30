@@ -8,7 +8,9 @@ const session = new mongoose.Schema({
   courseId: { type: id, required: true }, quizId: id, assistantId: id,
   materialIds: [id], title: { type: String, maxlength: 200 }, instructions: { type: String, maxlength: 12000 },
   autoApprove: { type: Boolean, default: false },
-  status: { type: String, default: 'waiting_for_materials', enum: ['waiting_for_materials', 'planning', 'awaiting_approval', 'generating', 'ready', 'working', 'needs_attention', 'cancelled'] },
+  requirementsReady: { type: Boolean, default: false },
+  requirementAnswers: { type: [{ _id: false, requestId: String, text: { type: String, maxlength: 4000 } }], default: [] },
+  status: { type: String, default: 'waiting_for_materials', enum: ['waiting_for_materials', 'awaiting_requirements', 'planning', 'awaiting_approval', 'generating', 'ready', 'working', 'needs_attention', 'cancelled'] },
   revision: { type: Number, default: 0 }, versionCounter: { type: Number, default: 0 },
   currentVersionId: id, candidateVersionId: id, activeRunId: id, publishedFingerprint: String,
   error: String, createdAt: { type: Date, default: Date.now }
@@ -37,6 +39,7 @@ const run = new mongoose.Schema({
   checkpoint: { type: String, default: 'start' }, result: mongoose.Schema.Types.Mixed,
   leaseToken: String, leaseUntil: Date, nextAt: { type: Date, default: Date.now },
   cancelRequested: { type: Boolean, default: false }, error: String,
+  continuePlanning: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 run.index({ owner: 1, requestId: 1 }, { unique: true });

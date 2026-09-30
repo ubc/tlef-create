@@ -2,6 +2,7 @@ import type { AuthoringSession } from '../../../services/api';
 
 const stepLabels: Record<string, string> = {
   start: 'Task queued', dispatch_planning: 'Read sources and propose a teaching plan',
+  clarify_requirements: 'Clarify the teaching requirements',
   dispatch_approval: 'Generate questions from the approved plan', dispatch_retry: 'Resume the saved task',
   model_call: 'Process your request', decision_saved: 'Choose the next action', output_saved: 'Prepare a revision',
   restoring: 'Restore a saved version', committing: 'Save the accepted version'

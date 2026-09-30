@@ -19,6 +19,7 @@ interface Props {
 }
 const labels: Record<AuthoringSession['status'], string> = {
   waiting_for_materials: 'Reading materials', planning: 'Preparing your teaching plan', awaiting_approval: 'Ready for your review',
+  awaiting_requirements: 'Waiting for your teaching choices',
   generating: 'Creating your activity', ready: 'Ready', working: 'Working on your request', needs_attention: 'Needs attention', cancelled: 'Stopped',
 };
 const running = (session: AuthoringSession | null) => !!session?.run && ['queued', 'running', 'waiting'].includes(session.run.status);

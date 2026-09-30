@@ -7,6 +7,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
     ['Task steps Refine teaching requirements Learner level Teaching purpose Question difficulty Update proposal', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Use selected answers clarification selectable answers conflicting requirements Send message', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Waiting for your teaching choices missing teaching requirements before objectives plan', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Rejected draft Review observations Discuss the failure Edit teaching plan Approved instructions', 'h5p-studio', 'Questions needing attention'],
     ['unreadable invalid question JSON output automatic fallback explicit retry', 'h5p-studio', 'Questions needing attention'],
     ['Questions needing attention instruction mismatch incomplete option feedback review service unavailable', 'h5p-studio', 'Questions needing attention'],

@@ -1686,7 +1686,7 @@ export interface AuthoringClarification { question: string; options: string[] }
 export interface AuthoringSession {
   id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
   instructions: string; autoApprove: boolean; revision: number;
-  status: 'waiting_for_materials' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
+  status: 'waiting_for_materials' | 'awaiting_requirements' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
   error: string; currentVersionId: string | null; candidateVersionId: string | null;
   messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; clarification?: AuthoringClarification[]; createdAt: string }>;
   versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;

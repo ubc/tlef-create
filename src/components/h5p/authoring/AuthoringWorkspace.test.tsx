@@ -36,6 +36,20 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 describe('Studio AI workspace', () => {
+  it('offers initial teaching choices without showing plan approval before requirements are answered', async () => {
+    mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'awaiting_requirements', assistant: null,
+      messages: [{ id: 'intake1', role: 'assistant', text: 'Tell me the intended learning task.', createdAt: '2026-09-30',
+        clarification: [{ question: 'Question count?', options: ['One', 'Three'] }] }] } } });
+    mount('task1');
+    expect(await screen.findByRole('radio', { name: 'One' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Accept plan & generate/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: 'One' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use selected answers' }));
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.command).not.toHaveBeenCalled();
+  });
   it('fills the composer from current clarification choices and calls the API only after Send', async () => {
     mocks.get.mockResolvedValue({ data: { session: { ...saved, messages: [{ id: 'clarify1', role: 'assistant', text: 'Choose your intended count.', createdAt: '2026-09-30',
       clarification: [{ question: 'How many questions?', options: ['One', 'Five'] }] }] } } });

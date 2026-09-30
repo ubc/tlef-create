@@ -1,4 +1,5 @@
 import { buildAuthoringDecisionPrompt } from './authoringDecisionPrompt.js';
+import { assessAuthoringRequirements, effectiveTeachingBrief } from './authoringRequirements.js';
 import crypto from 'node:crypto';
 import { assistantRecoveryMessage, canReviseAssistantPlan } from './assistantRecovery.js';
 import mongoose from 'mongoose';
@@ -16,6 +17,7 @@ import { generateStudioActivity } from '../h5pStudioAIService.js';
 import { extractBalancedJson } from '../../utils/openAIRequestUtils.js';
 import { isMaterialReady } from '../../utils/generationReadiness.js';
 import Question from '../../models/Question.js';
+import Quiz from '../../models/Quiz.js';
 import { acceptVersion, createVersion, readCourseSnapshot, readNative, cloneDocument } from './artifactVersionService.js';
 import { digest, stableId, fail, objectId, requestId, validateCommand, parseDecision, versionSummary } from './authoringContracts.js';
 
@@ -89,6 +91,7 @@ export async function createAuthoringSession(owner, body) {
     fail('Choose a course and 1–20 materials to begin.', 400, 'AUTHORING_INPUT');
   }
   if (!await Folder.exists({ _id: body.courseId, instructor: owner })) fail('Course not found.', 404);
+  if (body.quizId && !await Quiz.exists({ _id: body.quizId, folder: body.courseId, createdBy: owner })) fail('Learning object not found in this course.', 404);
   const materials = await Material.find({ _id: { $in: body.materialIds }, folder: body.courseId, uploadedBy: owner });
   if (materials.length !== body.materialIds.length) fail('A selected material is not available in this course.', 404);
   const instructions = body.instructions?.trim() || 'Create an evidence-grounded learning activity from these materials. Propose clear learning objectives, a manageable question plan, correct answers and helpful feedback.';
@@ -205,19 +208,51 @@ async function perform(run, session, guard, checkpoint, signal) {
     }
     if (previous?.kind === 'manual') fail('Return to the advanced editor and save again to retry that manual edit.');
     if (previous?.checkpoint === 'output_saved' && previous.result) return finishCandidate(run, session, previous.result, guard);
-    if (previous && ['message', 'accept', 'reject', 'restore'].includes(previous.kind)) {
+    const resumesRequirements = previous?.kind === 'message' && (previous.continuePlanning
+      || (session.requirementsReady && (session.requirementAnswers || []).some(answer => answer.requestId === previous.input?.requestId)));
+    if (previous && !resumesRequirements && ['message', 'accept', 'reject', 'restore'].includes(previous.kind)) {
       return perform({ ...run.toObject(), _id: run._id, kind: previous.kind, input: previous.input }, session, guard, checkpoint, signal);
     }
   }
-  if (['create', 'approve', 'retry'].includes(run.kind)) {
+  const prepareRequirements = async (materials, latestAnswer) => {
+    if (session.quizId && !await Quiz.exists({ _id: session.quizId, folder: session.courseId, createdBy: owner })) fail('Learning object not found in this course.', 404);
+    const answers = [...(session.requirementAnswers || [])];
+    if (latestAnswer && !answers.some(answer => answer.requestId === run.input.requestId)) {
+      answers.push({ requestId: run.input.requestId, text: latestAnswer });
+    }
+    const alreadyChecked = session.requirementsReady && (!latestAnswer || (session.requirementAnswers || []).some(answer => answer.requestId === run.input.requestId));
+    if (alreadyChecked || (session.autoApprove && !latestAnswer)) return true;
+    const brief = effectiveTeachingBrief(session, answers);
+    await checkpoint('clarify_requirements');
+    const assessment = await assessAuthoringRequirements({ instructions: brief, materials, userId: owner, signal });
+    await guard();
+    await patch({ requirementAnswers: answers, requirementsReady: assessment.ready,
+      status: assessment.ready ? 'planning' : 'awaiting_requirements' });
+    session.requirementAnswers = answers;
+    session.requirementsReady = assessment.ready;
+    if (!assessment.ready) await message(assessment.reply, assessment.clarification);
+    return assessment.ready;
+  };
+  if (run.kind === 'message' && !session.assistantId && !current) {
+    const materials = await Material.find({ _id: { $in: session.materialIds }, folder: session.courseId, uploadedBy: owner });
+    if (materials.length !== session.materialIds.length) fail('A selected material is no longer available.', 404);
+    if (materials.some(m => m.processingStatus === 'failed')) fail('A material could not be processed. Retry it in Materials, then resume this task.');
+    if (materials.some(m => !isMaterialReady(m))) { await patch({ status: 'waiting_for_materials' }); return false; }
+    if (!await prepareRequirements(materials, run.input.text)) return true;
+    await guard();
+    await Run.updateOne({ _id: run._id, owner, sessionId: session._id }, { $set: { continuePlanning: true } });
+    run.continuePlanning = true;
+  }
+  if (['create', 'approve', 'retry'].includes(run.kind) || run.continuePlanning) {
     if (!session.assistantId) {
       const materials = await Material.find({ _id: { $in: session.materialIds }, folder: session.courseId, uploadedBy: owner });
       if (materials.length !== session.materialIds.length) fail('A selected material is no longer available.', 404);
       if (materials.some(m => m.processingStatus === 'failed')) fail('A material could not be processed. Retry it in Materials, then resume this task.');
       if (materials.some(m => !isMaterialReady(m))) { await patch({ status: 'waiting_for_materials' }); return false; }
+      if (!await prepareRequirements(materials)) return true;
       await checkpoint('dispatch_planning');
       const assistant = await createAssistantSession(user, { requestId: `authoring-${id}`, courseId: String(session.courseId),
-        ...(session.quizId ? { quizId: String(session.quizId) } : {}), materialIds: session.materialIds.map(String), instructions: session.instructions,
+        ...(session.quizId ? { quizId: String(session.quizId) } : {}), materialIds: session.materialIds.map(String), instructions: effectiveTeachingBrief(session),
         canonicalObjectives: true });
       await guard();
       await patch({ assistantId: assistant.id, quizId: assistant.quizId, status: 'planning' });
@@ -312,7 +347,7 @@ async function perform(run, session, guard, checkpoint, signal) {
     await checkpoint('model_call');
     const materials = await Material.find({ _id: { $in: session.materialIds }, folder: session.courseId, uploadedBy: owner });
     const context = await buildAssistantContext(materials, { userId: owner, signal });
-    const plan = await proposeAssistantPlan({ instructions: session.instructions, currentPlan: assistant.plan, revisionRequest: run.input.text,
+    const plan = await proposeAssistantPlan({ instructions: effectiveTeachingBrief(session), currentPlan: assistant.plan, revisionRequest: run.input.text,
       objectives: assistant.objectives, context: context.context, userId: owner, signal });
     await guard();
     await updateAssistantPlan(user, assistant.id, { revision: assistant.revision, objectives: assistant.objectives, plan });
