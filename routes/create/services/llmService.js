@@ -717,7 +717,7 @@ class QuizLLMService {
       };
 
     } catch (error) {
-      console.error('❌ LLM question generation failed:', error);
+      console.error('LLM question generation failed.', { code: error.code || 'QUESTION_GENERATION_FAILED' });
       throw error;
     }
   }
@@ -785,6 +785,9 @@ INSTRUCTIONS:${customPrompt && learningObjective ? '\n⚠️ ADDITIONAL USER REQ
 7. If the learning objective contains multiple components, select ONE clear assessable slice unless synthesis is explicitly necessary
 8. Prefer a narrow and concrete target over a broad catch-all question
 9. Use the course materials to ground the chosen slice in specific ideas, examples, terminology, or evidence
+10. For a quantitative worked problem, you may introduce explicitly stated hypothetical numerical inputs while keeping its laws and concepts supported by the sources, unless the instructor requires source-only measurements. Do not present hypothetical inputs as facts from the source.
+11. Solve the proposed problem before constructing the answer choices. Give all needed inputs, coordinate directions, units, angle conventions and rounding precision in the learner-facing question. Check every distractor so there is exactly one correct choice in single-selection mode, including equivalent expressions and rounded values.
+12. Scenario examples in a plan row are alternatives across separately generated items unless the instructor explicitly requires them together. Preserve the assigned topic and constraints; choose one complete, solvable scenario for this question.
 
 NOVELTY AND COVERAGE REQUIREMENTS:
 - First identify the specific sub-skill, sub-topic, misconception, comparison, process step, or application case that this question will assess

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "coreApi": "1.28",
   "runtimeSha256": {
-    "h5p-core": "ea04c4d5ee7bc901ed9ea055f201a0a12c5bbc5fd77911e1e9fd169ef4068869",
-    "h5p-editor-core": "d288ec04cfeacb28c6c2577084c8f1a16377c7eaf93db84fcbdfb9a366abccec"
+    "h5p-core": "b623ec1bd4810c2a6373c55b9a2fdc71b9357559c342f69cd49f667cad0f3044",
+    "h5p-editor-core": "0993adcc9c9adcaea3a4c29ce46a8297cead7d3604bcebe8e6eadedce17fed5e"
   },
   "libraries": {
     "Drop-1.0": {

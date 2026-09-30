@@ -37,7 +37,6 @@ ns.Editor = function (library, defaultParams, replace, iframeLoaded) {
     },
     'class': 'h5p-editor-iframe',
     'frameBorder': '0',
-    'allowfullscreen': 'allowfullscreen',
     'allow': "fullscreen"
   });
   const metadata = parsedParams.metadata;
@@ -81,16 +80,17 @@ ns.Editor = function (library, defaultParams, replace, iframeLoaded) {
   };
 
   /**
-   * Wrapper for binding iframe unload event to a callback for multiple
+   * Wrapper for binding iframe page-leave events to a callback for multiple
    * devices.
    *
    * @private
    * @param {jQuery} $window of iframe
-   * @param {function} action callback on unload
+   * @param {function} action callback on page leave
    */
-  var onUnload = function ($window, action) {
-    $window.one('beforeunload unload', function () {
-      $window.off('pagehide beforeunload unload');
+  var onPageLeave = function ($window, action) {
+    // CREATE: pagehide covers navigation without the deprecated unload permission.
+    $window.one('beforeunload', function () {
+      $window.off('pagehide beforeunload');
       action();
     });
     $window.on('pagehide', action);
@@ -259,7 +259,7 @@ ns.Editor = function (library, defaultParams, replace, iframeLoaded) {
     }
 
     // Handle iframe being reloaded
-    onUnload($(iframe.contentWindow), function () {
+    onPageLeave($(iframe.contentWindow), function () {
       if (self.formSubmitted) {
         return;
       }

@@ -167,3 +167,15 @@
 @media(max-width:800px) { .authoring-body.has-artifact { display:flex; flex-direction:column; height:auto; min-height:0; } .authoring-body.has-artifact .authoring-conversation { min-height:480px; } .authoring-body.has-artifact .authoring-transcript { max-height:50vh; } .authoring-artifact { border-left:0; border-top:1px solid var(--aw-line); min-height:500px; } .authoring-artifact-content { max-height:65vh; min-height:330px; } .authoring-heading strong { max-width:210px; } .authoring-topbar { padding:14px; } .authoring-top-actions { gap:2px; } .authoring-top-actions>.authoring-quiet { font-size:10px!important; } }
 @media(max-width:520px) { .authoring-starters { grid-template-columns:1fr; gap:7px; margin-top:22px; } .authoring-starters button { padding:10px 14px; } .authoring-welcome { margin-top:15px; } .authoring-welcome h2 { font-size:28px; } .authoring-heading strong { max-width:160px; } .authoring-heading div>span { display:none; } .authoring-mark { display:none; } .authoring-body { min-height:600px; } .authoring-conversation { padding:0 15px 12px; } .desktop-break { display:none; } .authoring-export-actions { margin-left:0; } }
 @media(prefers-reduced-motion:reduce) { .authoring-workspace * { scroll-behavior:auto!important; transition:none!important; } }
+
+/* Saved progress and instructor decisions in the conversation column. */
+.authoring-progress,.authoring-preferences { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border-color,#e2e8f0); border-radius: 10px; font-size: 13px; }
+.authoring-progress summary,.authoring-preferences summary,.authoring-failed-question summary { cursor: pointer; line-height: 1.5; }
+.authoring-progress ol { padding-left: 20px; }
+.authoring-progress li { margin: 8px 0; }
+.authoring-progress small { display: block; color: #64748b; }
+.authoring-preferences label { display: block; margin: 10px 0; }
+.authoring-preferences select { display: block; width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #0f172a; }
+.authoring-failed-question { margin: 12px 0; border-top: 1px solid #f1b8b8; padding-top: 10px; }
+.authoring-failed-question p { white-space: pre-wrap; }
+.authoring-plan-row textarea { width: 100%; resize: vertical; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; line-height: 1.5; }

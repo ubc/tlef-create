@@ -2921,10 +2921,10 @@ H5P.createTitle = function (rawTitle, maxLength) {
           }
         }
       };
-      // iPad does not support beforeunload, therefore using unload
-      H5P.$window.one('beforeunload unload', function () {
+      // CREATE: use pagehide as the fallback; unload is deprecated and may be blocked.
+      H5P.$window.one('beforeunload', function () {
         // Only want to do this once
-        H5P.$window.off('pagehide beforeunload unload');
+        H5P.$window.off('pagehide beforeunload');
         storeCurrentState();
       });
       // pagehide is used on iPad when tabs are switched

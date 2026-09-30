@@ -8,6 +8,7 @@ import Material from '../../models/Material.js';
 import Quiz from '../../models/Quiz.js';
 import LearningObjective from '../../models/LearningObjective.js';
 import Question from '../../models/Question.js';
+import RejectedQuestionDraft from '../../models/RejectedQuestionDraft.js';
 import StudioGenerationJob from '../../models/StudioGenerationJob.js';
 import studioJobs from '../../services/studioGenerationJobs.js';
 import questionJobs from '../../services/questionGenerationJobs.js';
@@ -24,7 +25,7 @@ let runWork = true;
 let pendingWork;
 let completion;
 let start;
-const models = [Session, Folder, Material, Quiz, LearningObjective, Question, StudioGenerationJob];
+const models = [Session, Folder, Material, Quiz, LearningObjective, Question, StudioGenerationJob, RejectedQuestionDraft];
 beforeAll(async () => {
   dotenv.config({ path: new URL('../../../../.env', import.meta.url).pathname, quiet: true });
   const uri = new URL(process.env.E2E_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017');
@@ -99,6 +100,53 @@ function planEdit(session, changes = {}) {
 }
 
 describe('assistant and canonical course workflow share the same records', () => {
+  test('reads rejected observations only for the owned quiz, receipt and failed item', async () => {
+    const f = await fixture(); const planned = await createAssistantSession(f.user, f.body);
+    const jobId = new mongoose.Types.ObjectId(); const requestId = randomUUID();
+    await Session.updateOne({ _id: planned.id }, { $set: { questionJobRequestId: requestId } });
+    questionJobs.get.mockResolvedValue({ _id: jobId, quiz: planned.quizId, status: 'failed', active: false, requestId,
+      items: [{ index: 0, status: 'failed' }, { index: 1, status: 'ready' }] });
+    await RejectedQuestionDraft.create([
+      { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 0, questionText: 'Owned rejected draft', issues: ['Owned observation'] },
+      { owner: new mongoose.Types.ObjectId(), quiz: planned.quizId, job: jobId, index: 0, questionText: 'Other account private draft' },
+      { owner: f.user.id, quiz: planned.quizId, job: new mongoose.Types.ObjectId(), index: 0, questionText: 'Old attempt private draft' },
+      { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 1, questionText: 'Prepared item obsolete review' }
+    ]);
+    const view = await readAssistantSession(f.user.id, planned.id);
+    expect(view.generation.items[0].review).toMatchObject({ questionText: 'Owned rejected draft', issues: ['Owned observation'] });
+    expect(view.generation.items[1].review).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain('Other account private');
+    expect(JSON.stringify(view)).not.toContain('Old attempt private');
+    await expect(readAssistantSession(String(new mongoose.Types.ObjectId()), planned.id)).rejects.toMatchObject({ status: 404 });
+  });
+
+  test('reopens only a terminal unpublished batch, clears approval and preserves course questions', async () => {
+    const f = await fixture({ existing: true, questions: true });
+    const planned = await createAssistantSession(f.user, f.body);
+    const request = randomUUID();
+    await Session.updateOne({ _id: planned.id }, { $set: { status: 'failed', phase: 'generating',
+      errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED', questionJobRequestId: request,
+      approvedAt: new Date(), approvedRevision: planned.revision, approvedPlanHash: 'old-approval' } });
+    questionJobs.get.mockResolvedValue({ _id: new mongoose.Types.ObjectId(), quiz: planned.quizId,
+      status: 'failed', active: false, items: [], requestId: request });
+    const edited = await updateAssistantPlan(f.user, planned.id, planEdit(planned, { plan: [{ ...planned.plan[0], count: 3 }] }));
+    expect(edited.status).toBe('awaiting_approval');
+    const stored = await Session.findById(planned.id);
+    expect(stored.approvedPlanHash).toBeUndefined();
+    expect(stored.questionJobRequestId).toBeUndefined();
+    const quiz = await Quiz.findById(planned.quizId);
+    expect(quiz.questions.map(String)).toEqual([String(f.question._id)]);
+    expect(quiz.progress.planApproved).toBe(false);
+    expect(quiz.settings.planItems[0].count).toBe(3);
+  });
+  test.each(['succeeded', 'running'])('does not edit an already published or active %s batch', async status => {
+    const f = await fixture(); const planned = await createAssistantSession(f.user, f.body);
+    await Session.updateOne({ _id: planned.id }, { $set: { status: 'failed', phase: 'generating',
+      errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED', questionJobRequestId: randomUUID() } });
+    questionJobs.get.mockResolvedValue({ quiz: planned.quizId, status, active: status === 'running' });
+    await expect(updateAssistantPlan(f.user, planned.id, planEdit(planned))).rejects.toThrow('unpublished');
+  });
+
   test.each(['branching-scenario', 'crossword', 'sort-paragraphs'])(
     'rejects an existing %s learning object before paid planning or any changes to its canonical records', async type => {
       const f = await fixture({ existing: true, questions: true });

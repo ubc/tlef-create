@@ -15,6 +15,16 @@ const reviewed = { answerIsCorrect: true, followsInstructorRequest: true, issues
 const complete = payload => jest.fn().mockResolvedValue({ content: JSON.stringify(payload), model: 'test-model' });
 
 describe('independent question feedback review', () => {
+  test('retains a bounded private rejected draft and observations, while the receipt remains generic', async () => {
+    const { safeQuestionJobFailure } = await import('../../services/questionGenerationJobs.js');
+    const review = { ...reviewed, answerIsCorrect: false, issues: ['The marked option contradicts condensation.'] };
+    let error;
+    try { await reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(review) }); } catch (caught) { error = caught; }
+    expect(error.rejectedDraft).toMatchObject({ questionText: question.questionText, issues: review.issues });
+    expect(JSON.stringify(safeQuestionJobFailure(error))).not.toContain(review.issues[0]);
+    expect(JSON.stringify(safeQuestionJobFailure(error))).not.toContain(question.questionText);
+  });
+
   test.each([
     [{ ...reviewed, answerIsCorrect: false }, 'ANSWER_INVALID'],
     [{ ...reviewed, followsInstructorRequest: false }, 'INSTRUCTION_MISMATCH'],

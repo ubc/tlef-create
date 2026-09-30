@@ -98,6 +98,33 @@ async function ready(f) {
 }
 
 describe('durable Studio authoring', () => {
+  test('answers a failed unpublished batch without retrying, then reconciles a saved plan edit', async () => {
+    const f = await fixture();
+    const created = await createAuthoringSession(f.owner, f.body);
+    const initial = await settle(f.owner, created.id);
+    const assistant = legacy.get(initial.assistant.id);
+    Object.assign(assistant, { status: 'failed', phase: 'generating', errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED',
+      error: 'Batch blocked.', generation: { items: [{ index: 0, status: 'failed', reason: 'ANSWER_INVALID' }] } });
+    await Session.updateOne({ _id: initial.id }, { $set: { status: 'needs_attention', error: 'Batch blocked.' } });
+    await authoringCommand(f.owner, initial.id, 'message', { requestId: randomUUID(), revision: initial.revision, text: 'Why did the batch fail?' });
+    const reply = await settle(f.owner, initial.id);
+    expect(reply.status).toBe('needs_attention');
+    expect(reply.messages.at(-1).role).toBe('assistant');
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(approve).not.toHaveBeenCalled();
+    expect(reply.run.steps.map(step => step.name)).toEqual(['model_call', 'decision_saved']);
+    await authoringCommand(f.owner, initial.id, 'retry', { requestId: randomUUID(), revision: reply.revision });
+    const resumed = await settle(f.owner, initial.id);
+    expect(resumed.run.checkpoint).toBe('dispatch_retry');
+    expect(complete).toHaveBeenCalledTimes(1);
+    assistant.status = 'awaiting_approval';
+    const edited = await readAuthoringSession(f.owner, initial.id);
+    expect(edited.status).toBe('awaiting_approval');
+    expect(edited.error).toBe('');
+    expect(edited.revision).toBe(resumed.revision + 1);
+    await expect(readAuthoringSession(String(new mongoose.Types.ObjectId()), initial.id)).rejects.toMatchObject({ status: 404 });
+  });
+
   test('persists conversation, waits for explicit approval, and deduplicates creation and approval', async () => {
     const f = await fixture();
     const created = await createAuthoringSession(f.owner, f.body);

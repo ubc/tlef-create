@@ -36,6 +36,34 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 describe('Studio AI workspace', () => {
+  it('opens failed draft details and allows plan instructions to be edited before a new approval', async () => {
+    mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'needs_attention', error: 'Batch blocked.',
+      assistant: { ...saved.assistant, status: 'failed', phase: 'generating', errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED',
+        generation: { requestId: 'request-1', status: 'failed', readyCount: 1, totalQuestions: 2,
+          items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', reason: 'ANSWER_INVALID', message: 'Answer ambiguous.',
+            review: { questionText: 'A rejected water draft.', correctAnswer: 'Rock', options: [{ text: 'Rock', isCorrect: true }], issues: ['Water changes phase, not rock.'] } }] } } } } });
+    mount('task1');
+    const instructions = await screen.findByRole('textbox', { name: 'Question instructions for plan row 1' });
+    expect(instructions).toBeEnabled();
+    fireEvent.change(instructions, { target: { value: 'Ask about condensation, with one answer.' } });
+    expect(screen.getByRole('button', { name: 'Save plan' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Accept plan & generate/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Water changes phase, not rock.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Discuss the failure' }));
+    expect((screen.getByRole('textbox', { name: 'Message Studio AI' }) as HTMLTextAreaElement).value).toContain('Explain the failed');
+    expect(mocks.command).not.toHaveBeenCalled();
+  });
+  it('submits chosen teaching preferences as a revision and never auto-approves it', async () => {
+    mount('task1');
+    await screen.findByRole('button', { name: /Accept plan & generate/ });
+    fireEvent.click(screen.getByText('Refine teaching requirements'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Learner level' }), { target: { value: 'introductory university students' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Question difficulty' }), { target: { value: 'easy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update proposal' }));
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('task1', 'message', expect.objectContaining({ text: expect.stringContaining('Difficulty: easy.') })));
+    expect(mocks.command).toHaveBeenCalledTimes(1);
+  });
+
   it('shows per-question diagnoses from the saved batch', async () => {
     mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'needs_attention', error: 'The batch could not complete.',
       assistant: { ...saved.assistant, generation: { requestId: 'request-1', status: 'failed', readyCount: 1, totalQuestions: 2, reusedQuestions: 1,

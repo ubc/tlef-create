@@ -87,7 +87,7 @@
         "js/h5p-version.js": "cbf8dc36b67e18a61e36161a5aecc23012576ca8f93e4474bdeadb9610e821b3",
         "js/h5p-x-api-event.js": "13a582a8cf4f91f4eb33a0a6c70b58828ed2f0cb4c2392568fb692e17e623347",
         "js/h5p-x-api.js": "e13526de247d549395d0cdfcd61da02fa5234b7d9394113737bc8ebf39f04af6",
-        "js/h5p.js": "8474d16ceb1377c9a0aa12961047fafd016d71ed38f349035066bc5e27994c01",
+        "js/h5p.js": "14e3b90f2bbe09efb7fbb0b177a993ee24bfbe8172665f53ce32c2e8f1a9edf4",
         "js/jquery.js": "249b0b7542a571fc5acad79d517486f364c57fa50d61bf7942bd5ebc227c289a",
         "js/request-queue.js": "6e6c73ae318aa59347152e6c65af87ee6c960c34067e822e8bc99c15b3cb3bd8",
         "js/settings/h5p-disable-hub.js": "78e60375328697273407ae0eb1a805c36cde159ad85529dba18282b2fedb8dc7",
@@ -103,7 +103,16 @@
         "styles/h5p-theme.css": "e5eeb61df60ba5fa39ffa928ff327f65f3b4b3c7e582640dbecd9038479d916f",
         "styles/h5p-tooltip.css": "d2c6cd84fb9987cbc8ce0524ec5ac7488b70b1f41008e003892ac1a0ce5c25ef",
         "styles/h5p.css": "52d0cd3fa2290faf9a35140fc8b10cb43f30fe6fb901c5a33dd1720575a916af"
-      }
+      },
+      "createPatches": [
+        {
+          "date": "2026-09-30",
+          "files": [
+            "js/h5p.js"
+          ],
+          "description": "Keep state-saving beforeunload/pagehide handlers without registering deprecated unload listeners."
+        }
+      ]
     },
     {
       "directory": "h5p-editor-core",
@@ -223,7 +232,7 @@
         "scripts/h5peditor-boolean.js": "4bc0190c1012b55b9bbcb88beb056b5609589701b493dd08b16017b9cda7eb12",
         "scripts/h5peditor-coordinates.js": "8aefed9175bc05c2a5fcd1c17276f0ab7f837e3661588bd197660235c929316a",
         "scripts/h5peditor-dimensions.js": "a85a170dd13c6e4cab1e79b00e276a9caccba20a18da42fb6ba5d663cb121f1f",
-        "scripts/h5peditor-editor.js": "dc17502f295c26e51245ee8d7fc32015245eb00667afec260a8a7b1b1b54113e",
+        "scripts/h5peditor-editor.js": "f4133b52bbea162ba101d309e20852583bc9c61581c15b312e720cafd76ee93f",
         "scripts/h5peditor-file-uploader.js": "38581740878d98969f0f04593866af7ef33db40b10e37dff152ee359f0ab76a4",
         "scripts/h5peditor-file.js": "d74137824cadde196de79d4fe30f2081d1c82a0cdf49f2d14fc30ef44709006b",
         "scripts/h5peditor-form.js": "bb39127acf793f985286334d234f56530449c4e9ce0042d4931920fb4a1fecc1",
@@ -288,7 +297,16 @@
         "styles/scss/_variables.scss": "98e54921037bd450dc310e23df6d4f7b6a4ff9af98966354858c004a39345bd5",
         "styles/scss/application.scss": "50e2f1406b448b7d6bd4f5541f931c314abe5a2809c22db926abdebc2fbe5194",
         "styles/scss/cke-contents.scss": "81e8fce0c866ba311bcdf31118d21ee4937590c46913b2d70ed1e38faef15297"
-      }
+      },
+      "createPatches": [
+        {
+          "date": "2026-09-30",
+          "files": [
+            "scripts/h5peditor-editor.js"
+          ],
+          "description": "Use beforeunload/pagehide without registering deprecated unload listeners; editor uses the modern fullscreen allow attribute only."
+        }
+      ]
     }
   ],
   "libraries": [

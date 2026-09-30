@@ -2,7 +2,7 @@
 // Updating the advertised API requires replacing the real browser assets too.
 export const H5P_CORE_API = Object.freeze({ major: 1, minor: 28 });
 export const H5P_CORE_VERSION = '1.28.0';
-export const H5P_RUNTIME_REVISION = '20260921-core128-opaque-resize';
+export const H5P_RUNTIME_REVISION = '20260930-core128-pagehide';
 
 export const H5P_CORE_SCRIPTS = [
   'js/jquery.js', 'js/h5p-jquery-bridge.js', 'js/h5p.js',

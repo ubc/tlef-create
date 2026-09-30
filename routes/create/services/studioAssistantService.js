@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { canReviseAssistantPlan } from './authoring/assistantRecovery.js';
 import mongoose from 'mongoose';
 import Session from '../models/StudioAssistantSession.js';
 import Folder from '../models/Folder.js';
@@ -8,6 +9,7 @@ import LearningObjective from '../models/LearningObjective.js';
 import Question from '../models/Question.js';
 import H5PContent from '../models/H5PContent.js';
 import QuestionGenerationJob from '../models/QuestionGenerationJob.js';
+import RejectedQuestionDraft from '../models/RejectedQuestionDraft.js';
 import studioJobs from './studioGenerationJobs.js';
 import questionJobs, { serializeQuestionJob } from './questionGenerationJobs.js';
 import { withQuestionMutation } from './questionPublication.js';
@@ -301,6 +303,14 @@ export async function readAssistantSession(owner, id) {
     if (job && String(job.quiz) === String(session.quizId)) {
       const serialized = serializeQuestionJob(job);
       value.generation = { ...serialized, totalQuestions: job.items.length, readyCount: job.items.filter(item => item.status === 'ready').length };
+      const rejected = await RejectedQuestionDraft.find({ owner, quiz: session.quizId, job: job._id,
+        index: { $in: job.items.filter(item => item.status === 'failed').map(item => item.index) }
+      }).select('index questionText correctAnswer options issues reason').lean();
+      value.generation.items = value.generation.items.map(item => {
+        const draft = rejected.find(entry => entry.index === item.index);
+        return draft ? { ...item, review: { questionText: draft.questionText, correctAnswer: draft.correctAnswer,
+          options: draft.options, issues: draft.issues } } : item;
+      });
       value.previewVersion = value.generation.readyCount;
     }
   }
@@ -352,19 +362,26 @@ export async function createAssistantSession(user, body) {
 
 export async function updateAssistantPlan(user, id, body) {
   const session = await ownedSession(String(user.id), id);
-  if (session.status !== 'awaiting_approval' || session.revision !== body.revision) fail('Reload the current plan before saving.');
+  if (!canReviseAssistantPlan(session) || session.revision !== body.revision) fail('Reload the current plan before saving.');
   await assertSources(session);
+  if (session.status === 'failed') {
+    const job = session.questionJobRequestId ? await questionJobs.get(String(user.id), session.questionJobRequestId) : null;
+    if (!job || job.active || job.status !== 'failed' || String(job.quiz) !== String(session.quizId)) {
+      fail('Only a failed, unpublished question batch can return to plan editing. Check task status first.');
+    }
+  }
   // Reserve this edit before changing the shared learning object. Approval and
   // concurrent saves cannot run against the previous plan while it is saving.
-  const reserved = await Session.findOneAndUpdate({ _id: session._id, owner: session.owner, revision: body.revision, status: 'awaiting_approval' }, {
+  const reserved = await Session.findOneAndUpdate({ _id: session._id, owner: session.owner, revision: body.revision, status: session.status }, {
     $set: { status: 'planning' }, $inc: { revision: 1 }
   }, { new: true });
   if (!reserved) fail('This plan is already being changed. Reload it before continuing.');
   try {
     const saved = await saveBlueprint(reserved, body, session.quizFingerprint);
-    await Session.updateOne({ _id: session._id, revision: reserved.revision, status: 'planning' }, { $set: { ...saved, status: 'awaiting_approval', error: '' } });
+    await Session.updateOne({ _id: session._id, revision: reserved.revision, status: 'planning' }, { $set: { ...saved, status: 'awaiting_approval', error: '', errorCode: null },
+      $unset: { approvedAt: '', approvedRevision: '', approvedPlanHash: '', questionJobRequestId: '', questionJobRetryFromRequestId: '' } });
   } catch (error) {
-    await Session.updateOne({ _id: session._id, revision: reserved.revision, status: 'planning' }, { $set: { status: 'awaiting_approval' } });
+    await Session.updateOne({ _id: session._id, revision: reserved.revision, status: 'planning' }, { $set: { status: session.status } });
     throw error;
   }
   return readAssistantSession(String(user.id), id);

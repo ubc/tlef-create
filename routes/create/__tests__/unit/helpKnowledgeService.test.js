@@ -5,6 +5,8 @@ import { answerHelpQuestion } from '../../services/helpChatService.js';
 describe('CREATE Guide knowledge retrieval', () => {
   test.each([
     ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
+    ['Task steps Refine teaching requirements Learner level Teaching purpose Question difficulty Update proposal', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Rejected draft Review observations Discuss the failure Edit teaching plan Approved instructions', 'h5p-studio', 'Questions needing attention'],
     ['Questions needing attention instruction mismatch incomplete option feedback review service unavailable', 'h5p-studio', 'Questions needing attention'],
     ['Create Course optional Canvas step Connect to Canvas sign-in window blocked pop-ups', 'review-and-export', 'Connecting Canvas when creating a course'],
     ['Connect Canvas UBC GenAI Toolkit reconnect authorization disconnect Developer Key permissions', 'review-and-export', 'Canvas export'],

@@ -210,6 +210,7 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
     const Question = await import('../models/Question.js');
     const LearningObjective = await import('../models/LearningObjective.js');
     const GenerationPlan = await import('../models/GenerationPlan.js');
+    const RejectedQuestionDraft = await import('../models/RejectedQuestionDraft.js');
     const ragService = await import('../services/ragService.js');
     const jobQueueService = await import('../services/jobQueueService.js');
 
@@ -263,6 +264,8 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
         quiz: { $in: folder.quizzes }
       });
       console.log(`✅ Deleted ${planDeleteResult.deletedCount} generation plans`);
+
+      await RejectedQuestionDraft.default.deleteMany({ owner: userId, quiz: { $in: folder.quizzes } });
 
       // Step 5: Delete all quizzes in this folder
       const quizDeleteResult = await Quiz.default.deleteMany({

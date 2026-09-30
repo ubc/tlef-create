@@ -1628,6 +1628,7 @@ export interface StudioAssistantSession {
   instructions: string;
   revision: number;
   phase?: 'planning' | 'generating';
+  errorCode?: string | null;
   status: 'planning' | 'awaiting_approval' | 'generating' | 'completed' | 'failed' | 'interrupted';
   objectives: StudioAssistantObjective[];
   plan: StudioAssistantPlanItem[];
@@ -1644,7 +1645,7 @@ export interface StudioAssistantSession {
     readyCount: number;
     reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string }>;
+    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[] } }>;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -1688,7 +1689,8 @@ export interface AuthoringSession {
   error: string; currentVersionId: string | null; candidateVersionId: string | null;
   messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; createdAt: string }>;
   versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;
-  run: { id: string; status: string; checkpoint: string; error?: string } | null; updatedAt: string;
+  taskSteps?: Array<{ name: string; createdAt: string }>;
+  run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string } | null; updatedAt: string;
 }
 export const studioAuthoringApi = {
   list: (): Promise<ApiResponse<{ sessions: Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>> }>> =>

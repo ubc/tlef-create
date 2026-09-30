@@ -72,9 +72,19 @@ The conversation, task state and version history are stored on the server for th
 
 If material processing fails, retry it in the course Materials tab before resuming. If a task changed in another tab, refresh its status and review the latest plan or version. Save plan edits before leaving. A disconnected initial submission can be found in Task history; resubmitting the same request identifier with a different brief is rejected, so use **New task** for a different brief.
 
+### Task steps and teaching requirements
+
+In the conversation column, expand **Task steps** to see saved actions: reading sources, proposing the plan, generating and checking questions, preparing a revision, and saving an accepted version. Each question shows whether it is queued, generating and checking, prepared, or needs attention. These are task actions and checks, not the model's private reasoning.
+
+For a broad request such as “create quizzes from this material,” review the proposed plan before generating. Expand **Refine teaching requirements** to choose **Learner level**, **Teaching purpose**, and **Question difficulty**. **Update proposal** sends those choices as a plan revision; you must still approve the updated plan. You can discuss other requirements in the message box, including question count and constraints. **Generate draft automatically** is an explicit opt-in that skips the initial plan review.
+
 ### Questions needing attention
 
 When a batch has failed questions, **Questions needing attention** lists each affected question number and its saved diagnosis. The message distinguishes an answer flagged as incorrect or ambiguous, an instruction mismatch, incomplete option feedback, an unverifiable calculation, and an unavailable feedback review service. A review flag is a reason to inspect the draft and sources, not proof that the reviewer is always correct. Older tasks may show a general failure message because they do not contain the newer diagnosis.
+
+Expand a failed question to inspect its topic, **Approved instructions**, **Rejected draft — not published**, and **Review observations**. Rejected drafts and review observations are private course content visible only to the owning instructor. They are not saved in job telemetry. Older attempts may lack these details; CREATE explains that instead of inventing a diagnosis.
+
+Choose **Discuss the failure** to compose a question for the assistant, or **Edit teaching plan** to revise the failed, unpublished batch. Question instructions, objective wording and counts can be edited. **Save plan** invalidates the previous approval; review the updated plan and choose **Accept plan & generate**. A message never automatically retries generation. This recovery does not reopen a batch whose questions were already published.
 
 The whole batch must pass before its questions are published. **Resume task** reuses confirmed prepared questions when the approved plan, course snapshot and generation contract are unchanged. Only the remaining questions are generated again, using additional model credits. If a prepared candidate is no longer available or comes from an older generation contract, it must be regenerated. A failed status read is retried automatically without starting generation; **Check status** can also refresh the saved result.
 

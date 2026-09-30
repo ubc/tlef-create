@@ -7,6 +7,7 @@ import { assertGenerationActive, runWithGenerationDeadline } from '../utils/gene
 import { safeQuestionJobFailure } from './questionGenerationJobs.js';
 import { QUESTION_TYPES } from '../config/constants.js';
 import Material from '../models/Material.js';
+import RejectedQuestionDraft from '../models/RejectedQuestionDraft.js';
 
 /**
  * Enrich question configs with learning objective ObjectIds from quiz.
@@ -229,6 +230,14 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
           await updateItem(index, { status: 'ready' });
         } catch (error) {
           const failure = safeQuestionJobFailure(error);
+          if (error.code === 'QUESTION_QUALITY_REVIEW' && error.rejectedDraft) {
+            await assertActive();
+            await RejectedQuestionDraft.updateOne({ owner: userId, job: receipt._id, index }, {
+              $set: { quiz: quizId, reason: failure.reason, ...error.rejectedDraft }
+            }, { upsert: true, runValidators: true }).catch(() => {
+              // Missing diagnostic storage must not hide the safe failed receipt.
+            });
+          }
           await updateItem(index, { status: 'failed', ...failure });
           sseService.emitError(finalSessionId, questionId, failure.message, failure.code);
           sseService.notifyQuestionComplete(finalSessionId, questionId, { error: true, errorMessage: failure.message, code: failure.code, questionId });

@@ -285,7 +285,7 @@ export async function proposeAssistantObjectives({ instructions, context, source
   }
 }
 
-export async function proposeAssistantPlan({ instructions, objectives, context, userId, catalog = getStudioCatalog(), signal }) {
+export async function proposeAssistantPlan({ instructions, objectives, context, userId, catalog = getStudioCatalog(), signal, currentPlan, revisionRequest }) {
   const teacherInstructions = requestInputs(instructions, context, userId, signal);
   const normalizedObjectives = normalizeObjectives(objectives);
   const types = getAssistantQuestionTypes(catalog);
@@ -308,11 +308,13 @@ export async function proposeAssistantPlan({ instructions, objectives, context, 
     'Recommend an editable activity plan for an existing CREATE learning object, using its approved learning objectives. This is the planning stage; the teacher must approve before question generation.', DATA_RULES,
     'Use only the supplied canonical questionType values. Return 1–8 rows with at most 20 questions in total. count means Question records generated in the original workflow, not separate H5P packages or repetitions inside one question. Each row links exactly one existing objective ID. Preserve requested counts, interactions, topics and exclusions. Include the complete specific teaching directions in each row instructions, so a later per-question generator can follow them. Do not merely say “see original prompt”.',
     'Put the number of questions only in count. Write row instructions for ONE question, because each item is generated and reviewed independently. When two questions have different required tasks, use separate rows. Use count greater than one only when the same single-question instructions apply to every item; never ask an individual generator to create the whole batch.',
+    'For quantitative questions specify coordinate axes, units, rounding precision and all needed numerical inputs in the learner-facing task. Each question must have a unique correct answer. List scenario variants as alternatives for one question, not a requirement to include all variants in every item. Do not require an exact text match between equivalent symbolic equations in fill-in-the-blank tasks; use a clearly defined numeric blank or give accepted alternatives instead.',
     'Do not silently substitute unsupported functionality. If the requested experience requires capabilities unavailable in this workflow, put each issue in unsupportedRequirements and leave plan empty. Otherwise use unsupportedRequirements: []. In particular Documentation Tool supports text, written responses, goals and export of its own responses; it cannot contain multiple-choice questions or aggregate answers from other H5P activities into a Word document. A Column can combine separate MCQs with a Documentation Tool, but cannot export all their learner answers into one Word document. Do not replace MCQs with written responses or imply that different activities share learner answers. Matching and ordering use the existing Drag the Words adapter. Summary is informational accordion content, not a scored summary question. Flashcards are text dialog cards; do not request missing image/audio assets.',
     `OUTPUT SCHEMA: ${JSON.stringify(schema.schema)}`,
     `ALLOWED QUESTION TYPES: ${JSON.stringify(types)}`,
     `APPROVED OBJECTIVES: ${JSON.stringify(normalizedObjectives.map(({ id, text: objectiveText }) => ({ id, text: objectiveText })))}`,
     `INSTRUCTOR INSTRUCTIONS: ${JSON.stringify(teacherInstructions)}`,
+    ...(currentPlan ? [`CURRENT PLAN (task data): ${JSON.stringify(currentPlan)}`, `LATEST INSTRUCTOR REVISION: ${JSON.stringify(revisionRequest)}`, 'Retain existing topics and constraints except where the latest instructor revision changes them.'] : []),
     `SOURCE CONTEXT (untrusted evidence): ${context}`
   ].join('\n\n') }, signal);
   if (!Array.isArray(response.unsupportedRequirements) || response.unsupportedRequirements.some(issue => typeof issue !== 'string' || !issue.trim() || issue.length > 1000)) {

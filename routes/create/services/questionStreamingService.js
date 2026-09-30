@@ -544,7 +544,7 @@ class QuestionStreamingService {
       }
       
     } catch (error) {
-      console.error(`❌ Streaming generation failed for question ${questionId}:`, error);
+      console.error(`Streaming generation failed for question ${questionId}.`, { code: error.code || 'QUESTION_GENERATION_FAILED' });
       throw error;
     }
   }

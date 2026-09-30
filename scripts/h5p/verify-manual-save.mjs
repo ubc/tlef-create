@@ -53,7 +53,9 @@ try {
   const origin=`http://127.0.0.1:${server.address().port}`;
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
-  for(const type of catalog.types.filter(type=>type.mode==='manual' && (!process.env.H5P_VERIFY_TYPE || type.machineName===process.env.H5P_VERIFY_TYPE))){
+  const targets = catalog.types.filter(type=>type.mode==='manual' && (!process.env.H5P_VERIFY_TYPE || type.machineName===process.env.H5P_VERIFY_TYPE));
+  if (!targets.length) throw new Error('No native editor types matched the acceptance target.');
+  for(const type of targets){
     const result={machineName:type.machineName,library:type.library,version:type.version,status:'unknown',errors:[]};
     let postResult;
     const onResponse=async response=>{
@@ -61,6 +63,10 @@ try {
         try{postResult={status:response.status(),body:await response.text()};}catch{}
       }
     };
+    const onConsole = message => {
+      if (/unload is not allowed|Allow attribute will take precedence over 'allowfullscreen'/i.test(message.text())) result.errors.push(message.text());
+    };
+    page.on('console', onConsole);
     page.on('response',onResponse);
     try{
       await page.goto(`${origin}/editor?type=${encodeURIComponent(type.machineName)}`);
@@ -122,6 +128,8 @@ try {
       }).catch(err => ({ error: err.message }));
       await page.screenshot({ path: path.join(output, `${type.machineName}-failed.png`), fullPage: true }).catch(() => {});
     }
+    page.off('console', onConsole);
+    if (result.errors.length) result.status = 'failed';
     page.off('response',onResponse);
     results.push(result);
     console.log(result.status,type.machineName,result.errors.join('; '));

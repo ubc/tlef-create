@@ -32,6 +32,7 @@ const run = new mongoose.Schema({
   input: mongoose.Schema.Types.Mixed, baseVersionId: id,
   admitted: { type: Boolean, default: false },
   status: { type: String, enum: ['queued', 'running', 'waiting', 'succeeded', 'failed', 'interrupted', 'cancelled'], default: 'queued' },
+  steps: { type: [{ _id: false, name: String, createdAt: Date }], default: [] },
   checkpoint: { type: String, default: 'start' }, result: mongoose.Schema.Types.Mixed,
   leaseToken: String, leaseUntil: Date, nextAt: { type: Date, default: Date.now },
   cancelRequested: { type: Boolean, default: false }, error: String,

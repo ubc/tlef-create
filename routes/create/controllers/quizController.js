@@ -245,17 +245,19 @@ router.delete('/:id', authenticateToken, validateMongoId, asyncHandler(async (re
   }
 
   // Delete associated data
-  const [LearningObjective, Question, GenerationPlan] = await Promise.all([
+  const [LearningObjective, Question, GenerationPlan, RejectedQuestionDraft] = await Promise.all([
     import('../models/LearningObjective.js').then(m => m.default),
     import('../models/Question.js').then(m => m.default),
-    import('../models/GenerationPlan.js').then(m => m.default)
+    import('../models/GenerationPlan.js').then(m => m.default),
+    import('../models/RejectedQuestionDraft.js').then(m => m.default)
   ]);
 
   console.log('🗑️ Deleting associated data...');
   const deletionResults = await Promise.all([
     LearningObjective.deleteMany({ quiz: quizId }),
     Question.deleteMany({ quiz: quizId }),
-    GenerationPlan.deleteMany({ quiz: quizId })
+    GenerationPlan.deleteMany({ quiz: quizId }),
+    RejectedQuestionDraft.deleteMany({ quiz: quizId, owner: userId })
   ]);
   console.log('✅ Deleted:', deletionResults[0].deletedCount, 'objectives,',
     deletionResults[1].deletedCount, 'questions,',
