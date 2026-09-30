@@ -49,6 +49,24 @@ describe('question generation quality boundary', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
+  test('requests JSON and stops after a completed malformed draft without a paid fallback', async () => {
+    llmService.parseAndValidateResponse.mockRestore();
+    const completion = jest.spyOn(llmService, 'streamCompletion').mockResolvedValue({ content: '{"questionText": + "bad"}', model: 'gpt-6-luna' });
+    const fallback = jest.spyOn(llmService, 'generateQuestion');
+    await expect(llmService.generateQuestionStreaming(config)).rejects.toMatchObject({ code: 'QUESTION_INVALID_RESPONSE' });
+    expect(completion).toHaveBeenCalledTimes(1);
+    expect(completion.mock.calls[0][0].jsonMode).toBe(true);
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  test('requests JSON through the non-streaming OpenAI toolkit transport', async () => {
+    const sendMessage = jest.fn().mockResolvedValue({ content: 'draft', model: 'gpt-6-luna' });
+    jest.spyOn(llmService, 'createLLMForConfig').mockReturnValue({ sendMessage });
+    jest.spyOn(llmService, 'streamCompletion').mockResolvedValue({ content: '{"answerIsCorrect":false}' });
+    await expect(llmService.generateQuestion(config)).rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW' });
+    expect(sendMessage.mock.calls[0][1].responseFormat).toBe('json');
+  });
+
   test.each(['generateQuestion', 'generateQuestionStreaming'])(
     '%s blocks unavailable types before resolving credentials or doing model work', async method => {
       const libraries = getStudioCatalog().libraries;

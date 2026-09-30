@@ -16,10 +16,9 @@ export function supportsOpenAIStructuredOutputs(model = '', endpoint = '') {
 }
 
 export function extractBalancedJson(value = '') {
-  const text = String(value)
-    .replace(/```json\s*/gi, '')
-    .replace(/```/g, '')
-    .trim();
+  // Scanning starts at the first JSON delimiter, so outer Markdown fences
+  // need no replacement. Preserve literal fences inside question strings.
+  const text = String(value).trim();
   const start = text.search(/[\[{]/);
   if (start < 0) return '';
 

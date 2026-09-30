@@ -55,6 +55,7 @@ export function safeQuestionJobFailure(error) {
     return { code: error.code, reason: error.qualityFailureReason, message: reviewReasons[error.qualityFailureReason] };
   }
   const known = {
+    QUESTION_INVALID_RESPONSE: 'The model returned an unreadable or invalid question. No question was saved. An explicit retry generates a new draft using additional AI credits.',
     GENERATION_TIMEOUT: 'This question exceeded its generation deadline. No question from this batch was published.',
     QUESTION_QUALITY_REVIEW: 'This question did not pass the feedback check. Refine its instructions before starting a new attempt.',
     NO_API_KEY: 'An AI API key is required before generating questions.',

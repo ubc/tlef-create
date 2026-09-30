@@ -3,6 +3,12 @@ import { safeQuestionJobFailure, serializeQuestionJob } from '../../services/que
 import Job from '../../models/QuestionGenerationJob.js';
 
 describe('safe question failure diagnostics', () => {
+  test('distinguishes a malformed model draft without exposing provider output', () => {
+    const result = safeQuestionJobFailure({ code: 'QUESTION_INVALID_RESPONSE', message: 'PRIVATE provider draft' });
+    expect(result.code).toBe('QUESTION_INVALID_RESPONSE');
+    expect(result.message).toContain('explicit retry');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  });
   test.each(['REVIEW_UNAVAILABLE', 'REVIEW_INVALID_RESPONSE', 'ANSWER_INVALID', 'INSTRUCTION_MISMATCH',
     'FEEDBACK_INVALID', 'ARITHMETIC_FALSE_EQUALITY', 'ARITHMETIC_INVALID_SCHEMA',
     'ARITHMETIC_DIVISION_BY_ZERO', 'ARITHMETIC_UNSUPPORTED_EXPRESSION', 'FEEDBACK_TEXT_LIMIT'])('persists and exposes the allowlisted diagnosis %s', reason => {

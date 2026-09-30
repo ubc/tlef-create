@@ -491,6 +491,7 @@ class QuizLLMService {
         temperature,
         maxTokens,
         reasoningEffort,
+        jsonMode: true,
         signal
       }, onStreamChunk);
       accumulatedContent = response.content;
@@ -556,7 +557,7 @@ class QuizLLMService {
       };
     } catch (error) {
       signal?.throwIfAborted();
-      if (error.code === 'QUESTION_QUALITY_REVIEW' || error.name === 'AbortError'
+      if (error.code === 'QUESTION_QUALITY_REVIEW' || error.code === 'QUESTION_INVALID_RESPONSE' || error.name === 'AbortError'
         || error.name === 'APIUserAbortError' || error.code === 'ABORT_ERR') throw error;
       console.error(`❌ Streaming generation failed: ${error.message}`);
       console.error('🔄 Falling back to non-streaming generation...');
@@ -654,6 +655,7 @@ class QuizLLMService {
       const { maxTokens, reasoningEffort } = getQuestionCompletionOptions(llmConfig.model, isLongFormQuestion);
 
       const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig, reasoningEffort);
+      if (llmConfig.provider === 'openai') options.responseFormat = 'json';
       signal?.throwIfAborted();
       const response = await llm.sendMessage(prompt, options);
       signal?.throwIfAborted();
@@ -1204,21 +1206,10 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
         throw new Error('No JSON object found in response');
       }
       
-      // Find the matching closing brace by counting braces
-      let braceCount = 0;
-      let lastBrace = -1;
-      
-      for (let i = firstBrace; i < cleanContent.length; i++) {
-        if (cleanContent[i] === '{') {
-          braceCount++;
-        } else if (cleanContent[i] === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            lastBrace = i;
-            break;
-          }
-        }
-      }
+      // Learner text can contain braces and escaped quotes (for example LaTeX).
+      // Only structural JSON braces determine the end of the response object.
+      const balancedJson = extractBalancedJson(cleanContent);
+      let lastBrace = balancedJson ? firstBrace + balancedJson.length - 1 : -1;
       
       if (lastBrace === -1) {
         console.log('❌ No matching closing brace found');
@@ -1595,9 +1586,10 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
       return normalizeGeneratedQuestionText(parsed);
 
     } catch (error) {
-      console.error('❌ Failed to parse LLM response:', error.message);
-      console.error('Raw response:', responseContent);
-      throw new Error(`Invalid LLM response format: ${error.message}`);
+      console.error('❌ Question response failed format validation.');
+      throw Object.assign(new Error('The model returned an unreadable or invalid question. No question was saved. Retry explicitly to generate a new draft.'), {
+        code: 'QUESTION_INVALID_RESPONSE', cause: error
+      });
     }
   }
 
