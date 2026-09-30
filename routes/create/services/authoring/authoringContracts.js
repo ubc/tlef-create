@@ -21,7 +21,16 @@ export function parseDecision(value, questionCount) {
     || value.questionIndex < 1 || value.questionIndex > questionCount)) {
     fail('Choose a question in the current version before requesting a revision.', 422, 'AUTHORING_RESPONSE');
   }
-  return { action: value.action, reply: value.reply, questionIndex: value.questionIndex };
+  const clarification = value.clarification ?? [];
+  if (!Array.isArray(clarification) || clarification.length > 3 || (value.action !== 'reply' && clarification.length)
+    || clarification.some(item => !item || typeof item.question !== 'string' || !item.question.trim() || item.question.length > 300
+      || !Array.isArray(item.options) || item.options.length < 2 || item.options.length > 4
+      || item.options.some(option => typeof option !== 'string' || !option.trim() || option.length > 180)
+      || new Set(item.options.map(option => option.trim())).size !== item.options.length)) {
+    fail('The assistant returned incomplete clarification choices. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
+  }
+  return { action: value.action, reply: value.reply, questionIndex: value.questionIndex,
+    clarification: clarification.map(item => ({ question: item.question.trim(), options: item.options.map(option => option.trim()) })) };
 }
 export const versionSummary = version => ({
   id: String(version._id), number: version.number, parentId: version.parentId ? String(version.parentId) : null,

@@ -1682,12 +1682,13 @@ export interface AuthoringVersion {
   representation: 'course-linked' | 'native-fork'; state: 'candidate' | 'accepted' | 'rejected'; createdAt: string;
   questions: Array<{ id: string; index: number; type: string; text: string; explanation?: string; sourceReferences: SourceReference[] }>;
 }
+export interface AuthoringClarification { question: string; options: string[] }
 export interface AuthoringSession {
   id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
   instructions: string; autoApprove: boolean; revision: number;
   status: 'waiting_for_materials' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
   error: string; currentVersionId: string | null; candidateVersionId: string | null;
-  messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; createdAt: string }>;
+  messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; clarification?: AuthoringClarification[]; createdAt: string }>;
   versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;
   taskSteps?: Array<{ name: string; createdAt: string }>;
   run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string } | null; updatedAt: string;

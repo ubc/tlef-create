@@ -20,6 +20,7 @@ const message = new mongoose.Schema({
   owner: { type: id, required: true }, sessionId: { type: id, required: true },
   key: { type: String, required: true }, role: { type: String, enum: ['user', 'assistant'], required: true },
   text: { type: String, required: true, maxlength: 12000 }, runId: id,
+  clarification: { type: [{ _id: false, question: { type: String, maxlength: 300 }, options: [{ type: String, maxlength: 180 }] }], default: [] },
   createdAt: { type: Date, default: Date.now }
 });
 message.index({ sessionId: 1, key: 1 }, { unique: true });

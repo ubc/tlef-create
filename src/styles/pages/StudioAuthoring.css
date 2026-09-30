@@ -33,6 +33,15 @@
 .authoring-message.is-user { background:#f3f5f4; border:1px solid #eef0ee; border-radius:12px; padding:14px 17px; margin-left:22px; }
 .authoring-speaker { display:flex; align-items:center; gap:7px; font-size:10px; font-weight:650; letter-spacing:.06em; color:#6b8279; }
 .authoring-message p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; line-height:1.85; margin:9px 0 0; color:#354b51; }
+.authoring-clarification { margin-top:14px; }
+.authoring-clarification fieldset { border:0; padding:0; margin:0 0 14px; min-width:0; }
+.authoring-clarification legend { font-size:12px; font-weight:600; color:var(--aw-ink); margin-bottom:8px; overflow-wrap:anywhere; }
+.authoring-clarification-options { display:flex; flex-wrap:wrap; gap:7px; }
+.authoring-clarification-options label { display:flex; gap:7px; align-items:flex-start; border:1px solid var(--aw-line); border-radius:9px; padding:9px 11px; background:white; font-size:12px; line-height:1.5; color:#435b55; cursor:pointer; overflow-wrap:anywhere; max-width:100%; }
+.authoring-clarification-options label.selected { background:#edf6f1; border-color:#7da894; }
+.authoring-clarification-options input { accent-color:var(--aw-accent); margin:3px 0 0; flex:none; }
+.authoring-clarification fieldset:disabled label { cursor:default; }
+.authoring-clarification .authoring-clarification-note { font-size:11px; line-height:1.5; color:var(--aw-muted); }
 .authoring-live { display:flex; gap:10px; align-items:flex-start; color:var(--aw-accent); font-size:12px; padding:0 0 22px; }
 .authoring-live svg { flex-shrink:0; margin-top:3px; }
 .authoring-live strong { display:block; font-weight:550; }

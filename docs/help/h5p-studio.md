@@ -78,6 +78,8 @@ In the conversation column, expand **Task steps** to see saved actions: reading 
 
 For a broad request such as “create quizzes from this material,” review the proposed plan before generating. Expand **Refine teaching requirements** to choose **Learner level**, **Teaching purpose**, and **Question difficulty**. **Update proposal** sends those choices as a plan revision; you must still approve the updated plan. You can discuss other requirements in the message box, including question count and constraints. **Generate draft automatically** is an explicit opt-in that skips the initial plan review.
 
+When a message is ambiguous or its requirements conflict, CREATE can ask up to three clarification questions with selectable answers in the conversation. Select an option, then choose **Use selected answers** to fill the message box. Review or edit the reply and choose **Send message**. Selecting options alone does not call the model, change the plan, or approve generation. You can also write a free-text reply. Only the latest assistant message offers active choices; older choices remain visible but cannot be submitted. Save unsaved plan edits before using clarification choices.
+
 ### Questions needing attention
 
 When a batch has failed questions, **Questions needing attention** lists each affected question number and its saved diagnosis. The message distinguishes an answer flagged as incorrect or ambiguous, an instruction mismatch, incomplete option feedback, an unverifiable calculation, and an unavailable feedback review service. A review flag is a reason to inspect the draft and sources, not proof that the reviewer is always correct. Older tasks may show a general failure message because they do not contain the newer diagnosis.

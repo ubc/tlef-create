@@ -31,3 +31,11 @@ The planning and decision rounds use the actual helper/prompt and parser with sy
 Browser access to localhost was rejected by the browser permission layer. Permission restoration and local login were requested. Every screenshot slot remains explicitly pending; no service output is represented as a UI screenshot. The supplied lecture's external model transmission also awaits the user's response to the prior automatic approval rejection.
 
 Selectable clarification choices and an initial adaptive intake are not implemented at this checkpoint. A vague-message text reply does not satisfy that design. Remaining evaluation includes actual UI rounds, individual-question revisions, contradictions, unsupported capabilities, stop/retry behavior and the complex lecture case after approval.
+
+## Selectable clarification checkpoint
+
+Two further live decision rounds tested a contradictory one-versus-five question count. The text-only baseline correctly asked the instructor to choose. After extending the decision contract, Luna returned a validated question with three selectable alternatives and kept the action as `reply`.
+
+Clarification questions are now persisted with owner-authorized conversation messages. Each reply accepts at most three questions with two to four bounded, distinct options. A revision cannot be combined with unanswered clarification choices. The conversation renders radio choices for the latest assistant message; **Use selected answers** composes an editable reply, and only **Send message** calls the API. Changing a selection replaces its previous composed answer. Superseded choices are unavailable.
+
+Validation: 107 focused backend unit tests, 10 isolated authoring integration tests and 17 frontend tests passed. The production build passed with existing bundle-size warnings. A live model response matched the structured choice contract. Browser visual acceptance and screenshots remain pending permission. Initial adaptive intake before plan generation remains outstanding.

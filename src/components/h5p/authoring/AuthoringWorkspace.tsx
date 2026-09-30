@@ -5,6 +5,7 @@ import { ApiError, foldersApi, materialsApi, studioAuthoringApi, studioAssistant
   type AuthoringSession, type Folder, type Material, type SourceReference } from '../../../services/api';
 import StudioPreview from '../StudioPreview';
 import AuthoringProgress from './AuthoringProgress';
+import AuthoringClarification from './AuthoringClarification';
 import SourceReferencePreviewModal from '../../SourceReferencePreviewModal';
 import { useSystemDialog } from '../../system-dialog/SystemDialogProvider';
 import { usePubSub } from '../../../hooks/usePubSub';
@@ -65,6 +66,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   const dragDepth = useRef(0);
   const end = useRef<HTMLDivElement>(null);
   const operation = useRef(false);
+  const composedClarification = useRef('');
   const alive = useRef(true);
   const callbacks = useRef({ onSessionChange, onOpenActivity });
   callbacks.current = { onSessionChange, onOpenActivity };
@@ -189,6 +191,13 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
       }
     });
   };
+  const useClarificationAnswers = (reply: string) => {
+    const previous = composedClarification.current;
+    composedClarification.current = reply;
+    setText(existing => previous && existing.endsWith(previous)
+      ? `${existing.slice(0, -previous.length)}${reply}`
+      : existing.trim() ? `${existing}\n\n${reply}` : reply);
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (operation.current || running(session) || uncertain) return;
@@ -310,7 +319,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
             ['Prepare for class', 'Create a first-year pre-class activity introducing the key concepts in these materials.'],
             ['Apply the ideas', 'Create an activity with practical application questions grounded in these materials.']
           ].map(([title, prompt]) => <button key={title} onClick={() => setText(prompt)}><BookOpen size={16} /><span>{title}</span><ArrowUpRight size={14} /></button>)}</div></div>}
-          {session?.messages.map(message => <article className={`authoring-message is-${message.role}`} key={message.id}><span className="authoring-speaker">{message.role === 'assistant' ? <><Sparkles size={14} /> CREATE</> : 'You'}</span><p>{message.text}</p></article>)}
+          {session?.messages.map(message => <article className={`authoring-message is-${message.role}`} key={message.id}><span className="authoring-speaker">{message.role === 'assistant' ? <><Sparkles size={14} /> CREATE</> : 'You'}</span><p>{message.text}</p>{message.role === 'assistant' && !!message.clarification?.length && <AuthoringClarification messageId={message.id} questions={message.clarification} disabled={active || !!busy || uncertain || !!candidate || planDirty || session?.messages.at(-1)?.id !== message.id} onUseAnswers={useClarificationAnswers} />}</article>)}
           {session && <AuthoringProgress session={session} />}
           {session && active && <div className="authoring-live" role="status"><Loader2 size={15} className="spin" /><div><strong>{labels[session.status]}</strong><span>{session.assistant?.events.at(-1)?.message || 'Your progress is saved. You can return to this task later.'}</span>{session.assistant?.generation && <progress aria-label="Questions prepared" value={session.assistant.generation.readyCount} max={session.assistant.generation.totalQuestions} />}</div></div>}
           {session?.status === 'awaiting_approval' && !active && <div className="authoring-decision"><div><span className="authoring-decision-icon"><Check size={18} /></span><strong>Your teaching plan is ready</strong></div><p>{planDraft?.objectives.length || 0} learning objectives · {total} questions · H5P Column</p><p>Review the plan alongside this conversation. Your existing course questions are preserved.</p><button className="btn btn-primary" disabled={!!busy || planDirty || !validPlan} onClick={() => command('approve', { planRevision: session.assistant?.revision })}>Accept plan & generate <ArrowUpRight size={15} /></button><button className="authoring-quiet" onClick={() => setPanel('plan')}>Review plan</button>{planDirty && <small>Save your plan edits before generating.</small>}</div>}

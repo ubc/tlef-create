@@ -36,6 +36,20 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 describe('Studio AI workspace', () => {
+  it('fills the composer from current clarification choices and calls the API only after Send', async () => {
+    mocks.get.mockResolvedValue({ data: { session: { ...saved, messages: [{ id: 'clarify1', role: 'assistant', text: 'Choose your intended count.', createdAt: '2026-09-30',
+      clarification: [{ question: 'How many questions?', options: ['One', 'Five'] }] }] } } });
+    mount('task1');
+    fireEvent.click(await screen.findByRole('radio', { name: 'One' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use selected answers' }));
+    expect((screen.getByRole('textbox', { name: 'Message Studio AI' }) as HTMLTextAreaElement).value).toContain('How many questions? One');
+    expect(mocks.command).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Five' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use selected answers' }));
+    expect((screen.getByRole('textbox', { name: 'Message Studio AI' }) as HTMLTextAreaElement).value).not.toContain('How many questions? One');
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('task1', 'message', expect.objectContaining({ text: expect.stringContaining('How many questions? Five') })));
+  });
   it('opens failed draft details and allows plan instructions to be edited before a new approval', async () => {
     mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'needs_attention', error: 'Batch blocked.',
       assistant: { ...saved.assistant, status: 'failed', phase: 'generating', errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED',

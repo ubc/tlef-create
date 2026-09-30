@@ -33,8 +33,8 @@ export async function ownedSession(owner, id) {
   if (!session || !await Folder.exists({ _id: session.courseId, instructor: owner })) fail('Task not found.', 404);
   return session;
 }
-const say = (session, key, role, text, runId) => Message.updateOne({ sessionId: session._id, key }, {
-  $setOnInsert: { owner: session.owner, sessionId: session._id, key, role, text, runId }
+const say = (session, key, role, text, runId, clarification = []) => Message.updateOne({ sessionId: session._id, key }, {
+  $setOnInsert: { owner: session.owner, sessionId: session._id, key, role, text, runId, clarification }
 }, { upsert: true });
 
 export async function readAuthoringSession(owner, id, attempt = 0) {
@@ -66,7 +66,7 @@ export async function readAuthoringSession(owner, id, attempt = 0) {
     instructions: session.instructions, autoApprove: session.autoApprove, revision: session.revision,
     status: session.status, error: session.error || '', currentVersionId: session.currentVersionId ? String(session.currentVersionId) : null,
     candidateVersionId: session.candidateVersionId ? String(session.candidateVersionId) : null,
-    messages: messages.reverse().map(m => ({ id: String(m._id), role: m.role, text: m.text, createdAt: m.createdAt })),
+    messages: messages.reverse().map(m => ({ id: String(m._id), role: m.role, text: m.text, clarification: m.clarification || [], createdAt: m.createdAt })),
     versions: versions.map(versionSummary), assistant,
     taskSteps: pastRuns.flatMap(entry => (entry.steps || []).map(step => ({ name: step.name, createdAt: step.createdAt })))
       .sort((a, b) => +a.createdAt - +b.createdAt).slice(-100),
@@ -195,7 +195,7 @@ async function perform(run, session, guard, checkpoint, signal) {
   const user = userFor(owner);
   const id = String(session._id);
   const patch = async values => { await guard(); return Session.updateOne({ _id: session._id, activeRunId: run._id }, { $set: values }); };
-  const message = async text => { await guard(); return say(session, `result-${run._id}`, 'assistant', text, run._id); };
+  const message = async (text, clarification = []) => { await guard(); return say(session, `result-${run._id}`, 'assistant', text, run._id, clarification); };
   const current = session.currentVersionId ? await Version.findOne({ _id: session.currentVersionId, owner, sessionId: session._id }) : null;
   if (run.kind === 'retry' && run.input.resumeRunId) {
     let previous = await Run.findOne({ _id: run.input.resumeRunId, owner, sessionId: session._id });
@@ -302,7 +302,7 @@ async function perform(run, session, guard, checkpoint, signal) {
   const decision = parseDecision(JSON.parse(extractBalancedJson(response.content) || '{}'), current?.snapshot?.questions?.length || 0);
   await checkpoint('decision_saved', decision);
   if (decision.action === 'reply') {
-    await message(decision.reply);
+    await message(decision.reply, decision.clarification);
     await patch({ status: current ? 'ready' : assistant?.status === 'failed' ? 'needs_attention' : 'awaiting_approval',
       error: assistant?.status === 'failed' ? assistant.error || '' : '' });
     return true;

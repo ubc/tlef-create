@@ -98,6 +98,22 @@ async function ready(f) {
 }
 
 describe('durable Studio authoring', () => {
+  test('saves owner-visible clarification choices without changing the plan or approving generation', async () => {
+    const f = await fixture();
+    const created = await createAuthoringSession(f.owner, f.body);
+    const initial = await settle(f.owner, created.id);
+    const clarification = [{ question: 'How many questions?', options: ['One', 'Five'] }];
+    complete.mockResolvedValue({ content: JSON.stringify({ action: 'reply', reply: 'These counts conflict. Please choose.', clarification }) });
+    await authoringCommand(f.owner, initial.id, 'message', { requestId: randomUUID(), revision: initial.revision, text: 'Use exactly one and exactly five questions.' });
+    const replied = await settle(f.owner, initial.id);
+    expect(replied.status).toBe('awaiting_approval');
+    expect(replied.messages.at(-1).clarification).toEqual(clarification);
+    expect((await readAuthoringSession(f.owner, initial.id)).messages.at(-1).clarification).toEqual(clarification);
+    expect(replied.assistant.plan).toEqual(initial.assistant.plan);
+    expect(approve).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledTimes(1);
+    await expect(readAuthoringSession(String(new mongoose.Types.ObjectId()), initial.id)).rejects.toMatchObject({ status: 404 });
+  });
   test('answers a failed unpublished batch without retrying, then reconciles a saved plan edit', async () => {
     const f = await fixture();
     const created = await createAuthoringSession(f.owner, f.body);
