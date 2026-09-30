@@ -57,6 +57,9 @@ export function evaluateArithmetic(expression) {
 }
 
 const equal = (left, right) => Math.abs(left - right) <= 1e-10 * Math.max(1, Math.abs(left), Math.abs(right));
+const falseEquality = (expression, claimed, computed, message) => Object.assign(fail('ARITHMETIC_FALSE_EQUALITY', message), {
+  calculation: { expression: expression.trim(), claimed, computed }
+});
 const normalize = value => value.replace(/\s+/g, '').replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/');
 const isConstant = value => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(normalize(value).replace(/[()]/g, ''));
 
@@ -65,7 +68,8 @@ export function verifyAndRenderCalculations(text, calculations) {
   if (!Array.isArray(calculations) || calculations.length > 8) throw fail('ARITHMETIC_INVALID_SCHEMA', 'Missing or excessive declared calculations');
   for (const item of calculations) {
     if (!item || typeof item.expression !== 'string' || typeof item.result !== 'number' || !Number.isFinite(item.result)) throw fail('ARITHMETIC_INVALID_SCHEMA', 'Malformed declared calculation');
-    if (!equal(evaluateArithmetic(item.expression), item.result)) throw fail('ARITHMETIC_FALSE_EQUALITY', 'A declared arithmetic result is incorrect');
+    const computed = evaluateArithmetic(item.expression);
+    if (!equal(computed, item.result)) throw falseEquality(item.expression, item.result, computed, 'A declared arithmetic result is incorrect');
   }
   const equations = [];
   // Only plain numerical equalities are recognized in free text. Scientific
@@ -81,7 +85,7 @@ export function verifyAndRenderCalculations(text, calculations) {
       continue; // Unsupported prose is not proof of a wrong calculation.
     }
     const result = Number(match[2]);
-    if (!equal(value, result)) throw fail('ARITHMETIC_FALSE_EQUALITY', 'An explicit arithmetic equation is incorrect');
+    if (!equal(value, result)) throw falseEquality(expression, result, value, 'An explicit arithmetic equation is incorrect');
     equations.push({ expression, result });
   }
   const meaningfulCalculations = calculations.filter(item => !isConstant(item.expression));

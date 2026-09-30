@@ -150,6 +150,12 @@ describe('independent question feedback review', () => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete({ ...reviewed, explanation: 'The result is 7 × 8 = 54.' }) }))
       .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW' });
   });
+  test('retains the exact deterministic mismatch in the private rejected draft', async () => {
+    const payload = { ...reviewed, issues: [], feedback: reviewed.feedback.map((item, index) => index === 1
+      ? { ...item, calculations: [{ expression: '9.8*(0.500+0.20*0.866)', result: 6.59 }] } : item) };
+    await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(payload) }))
+      .rejects.toMatchObject({ rejectedDraft: { issues: [expect.stringContaining('Calculation check (option 2 feedback): 9.8*(0.500+0.20*0.866) evaluates to 6.59736; the feedback claimed 6.59.')] } });
+  });
   test('requires calculation declarations but allows non-arithmetic hypothetical premises', async () => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete({ ...reviewed, calculations: undefined }) }))
       .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'ARITHMETIC_INVALID_SCHEMA' });

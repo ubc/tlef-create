@@ -1127,40 +1127,34 @@ NOTE: Branching scenarios are complex container types. Generate a simple placeho
    * Simple JSON cleaning that handles the most common issues
    */
   simpleJsonClean(jsonString) {
-    // First, remove trailing commas before closing braces/brackets
-    // This is a common LLM error: {"key": "value",} or ["item",]
-    let cleaned = jsonString
-      .replace(/,\s*}/g, '}')  // Remove comma before }
-      .replace(/,\s*]/g, ']'); // Remove comma before ]
-
-    // The most common issue is literal newlines in string values
-    // We need to carefully replace newlines only within string values
-
+    // Track escapes: an escaped backslash can precede a closing quotation mark.
     let inString = false;
+    let escaped = false;
     let result = '';
-    let i = 0;
-
-    while (i < cleaned.length) {
-      const char = cleaned[i];
-
-      if (char === '"' && (i === 0 || cleaned[i-1] !== '\\')) {
-        // Toggle string state
-        inString = !inString;
+    for (let i = 0; i < jsonString.length; i++) {
+      const char = jsonString[i];
+      if (inString) {
+        if (escaped) {
+          result += char;
+          escaped = false;
+        } else if (char === '\\') {
+          result += char;
+          escaped = true;
+        } else if (char === '"') {
+          result += char;
+          inString = false;
+        } else {
+          result += char === '\n' ? '\\n' : char === '\r' ? '\\r' : char === '\t' ? '\\t' : char;
+        }
+      } else if (char === '"') {
         result += char;
-      } else if (inString && char === '\n') {
-        // Replace literal newline with escaped newline in strings
-        result += '\\n';
-      } else if (inString && char === '\r') {
-        // Replace literal carriage return with escaped version
-        result += '\\r';
-      } else if (inString && char === '\t') {
-        // Replace literal tab with escaped version
-        result += '\\t';
+        inString = true;
+      } else if (char === ',' && /^\s*[}\]]/.test(jsonString.slice(i + 1))) {
+        // Remove only structural trailing commas; preserve punctuation in text.
+        continue;
       } else {
         result += char;
       }
-      
-      i++;
     }
     
     return result;

@@ -115,9 +115,13 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
   }
   let explanation;
   let rationales;
+  let calculationLocation = 'overall explanation';
   try {
     explanation = verifyAndRenderCalculations(review.explanation, review.calculations).text;
-    rationales = review.feedback.map(item => verifyAndRenderCalculations(factualRationale(item.rationale), item.calculations).text);
+    rationales = review.feedback.map((item, index) => {
+      calculationLocation = `option ${index + 1} feedback`;
+      return verifyAndRenderCalculations(factualRationale(item.rationale), item.calculations).text;
+    });
     if (explanation.length > QUESTION_TEXT_LIMITS.explanation || rationales.some(value => value.length > 12000)) throw Object.assign(new Error('Reviewed feedback exceeds text limits'), { code: 'FEEDBACK_TEXT_LIMIT' });
   } catch (error) {
     const message = error.code === 'ARITHMETIC_INVALID_SCHEMA'
@@ -128,6 +132,13 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
     const failure = rejected(message, error);
     failure.qualityCheck = 'arithmetic';
     failure.qualityFailureReason = error.code || 'ARITHMETIC_INVALID_SCHEMA';
+    if (error.code === 'ARITHMETIC_FALSE_EQUALITY' && error.calculation) {
+      const { expression, claimed, computed } = error.calculation;
+      // Only bounded, parsed arithmetic reaches this owner-authorized draft.
+      // Keep the concrete check out of job receipts and mutation audit data.
+      const displayedResult = Number(computed.toPrecision(15));
+      failure.rejectedDraft.issues.push(`Calculation check (${calculationLocation}): ${expression} evaluates to ${displayedResult}; the feedback claimed ${claimed}. The answer key was not changed.`);
+    }
     throw failure;
   }
   return {

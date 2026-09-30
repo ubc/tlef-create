@@ -69,7 +69,7 @@ describe('Studio AI workspace', () => {
       assistant: { ...saved.assistant, status: 'failed', phase: 'generating', errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED',
         generation: { requestId: 'request-1', status: 'failed', readyCount: 1, totalQuestions: 2,
           items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', reason: 'ANSWER_INVALID', message: 'Answer ambiguous.',
-            review: { questionText: 'A rejected water draft.', correctAnswer: 'Rock', options: [{ text: 'Rock', isCorrect: true }], issues: ['Water changes phase, not rock.'] } }] } } } } });
+            review: { questionText: 'A rejected water draft.', correctAnswer: 'Rock', options: [{ text: 'Rock', isCorrect: true }], issues: ['Water changes phase, not rock.', 'Calculation check (option 1 feedback): 7 * 8 evaluates to 56; the feedback claimed 54.'] } }] } } } } });
     mount('task1');
     const instructions = await screen.findByRole('textbox', { name: 'Question instructions for plan row 1' });
     expect(instructions).toBeEnabled();
@@ -77,6 +77,8 @@ describe('Studio AI workspace', () => {
     expect(screen.getByRole('button', { name: 'Save plan' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /Accept plan & generate/ })).not.toBeInTheDocument();
     expect(screen.getByText('Water changes phase, not rock.')).toBeInTheDocument();
+    expect(screen.getByText('Failure details')).toBeInTheDocument();
+    expect(screen.getByText(/7 \* 8 evaluates to 56/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Discuss the failure' }));
     expect((screen.getByRole('textbox', { name: 'Message Studio AI' }) as HTMLTextAreaElement).value).toContain('Explain the failed');
     expect(mocks.command).not.toHaveBeenCalled();
