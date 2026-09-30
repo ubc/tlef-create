@@ -30,4 +30,18 @@ describe('authoring decision context', () => {
     expect(review.issues[0].length).toBe(600);
     expect(prompt).toContain('AI judgments, not verified diagnoses');
   });
+  test('includes current type, difficulty, answer mode and runtime choices for a revision', () => {
+    const prompt = buildAuthoringDecisionPrompt({ latestRequest: 'Convert question 1 to true/false.', allowedQuestionTypes: ['multiple-choice', 'true-false'],
+      current: { snapshot: { questions: [{ questionText: 'One', type: 'multiple-choice', difficulty: 'easy', content: { selectionMode: 'multiple' } }] } } });
+    expect(data(prompt)).toMatchObject({ allowedQuestionTypes: ['multiple-choice', 'true-false'],
+      current: { questions: [{ index: 1, type: 'multiple-choice', difficulty: 'easy', selectionMode: 'multiple' }] } });
+    expect(prompt).toContain('omit unchanged properties');
+  });
+  test('gives the accepted version precedence over stale initial-plan status', () => {
+    const prompt = buildAuthoringDecisionPrompt({ latestRequest: 'Make all questions harder.',
+      assistant: { status: 'awaiting_approval', objectives: [], plan: [{ count: 3 }] }, current: { snapshot: { questions: [] } } });
+    expect(data(prompt)).toMatchObject({ taskStatus: 'ready', plan: null });
+    expect(prompt).toContain('never use revise_plan');
+    expect(prompt).toContain('without starting a native fork');
+  });
 });

@@ -8,7 +8,7 @@ import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
 import LegacySession from '../../models/StudioAssistantSession.js';
 import { createAssistantSession, readAssistantSession, approveAssistantPlan, resumeAssistantSession, updateAssistantPlan } from '../studioAssistantService.js';
-import { proposeAssistantPlan, buildAssistantContext } from '../studioAssistantPlanning.js';
+import { proposeAssistantPlan, buildAssistantContext, getAssistantQuestionTypes } from '../studioAssistantPlanning.js';
 import llmService from '../llmService.js';
 import ragService from '../ragService.js';
 import questionStreamingService from '../questionStreamingService.js';
@@ -330,11 +330,12 @@ async function perform(run, session, guard, checkpoint, signal) {
   const assistant = session.assistantId ? await readAssistantSession(owner, String(session.assistantId)) : null;
   if (!current && !canReviseAssistantPlan(assistant)) fail('Wait for the teaching plan before sending changes.');
   const history = await Message.find({ sessionId: session._id, owner }).sort({ _id: -1 }).limit(12).lean();
+  const allowedQuestionTypes = getAssistantQuestionTypes().map(type => type.questionType);
   await checkpoint('model_call');
   const response = await llmService.streamCompletion({ userId: owner, signal, jsonMode: true, maxTokens: 1800, temperature: 0.1,
-    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history }) });
+    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history, allowedQuestionTypes }) });
   await guard();
-  const decision = parseDecision(JSON.parse(extractBalancedJson(response.content) || '{}'), current?.snapshot?.questions?.length || 0);
+  const decision = parseDecision(JSON.parse(extractBalancedJson(response.content) || '{}'), current?.snapshot?.questions?.length || 0, allowedQuestionTypes);
   await checkpoint('decision_saved', decision);
   if (decision.action === 'reply') {
     await message(decision.reply, decision.clarification);
@@ -365,19 +366,24 @@ async function perform(run, session, guard, checkpoint, signal) {
     snapshot = structuredClone(current.snapshot);
     const index = decision.questionIndex - 1;
     const original = snapshot.questions[index];
+    const questionType = decision.questionType || original.type;
+    const difficulty = decision.difficulty || original.difficulty || 'moderate';
+    const selectionMode = questionType === 'multiple-choice'
+      ? decision.selectionMode || (original.type === 'multiple-choice' ? original.content?.selectionMode : null) || 'single' : 'single';
+    if (decision.selectionMode && questionType !== 'multiple-choice') fail('Answer selection mode applies only to multiple-choice questions.', 422, 'AUTHORING_RESPONSE');
     const objective = snapshot.learningObjectives.find(lo => String(lo._id) === String(original.learningObjective?._id || original.learningObjective));
     const materials = await Material.find({ _id: { $in: session.materialIds }, uploadedBy: owner, folder: session.courseId });
     if (materials.length !== session.materialIds.length || materials.some(m => !isMaterialReady(m))) fail('The source materials are no longer ready.');
-    const retrieval = await ragService.retrieveRelevantContent(objective?.text || original.questionText, original.type,
+    const retrieval = await ragService.retrieveRelevantContent(`${objective?.text || original.questionText}\n${run.input.text}`.slice(0, 5000), questionType,
       { materialIds: session.materialIds.map(String), topK: 5, minScore: 0.3 });
     if (!retrieval?.chunks?.length) fail('No supporting evidence was found. The original question is preserved.');
-    const result = await llmService.generateQuestion({ learningObjective: objective?.text || null, questionType: original.type,
-      relevantContent: retrieval.chunks, difficulty: original.difficulty || 'moderate', userId: owner, signal,
+    const result = await llmService.generateQuestion({ learningObjective: objective?.text || null, questionType,
+      relevantContent: retrieval.chunks, difficulty, selectionMode, userId: owner, signal,
       customPrompt: `${run.input.text}\nRevise only this question: ${original.questionText}`,
       previousQuestions: snapshot.questions.filter((_, i) => i !== index).map(q => ({ questionText: q.questionText })) });
     if (!result.success || !result.questionData) fail('The revised question did not pass generation checks.', 422);
     const data = result.questionData;
-    snapshot.questions[index] = { ...original, questionText: data.questionText, content: formatContentForDatabase(data, original.type),
+    snapshot.questions[index] = { ...original, type: questionType, difficulty, questionText: data.questionText, content: formatContentForDatabase(data, questionType),
       correctAnswer: data.correctAnswer, explanation: data.explanation,
       generationMetadata: { ...original.generationMetadata, ...data.generationMetadata,
         sourceReferences: questionStreamingService.buildSourceReferences(retrieval.chunks), instructorPrompt: run.input.text } };

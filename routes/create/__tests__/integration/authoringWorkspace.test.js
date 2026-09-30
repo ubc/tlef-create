@@ -260,6 +260,53 @@ describe('durable Studio authoring', () => {
     expect((await Quiz.findById(f.quiz._id).populate('questions')).questions.map(q => q.questionText)).toEqual(['Original question 1?', 'Original question 2?']);
     expect(generate).toHaveBeenCalledTimes(1);
   });
+  test('applies a single-question type and difficulty change only after proposal acceptance', async () => {
+    const f = await fixture(); const initial = await ready(f);
+    const originalVersion = await Version.findById(initial.currentVersionId).lean();
+    complete.mockResolvedValue({ content: JSON.stringify({ action: 'revise_question', reply: 'Convert question 1.', questionIndex: 1,
+      questionType: 'true-false', difficulty: 'easy' }) });
+    generate.mockResolvedValue({ success: true, questionData: { questionText: 'Water can evaporate.',
+      options: [{ text: 'True', isCorrect: true }, { text: 'False', isCorrect: false }], correctAnswer: 'True', explanation: 'Water changes to vapour.' } });
+    await authoringCommand(f.owner, initial.id, 'message', { requestId: randomUUID(), revision: initial.revision, text: 'Convert only question 1 to an easy true/false question.' });
+    const proposed = await settle(f.owner, initial.id);
+    expect(proposed.error).toBe('');
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ questionType: 'true-false', difficulty: 'easy', selectionMode: 'single' }));
+    const candidate = await Version.findById(proposed.candidateVersionId).lean();
+    expect(candidate.snapshot.questions[0]).toMatchObject({ type: 'true-false', difficulty: 'easy', correctAnswer: 'True' });
+    expect(candidate.snapshot.questions[1]).toEqual(originalVersion.snapshot.questions[1]);
+    expect((await Quiz.findById(f.quiz._id).populate('questions')).questions[0].type).toBe('multiple-choice');
+    await authoringCommand(f.owner, initial.id, 'accept', { requestId: randomUUID(), revision: proposed.revision, versionId: String(candidate._id) });
+    const accepted = await settle(f.owner, initial.id);
+    expect(accepted.error).toBe('');
+    expect((await Quiz.findById(f.quiz._id).populate('questions')).questions[0]).toMatchObject({ type: 'true-false', difficulty: 'easy' });
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+  test('retains multiple-answer mode and difficulty during an unchanged-type wording revision', async () => {
+    const f = await fixture();
+    await Question.updateOne({ _id: f.questions[0]._id }, { $set: { 'content.selectionMode': 'multiple' } });
+    const initial = await ready(f);
+    complete.mockResolvedValue({ content: JSON.stringify({ action: 'revise_question', reply: 'Simplify wording.', questionIndex: 1 }) });
+    generate.mockResolvedValue({ success: true, questionData: { questionText: 'Choose examples of evaporation.',
+      content: { selectionMode: 'multiple', options: [{ text: 'Drying water', isCorrect: true }, { text: 'Drying clothes', isCorrect: true }, { text: 'Freezing water', isCorrect: false }] },
+      correctAnswer: 'Drying water; Drying clothes', explanation: 'Both examples involve liquid becoming gas.' } });
+    await authoringCommand(f.owner, initial.id, 'message', { requestId: randomUUID(), revision: initial.revision, text: 'Simplify only the wording of question 1. Keep its answer mode and difficulty.' });
+    const proposed = await settle(f.owner, initial.id);
+    expect(proposed.error).toBe('');
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ questionType: 'multiple-choice', difficulty: 'moderate', selectionMode: 'multiple' }));
+    const candidate = await Version.findById(proposed.candidateVersionId).lean();
+    expect(candidate.snapshot.questions[0].content.selectionMode).toBe('multiple');
+  });
+  test('refuses unsupported question conversion before any generation or course mutation', async () => {
+    const f = await fixture(); const initial = await ready(f);
+    complete.mockResolvedValue({ content: JSON.stringify({ action: 'revise_question', reply: 'Convert it.', questionIndex: 1, questionType: 'invented-type' }) });
+    await authoringCommand(f.owner, initial.id, 'message', { requestId: randomUUID(), revision: initial.revision, text: 'Change question 1 to an unavailable type.' });
+    const result = await settle(f.owner, initial.id);
+    expect(result.run.status).toBe('failed');
+    expect(result.candidateVersionId).toBeFalsy();
+    expect(result.currentVersionId).toBe(initial.currentVersionId);
+    expect(generate).not.toHaveBeenCalled();
+    expect((await Quiz.findById(f.quiz._id).populate('questions')).questions[0].questionText).toBe('Original question 1?');
+  });
   test('preserves a concurrent course edit when accepting a candidate', async () => {
     const f = await fixture(); const initial = await ready(f);
     const base = await Version.findById(initial.currentVersionId);

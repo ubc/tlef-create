@@ -56,7 +56,7 @@ For native types, media templates, or a different container, choose **Advanced t
 
 ## Revise an activity and restore a version
 
-Describe a change in the conversation, for example “Make question 2 simpler.” A single-question revision of a linked version preserves the other questions and retrieves supporting material. The proposal appears beside the conversation while the accepted version stays current. Choose **Accept changes** or **Keep current**. Switch **Viewing** to compare the previews before deciding.
+Describe a change in the conversation, for example “Make question 2 simpler.” A single-question revision of a linked version preserves the other questions and retrieves supporting material. You can explicitly request an available question type, easy/moderate/hard difficulty, or single/multiple-answer mode for a multiple-choice question. Unchanged properties are retained; unavailable types are refused before question generation. After a linked version is accepted, conversational course-question revisions apply to one identified question at a time. A request to change several linked questions asks you to choose one; it does not silently create an independent native fork. The proposal appears beside the conversation while the accepted version stays current. Choose **Accept changes** or **Keep current**. Switch **Viewing** to compare the previews before deciding.
 
 An explicit whole-activity revision produces an **Independent Studio version**. Advanced native H5P edits are not converted back into course question records or coverage links. The **Questions & sources** view explains this boundary instead of showing stale course questions as the native revision. Use Preview to inspect it.
 

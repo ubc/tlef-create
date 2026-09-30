@@ -59,3 +59,11 @@ Round 13 correctly classified an explicit change to question 2 as `revise_questi
 A separate parser regression exposed valid formatted JSON whose answer string ends in an escaped backslash. The cleaner now tracks escaped characters and removes trailing commas only outside strings. Literal `,}` and `,]` punctuation survives unchanged.
 
 Validation: 161 focused backend unit tests, 15 workspace frontend tests and the production build passed. Fourteen live rounds used seventeen logical model requests. Real UI screenshots, authenticated effective-model verification and the private lecture case remain pending the previously requested permissions.
+
+## Single-question execution checkpoint
+
+Code inspection after the first live single-question classification test found that the executor retained the old question type/difficulty and defaulted to single-answer mode. The decision contract now accepts bounded explicit `questionType`, `difficulty` and `selectionMode` changes. The prompt provides current values and deployed question-type availability; unchanged fields are omitted and retained by execution. Changed type and difficulty are stored on the candidate and published only after acceptance. Retrieval includes the current revision request and selected type.
+
+Round 15 returned the requested true/false type and hard difficulty for question 2. Round 16 deliberately combined an accepted current version with obsolete initial-plan approval status; the model selected a plan revision that the executor would reject. The decision context now gives the current version precedence and forbids that route. Round 17 used the realistic completed initial-plan state and correctly offered a single-question choice for a bulk change that must preserve course links. Round 18 refused a source-only numerical friction plan because the supplied synthetic source contained no measurements or coefficients; it did not invent inputs.
+
+Validation: 119 decision/contract/help unit checks and 17 isolated authoring integration tests passed. Integration coverage verifies type/difficulty conversion, unchanged neighbouring snapshots, publication only after proposal acceptance, preservation of multiple-answer mode and refusal of unsupported types before paid generation. No uploaded lecture text was transmitted. Browser verification remains pending permission.

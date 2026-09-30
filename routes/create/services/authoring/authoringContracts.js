@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getH5PTypesForContainer } from '../../config/h5pTypeAdapterRegistry.js';
 
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const stableId = value => digest(value).slice(0, 24);
@@ -12,7 +13,7 @@ export function validateCommand(body) {
     fail('Reload this task before sending the request.', 400, 'AUTHORING_INPUT');
   }
 }
-export function parseDecision(value, questionCount) {
+export function parseDecision(value, questionCount, allowedQuestionTypes = getH5PTypesForContainer('column')) {
   if (!value || !['reply', 'revise_plan', 'revise_question', 'revise_activity'].includes(value.action)
     || typeof value.reply !== 'string' || !value.reply.trim() || value.reply.length > 6000) {
     fail('The assistant returned an incomplete response. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
@@ -20,6 +21,18 @@ export function parseDecision(value, questionCount) {
   if (value.action === 'revise_question' && (!Number.isInteger(value.questionIndex)
     || value.questionIndex < 1 || value.questionIndex > questionCount)) {
     fail('Choose a question in the current version before requesting a revision.', 422, 'AUTHORING_RESPONSE');
+  }
+  const revision = {};
+  for (const [field, allowed] of Object.entries({ questionType: allowedQuestionTypes,
+    difficulty: ['easy', 'moderate', 'hard'], selectionMode: ['single', 'multiple'] })) {
+    if (value[field] == null) continue;
+    if (value.action !== 'revise_question' || !allowed.includes(value[field])) {
+      fail('The assistant returned an unsupported question change. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
+    }
+    revision[field] = value[field];
+  }
+  if (revision.selectionMode && revision.questionType && revision.questionType !== 'multiple-choice') {
+    fail('Answer selection mode applies only to multiple-choice questions.', 422, 'AUTHORING_RESPONSE');
   }
   const clarification = value.clarification ?? [];
   if (!Array.isArray(clarification) || clarification.length > 3 || (value.action !== 'reply' && clarification.length)
@@ -29,7 +42,7 @@ export function parseDecision(value, questionCount) {
       || new Set(item.options.map(option => option.trim())).size !== item.options.length)) {
     fail('The assistant returned incomplete clarification choices. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
   }
-  return { action: value.action, reply: value.reply, questionIndex: value.questionIndex,
+  return { action: value.action, reply: value.reply, questionIndex: value.questionIndex, ...revision,
     clarification: clarification.map(item => ({ question: item.question.trim(), options: item.options.map(option => option.trim()) })) };
 }
 export const versionSummary = version => ({

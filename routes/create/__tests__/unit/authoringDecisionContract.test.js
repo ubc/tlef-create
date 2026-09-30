@@ -26,4 +26,27 @@ describe('selectable authoring clarification contract', () => {
   test('never admits a revision action together with unanswered choices', () => {
     expect(() => parseDecision({ ...reply, action: 'revise_plan' }, 0)).toThrow(expect.objectContaining({ code: 'AUTHORING_RESPONSE' }));
   });
+  test('retains explicit supported type, difficulty and answer-mode changes', () => {
+    expect(parseDecision({ action: 'revise_question', reply: 'Change question 2.', questionIndex: 2,
+      questionType: 'multiple-choice', difficulty: 'hard', selectionMode: 'multiple' }, 3))
+      .toMatchObject({ questionType: 'multiple-choice', difficulty: 'hard', selectionMode: 'multiple' });
+  });
+  test('omits unchanged revision properties for historical decisions', () => {
+    const decision = parseDecision({ action: 'revise_question', reply: 'Simplify the wording.', questionIndex: 1 }, 2);
+    expect(decision).not.toHaveProperty('questionType');
+    expect(decision).not.toHaveProperty('difficulty');
+    expect(decision).not.toHaveProperty('selectionMode');
+  });
+  test.each([
+    { questionType: 'invented-type' }, { questionType: 'question-set' },
+    { difficulty: 'expert' }, { selectionMode: 'all' },
+    { questionType: 'true-false', selectionMode: 'multiple' }
+  ])('refuses unsupported revision properties: %j', changes => {
+    expect(() => parseDecision({ action: 'revise_question', reply: 'Change it.', questionIndex: 1, ...changes }, 2))
+      .toThrow(expect.objectContaining({ code: 'AUTHORING_RESPONSE' }));
+  });
+  test('refuses a type that is absent from the deployed runtime before dispatch', () => {
+    expect(() => parseDecision({ action: 'revise_question', reply: 'Change it.', questionIndex: 1, questionType: 'true-false' }, 2, ['multiple-choice']))
+      .toThrow(expect.objectContaining({ code: 'AUTHORING_RESPONSE' }));
+  });
 });
