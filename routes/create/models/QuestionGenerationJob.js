@@ -8,6 +8,7 @@ const itemSchema = new mongoose.Schema({
   savedQuestionId: { type: mongoose.Schema.Types.ObjectId, required: true },
   status: { type: String, enum: ['queued', 'generating', 'ready', 'failed'], default: 'queued' },
   phase: String,
+  repairStrategy: String,
   attempts: { type: Number, default: 0 },
   startedAt: Date,
   completedAt: Date,

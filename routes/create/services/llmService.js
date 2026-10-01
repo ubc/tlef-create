@@ -433,7 +433,26 @@ class QuizLLMService {
    * @param {Object} questionConfig - Question configuration
    * @param {Function} onStreamChunk - Callback for streaming text chunks
    */
+  async repairQuestionFeedback(questionConfig) {
+    const { repairDraft, repairObservation, questionType, relevantContent, userId, signal } = questionConfig;
+    if (!repairDraft || questionType !== 'multiple-choice') throw new Error('Feedback repair requires the original multiple-choice draft.');
+    signal?.throwIfAborted();
+    const llmConfig = questionConfig.llmConfig || await this.resolveUserLLMConfig(userId);
+    const questionData = await reviewQuestionFeedback(structuredClone(repairDraft), {
+      questionType, relevantContent, repairObservation,
+      instructorRequest: questionConfig.instructorPrompt ?? questionConfig.customPrompt ?? '',
+      instructorContext: [normalizeLearningObjectiveText(questionConfig.learningObjective), questionConfig.courseContext].filter(Boolean).join('\n\n'),
+      complete: options => this.streamCompletion({ ...options, llmConfig, signal })
+    });
+    signal?.throwIfAborted();
+    return { success: true, promptUsed: repairDraft.prompt, questionData: { ...questionData, type: questionType,
+      difficulty: questionConfig.difficulty || 'moderate',
+      generationMetadata: { ...repairDraft.generationMetadata, llmModel: llmConfig.model,
+        qualityReview: questionData.qualityReview, generationMethod: 'feedback-repair' } } };
+  }
+
   async generateQuestionStreaming(questionConfig, onStreamChunk = null) {
+    if (questionConfig.repairDraft) return this.repairQuestionFeedback(questionConfig);
     assertQuestionTypeAvailable(questionConfig.questionType);
     const {
       learningObjective,
@@ -520,7 +539,10 @@ class QuizLLMService {
         this.parseAndValidateResponse(finalContent, questionType, selectionMode, branchingLayers, branchingChoices,
           sourceScenarioChoiceCounts(relevantContent, branchingLayers, branchingChoices)),
         { questionType, relevantContent, instructorRequest: instructorPromptText, instructorContext: [learningObjectiveText, courseContext, customPromptText].filter(Boolean).join('\n\n'), complete: options => this.streamCompletion({ ...options, maxTokens: isGpt5Family(llmConfig.model) ? options.maxTokens : Math.min(options.maxTokens, 4000), llmConfig, signal }) }
-      );
+      ).catch(error => {
+        if (error.repairDraft) error.repairDraft.prompt = prompt;
+        throw error;
+      });
       signal?.throwIfAborted();
       const processingTime = Date.now() - startTime;
       
@@ -573,6 +595,7 @@ class QuizLLMService {
       if (providerFailure.code === 'MODEL_SERVICE_LIMIT_REACHED') throw providerFailure;
       if (error.code === 'QUESTION_QUALITY_REVIEW' || error.code === 'QUESTION_INVALID_RESPONSE' || error.name === 'AbortError'
         || error.name === 'APIUserAbortError' || error.code === 'ABORT_ERR') throw error;
+      if (questionConfig.disableGenerationFallback) throw error;
       console.error(`❌ Streaming generation failed: ${error.message}`);
       console.error('🔄 Falling back to non-streaming generation...');
       

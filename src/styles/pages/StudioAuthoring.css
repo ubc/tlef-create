@@ -236,3 +236,10 @@
 .authoring-context-preview header strong { flex:1; }
 .authoring-context-preview p { white-space:pre-wrap; font-size:14px; line-height:1.8; color:#4c6259; }
 .authoring-workspace .authoring-body:not(.has-artifact) .authoring-conversation { width:min(860px,100%); margin:auto; }
+
+.authoring-requirements { margin: 1rem 0; padding: .8rem 1rem; border: 1px solid var(--border-color, #dce5e3); border-radius: 12px; font-size: .875rem; }
+.authoring-requirements summary { cursor: pointer; font-weight: 600; }
+.authoring-requirements dl > div { display: grid; grid-template-columns: minmax(7rem, 1fr) 2fr; gap: .75rem; padding: .45rem 0; }
+.authoring-requirements dd { margin: 0; overflow-wrap: anywhere; }
+.authoring-requirements small { display: block; opacity: .7; margin-top: .25rem; }
+.authoring-operation-child { margin-left: 1rem; }

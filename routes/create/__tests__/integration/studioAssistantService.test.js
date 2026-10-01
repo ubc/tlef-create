@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, tes
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Session from '../../models/StudioAssistantSession.js';
+import { AuthoringSession } from '../../models/StudioAuthoring.js';
 import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
 import Quiz from '../../models/Quiz.js';
@@ -26,7 +27,7 @@ let runWork = true;
 let pendingWork;
 let completion;
 let start;
-const models = [Session, Folder, Material, Quiz, LearningObjective, Question, StudioGenerationJob, RejectedQuestionDraft];
+const models = [Session, AuthoringSession, Folder, Material, Quiz, LearningObjective, Question, StudioGenerationJob, RejectedQuestionDraft];
 beforeAll(async () => {
   dotenv.config({ path: new URL('../../../../.env', import.meta.url).pathname, quiet: true });
   const uri = new URL(process.env.E2E_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017');
@@ -422,3 +423,24 @@ describe('assistant and canonical course workflow share the same records', () =>
    expect(String((await Question.findById(f.question._id)).learningObjective)).toBe(String(f.objective._id));
    expect(completion.mock.calls.some(([arg]) => arg.jsonSchema.name === 'studio_assistant_objectives')).toBe(false);
  });
+
+test('explicit fifteen-question request overrides a smaller AI allocation before approval', async () => {
+  const f = await fixture();
+  const planned = await createAssistantSession(f.user, { ...f.body, instructions: 'Create around 15 questions about evaporation.' });
+  expect(planned.status).toBe('awaiting_approval');
+  expect(planned.plan.reduce((n, row) => n + row.count, 0)).toBe(15);
+  expect(planned.teachingRequirements.fields.questionCount.value).toBe(15);
+  const quiz = await Quiz.findById(planned.quizId);
+  expect(quiz.settings.planItems.reduce((n, row) => n + row.count, 0)).toBe(15);
+  const edited = await updateAssistantPlan(f.user, planned.id, planEdit(planned, { plan: [{ ...planned.plan[0], count: 6 }] }));
+  expect(edited.teachingRequirements.fields.questionCount).toMatchObject({ value: 6, source: 'plan-edit' });
+});
+
+test('legacy approval also rejects a newer conversation count until the plan is revised', async () => {
+  const f = await fixture(); const planned = await createAssistantSession(f.user, f.body);
+  await AuthoringSession.create({ owner: f.user.id, requestId: randomUUID(), courseId: f.folder._id,
+    assistantId: planned.id, teachingRequirements: { fields: { questionCount: { value: 15 } } } });
+  await expect(approveAssistantPlan(f.user, planned.id, { revision: planned.revision, requestId: randomUUID() }))
+    .rejects.toMatchObject({ code: 'STUDIO_ASSISTANT_REQUIREMENTS' });
+  expect((await Session.findById(planned.id)).approvedAt).toBeFalsy();
+});

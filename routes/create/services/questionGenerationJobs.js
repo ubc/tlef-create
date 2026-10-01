@@ -36,7 +36,7 @@ export function serializeQuestionJob(job) {
     questionIds: published(job) ? (job.questionIds || []).map(String) : [],
     items: job.items.map(item => ({ index: item.index, questionId: item.questionId, status: item.status,
       ...(published(job) && item.status === 'ready' ? { savedQuestionId: String(item.savedQuestionId) } : {}),
-      phase: item.phase, attempts: item.attempts || 0, startedAt: item.startedAt, completedAt: item.completedAt,
+      repairStrategy: item.repairStrategy, phase: item.phase, attempts: item.attempts || 0, startedAt: item.startedAt, completedAt: item.completedAt,
       ...(item.code ? { code: item.code } : {}), ...(item.reason ? { reason: item.reason } : {}), ...(item.message ? { message: item.message } : {}) })),
     message: job.message || '', createdAt: job.createdAt, updatedAt: job.updatedAt
   };
@@ -313,6 +313,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
             const updated = await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, {
               $set: { [`items.${item.index}.status`]: 'ready', [`items.${item.index}.reused`]: true, [`items.${item.index}.phase`]: 'saved',
                 [`items.${item.index}.attempts`]: previousItem.attempts || 0,
+                [`items.${item.index}.repairStrategy`]: previousItem.repairStrategy,
                 [`items.${item.index}.startedAt`]: previousItem.startedAt, [`items.${item.index}.completedAt`]: previousItem.completedAt }
             });
             if (!updated.matchedCount) throw jobError(interruptedMessage, 'GENERATION_INTERRUPTED');
@@ -320,7 +321,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
           }
           await work({ job, signal: abortController.signal, assertActive, async updateItem(index, values) {
             await assertActive();
-            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message', 'phase', 'attempts', 'startedAt', 'completedAt'].includes(key)));
+            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message', 'phase', 'repairStrategy', 'attempts', 'startedAt', 'completedAt'].includes(key)));
             const result = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, {
               $set: Object.fromEntries(Object.entries(allowed).map(([key, value]) => [`items.${index}.${key}`, value]))
             });

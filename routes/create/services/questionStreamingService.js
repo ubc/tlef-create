@@ -150,7 +150,7 @@ class QuestionStreamingService {
       });
 
       const plannedTask = questionConfig.plannedTask || null;
-      const maxAttempts = 3;
+      const maxAttempts = questionConfig.maxGenerationAttempts === 1 ? 1 : 3;
       let result = null;
       let finalValidation = { valid: true, reason: 'No planned task validation required' };
       let noveltyResult = {
@@ -201,6 +201,8 @@ class QuestionStreamingService {
         };
 
         result = await llmService.generateQuestionStreaming({
+          disableGenerationFallback: questionConfig.maxGenerationAttempts === 1,
+          repairDraft: questionConfig.repairDraft, repairObservation: questionConfig.repairObservation,
           learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
           questionType: questionConfig.questionType,
           relevantContent: relevantContent || [],
@@ -334,7 +336,7 @@ class QuestionStreamingService {
         console.log(`[${questionId}] Existing questions count: ${existingQuestionsCount}`);
         
         // Generate metadata fields to match non-streaming implementation
-        console.log(`🔍 DEBUG - questionConfig received:`, questionConfig);
+        // Keep ephemeral repair drafts and instructor text out of debug output.
         const questionType = questionConfig.questionType || result.questionData.type || 'multiple-choice';
         console.log(`🔍 DEBUG - questionType resolved:`, questionType);
         

@@ -48,6 +48,8 @@ const { default: Content } = await import('../../models/H5PContent.js');
 const { createAuthoringSession, authoringCommand, readAuthoringSession, cancelAuthoringRun, tickAuthoringWorker } = await import('../../services/authoring/authoringService.js');
 const { buildH5PSourceFingerprint } = await import('../../services/h5pEditorService.js');
 const { saveManualVersion } = await import('../../services/authoring/artifactVersionService.js');
+const { authoringOperation, withAuthoringOperations } = await import('../../services/authoring/authoringOperations.js');
+const { default: sse } = await import('../../services/sseService.js');
 const { streamAuthoringSession } = await import('../../services/authoring/authoringStream.js');
 const models = [Session, Run, Message, Version, Folder, Quiz, Material, Question, Objective, Content];
 const dbName = `tlef_qa_authoring_${randomUUID().replaceAll('-', '')}`;
@@ -342,10 +344,10 @@ describe('durable Studio authoring', () => {
     expect(result.status).toBe('needs_attention'); expect(result.currentVersionId).toBe(initial.currentVersionId);
     expect(result.error).toMatch(/edited elsewhere/);
   });
-  test('marks an expired model call interrupted without replaying it, and recovers admitted commands', async () => {
+  test.each(['model_call', 'clarify_requirements'])('marks an expired %s interrupted without replaying paid work', async checkpoint => {
     const f = await fixture(); const initial = await ready(f);
     const run = await Run.create({ owner: f.owner, sessionId: initial.id, requestId: randomUUID(), kind: 'message',
-      status: 'running', admitted: true, checkpoint: 'model_call', leaseToken: 'old', leaseUntil: new Date(0) });
+      status: 'running', admitted: true, checkpoint, leaseToken: 'old', leaseUntil: new Date(0) });
     await Session.updateOne({ _id: initial.id }, { $set: { activeRunId: run._id, status: 'working' } });
     await tickAuthoringWorker();
     expect((await Run.findById(run._id)).status).toBe('interrupted');
@@ -364,6 +366,7 @@ describe('durable Studio authoring', () => {
       kind: 'create', status: 'queued', admitted: false, input: {} });
     await Session.updateOne({ _id: created.id }, { $set: { activeRunId: run._id } });
     const recovered = await settle(f.owner, created.id);
+    expect(recovered.error).toBe('');
     expect(recovered.status).toBe('awaiting_approval');
     expect((await Run.findById(run._id)).admitted).toBe(true);
     expect(start).toHaveBeenCalledTimes(1);
@@ -440,3 +443,28 @@ describe('durable Studio authoring', () => {
    expect(start.mock.calls[1][1].requestId).not.toBe(start.mock.calls[0][1].requestId);
    expect(approve).not.toHaveBeenCalled();
  });
+
+test('operation boundaries persist nested success/failure and stream only to the authorized session', async () => {
+  const f = await fixture(); const created = await createAuthoringSession(f.owner, f.body);
+  const session = await settle(f.owner, created.id);
+  const res = Object.assign(new EventEmitter(), { req: { headers: {} }, writeHead: jest.fn(), flushHeaders: jest.fn(), write: jest.fn(() => true), end() { this.emit('close'); } });
+  const before = sse.listenerCount('authoring-operation');
+  await streamAuthoringSession({ user: { id: f.owner }, params: { id: session.id } }, res, { intervalMs: 10000 });
+  const run = await Run.findById(session.run.id);
+  try {
+    await withAuthoringOperations(run, () => authoringOperation('parent', 'Outer operation', async () => {
+      await expect(authoringOperation('child', 'Inner operation', async () => { throw new Error('fixture failure'); })).rejects.toThrow('fixture failure');
+    }));
+    const saved = await readAuthoringSession(f.owner, session.id);
+    const parent = saved.operations.find(item => item.name === 'parent');
+    const child = saved.operations.find(item => item.name === 'child');
+    expect(parent.status).toBe('completed'); expect(child.status).toBe('failed');
+    expect(child.parentId).toBe(parent.id); expect(parent.durationMs).toBeGreaterThanOrEqual(0);
+    expect(res.write.mock.calls.some(([text]) => text.includes('event: authoring-operation'))).toBe(true);
+    res.write.mockClear();
+    sse.emit('authoring-operation', { owner: 'foreign', sessionId: session.id, operation: parent });
+    sse.emit('authoring-operation', { owner: f.owner, sessionId: 'foreign', operation: parent });
+    expect(res.write).not.toHaveBeenCalled();
+  } finally { res.end(); }
+  expect(sse.listenerCount('authoring-operation')).toBe(before);
+});

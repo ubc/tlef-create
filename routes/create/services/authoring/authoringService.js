@@ -1,3 +1,5 @@
+import { updateTeachingRequirements, reconcileQuestionCount } from './teachingRequirements.js';
+import { authoringOperation, withAuthoringOperations } from './authoringOperations.js';
 import { resolveAuthoringContext, ensureDraftCourse } from './authoringContext.js';
 import { buildAuthoringDecisionPrompt } from './authoringDecisionPrompt.js';
 import { assessAuthoringRequirements, effectiveTeachingBrief } from './authoringRequirements.js';
@@ -50,7 +52,7 @@ export async function readAuthoringSession(owner, id, attempt = 0) {
       if (error.status === 404) return null;
       throw error;
     }) : null,
-    Run.find({ owner, sessionId: id }).sort({ _id: -1 }).limit(20).select('steps').lean()
+    Run.find({ owner, sessionId: id }).sort({ _id: -1 }).limit(20).select('steps operations').lean()
   ]);
   // A saved plan edit uses the shared assistant endpoint. Reconcile only after
   // the previous authoring execution has finished; never interrupt a worker.
@@ -66,6 +68,7 @@ export async function readAuthoringSession(owner, id, attempt = 0) {
   if (latest && +latest.updatedAt !== +session.updatedAt && attempt < 2) return readAuthoringSession(owner, id, attempt + 1);
   return { id: String(session._id), title: session.title, courseId: String(session.courseId),
     quizId: session.quizId ? String(session.quizId) : null, materialIds: session.materialIds.map(String), objectiveIds: (session.objectiveIds || []).map(String), contextCourse: session.contextCourse === true,
+    teachingRequirements: session.teachingRequirements, operations: pastRuns.flatMap(r => r.operations || []).sort((a, b) => +a.startedAt - +b.startedAt).slice(-200),
     instructions: session.instructions, autoApprove: session.autoApprove, revision: session.revision,
     status: session.status, error: session.error || '', currentVersionId: session.currentVersionId ? String(session.currentVersionId) : null,
     candidateVersionId: session.candidateVersionId ? String(session.candidateVersionId) : null,
@@ -102,7 +105,7 @@ export async function createAuthoringSession(owner, body) {
   if (!session) {
     const title = (body.instructions?.trim() || `Learning activity · ${materials[0]?.name || course.name}`).slice(0, 90);
     try { session = await Session.create({ _id: stableId(`${owner}:${body.requestId}`), owner, requestId: body.requestId,
-      requestHash: hash, ...input, title }); }
+      requestHash: hash, ...input, teachingRequirements: updateTeachingRequirements(null, instructions, body.requestId), title }); }
     catch (error) {
       if (error.code !== 11000) throw error;
       session = await Session.findOne({ owner, requestId: body.requestId });
@@ -207,6 +210,10 @@ async function perform(run, session, guard, checkpoint, signal) {
   const patch = async values => { await guard(); return Session.updateOne({ _id: session._id, activeRunId: run._id }, { $set: values }); };
   const message = async (text, clarification = []) => { await guard(); return say(session, `result-${run._id}`, 'assistant', text, run._id, clarification); };
   const current = session.currentVersionId ? await Version.findOne({ _id: session.currentVersionId, owner, sessionId: session._id }) : null;
+  if (run.kind === 'message') {
+    const spec = updateTeachingRequirements(session.teachingRequirements, run.input.text, run.input.requestId);
+    await patch({ teachingRequirements: spec }); session.teachingRequirements = spec;
+  }
   if (run.kind === 'message' && run.input.context && run.checkpoint === 'start') {
     const resolved = await resolveAuthoringContext(owner, run.input.context);
     const context = { courseId: String(resolved.course?._id || session.courseId), materialIds: resolved.materials.map(m => m._id),
@@ -243,10 +250,12 @@ async function perform(run, session, guard, checkpoint, signal) {
     if (alreadyChecked || (session.autoApprove && !latestAnswer)) return true;
     const brief = await contextualTeachingBrief(session, answers);
     await checkpoint('clarify_requirements');
-    const assessment = await assessAuthoringRequirements({ instructions: brief, materials, userId: owner, signal });
+    const assessment = session.teachingRequirements?.countIssue ? { ready: false, reply: session.teachingRequirements.countIssue, clarification: [{ question: 'How many questions should this activity contain?', options: ['5 questions', '10 questions', '15 questions'] }] } : await authoringOperation('clarify_requirements', 'Check teaching requirements', () => assessAuthoringRequirements({ instructions: brief, materials, userId: owner, signal }));
+    const spec = updateTeachingRequirements(session.teachingRequirements, latestAnswer || session.instructions, run.input?.requestId || run.requestId, assessment.requirements, assessment.clarification.map(q => q.question));
     await guard();
-    await patch({ requirementAnswers: answers, requirementsReady: assessment.ready,
+    await patch({ teachingRequirements: spec, requirementAnswers: answers, requirementsReady: assessment.ready, error: '',
       status: assessment.ready ? 'planning' : 'awaiting_requirements' });
+    session.teachingRequirements = spec;
     session.requirementAnswers = answers;
     session.requirementsReady = assessment.ready;
     if (!assessment.ready) await message(assessment.reply, assessment.clarification);
@@ -273,7 +282,7 @@ async function perform(run, session, guard, checkpoint, signal) {
       const instructions = await contextualTeachingBrief(session);
       const assistant = await createAssistantSession(user, { requestId: `authoring-${id}-${digest({ courseId: session.courseId, materialIds: session.materialIds, objectiveIds: session.objectiveIds, instructions }).slice(0, 12)}`, courseId: String(session.courseId),
         ...(session.quizId ? { quizId: String(session.quizId) } : {}), materialIds: session.materialIds.map(String), instructions,
-        canonicalObjectives: session.materialIds.length > 0, promptBased: !session.materialIds.length, objectiveIds: (session.objectiveIds || []).map(String) });
+        canonicalObjectives: session.materialIds.length > 0, promptBased: !session.materialIds.length, objectiveIds: (session.objectiveIds || []).map(String) }, { teachingRequirements: session.teachingRequirements });
       await guard();
       await patch({ assistantId: assistant.id, quizId: assistant.quizId, status: 'planning' });
       return false;
@@ -286,6 +295,8 @@ async function perform(run, session, guard, checkpoint, signal) {
     if (assistant.status === 'awaiting_approval') {
       if (run.kind === 'approve' || (session.autoApprove && run.kind === 'create')) {
         if (run.kind === 'approve' && run.input.planRevision !== assistant.revision) fail('The teaching plan changed. Review and approve the latest plan.');
+        const reconciled = reconcileQuestionCount(assistant.plan || [], session.teachingRequirements);
+        if (reconciled.some((row, index) => row.count !== assistant.plan[index].count)) fail('The plan no longer matches your requested question count. Revise and review it before approval.');
         await checkpoint('dispatch_approval');
         assistant = await approveAssistantPlan(user, assistant.id, { revision: assistant.revision, requestId: `approve-${run._id}` });
         await patch({ status: 'generating' });
@@ -352,10 +363,14 @@ async function perform(run, session, guard, checkpoint, signal) {
   const history = await Message.find({ sessionId: session._id, owner }).sort({ _id: -1 }).limit(12).lean();
   const allowedQuestionTypes = getAssistantQuestionTypes().map(type => type.questionType);
   await checkpoint('model_call');
-  const response = await llmService.streamCompletion({ userId: owner, signal, jsonMode: true, maxTokens: 1800, temperature: 0.1,
-    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history, allowedQuestionTypes, referencedContext: await contextualTeachingBrief(session) }) });
+  const referencedContext = await contextualTeachingBrief(session);
+  const response = await authoringOperation('choose_action', 'Interpret the next teaching request', () => llmService.streamCompletion({ userId: owner, signal, jsonMode: true, maxTokens: 2400, temperature: 0.1,
+    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history, allowedQuestionTypes, referencedContext }) }));
   await guard();
-  const decision = parseDecision(JSON.parse(extractBalancedJson(response.content) || '{}'), current?.snapshot?.questions?.length || 0, allowedQuestionTypes);
+  const rawDecision = JSON.parse(extractBalancedJson(response.content) || '{}');
+  const decision = parseDecision(rawDecision, current?.snapshot?.questions?.length || 0, allowedQuestionTypes);
+  const spec = updateTeachingRequirements(session.teachingRequirements, run.input.text, run.input.requestId, rawDecision.requirements, Array.isArray(rawDecision.clarification) ? rawDecision.clarification.map(q => q?.question) : undefined);
+  await patch({ teachingRequirements: spec }); session.teachingRequirements = spec;
   await checkpoint('decision_saved', decision);
   if (decision.action === 'reply') {
     await message(decision.reply, decision.clarification);
@@ -369,10 +384,10 @@ async function perform(run, session, guard, checkpoint, signal) {
     const materials = await Material.find({ _id: { $in: session.materialIds }, folder: session.courseId, uploadedBy: owner });
     const context = materials.length ? await buildAssistantContext(materials, { userId: owner, signal }) : { context: 'Brainstorming from the instructor brief and selected objectives. No source evidence was supplied.' };
     const objectives = decision.action === 'revise_objectives' ? await proposeAssistantObjectives({ instructions: `${effectiveTeachingBrief(session)}\nLatest revision: ${run.input.text}`, context: context.context, sources: context.sources || [], userId: owner, signal, promptBased: !materials.length }) : assistant.objectives;
-    const plan = await proposeAssistantPlan({ instructions: effectiveTeachingBrief(session), currentPlan: assistant.plan, revisionRequest: run.input.text,
-      objectives, context: context.context, userId: owner, signal });
+    const plan = reconcileQuestionCount(await proposeAssistantPlan({ instructions: effectiveTeachingBrief(session), currentPlan: assistant.plan, revisionRequest: run.input.text,
+      objectives, context: context.context, userId: owner, signal }), session.teachingRequirements);
     await guard();
-    await updateAssistantPlan(user, assistant.id, { revision: assistant.revision, objectives, plan });
+    await updateAssistantPlan(user, assistant.id, { revision: assistant.revision, objectives, plan }, { teachingRequirements: session.teachingRequirements });
     await patch({ status: 'awaiting_approval', error: '' });
     await message(decision.action === 'revise_objectives' ? 'I revised the learning objectives and their question plan. Open the proposal to review or edit it before generating questions.' : 'I updated the proposed question plan. Review the quantities, types and instructions before accepting it.');
     return true;
@@ -470,7 +485,7 @@ async function execute(run) {
     await guard();
     if (run.kind === 'message') await say(session, `user-${run._id}`, 'user', run.input.text, run._id);
     const done = run.checkpoint === 'output_saved' && run.result
-      ? await finishCandidate(run, session, run.result, guard) : await perform(run, session, guard, checkpoint, controller.signal);
+      ? await finishCandidate(run, session, run.result, guard) : await withAuthoringOperations(run, () => perform(run, session, guard, checkpoint, controller.signal));
     await guard();
     await Run.updateOne(filter, { $set: { status: done ? 'succeeded' : 'waiting', nextAt: new Date(Date.now() + 2000) }, $unset: { leaseToken: '', leaseUntil: '' } });
   } catch (error) {
@@ -495,7 +510,7 @@ export async function tickAuthoringWorker() {
         await Run.updateOne({ _id: run._id, status: 'queued' }, { $set: { admitted: true } });
       }
     }
-    const uncertain = await Run.find({ status: 'running', leaseUntil: { $lt: new Date() }, checkpoint: { $in: ['model_call', 'decision_saved', 'manual_save'] } }).limit(20);
+    const uncertain = await Run.find({ status: 'running', leaseUntil: { $lt: new Date() }, checkpoint: { $in: ['clarify_requirements', 'model_call', 'decision_saved', 'manual_save'] } }).limit(20);
     for (const run of uncertain) {
       const result = await Run.updateOne({ _id: run._id, status: 'running', leaseUntil: { $lt: new Date() } },
         { $set: { status: 'interrupted', error: 'The model request was interrupted. Review the task and retry explicitly; it may have used credits.' } });

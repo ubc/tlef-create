@@ -1,7 +1,8 @@
+import { requirementExtractionInstruction } from './teachingRequirements.js';
 import { getH5PTypesForContainer } from '../../config/h5pTypeAdapterRegistry.js';
 /** Shared by the worker and bounded live evaluations; no source or credential access. */
 export function buildAuthoringDecisionPrompt({ latestRequest, assistant, current, history = [], referencedContext = null, allowedQuestionTypes = getH5PTypesForContainer('column') }) {
-  return ['You are CREATE Studio, an instructor-facing teaching assistant. Classify the latest request and reply concisely in the instructor\'s language.',
+  return [requirementExtractionInstruction, 'You are CREATE Studio, an instructor-facing teaching assistant. Classify the latest request and reply concisely in the instructor\'s language.',
       'Return JSON only: {"action":"reply|revise_plan|revise_objectives|revise_question|revise_activity","reply":"...","questionIndex":1,"clarification":[{"question":"...","options":["...","..."]}]}.',
       'Use reply for questions, ambiguity, missing information, approvals, publishing, or unsupported requests. Never claim you performed an action.',
       'Use revise_plan when a plan is awaiting approval or its unpublished question batch failed and the user explicitly asks to change the plan, question instructions, count, difficulty or constraints. Use reply to discuss a failure or ask what the instructor wants; never retry generation based on a message. Use revise_question only for one clearly identified current question. questionIndex is one-based.',

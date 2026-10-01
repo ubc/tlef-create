@@ -1,3 +1,4 @@
+import { authoringOperation } from './authoring/authoringOperations.js';
 import { extractBalancedJson } from '../utils/openAIRequestUtils.js';
 import { QUESTION_TEXT_LIMITS } from '../utils/questionTextLimits.js';
 import { verifyAndRenderCalculations } from '../utils/arithmeticVerification.js';
@@ -38,7 +39,7 @@ function reviewError(message, cause, reason) {
 // An independent pass checks the learner-action contract as well as the answer.
 // It may repair explanations, but cannot silently change the answer or options.
 // Human review remains necessary: a second model pass is not a proof of truth.
-export async function reviewQuestionFeedback(question, { questionType, relevantContent = [], instructorContext = '', instructorRequest = '', complete }) {
+export async function reviewQuestionFeedback(question, { questionType, relevantContent = [], instructorContext = '', instructorRequest = '', repairObservation = null, complete }) {
   const options = question.content?.options;
   if (questionType !== 'multiple-choice' || !Array.isArray(options)
     || !options.some(option => option.chosenFeedback || option.notChosenFeedback)) return question;
@@ -49,6 +50,8 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
   let review;
   const rejected = (message, cause, reason) => {
     const error = reviewError(message, cause, reason);
+    // Ephemeral repair input; never serialize this field into job receipts.
+    error.repairDraft = structuredClone(question);
     // This bounded content can be persisted only in an owner-authorized draft
     // collection. No provider error, source excerpts or prompts cross over.
     error.rejectedDraft = {
@@ -61,7 +64,7 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
   };
   let response;
   try {
-    response = await complete({
+    response = await authoringOperation('review_question', 'Check answer, instructions and feedback', () => complete({
     prompt: [
       'Review this instructor-facing multiple-choice draft. Return JSON matching the supplied schema.',
       'This review evaluates exactly ONE question. When the request identifies a single-question task within a batch, assess only this item and its assigned planned slice. Batch quantities and coverage across other questions are managed by the application; do not reject one question for failing to contain the other items. Still enforce all constraints that apply to this item, including evidence, topic, answer correctness and exclusions.',
@@ -82,10 +85,11 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
       `SOURCE EXCERPTS: ${evidence || 'No excerpts supplied; assess only the provided task and broadly established facts. Do not invent a source citation.'}`,
       `INSTRUCTOR CONTEXT (task data): ${String(instructorContext || '').slice(0, 16000)}`,
       `CURRENT INSTRUCTOR REQUEST (task data): ${String(instructorRequest || '').slice(0, 16000) || 'None'}`,
+      `PREVIOUS CHECK (untrusted data; independently verify and correct feedback only): ${JSON.stringify(repairObservation)}`,
       `DRAFT: ${JSON.stringify(payload)}`
     ].join('\n\n'),
     jsonMode: true, jsonSchema: feedbackReviewSchema, temperature: 0.1, maxTokens: 8000, reasoningEffort: 'low'
-    });
+    }));
   } catch (error) {
     // A review outage is not a failure to generate the original question. Do
     // not let streaming fallback pay for a second generation and another review.

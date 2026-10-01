@@ -1617,6 +1617,7 @@ export interface StudioAssistantPlanItem {
 }
 
 export interface StudioAssistantSession {
+  teachingRequirements?: TeachingRequirements;
   id: string;
   requestId?: string;
   courseId: string;
@@ -1648,7 +1649,7 @@ export interface StudioAssistantSession {
     questions?: AuthoringVersion['questions'];
     reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; phase?: string; attempts?: number; startedAt?: string; completedAt?: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
+    items: Array<{ index: number; questionId?: string; status: string; phase?: string; repairStrategy?: string; attempts?: number; startedAt?: string; completedAt?: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -1687,7 +1688,17 @@ export interface AuthoringVersion {
   questions: Array<{ id: string; index: number; type: string; text: string; explanation?: string; sourceReferences: SourceReference[] }>;
 }
 export interface AuthoringClarification { question: string; options: string[] }
+export interface AuthoringOperation {
+  id: string; runId: string; parentId?: string; name: string; label: string;
+  status: 'running' | 'completed' | 'failed'; startedAt: string; completedAt?: string; durationMs?: number;
+}
+export interface TeachingRequirements {
+  fields: Record<string, { value: string | number; quote?: string; source: string; approximate?: boolean }>;
+  openQuestions?: string[]; countIssue?: string;
+}
 export interface AuthoringSession {
+  teachingRequirements?: TeachingRequirements;
+  operations?: AuthoringOperation[];
   id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
   instructions: string; autoApprove: boolean; revision: number; objectiveIds?: string[]; contextCourse?: boolean;
   status: 'waiting_for_materials' | 'awaiting_requirements' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';

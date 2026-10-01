@@ -15,7 +15,14 @@ export async function streamAuthoringSession(req, res, { read = readAuthoringSes
   let closed = false;
   let signature;
   const expires = Date.now() + 15 * 60_000;
-  const close = () => { closed = true; clearTimeout(timer); };
+  const operation = event => {
+    if (!closed && event.owner === owner && event.sessionId === String(id)) {
+      if (res.writableLength > 1024 * 1024) { res.end(); close(); return; }
+      sseService.sendToClient(connection, 'authoring-operation', { sessionId: event.sessionId, operation: event.operation });
+    }
+  };
+  const close = () => { closed = true; clearTimeout(timer); sseService.off('authoring-operation', operation); };
+  sseService.on('authoring-operation', operation);
   res.on('close', close);
   res.on('error', close);
   const emit = session => {

@@ -1,3 +1,4 @@
+import { authoringOperation } from './authoring/authoringOperations.js';
 import { createHash } from 'node:crypto';
 import ragService from './ragService.js';
 import llmService from './llmService.js';
@@ -240,7 +241,7 @@ function requestInputs(instructions, context, userId, signal) {
   return text(instructions, 'Teaching instructions', ASSISTANT_LIMITS.instructionsCharacters);
 }
 async function complete(request, signal) {
-  const response = await llmService.streamCompletion({ ...request, jsonMode: true, signal, temperature: 0.2, maxTokens: 8000, reasoningEffort: 'low' });
+  const response = await authoringOperation(request.jsonSchema.name === 'studio_assistant_objectives' ? 'propose_objectives' : 'propose_plan', request.jsonSchema.name === 'studio_assistant_objectives' ? 'Propose learning objectives' : 'Propose the question plan', () => llmService.streamCompletion({ ...request, jsonMode: true, signal, temperature: 0.2, maxTokens: 8000, reasoningEffort: 'low' }));
   signal?.throwIfAborted();
   try {
     if (typeof response?.content !== 'string' || response.content.length > 100000) throw new Error('Invalid output');

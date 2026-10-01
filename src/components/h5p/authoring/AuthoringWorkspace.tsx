@@ -7,6 +7,8 @@ import { useSSE } from '../../../hooks/useSSE';
 import AuthoringContextPicker, { caretAnchor, ContextIcon, type ContextChip } from './AuthoringContextPicker';
 import PreparedQuestionPreview from './PreparedQuestionPreview';
 import StudioPreview from '../StudioPreview';
+import TeachingRequirementsCard from './TeachingRequirementsCard';
+import { mergeAuthoringOperations } from './authoringOperations';
 import AuthoringProgress from './AuthoringProgress';
 import AuthoringClarification from './AuthoringClarification';
 import RejectedDraftDetails from './RejectedDraftDetails';
@@ -90,6 +92,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   const receive = useCallback((next: AuthoringSession) => {
     if (!alive.current || (current.current.session?.id === next.id && next.revision < current.current.session.revision)) return;
     const previous = current.current.session;
+    if (previous?.id === next.id) next = { ...next, operations: mergeAuthoringOperations(previous.operations, next.operations) };
     current.current = { ...current.current, session: next };
     setSession(next);
     setRecent(items => [next, ...items.filter(item => item.id !== next.id)]);
@@ -117,6 +120,12 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
 
   const { connectionStatus } = useSSE(sessionId ? studioAuthoringApi.eventsUrl(sessionId) : null, {
     onAuthoringSnapshot: next => { receive(next); setRefreshError(''); },
+    onAuthoringOperation: event => {
+      const previous = current.current.session;
+      if (!previous || previous.id !== event.sessionId) return;
+      const next = { ...previous, operations: mergeAuthoringOperations(previous.operations, [event.operation]) };
+      current.current = { ...current.current, session: next }; setSession(next);
+    },
   });
   const streamStatus = useRef(connectionStatus);
   streamStatus.current = connectionStatus;
@@ -363,6 +372,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
           ].map(([title, prompt]) => <button key={title} onClick={() => setText(prompt)}><BookOpen size={16} /><span>{title}</span><ArrowUpRight size={14} /></button>)}</div></div>}
           {session?.messages.map(message => <article className={`authoring-message is-${message.role}`} key={message.id}><span className="authoring-speaker">{message.role === 'assistant' ? <><Sparkles size={14} /> CREATE</> : 'You'}</span><p>{message.text}</p>{message.role === 'assistant' && !!message.clarification?.length && <AuthoringClarification messageId={message.id} questions={message.clarification} disabled={active || !!busy || uncertain || !!candidate || planDirty || session?.messages.at(-1)?.id !== message.id} onUseAnswers={useClarificationAnswers} />}</article>)}
           {!!planDraft?.objectives.length && <button className="authoring-result-card" onClick={() => { setPanel('plan'); setPreviewOpen(true); }}><BookOpen size={24} /><span><strong>Learning objectives & teaching plan</strong><small>{planDraft.objectives.length} objectives · {total} planned questions · {planDraft.promptBased ? 'Brainstormed draft' : 'Material-based draft'}</small></span><ArrowUpRight size={17} /></button>}
+          {session?.teachingRequirements && <TeachingRequirementsCard requirements={session.teachingRequirements} />}
           {session && <AuthoringProgress session={session} connected={connectionStatus === 'connected'} />}
           {session && active && <div className="authoring-live" role="status"><Loader2 size={15} className="spin" /><div><strong>{labels[session.status]}</strong><span>{session.assistant?.events.at(-1)?.message || 'Your progress is saved. You can return to this task later.'}</span>{session.assistant?.generation && <progress aria-label="Questions prepared" value={session.assistant.generation.readyCount} max={session.assistant.generation.totalQuestions} />}</div></div>}
           {session?.status === 'awaiting_approval' && !active && <div className="authoring-decision"><div><span className="authoring-decision-icon"><Check size={18} /></span><strong>Your teaching plan is ready</strong></div><p>{planDraft?.objectives.length || 0} learning objectives · {total} questions · H5P Column</p><p>Open the teaching plan to review objectives, evidence and the question mix, or ask for changes here.</p><button className="btn btn-primary" disabled={!!busy || planDirty || contextDirty.current || !validPlan} onClick={() => command('approve', { planRevision: session.assistant?.revision })}>Accept plan & generate <ArrowUpRight size={15} /></button><button className="authoring-quiet" onClick={() => { setPanel('plan'); setPreviewOpen(true); }}>Review plan</button>{planDirty && <small>Save your plan edits before generating.</small>}</div>}

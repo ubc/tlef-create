@@ -28,3 +28,21 @@ test('cancellation prevents a second call', async () => {
   await expect(generateWithRework({ config, generate, onAttempt: async () => {}, enabled: true, signal: controller.signal })).rejects.toThrow('Stopped');
   expect(generate).toHaveBeenCalledTimes(1);
 });
+test('feedback-only repair reuses the exact draft and approved prompt, with one recheck', async () => {
+  const error = invalid('ARITHMETIC_FALSE_EQUALITY');
+  error.repairDraft = { questionText: '12 kg at 30 degrees', correctAnswer: '101.8 N', content: { options: [{ text: '101.8 N', isCorrect: true }] } };
+  const generate = jest.fn().mockRejectedValueOnce(error).mockResolvedValue({ saved: true });
+  const onRepair = jest.fn();
+  await generateWithRework({ config, generate, onAttempt: async () => {}, onRepair, enabled: true });
+  expect(onRepair).toHaveBeenCalledWith('feedback');
+  expect(generate.mock.calls[1][0]).toMatchObject({ customPrompt: config.customPrompt, repairDraft: error.repairDraft,
+    repairObservation: { reason: 'ARITHMETIC_FALSE_EQUALITY', calculationCheck: error.rejectedDraft.calculationCheck } });
+});
+test.each([['ANSWER_INVALID', 'answer'], ['INSTRUCTION_MISMATCH', 'instructions']])('%s requests a full redraft with its own strategy', async (reason, strategy) => {
+  const error = invalid(reason); error.repairDraft = { questionText: 'Old' };
+  const generate = jest.fn().mockRejectedValueOnce(error).mockResolvedValue({ saved: true });
+  const onRepair = jest.fn();
+  await generateWithRework({ config, generate, onAttempt: async () => {}, onRepair, enabled: true });
+  expect(onRepair).toHaveBeenCalledWith(strategy);
+  expect(generate.mock.calls[1][0].repairDraft).toBeUndefined();
+});

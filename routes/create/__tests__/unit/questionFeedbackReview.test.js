@@ -173,3 +173,23 @@ describe('independent question feedback review', () => {
     expect(result.explanation).toBe(payload.explanation);
   });
 });
+
+test('feedback repair calls only the reviewer, retains the answer, and still rejects an incorrect answer', async () => {
+  const { default: llm } = await import('../../services/llmService.js');
+  const model = jest.spyOn(llm, 'streamCompletion').mockResolvedValue({ content: JSON.stringify(reviewed) });
+  const draftPrompt = jest.spyOn(llm, 'buildExpertPrompt');
+  try {
+    const input = { repairDraft: question, questionType: 'multiple-choice', instructorPrompt: 'Ask about condensation',
+      relevantContent: [{ content: 'Condensation is gas to liquid.' }], llmConfig: { model: 'fixture-model', provider: 'openai' } };
+    const result = await llm.generateQuestionStreaming(input);
+    expect(draftPrompt).not.toHaveBeenCalled(); expect(model).toHaveBeenCalledTimes(1);
+    expect(result.questionData.questionText).toBe(question.questionText);
+    expect(result.questionData.correctAnswer).toBe(question.correctAnswer);
+    expect(result.questionData.content.options.map(option => [option.text, option.isCorrect])).toEqual(question.content.options.map(option => [option.text, option.isCorrect]));
+    model.mockResolvedValue({ content: JSON.stringify({ ...reviewed, answerIsCorrect: false }) });
+    await expect(llm.generateQuestionStreaming(input)).rejects.toMatchObject({ qualityFailureReason: 'ANSWER_INVALID' });
+    model.mockResolvedValue({ content: JSON.stringify({ ...reviewed, calculations: [{ expression: '12*9.8*0.866025403784', result: 101.823389485 }] }) });
+    await expect(llm.generateQuestionStreaming(input)).rejects.toMatchObject({ qualityFailureReason: 'ARITHMETIC_FALSE_EQUALITY' });
+    expect(draftPrompt).not.toHaveBeenCalled();
+  } finally { model.mockRestore(); draftPrompt.mockRestore(); }
+});

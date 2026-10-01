@@ -1,3 +1,4 @@
+import { authoringOperation } from './authoring/authoringOperations.js';
 import { generateWithRework } from './questionRework.js';
 import { planLOSlices } from './loSlicePlanner.js';
 import coursePromptService from './coursePromptService.js';
@@ -195,11 +196,11 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
                 ...(config.learningObjective?.generationMetadata?.subpoints || [])].filter(Boolean).join('\n');
               // A complete scenario needs the source's later choices and outcomes,
               // which a five-chunk lookup can omit even when the first decision matches.
-              const retrieved = await ragService.retrieveRelevantContent(retrievalQuery, config.questionType, {
+              const retrieved = await authoringOperation('retrieve_evidence', `Question ${index + 1} · retrieve source evidence`, () => ragService.retrieveRelevantContent(retrievalQuery, config.questionType, {
                 topK: config.questionType === 'branching-scenario' ? 20 : 5,
                 materialIds: readiness.processedMaterialIds,
                 minScore: 0.3
-              });
+              }));
               relevantContent = retrieved?.chunks || [];
               if (!relevantContent.length) throw new Error('No supporting material could be retrieved.');
               if (config.questionType === 'branching-scenario') {
@@ -221,14 +222,15 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
             }
             assertGenerationActive(signal);
             await assertActive();
-            await generateWithRework({ config, signal, enabled: autoRework,
+            await generateWithRework({ config: autoRework ? { ...config, maxGenerationAttempts: 1 } : config, signal, enabled: autoRework,
+              onRepair: async strategy => { await assertActive(); await updateItem(index, { repairStrategy: strategy }); },
               onAttempt: async attempt => { await assertActive(); await updateItem(index, { attempts: attempt, phase: attempt === 1 ? 'generate_and_review' : 'rework_and_review' }); },
-              generate: questionConfig => questionStreamingService.generateQuestionWithStreaming({
+              generate: questionConfig => authoringOperation(questionConfig.repairDraft ? 'repair_feedback' : 'generate_question', `Question ${index + 1} · ${questionConfig.repairDraft ? 'repair feedback and recheck' : 'generate and check'}`, () => questionStreamingService.generateQuestionWithStreaming({
               quizId, questionId, questionConfig, learningObjective: config.learningObjective,
               relevantContent, sessionId: finalSessionId, userId, signal, beginPersistence,
               generationContext: { jobId: receipt._id, savedQuestionId: receipt.items[index].savedQuestionId,
                 order: (mode === 'append' ? (receipt.generationOffset ?? receipt.baseQuestionIds.length) : 0) + index, assertActive }
-            }) });
+            })) });
           }, autoRework ? 240000 : 120000);
           await updateItem(index, { status: 'ready', phase: 'saved', completedAt: new Date(), code: '', reason: '', message: '' });
         } catch (error) {

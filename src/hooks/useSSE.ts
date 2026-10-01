@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AuthoringSession } from '../services/api';
+import type { AuthoringSession, AuthoringOperation } from '../services/api';
 import { API_URL } from '../config/api';
 import { notifyAuthExpired } from '../utils/authEvents';
 
@@ -68,6 +68,7 @@ interface SSEEvent {
 
 interface SSEHookOptions {
   onConnected?: () => void;
+  onAuthoringOperation?: (event: { sessionId: string; operation: AuthoringOperation }) => void;
   onAuthoringSnapshot?: (session: AuthoringSession) => void;
   onBatchStarted?: (data: BatchStartedData) => void;
   onQuestionProgress?: (questionId: string, data: QuestionProgressData) => void;
@@ -199,6 +200,11 @@ export const useSSE = (sseUrl: string | null, options: SSEHookOptions = {}) => {
       } catch (err) {
         console.error('[SSE] Error parsing connected event:', err);
       }
+    });
+
+    eventSource.addEventListener('authoring-operation', event => {
+      try { callbacksRef.current.onAuthoringOperation?.(JSON.parse(event.data)); }
+      catch { /* The next authorized snapshot recovers persisted operations. */ }
     });
 
     eventSource.addEventListener('authoring-snapshot', (event) => {

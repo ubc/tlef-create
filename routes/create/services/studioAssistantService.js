@@ -1,3 +1,6 @@
+import { updateTeachingRequirements, teachingRequirementsPrompt, reconcileQuestionCount } from './authoring/teachingRequirements.js';
+import { authoringOperation } from './authoring/authoringOperations.js';
+import { AuthoringSession } from '../models/StudioAuthoring.js';
 import crypto from 'node:crypto';
 import { resolveAuthoringContext } from './authoring/authoringContext.js';
 import { canReviseAssistantPlan } from './authoring/assistantRecovery.js';
@@ -61,7 +64,7 @@ export function serializeAssistantSession(session) {
   return {
     id: String(session._id), requestId: session.requestId, courseId: String(session.courseId),
     quizId: String(session.quizId), quizName: session.quizName, materialIds: session.materialIds.map(String),
-    instructions: session.instructions, promptBased: session.promptBased === true, revision: session.revision, status: session.status, phase: session.phase,
+    teachingRequirements: session.teachingRequirements, instructions: session.instructions, promptBased: session.promptBased === true, revision: session.revision, status: session.status, phase: session.phase,
     objectives: session.objectives, plan: session.plan, outputs: session.outputs, events: session.events,
     error: session.error, errorCode: session.errorCode, currentJobId: session.currentJobId,
     approvedAt: session.approvedAt, createdAt: session.createdAt, updatedAt: session.updatedAt
@@ -181,7 +184,7 @@ async function planSession(session, assertActive) {
   const quiz = await ensureQuiz(session);
   const before = quizFingerprint(quiz);
   await patchActive(session, {}, event('materials', materials.length ? 'Reading the selected course materials and their source evidence.' : 'Developing the teaching idea from your brief. No source materials attached.'));
-  const context = materials.length ? await buildAssistantContext(materials, { userId: String(session.owner) }) : { context: 'Brainstorming specification from the instructor brief. No course material evidence is available. Do not invent citations.', sources: [], materialFingerprint: 'prompt-only' };
+  const context = materials.length ? await authoringOperation('retrieve_materials', 'Read selected course evidence', () => buildAssistantContext(materials, { userId: String(session.owner) })) : { context: 'Brainstorming specification from the instructor brief. No course material evidence is available. Do not invent citations.', sources: [], materialFingerprint: 'prompt-only' };
   await assertActive();
   const selectedContext = await resolveAuthoringContext(String(session.owner), { courseId: String(session.courseId), objectiveIds: (session.objectiveIds || []).map(String) });
   const selectedObjectives = quiz.learningObjectives.length ? quiz.learningObjectives : selectedContext.objectives;
@@ -191,7 +194,7 @@ async function planSession(session, assertActive) {
   session = await patchActive(session, { sources, materialSignature: fingerprintAssistantMaterials(materials), materialFingerprint: context.materialFingerprint },
     event('objectives', reused.length ? 'Reusing the learning objectives already saved in this learning object.' : session.promptBased ? 'Brainstorming learning objectives from the teaching brief.' : 'Drafting learning objectives from the selected materials.'));
   const objectives = reused.length ? reused : session.canonicalObjectives
-    ? await generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: session.instructions })
+    ? await authoringOperation('propose_objectives', 'Generate evidence-linked learning objectives', () => generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: session.instructions }))
     : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner), promptBased: session.promptBased });
   // Canonical LO generation may cite inventory chunks outside the small chat
   // sample. These references came from the server-owned generation pipeline.
@@ -200,9 +203,9 @@ async function planSession(session, assertActive) {
   session.sources = sources;
   await assertActive();
   await patchActive(session, { objectives, sources }, event('plan', 'Recommending question types and quantities for the learning objectives.'));
-  const plan = await proposeAssistantPlan({ instructions: session.instructions, objectives, context: context.context, userId: String(session.owner) });
+  const plan = reconcileQuestionCount(await proposeAssistantPlan({ instructions: `${session.instructions}\n${teachingRequirementsPrompt(session.teachingRequirements)}`, objectives, context: context.context, userId: String(session.owner) }), session.teachingRequirements);
   await assertActive(); await assertSources(session);
-  const saved = await saveBlueprint(session, { objectives, plan }, before, assertActive);
+  const saved = await authoringOperation('save_plan', 'Save objectives and the proposed question plan', () => saveBlueprint(session, { objectives, plan }, before, assertActive));
   await patchActive(session, { ...saved, status: 'awaiting_approval', error: '', errorCode: '' },
     event('approval', 'Learning objectives and the blueprint are saved in your course. Review or edit them, then approve question generation.'));
 }
@@ -256,7 +259,7 @@ async function generateSession(session, user, assertActive) {
     throw Object.assign(new Error(`${result.job.completedQuestions} of ${result.job.totalQuestions} checked questions are saved in the course and available in Question set preview. The remaining questions still need attention after automatic rework. Resume task retries only unfinished items and may use additional AI credits.`), { code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
   }
   await patchActive(session, {}, event('studio', 'Questions are saved in the course. Preparing the official H5P editor draft.'));
-  const content = await saveFinalContent(session, user, result.document, result.quiz, assertActive);
+  const content = await authoringOperation('package_h5p', 'Create the H5P activity', () => saveFinalContent(session, user, result.document, result.quiz, assertActive));
   await patchActive(session, { status: 'completed', error: '', errorCode: '', outputs: [{
     contentId: content.lumiContentId, title: content.title, planItemId: 'approved-plan', index: 0
   }] }, event('completed', 'The course questions and Studio draft are ready. Open the official editor to continue editing.'));
@@ -339,7 +342,7 @@ export async function listAssistantSessions(owner) {
   return sessions.map(serializeAssistantSession);
 }
 
-export async function createAssistantSession(user, body) {
+export async function createAssistantSession(user, body, internal = {}) {
   const owner = String(user.id);
   if (!requestIdValid(body.requestId) || !objectId(body.courseId) || (body.quizId && !objectId(body.quizId))
     || !Array.isArray(body.materialIds) || (!body.materialIds.length && body.promptBased !== true) || body.materialIds.length > 20
@@ -366,7 +369,7 @@ export async function createAssistantSession(user, body) {
     session = await Session.create({ ...draft, _id: id, requestId: body.requestId, requestHash,
       quizId: existingQuiz?._id || new mongoose.Types.ObjectId(), createdQuiz: !existingQuiz,
       quizName: existingQuiz?.name || `Studio learning object ${String(id).slice(-6)}`,
-      instructions: body.instructions.trim(), promptBased: body.promptBased === true && !body.materialIds.length, objectiveIds: body.objectiveIds || [], canonicalObjectives: body.canonicalObjectives === true,
+      teachingRequirements: internal.teachingRequirements || updateTeachingRequirements(null, body.instructions, body.requestId), instructions: body.instructions.trim(), promptBased: body.promptBased === true && !body.materialIds.length, objectiveIds: body.objectiveIds || [], canonicalObjectives: body.canonicalObjectives === true,
       status: 'planning', phase: 'planning', events: [event('started', 'Preparing the course workspace.')] });
   } catch (error) {
     if (error.code !== 11000) throw error;
@@ -378,7 +381,7 @@ export async function createAssistantSession(user, body) {
   return launch(session, user, 'planning', body.requestId);
 }
 
-export async function updateAssistantPlan(user, id, body) {
+export async function updateAssistantPlan(user, id, body, internal = {}) {
   const session = await ownedSession(String(user.id), id);
   if (!canReviseAssistantPlan(session) || session.revision !== body.revision) fail('Reload the current plan before saving.');
   await assertSources(session);
@@ -395,7 +398,14 @@ export async function updateAssistantPlan(user, id, body) {
   }, { new: true });
   if (!reserved) fail('This plan is already being changed. Reload it before continuing.');
   try {
+    validateAssistantApproval(body, undefined, session.sources);
+    const total = (body.plan || []).reduce((n, row) => n + row.count, 0);
+    const spec = internal.teachingRequirements || updateTeachingRequirements(session.teachingRequirements, `${total} questions`, `plan-edit-${reserved.revision}`);
+    if (!internal.teachingRequirements && spec.fields?.questionCount) spec.fields.questionCount.source = 'plan-edit';
+    if (spec.countIssue || reconcileQuestionCount(body.plan, spec).some((row, i) => row.count !== body.plan[i].count)) fail('The plan does not match the saved question count.', 422, 'STUDIO_ASSISTANT_REQUIREMENTS');
     const saved = await saveBlueprint(reserved, body, session.quizFingerprint);
+    saved.teachingRequirements = spec;
+    await AuthoringSession.updateOne({ assistantId: session._id, owner: session.owner }, { $set: { teachingRequirements: spec } });
     await Session.updateOne({ _id: session._id, revision: reserved.revision, status: 'planning' }, { $set: { ...saved, status: 'awaiting_approval', error: '', errorCode: null },
       $unset: { approvedAt: '', approvedRevision: '', approvedPlanHash: '', questionJobRequestId: '', questionJobRetryFromRequestId: '' } });
   } catch (error) {
@@ -410,6 +420,9 @@ export async function approveAssistantPlan(user, id, body) {
   if (!requestIdValid(body.requestId)) fail('A valid request ID is required.', 400, 'VALIDATION_ERROR');
   if (matchesAssistantRun(session, 'generating', body.requestId)) return readAssistantSession(String(user.id), id);
   if (session.status !== 'awaiting_approval' || session.revision !== body.revision) fail('Review and save the current plan before approving it.');
+  const authoring = await AuthoringSession.findOne({ assistantId: session._id, owner: session.owner }).select('teachingRequirements').lean();
+  const counted = reconcileQuestionCount(session.plan, authoring?.teachingRequirements || session.teachingRequirements);
+  if (counted.some((row, index) => row.count !== session.plan[index].count)) fail('The plan no longer matches your requested question count. Revise and review it before approval.', 422, 'STUDIO_ASSISTANT_REQUIREMENTS');
   await assertSources(session);
   const quiz = await loadQuiz(session.quizId, session.owner);
   if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged();

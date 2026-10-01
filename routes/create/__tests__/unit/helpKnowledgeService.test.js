@@ -4,6 +4,9 @@ import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
   test.each([
+    ['Teaching requirements recorded instructor wording saved question count outstanding questions', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['actual operation starts completions nested checks durations completion not recorded', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Feedback only Answer redraft Instruction correction repair strategy', 'h5p-studio', 'Questions needing attention'],
     ['AI rate limit usage allowance quota provider credits no fallback feedback review unpublished', 'h5p-studio', 'Questions needing attention'],
     ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
     ['Collapse sidebar Expand sidebar Question set preview Working for Worked for SSE Live', 'h5p-studio', 'Task steps and teaching requirements'],

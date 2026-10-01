@@ -14,6 +14,7 @@ const schema = new mongoose.Schema({
   objectiveIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'LearningObjective' }],
   canonicalObjectives: { type: Boolean, default: false },
   materialIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Material' }],
+  teachingRequirements: mongoose.Schema.Types.Mixed,
   instructions: { type: String, required: true, maxlength: 12000 },
   revision: { type: Number, default: 0 },
   status: { type: String, required: true, enum: ['planning', 'awaiting_approval', 'generating', 'completed', 'failed', 'interrupted'] },
