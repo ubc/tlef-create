@@ -42,17 +42,29 @@ CREATE's AI workflow can also generate **Guess the Answer** as a native `H5P.Gue
 
 ## Create with AI
 
-**Create with AI** opens the conversational **Studio AI workspace**. Start with **Add course materials**: choose or create a course, upload PDF/DOCX files or select existing materials, and optionally choose an existing Learning Object. You can leave the message empty. CREATE waits for processing, generates grounded learning objectives when needed, proposes a teaching plan, and prepares an H5P Column activity using the course question-generation workflow.
-
-Use the **+** button at the lower left of the message box to open the tools menu. **Upload files** accepts PDF and DOCX, **Choose course materials** opens existing course evidence, **Create a course** makes a home for new materials, and **Conversation history** opens saved tasks. You can also drag PDF or DOCX files onto the Studio AI workspace. If a course is selected, uploading starts automatically and the new materials are selected for the activity. If no course is selected, the files wait in the attachment list until you choose or create one; you can remove files before upload. A task can use up to 20 materials. After upload, materials may still need processing before generation starts.
-
-An existing conversation keeps its original evidence. Files added while viewing a saved task wait for a **new activity**; choose **Start new activity with these files** to upload and use them. This keeps earlier messages and versions attached to their original task.
-
-By default, review **Teaching plan** and choose **Accept plan & generate**. You can edit objective wording and question counts, then **Save plan**, or ask in the conversation to change the proposed question mix. Existing course objectives are reused. Existing questions are preserved and newly generated questions are appended only when the complete batch succeeds. **Generate draft automatically** authorizes generation within the recommended initial plan without a second approval; it does not authorize publishing or future revisions.
-
-**Preview** runs the saved H5P activity. **Questions & sources** shows the course questions and their evidence; source buttons open the material reference preview. **Download H5P** downloads the selected version. **Open course workspace** returns to the standard workflow. The activity is saved before download; no external deployment happens automatically.
+**Create with AI** opens the conversational **Studio AI workspace**. Start with a text-only teaching idea, upload PDF/DOCX files, or reference existing course context. Course, material and Learning Objective selection are optional. If the topic, learners or teaching purpose are unclear, CREATE asks focused questions and offers choices in the conversation. Choose answers and send them, or write your own response.
 
 For native types, media templates, or a different container, choose **Advanced types**. That opens the previous One activity / Question collection composer. A native AI draft does not replace or update Quiz questions. The conversational workflow, by contrast, initially creates linked course questions.
+
+### Add context with + or @
+
+The **+** button opens **Add to your conversation** above the message box. Choose **Upload files**, **Course**, **Materials**, or **Learning objectives**. Typing **@** in the message opens the same context tools next to the caret. Search, choose a tool, then select the course or item. Use Arrow Down to enter the list, arrow keys to move between options, and Escape to close it.
+
+Attached context appears as icon chips above your message. Click a chip to open **Context preview**; a material also offers **Open source document**. Use its remove button to detach it from the next message. Referencing a Course supplies its title and description; select individual materials or LOs to include their contents. Each activity uses context from one course, with up to 20 materials and 8 LOs. Choosing another course replaces the current selections.
+
+Drop PDF or DOCX files onto the workspace or choose **Upload files**. Files upload automatically. Without a selected course, CREATE saves them in **Studio drafts**. Wait for upload to finish before sending; CREATE waits for processing before planning. If uploading fails, use **Retry upload** or remove the file. In an existing conversation, added context waits for your next message. Before a finished activity exists, changed context creates a fresh proposal and needs your approval again. Previous course work is preserved. Start another conversation to move a finished activity to another course.
+
+### Brainstorm learning objectives in conversation
+
+For example, write “Help me brainstorm learning objectives for a first-year mechanics class.” CREATE discusses missing requirements, proposes observable LOs and an editable question plan, and labels the proposal **Brainstormed draft**. You can ask to revise the objectives or the plan in the chat. Without source materials, the system does not invent evidence or citations. Upload materials and send a message when you want to ground a new proposal in their contents.
+
+With materials attached, CREATE follows the material → learning objectives and evidence → question plan workflow. Referenced existing LOs are copied into a new activity; their original course records and questions are preserved.
+
+### Open a proposal or question set preview
+
+Click **Learning objectives & teaching plan** in the conversation to open the side preview. Review the LO wording, source links and question mix. Edit fields and **Save plan**, or ask for changes in chat. Choose **Accept plan & generate** to approve the current plan before any questions are generated. New context and unsaved edits must be submitted or saved first.
+
+Click **Question set preview** to open checked questions as they become available. One rejected question can receive one automatic rework; it does not block the other checked questions from being saved. **Close preview** returns to the full conversation. **Questions & sources** shows evidence, **Download H5P** downloads the selected saved version, and **Open course workspace** returns to the standard workflow. No external deployment happens automatically.
 
 ## Revise an activity and restore a version
 

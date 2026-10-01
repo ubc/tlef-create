@@ -21,7 +21,7 @@ export function expandAssistantQuestionPlan(quiz) {
     if (!objectiveId) throw failure('Every assistant question row must use a saved learning objective.', 'ASSISTANT_PLAN_INVALID', 400);
     const config = {
       questionType: row.type, learningObjectiveId: String(objectiveId), difficulty: row.difficulty || 'moderate',
-      customPrompt: row.customPrompt || '', useCustomPromptOnly: false,
+      customPrompt: row.customPrompt || '', useCustomPromptOnly: row.useCustomPromptOnly === true,
       ...Object.fromEntries(['pedagogicalIntent', 'bloomLevel', 'focusArea', 'selectionMode', 'branchingLayers', 'branchingChoices']
         .filter(key => row[key] !== undefined && row[key] !== null).map(key => [key, row[key]])),
       ...(row.rationale ? { planRationale: row.rationale } : {})
@@ -42,7 +42,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
     .populate('materials').populate('learningObjectives')
     .populate({ path: 'questions', populate: { path: 'learningObjective', select: 'text order' }, options: { sort: { order: 1 } } });
 
-  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs, retryFromRequestId,
+  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs, retryFromRequestId, promptBased = false,
     assertActive = async () => {}, assertQuizSnapshot = async () => {}, onProgress = async () => {}, signal }) {
     const owner = String(userId || user?.id || user?._id || '');
     if (!mongoose.isValidObjectId(owner) || !mongoose.isValidObjectId(quizId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) {
@@ -91,7 +91,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
           throw failure('This learning object contains questions that cannot be combined in a Column package. Choose a compatible learning object before generating.', 'ASSISTANT_CONTAINER_INCOMPATIBLE', 400);
         }
         const suppliedIds = materialIds === undefined ? quiz.materials.map(material => material._id) : materialIds;
-        if (!Array.isArray(suppliedIds) || !suppliedIds.length || suppliedIds.some(id => !mongoose.isValidObjectId(id))) {
+        if (!Array.isArray(suppliedIds) || (!suppliedIds.length && !promptBased) || suppliedIds.some(id => !mongoose.isValidObjectId(id))) {
           throw failure('Select processed course materials before generating questions.', 'ASSISTANT_MATERIALS_INVALID', 400);
         }
         const selectedIds = suppliedIds.map(String);
@@ -120,7 +120,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
       let job = await jobs.start({ owner, quizId, requestId, mode: 'append', questionConfigs: configs,
         retryFromRequestId: reusableRequestId, allowPartial: true,
         expectedQuizVersion: quiz.__v || 0, signal: controller.signal, assertContextActive: checkContext,
-        work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append', autoRework: true }) });
+        work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append', autoRework: true, preservePromptObjective: promptBased }) });
       while (true) {
         await checkContext();
         await report(job);

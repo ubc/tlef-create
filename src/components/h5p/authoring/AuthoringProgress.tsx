@@ -8,7 +8,7 @@ const stepLabels: Record<string, string> = {
   dispatch_retry: 'Resume unfinished work', model_call: 'Process your request', decision_saved: 'Choose the next action',
   output_saved: 'Prepare a revision', restoring: 'Restore a version', committing: 'Save the accepted version'
 };
-const tools: Record<string, string> = { retrieve_evidence: 'Retrieve source evidence',
+const tools: Record<string, string> = { prepare_prompt: 'Prepare teaching brief', retrieve_evidence: 'Retrieve source evidence',
   generate_and_review: 'Generate question · run checks',
   rework_and_review: 'Rework rejected draft · review again', saved: 'Save checked question', needs_attention: 'Review needed' };
 export const elapsedLabel = (milliseconds: number) => {

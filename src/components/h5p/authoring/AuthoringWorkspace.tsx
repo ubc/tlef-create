@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, Clock3, Download, FileText, History, Layers3, Loader2, MessageSquare, Plus, RefreshCw, RotateCcw, Search, SlidersHorizontal, Sparkles, Square, Upload, X } from 'lucide-react';
-import { ApiError, foldersApi, materialsApi, studioAuthoringApi, studioAssistantApi, h5pEditorApi,
-  type AuthoringSession, type Folder, type Material, type SourceReference } from '../../../services/api';
+import { ApiError, materialsApi, studioAuthoringApi, studioAssistantApi, h5pEditorApi,
+  type AuthoringSession, type AuthoringContextCatalog, type AuthoringContextSelection, type SourceReference } from '../../../services/api';
 import { useSSE } from '../../../hooks/useSSE';
+import AuthoringContextPicker, { caretAnchor, ContextIcon, type ContextChip } from './AuthoringContextPicker';
 import PreparedQuestionPreview from './PreparedQuestionPreview';
 import StudioPreview from '../StudioPreview';
 import AuthoringProgress from './AuthoringProgress';
@@ -35,19 +36,23 @@ const extract = (response: { data?: { session: AuthoringSession } }) => {
 export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId = '', initialQuizId = '', onSessionChange, onOpenActivity, onAdvanced }: Props) {
   const [session, setSession] = useState<AuthoringSession | null>(null);
   const [recent, setRecent] = useState<Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>>>([]);
-  const [courses, setCourses] = useState<Folder[]>([]);
+  const [catalog, setCatalog] = useState<AuthoringContextCatalog>({ courses: [], materials: [], objectives: [] });
   const [courseId, setCourseId] = useState(initialCourseId);
   const [quizId, setQuizId] = useState(initialQuizId);
-  const [materials, setMaterials] = useState<Material[]>([]);
+  const [objectiveIds, setObjectiveIds] = useState<string[]>([]);
+  const [contextCourse, setContextCourse] = useState(!!initialCourseId);
+  const contextDirty = useRef(false);
+  const [contextPreview, setContextPreview] = useState<ContextChip | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [mention, setMention] = useState<{ left: number; top: number; start: number; end: number; query: string } | null>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const selectedContext = useRef({ courseId, materialIds: selected, objectiveIds, contextCourse });
+  selectedContext.current = { courseId, materialIds: selected, objectiveIds, contextCourse };
   const [text, setText] = useState('');
-  const [autoApprove, setAutoApprove] = useState(false);
   const [audience, setAudience] = useState('');
   const [teachingGoal, setTeachingGoal] = useState('');
   const [difficulty, setDifficulty] = useState('');
-  const [newCourse, setNewCourse] = useState(false);
-  const [courseName, setCourseName] = useState('');
-  const [showSources, setShowSources] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyQuery, setHistoryQuery] = useState('');
   const [showTools, setShowTools] = useState(false);
@@ -66,7 +71,6 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   const [planDraft, setPlanDraft] = useState<AuthoringSession['assistant']>(null);
   const [planDirty, setPlanDirty] = useState(false);
   const file = useRef<HTMLInputElement>(null);
-  const toolsMenu = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
   const end = useRef<HTMLDivElement>(null);
   const operation = useRef(false);
@@ -82,13 +86,6 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   const { publish } = usePubSub('StudioAuthoring');
   const pendingKey = `create-authoring-request:${ownerId}`;
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => {
-    if (!showTools) return;
-    const close = (event: PointerEvent) => { if (!toolsMenu.current?.contains(event.target as Node)) setShowTools(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setShowTools(false); };
-    document.addEventListener('pointerdown', close); document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape); };
-  }, [showTools]);
 
   const receive = useCallback((next: AuthoringSession) => {
     if (!alive.current || (current.current.session?.id === next.id && next.revision < current.current.session.revision)) return;
@@ -111,7 +108,11 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
       publish('course-updated', { courseId: next.courseId, quizId: next.quizId });
     }
     if (!previous?.assistant?.generation?.readyCount && next.assistant?.generation?.readyCount) setPanel('preview');
-    setCourseId(next.courseId);
+    const local = selectedContext.current;
+    if (contextDirty.current && local.courseId === next.courseId && local.contextCourse === !!next.contextCourse && JSON.stringify([...local.materialIds].sort()) === JSON.stringify([...next.materialIds].sort()) && JSON.stringify([...local.objectiveIds].sort()) === JSON.stringify([...(next.objectiveIds || [])].sort())) contextDirty.current = false;
+    if (!contextDirty.current || previous?.id !== next.id) {
+      setCourseId(next.courseId); setSelected(next.materialIds); setObjectiveIds(next.objectiveIds || []); setContextCourse(next.contextCourse ?? false);
+    }
   }, [publish]);
 
   const { connectionStatus } = useSSE(sessionId ? studioAuthoringApi.eventsUrl(sessionId) : null, {
@@ -122,9 +123,9 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
 
   useEffect(() => {
     let active = true;
-    Promise.all([foldersApi.getFolders(), studioAuthoringApi.list()]).then(([folders, tasks]) => {
+    studioAuthoringApi.list().then(tasks => {
       if (!active) return;
-      setCourses(folders.folders); setRecent(tasks.data?.sessions || []);
+      setRecent(tasks.data?.sessions || []);
     }).catch(err => { if (active) setError(errorText(err)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [ownerId]);
@@ -153,22 +154,22 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   }, [sessionId, ownerId, poll, receive]);
 
   useEffect(() => {
-    if (!courseId || sessionId || session?.id) return;
+    if (!courseId) return;
     let active = true;
     let timeout: ReturnType<typeof setTimeout>;
     const refresh = async () => {
       try {
-        const response = await materialsApi.getMaterials(courseId);
+        const response = await studioAuthoringApi.context(courseId);
         if (!active) return;
-        setMaterials(response.materials); setRefreshError('');
-        if (response.materials.some(m => ['pending', 'processing'].includes(m.processingStatus))) timeout = setTimeout(refresh, 2500);
+        if (response.data) setCatalog(response.data);
+        if (response.data?.materials.some(m => ['pending', 'processing'].includes(m.status))) timeout = setTimeout(refresh, 2500);
       } catch (err) {
         if (active) { setRefreshError(errorText(err)); timeout = setTimeout(refresh, 8000); }
       }
     };
     void refresh();
     return () => { active = false; clearTimeout(timeout); };
-  }, [courseId, sessionId, session?.id, poll]);
+  }, [courseId, poll]);
 
   useEffect(() => { const transcript = end.current?.parentElement; transcript?.scrollTo?.({ top: transcript.scrollHeight, behavior: 'smooth' }); }, [session?.messages.length, session?.status]);
   useEffect(() => {
@@ -185,7 +186,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
     catch (err) { if (alive.current) setError(errorText(err)); }
     finally { operation.current = false; if (alive.current) setBusy(''); }
   };
-  const command = (kind: Parameters<typeof studioAuthoringApi.command>[1], extra: { text?: string; versionId?: string; planRevision?: number } = {}) => {
+  const command = (kind: Parameters<typeof studioAuthoringApi.command>[1], extra: { text?: string; versionId?: string; planRevision?: number; context?: AuthoringContextSelection } = {}) => {
     if (!session) return;
     void act(kind, async () => {
       const request = pending.current || { id: session.id, command: kind, body: { requestId: crypto.randomUUID(), revision: session.revision, ...extra } };
@@ -213,15 +214,17 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (operation.current || running(session) || uncertain) return;
-    if (session) { if (text.trim()) command('message', { text: text.trim() }); return; }
-    if (!courseId || !selected.length) { setShowSources(true); setError('Choose a course and attach at least one material to begin.'); return; }
+    if (planDirty) { setError('Save your teaching plan edits before sending another request.'); setPanel('plan'); setPreviewOpen(true); return; }
+    const context = { courseId: courseId || undefined, materialIds: selected, objectiveIds, contextCourse };
+    if (session) { if (text.trim() || contextDirty.current) command('message', { text: text.trim() || 'Update the teaching proposal using this context.', ...(contextDirty.current ? { context } : {}) }); return; }
+    if (!text.trim() && !selected.length && !objectiveIds.length && !contextCourse) return;
     void act('create', async () => {
       const requestId = sessionStorage.getItem(pendingKey) || crypto.randomUUID();
       sessionStorage.setItem(pendingKey, requestId);
       const next = extract(await studioAuthoringApi.create({ requestId, courseId, ...(quizId ? { quizId } : {}),
-        materialIds: selected, instructions: text.trim(), autoApprove }));
+        ...context, instructions: text.trim(), autoApprove: false }));
       sessionStorage.removeItem(pendingKey);
-      receive(next); setText(''); callbacks.current.onSessionChange(next.id); setShowSources(false);
+      contextDirty.current = false; receive(next); setText(''); callbacks.current.onSessionChange(next.id);
     });
   };
   const queueFiles = (files: File[]) => {
@@ -231,14 +234,13 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
     if (!valid.length) return;
     setPendingFiles(items => {
       const unique = valid.filter(item => !items.some(existing => existing.name === item.name && existing.size === item.size && existing.lastModified === item.lastModified));
-      if (items.length + unique.length + (session ? 0 : selected.length) > 20) {
+      if (items.length + unique.length + selected.length > 20) {
         setError('An activity can use up to 20 materials. Remove a queued file or deselect a material first.');
         return items;
       }
       return [...items, ...unique];
     });
     setUploadFailed(false);
-    if (!session) setShowSources(true);
     setShowTools(false);
   };
   const upload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -246,16 +248,21 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
     event.target.value = '';
   };
   useEffect(() => {
-    if (!courseId || session || !pendingFiles.length || uploadFailed || operation.current || busy) return;
-    const targetCourse = courseId;
+    if (!pendingFiles.length || uploadFailed || operation.current || busy || running(session)) return;
     const nextFile = pendingFiles[0];
     void act('upload', async () => {
       setProgress(0);
       try {
+        let targetCourse = courseId;
+        if (!targetCourse) {
+          const draft = await studioAuthoringApi.draftCourse();
+          if (!draft.data?.courseId) throw new Error('Could not prepare a place for your files. Retry upload.');
+          targetCourse = draft.data.courseId; setCourseId(targetCourse); current.current.courseId = targetCourse;
+        }
         const result = await materialsApi.uploadFiles(targetCourse, [nextFile], setProgress);
         if (!result.materials.length) throw new Error(`${nextFile.name} was not added. It may already be in this course.`);
         if (current.current.courseId !== targetCourse) return;
-        setMaterials(items => [...result.materials, ...items.filter(item => !result.materials.some(newItem => newItem._id === item._id))]);
+        contextDirty.current = true;
         setSelected(ids => [...new Set([...ids, ...result.materials.map(item => item._id)])]);
         setPendingFiles(items => items.filter(item => item !== nextFile));
         setPoll(value => value + 1); publish('materials-updated', { courseId: targetCourse });
@@ -294,11 +301,32 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
     if (operation.current) return;
     if (planDirty && !await showConfirm({ title: 'Discard unsaved plan edits?', description: 'Your saved teaching plan is kept. The unsaved changes will be discarded.', confirmLabel: 'Discard edits', cancelLabel: 'Keep editing', tone: 'warning' })) return;
     pending.current = null; setUncertain(false); setError(''); setRefreshError(''); setPlanDirty(false); setSession(null); setText(''); setShowHistory(false); setShowTools(false);
-    setQuizId(''); setSelected([]);
+    setQuizId(''); setSelected([]); setObjectiveIds([]); setCourseId(''); setContextCourse(false); contextDirty.current = false; setPreviewOpen(false); setMention(null); current.current.session = null;
     if (!id) sessionStorage.removeItem(pendingKey);
     callbacks.current.onSessionChange(id);
   };
 
+  const closePicker = () => { setShowTools(false); setMention(null); };
+  const finishMention = () => {
+    if (mention) setText(value => value.slice(0, mention.start) + value.slice(mention.end));
+    closePicker(); composer.current?.focus();
+  };
+  const detectMention = (input: HTMLTextAreaElement) => {
+    const prefix = input.value.slice(0, input.selectionStart);
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(prefix);
+    if (!match || running(session)) { setMention(null); return; }
+    setShowTools(false); setMention({ ...caretAnchor(input), start: prefix.lastIndexOf('@'), end: input.selectionStart, query: match[1] });
+  };
+  const chooseCourse = (id: string, pin: boolean) => {
+    if (id !== courseId) { setSelected([]); setObjectiveIds([]); setQuizId(''); setContextCourse(pin); }
+    else if (pin) setContextCourse(true);
+    contextDirty.current = true; setCourseId(id); if (pin) finishMention();
+  };
+  const chips: ContextChip[] = [
+    ...(contextCourse && courseId ? [{ id: courseId, kind: 'course' as const, name: catalog.courses.find(c => c.id === courseId)?.name || 'Course', preview: catalog.courses.find(c => c.id === courseId)?.description || 'Course title and description are referenced. Attach individual materials or learning objectives to use their contents.' }] : []),
+    ...selected.map(id => { const item = catalog.materials.find(m => m.id === id); return { id, kind: 'material' as const, name: item?.name || 'Material', preview: item?.preview || '', status: item?.status }; }),
+    ...objectiveIds.map(id => { const item = catalog.objectives.find(lo => lo.id === id); return { id, kind: 'objective' as const, name: item?.name || 'Learning objective', preview: item ? `${item.name}\n\nFrom: ${item.quizName}` : '' }; })
+  ];
   const active = running(session);
   const currentVersion = session?.versions.find(v => v.id === session.currentVersionId);
   const candidate = session?.versions.find(v => v.id === session.candidateVersionId);
@@ -314,7 +342,7 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
 
   return <section className={`authoring-workspace ${draggingFiles ? 'is-dragging-files' : ''}`} aria-label="Studio AI workspace" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
     <header className="authoring-topbar">
-      <div className="authoring-heading"><span className="authoring-mark"><Sparkles size={17} /></span><div><strong>{session?.title || 'New learning activity'}</strong><span>{session ? labels[session.status] : 'From your materials to something worth learning'}</span></div></div>
+      <div className="authoring-heading"><span className="authoring-mark"><Sparkles size={17} /></span><div><strong>{session?.title || 'New learning activity'}</strong><span>{session ? labels[session.status] : 'Start with an idea, a course, or your materials'}</span></div></div>
       <div className="authoring-top-actions">
         <button className={`authoring-history-trigger ${showHistory ? 'selected' : ''}`} title="Task history" aria-label="Task history" aria-expanded={showHistory} onClick={() => setShowHistory(v => !v)}><History size={17} /><span>History</span></button>
         <button className="authoring-icon" title="New task" aria-label="New task" disabled={!!busy} onClick={() => void selectTask(null)}><Plus size={19} /></button>
@@ -323,48 +351,50 @@ export default function AuthoringWorkspace({ ownerId, sessionId, initialCourseId
     </header>
     {showHistory && <div className="authoring-task-history"><div className="authoring-history-heading"><strong>Recent conversations</strong><span>Saved to your account</span></div><label className="authoring-history-search"><Search size={15} /><input aria-label="Search task history" placeholder="Search conversations" value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} /></label>{!recent.length && <p>Your saved conversations will appear here.</p>}{recent.length > 0 && !visibleTasks.length && <p>No conversations match your search.</p>}<div className="authoring-history-list">{visibleTasks.map(task => <button key={task.id} disabled={!!busy} onClick={() => { setShowHistory(false); void selectTask(task.id); }} className={session?.id === task.id ? 'selected' : ''}><MessageSquare size={15} /><span><strong>{task.title}</strong><small>{labels[task.status]}</small></span><time dateTime={task.updatedAt}>{new Date(task.updatedAt).toLocaleDateString()}</time></button>)}</div></div>}
     <input ref={file} type="file" multiple accept=".pdf,.docx" className="authoring-file-input" aria-label="Upload course materials" onChange={upload} />
-    {draggingFiles && <div className="authoring-drop-overlay" aria-hidden="true"><Upload size={30} /><strong>Drop PDF or DOCX files here</strong><span>{session ? 'Add them to a new activity' : courseId ? 'They will upload to your course' : 'Choose a course after dropping'}</span></div>}
-    <div className={`authoring-body ${session ? 'has-artifact' : ''}`}>
+    {draggingFiles && <div className="authoring-drop-overlay" aria-hidden="true"><Upload size={30} /><strong>Drop PDF or DOCX files here</strong><span>{courseId ? 'Add them to this conversation' : 'Files will be saved in Studio drafts'}</span></div>}
+    <div className={`authoring-body ${session && previewOpen ? 'has-artifact' : ''}`}>
       <div className="authoring-conversation">
         <div className="authoring-transcript" role="log" aria-label="Conversation" aria-live="polite">
-          {!session && <div className="authoring-welcome"><span className="authoring-welcome-icon"><Layers3 size={30} strokeWidth={1.4} /></span><p className="authoring-kicker">YOUR TEACHING, A LITTLE LESS WORK</p><h2>What will your students<br />discover today?</h2><p>Bring your materials. We’ll shape the learning objectives,<br className="desktop-break" /> build a thoughtful plan, and turn it into an H5P activity.</p><div className="authoring-starters">{[
+          {!session && <div className="authoring-welcome"><span className="authoring-welcome-icon"><Layers3 size={30} strokeWidth={1.4} /></span><p className="authoring-kicker">YOUR TEACHING, A LITTLE LESS WORK</p><h2>What will your students<br />discover today?</h2><p>Start with an idea or bring your materials. Together we’ll shape<br className="desktop-break" /> learning objectives, a teaching plan, and an H5P activity.</p><div className="authoring-starters">{[
+            ['Brainstorm objectives', 'Help me brainstorm learning objectives. Ask me about the topic and learners, then propose a teaching plan.'],
             ['Check understanding', 'Create a short self-check activity that helps students identify misconceptions in these materials.'],
             ['Prepare for class', 'Create a first-year pre-class activity introducing the key concepts in these materials.'],
             ['Apply the ideas', 'Create an activity with practical application questions grounded in these materials.']
           ].map(([title, prompt]) => <button key={title} onClick={() => setText(prompt)}><BookOpen size={16} /><span>{title}</span><ArrowUpRight size={14} /></button>)}</div></div>}
           {session?.messages.map(message => <article className={`authoring-message is-${message.role}`} key={message.id}><span className="authoring-speaker">{message.role === 'assistant' ? <><Sparkles size={14} /> CREATE</> : 'You'}</span><p>{message.text}</p>{message.role === 'assistant' && !!message.clarification?.length && <AuthoringClarification messageId={message.id} questions={message.clarification} disabled={active || !!busy || uncertain || !!candidate || planDirty || session?.messages.at(-1)?.id !== message.id} onUseAnswers={useClarificationAnswers} />}</article>)}
+          {!!planDraft?.objectives.length && <button className="authoring-result-card" onClick={() => { setPanel('plan'); setPreviewOpen(true); }}><BookOpen size={24} /><span><strong>Learning objectives & teaching plan</strong><small>{planDraft.objectives.length} objectives · {total} planned questions · {planDraft.promptBased ? 'Brainstormed draft' : 'Material-based draft'}</small></span><ArrowUpRight size={17} /></button>}
           {session && <AuthoringProgress session={session} connected={connectionStatus === 'connected'} />}
           {session && active && <div className="authoring-live" role="status"><Loader2 size={15} className="spin" /><div><strong>{labels[session.status]}</strong><span>{session.assistant?.events.at(-1)?.message || 'Your progress is saved. You can return to this task later.'}</span>{session.assistant?.generation && <progress aria-label="Questions prepared" value={session.assistant.generation.readyCount} max={session.assistant.generation.totalQuestions} />}</div></div>}
-          {session?.status === 'awaiting_approval' && !active && <div className="authoring-decision"><div><span className="authoring-decision-icon"><Check size={18} /></span><strong>Your teaching plan is ready</strong></div><p>{planDraft?.objectives.length || 0} learning objectives · {total} questions · H5P Column</p><p>Review the plan alongside this conversation. Your existing course questions are preserved.</p><button className="btn btn-primary" disabled={!!busy || planDirty || !validPlan} onClick={() => command('approve', { planRevision: session.assistant?.revision })}>Accept plan & generate <ArrowUpRight size={15} /></button><button className="authoring-quiet" onClick={() => setPanel('plan')}>Review plan</button>{planDirty && <small>Save your plan edits before generating.</small>}</div>}
+          {session?.status === 'awaiting_approval' && !active && <div className="authoring-decision"><div><span className="authoring-decision-icon"><Check size={18} /></span><strong>Your teaching plan is ready</strong></div><p>{planDraft?.objectives.length || 0} learning objectives · {total} questions · H5P Column</p><p>Open the teaching plan to review objectives, evidence and the question mix, or ask for changes here.</p><button className="btn btn-primary" disabled={!!busy || planDirty || contextDirty.current || !validPlan} onClick={() => command('approve', { planRevision: session.assistant?.revision })}>Accept plan & generate <ArrowUpRight size={15} /></button><button className="authoring-quiet" onClick={() => { setPanel('plan'); setPreviewOpen(true); }}>Review plan</button>{planDirty && <small>Save your plan edits before generating.</small>}</div>}
           {session?.status === 'awaiting_approval' && !active && <details className="authoring-preferences"><summary>Refine teaching requirements</summary><p>Who are the learners, and what should this activity do? Leave a field unchanged to keep the proposed plan.</p><label>Learner level<select aria-label="Learner level" value={audience} onChange={e => setAudience(e.target.value)}><option value="">Keep proposed audience</option><option value="introductory university students">Introductory</option><option value="intermediate university students">Intermediate</option><option value="advanced university students">Advanced</option></select></label><label>Teaching purpose<select aria-label="Teaching purpose" value={teachingGoal} onChange={e => setTeachingGoal(e.target.value)}><option value="">Keep proposed purpose</option><option value="low-stakes practice with explanatory feedback">Practice and feedback</option><option value="a pre-class readiness check">Prepare for class</option><option value="application and problem-solving practice">Apply concepts</option></select></label><label>Question difficulty<select aria-label="Question difficulty" value={difficulty} onChange={e => setDifficulty(e.target.value)}><option value="">Keep proposed difficulty</option><option value="easy">Easy</option><option value="moderate">Moderate</option><option value="hard">Hard</option></select></label><button className="btn btn-outline" disabled={!!busy || planDirty || !(audience || teachingGoal || difficulty)} onClick={() => command('message', { text: ['Revise the proposed teaching plan. Keep its topics and question counts.', audience && `Audience: ${audience}.`, teachingGoal && `Purpose: ${teachingGoal}.`, difficulty && `Difficulty: ${difficulty}.`].filter(Boolean).join(' ') })}>Update proposal</button><p>Review and approve the updated plan before generation.</p></details>}
           {candidate && <div className="authoring-decision"><strong>A revision to review</strong><ul>{candidate.changes.map((change, i) => <li key={i}>{change}</li>)}</ul><div className="authoring-decision-actions"><button className="btn btn-primary" disabled={!!busy || active || uncertain} onClick={() => command('accept', { versionId: candidate.id })}>Accept changes</button><button className="btn btn-outline" disabled={!!busy || active || uncertain} onClick={() => command('reject', { versionId: candidate.id })}>Keep current</button></div></div>}
           {(error || session?.error || refreshError) && <div className="authoring-error" role="alert"><p>{error || session?.error || refreshError}</p><button className="authoring-quiet" onClick={() => { setError(''); setRefreshError(''); setPoll(n => n + 1); }}><RefreshCw size={14} /> Check status</button>{uncertain && pending.current && <button className="authoring-quiet" disabled={!!busy} onClick={() => command(pending.current!.command)}>Retry same request</button>}{session && !active && ['needs_attention', 'cancelled'].includes(session.status) && <button className="authoring-quiet" disabled={!!busy || uncertain} onClick={() => command('retry')}>Resume task</button>}</div>}
           {!!session?.assistant?.generation?.reusedQuestions && <p className="authoring-muted">{session.assistant.generation.reusedQuestions} prepared {session.assistant.generation.reusedQuestions === 1 ? 'question' : 'questions'} reused from the previous attempt.</p>}
-          {session?.assistant?.generation?.items.some(item => item.status === 'failed') && <section className="authoring-error" aria-label="Questions needing attention"><strong>Questions needing attention</strong><p>{session.assistant.generation.readyCount} of {session.assistant.generation.totalQuestions} questions checked. {session.assistant.generation.published ? 'Checked questions are saved in the course and available in the preview. Resume task retries only the unfinished questions.' : 'Prepared questions are available in the preview; check task status before retrying.'}</p>{session.assistant.generation.items.filter(item => item.status === 'failed').map(item => <details className="authoring-failed-question" key={item.index}><summary><strong>Question {item.index + 1}</strong>{questionRows[item.index]?.title && <span> · {questionRows[item.index].title}</span>}<p>{item.message || 'This question could not be completed. Check its instructions before retrying.'}</p></summary>{item.review ? <RejectedDraftDetails review={item.review} /> : <p>This attempt has no saved rejected draft or detailed review. New attempts can retain these details when the review rejects a question.</p>}{questionRows[item.index]?.instructions && <p><strong>Approved instructions:</strong> {questionRows[item.index].instructions}</p>}</details>)}<div className="authoring-decision-actions"><button className="authoring-quiet" disabled={active || !!busy} onClick={() => setText('Explain the failed question checks and help me revise the teaching plan. Ask me about any unclear requirements before changing it.')}>Discuss the failure</button>{failedBatch && <button className="authoring-quiet" disabled={active || !!busy} onClick={() => setPanel('plan')}>Edit teaching plan</button>}</div><p>Resume task retries the unchanged plan and may use additional AI credits. Save a revised plan, then approve it before generating.</p></section>}
-          {!!session?.assistant?.generation?.readyCount && <button className="authoring-result-card" onClick={() => setPanel('preview')}><Layers3 size={24} /><span><strong>Question set preview</strong><small>{session.assistant.generation.readyCount} checked questions · {session.assistant.generation.published ? 'Saved in course' : 'Live draft'}</small></span><ArrowUpRight size={17} /></button>}
+          {session?.assistant?.generation?.items.some(item => item.status === 'failed') && <section className="authoring-error" aria-label="Questions needing attention"><strong>Questions needing attention</strong><p>{session.assistant.generation.readyCount} of {session.assistant.generation.totalQuestions} questions checked. {session.assistant.generation.published ? 'Checked questions are saved in the course and available in the preview. Resume task retries only the unfinished questions.' : 'Prepared questions are available in the preview; check task status before retrying.'}</p>{session.assistant.generation.items.filter(item => item.status === 'failed').map(item => <details className="authoring-failed-question" key={item.index}><summary><strong>Question {item.index + 1}</strong>{questionRows[item.index]?.title && <span> · {questionRows[item.index].title}</span>}<p>{item.message || 'This question could not be completed. Check its instructions before retrying.'}</p></summary>{item.review ? <RejectedDraftDetails review={item.review} /> : <p>This attempt has no saved rejected draft or detailed review. New attempts can retain these details when the review rejects a question.</p>}{questionRows[item.index]?.instructions && <p><strong>Approved instructions:</strong> {questionRows[item.index].instructions}</p>}</details>)}<div className="authoring-decision-actions"><button className="authoring-quiet" disabled={active || !!busy} onClick={() => setText('Explain the failed question checks and help me revise the teaching plan. Ask me about any unclear requirements before changing it.')}>Discuss the failure</button>{failedBatch && <button className="authoring-quiet" disabled={active || !!busy} onClick={() => { setPanel('plan'); setPreviewOpen(true); }}>Edit teaching plan</button>}</div><p>Resume task retries the unchanged plan and may use additional AI credits. Save a revised plan, then approve it before generating.</p></section>}
+          {(!!session?.assistant?.generation?.readyCount || !!viewed) && <button className="authoring-result-card" onClick={() => { setPanel('preview'); setPreviewOpen(true); }}><Layers3 size={24} /><span><strong>Question set preview</strong><small>{session?.assistant?.generation?.readyCount || viewed?.questions.length || 0} checked questions · {viewed || session?.assistant?.generation?.published ? 'Saved' : 'Live draft'}</small></span><ArrowUpRight size={17} /></button>}
           <div ref={end} />
         </div>
-        {!session && <div className="authoring-context"><button className="authoring-context-toggle" onClick={() => setShowSources(v => !v)} aria-expanded={showSources}><FileText size={15} /><span>{selected.length ? `${selected.length} material${selected.length === 1 ? '' : 's'} attached` : 'Add course materials'}</span><ChevronDown size={14} /></button>{loading && <span className="authoring-muted">Loading courses…</span>}
-          {showSources && <div className="authoring-source-picker"><label>Course<select value={courseId} disabled={!!busy} onChange={e => { setCourseId(e.target.value); setQuizId(''); setSelected([]); setMaterials([]); }}><option value="">Choose a course</option>{courses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label><button className="authoring-quiet" onClick={() => setNewCourse(v => !v)}><Plus size={14} /> New course</button>{newCourse && <div className="authoring-course-create"><input aria-label="New course name" value={courseName} onChange={e => setCourseName(e.target.value)} placeholder="Course name" maxLength={150} /><button className="btn btn-outline" disabled={!courseName.trim() || !!busy} onClick={() => void act('course', async () => { const result = await foldersApi.createFolder(courseName.trim(), 1); setCourses(items => [result.folder, ...items]); setCourseId(result.folder._id); setQuizId(''); setSelected([]); setNewCourse(false); publish('course-created', { courseId: result.folder._id }); })}>Create</button></div>}
-            {courseId && <label>Learning Object<select value={quizId} disabled={!!busy} onChange={e => setQuizId(e.target.value)}><option value="">Create a new Learning Object</option>{(courses.find(c => c._id === courseId)?.quizzes || []).map((q, i) => <option key={typeof q === 'string' ? q : q._id} value={typeof q === 'string' ? q : q._id}>{typeof q === 'string' ? `Learning Object ${i + 1}` : q.name}</option>)}</select></label>}
-            <button className="authoring-upload" disabled={!!busy} onClick={() => file.current?.click()}><Upload size={18} /><span>{progress !== null ? `Uploading ${progress}%` : 'Upload PDF or DOCX'}<small>{courseId ? 'Drop files here or use the + menu below' : 'Choose a course and your files will upload automatically'}</small></span><Plus size={16} /></button>
-            <div className="authoring-material-list">{materials.map(m => <label key={m._id}><input type="checkbox" checked={selected.includes(m._id)} disabled={!!busy || m.processingStatus === 'failed' || (!selected.includes(m._id) && selected.length >= 20)} onChange={e => setSelected(ids => e.target.checked ? [...ids, m._id] : ids.filter(id => id !== m._id))} /><FileText size={15} /><span>{m.name}</span><small>{m.processingStatus === 'completed' ? 'Ready' : m.processingStatus === 'failed' ? 'Failed · retry in Materials' : 'Processing'}</small></label>)}</div>
-          </div>}
-        </div>}
-        {!!pendingFiles.length && <div className="authoring-queued-files" aria-live="polite"><div className="authoring-queued-heading"><strong>{busy === 'upload' ? 'Uploading materials' : session ? 'Files for a new activity' : courseId ? uploadFailed ? 'Upload needs attention' : 'Files ready to upload' : 'Files waiting for a course'}</strong><span>{pendingFiles.length} file{pendingFiles.length === 1 ? '' : 's'}</span></div>{pendingFiles.map((item, index) => <div className="authoring-queued-file" key={`${item.name}-${item.size}-${item.lastModified}`}><FileText size={15} /><span title={item.name}>{item.name}</span>{index === 0 && progress !== null && <small>{progress}%</small>}<button className="authoring-icon" aria-label={`Remove ${item.name}`} disabled={busy === 'upload' && index === 0} onClick={() => setPendingFiles(files => files.filter(file => file !== item))}><X size={14} /></button></div>)}{session ? <button className="authoring-quiet" onClick={() => void selectTask(null)}>Start new activity with these files <ArrowUpRight size={14} /></button> : !courseId ? <button className="authoring-quiet" onClick={() => setShowSources(true)}>Choose or create a course <ArrowUpRight size={14} /></button> : uploadFailed ? <button className="authoring-quiet" onClick={() => { setError(''); setUploadFailed(false); }}>Retry upload <RefreshCw size={14} /></button> : null}</div>}
-        <form className="authoring-composer" onSubmit={submit}><textarea aria-label="Message Studio AI" value={text} onChange={e => setText(e.target.value)} placeholder={session ? 'Ask a question or describe what you’d like to change…' : 'Describe your learning activity, or start with your materials…'} maxLength={4000} rows={3} disabled={!!busy || uncertain} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} /><div className="authoring-composer-footer"><div className="authoring-composer-tools"><div className="authoring-tools-anchor" ref={toolsMenu}><button className={`authoring-tool-trigger ${showTools ? 'selected' : ''}`} type="button" aria-label="Add tools and materials" aria-expanded={showTools} aria-haspopup="menu" onClick={() => setShowTools(value => !value)}><Plus size={19} /></button>{showTools && <div className="authoring-tool-menu" role="menu"><span>ADD TO YOUR WORKSPACE</span><button type="button" role="menuitem" onClick={() => file.current?.click()}><Upload size={17} /><span><strong>Upload files</strong><small>PDF or DOCX course materials</small></span></button><button type="button" role="menuitem" onClick={() => { setShowTools(false); if (session) void selectTask(null); setShowSources(true); }}><FileText size={17} /><span><strong>Choose course materials</strong><small>{session ? 'Start a new activity with sources' : 'Use files already in a course'}</small></span></button><button type="button" role="menuitem" onClick={() => { setShowTools(false); if (session) void selectTask(null); setShowSources(true); setNewCourse(true); }}><Plus size={17} /><span><strong>Create a course</strong><small>Give new materials a home</small></span></button><div className="authoring-tool-divider" /><button type="button" role="menuitem" onClick={() => { setShowTools(false); setShowHistory(true); }}><History size={17} /><span><strong>Conversation history</strong><small>Continue a saved activity</small></span></button></div>}</div>{!session ? <label className="authoring-auto"><input type="checkbox" checked={autoApprove} onChange={e => setAutoApprove(e.target.checked)} />Generate draft automatically</label> : <span><span className={`authoring-status-dot ${active ? 'working' : ''}`} />{active ? 'Task running' : 'Progress saved'}</span>}</div>{active ? <button type="button" className="authoring-send stop" aria-label="Stop task" disabled={!!busy} onClick={() => void act('cancel', async () => { receive(extract(await studioAuthoringApi.cancel(session!.id, session!.revision))); setPoll(v => v + 1); })}><Square size={15} fill="currentColor" /></button> : <button className="authoring-send" type="submit" aria-label={session ? 'Send message' : 'Start learning activity'} disabled={!!busy || loading || uncertain || (session ? !text.trim() || !!candidate : !selected.length || !courseId || !!pendingFiles.length)}>{busy ? <Loader2 size={18} className="spin" /> : <ArrowUp size={20} />}</button>}</div></form>
-        <p className="authoring-composer-note">{!session ? autoApprove ? 'Generation includes one automatic rework per rejected question and may use additional AI credits. You can stop at any time.' : 'You’ll review the teaching plan before questions are generated.' : 'AI drafts need your review. Enter to send · Shift + Enter for a new line.'}</p>
+        {!!pendingFiles.length && <div className="authoring-queued-files" aria-live="polite"><strong>{busy === 'upload' ? `Uploading ${progress ?? 0}%` : uploadFailed ? 'Upload needs attention' : 'Files ready to upload'}</strong>{pendingFiles.map((item, index) => <div className="authoring-queued-file" key={`${item.name}-${item.lastModified}`}><FileText size={15} /><span>{item.name}</span><button className="authoring-icon" aria-label={`Remove ${item.name}`} disabled={busy === 'upload' && index === 0} onClick={() => setPendingFiles(files => files.filter(f => f !== item))}><X size={14} /></button></div>)}{uploadFailed && <button className="authoring-quiet" onClick={() => { setError(''); setUploadFailed(false); }}>Retry upload</button>}</div>}
+        <form className="authoring-composer" onSubmit={submit}>
+          {(showTools || mention) && <AuthoringContextPicker courseId={courseId} selected={chips} mention={mention || undefined} query={mention?.query} onClose={closePicker} onCourse={chooseCourse} onSelect={(kind, id) => { contextDirty.current = true; if (kind === 'material') setSelected(ids => [...new Set([...ids, id])]); else setObjectiveIds(ids => [...new Set([...ids, id])]); finishMention(); }} onUpload={() => { closePicker(); finishMention(); file.current?.click(); }} />}
+          {!!chips.length && <div className="authoring-context-chips" aria-label="Attached context">{chips.map(chip => <div className="authoring-context-chip" key={`${chip.kind}:${chip.id}`}><button type="button" onClick={() => setContextPreview(chip)} title={`Preview ${chip.name}`}><ContextIcon kind={chip.kind} /><span>{chip.name}</span>{chip.status && chip.status !== 'completed' && <small>{chip.status}</small>}</button><button type="button" aria-label={`Remove context ${chip.name}`} disabled={active || !!busy} onClick={() => { contextDirty.current = true; if (chip.kind === 'course') setContextCourse(false); else if (chip.kind === 'material') setSelected(ids => ids.filter(id => id !== chip.id)); else setObjectiveIds(ids => ids.filter(id => id !== chip.id)); }}><X size={13} /></button></div>)}</div>}
+          {contextDirty.current && session && <small className="authoring-muted">New context is ready. Send a message to update the proposal before approving.</small>}
+          <textarea ref={composer} aria-label="Message Studio AI" value={text} onChange={e => { setText(e.target.value); detectMention(e.currentTarget); }} onClick={e => detectMention(e.currentTarget)} placeholder="Describe an idea, ask a question, or type @ to add context…" maxLength={4000} rows={3} disabled={!!busy || uncertain} onKeyDown={e => { if (e.key === 'Escape') { closePicker(); return; } if ((showTools || mention) && e.key === 'ArrowDown') { e.preventDefault(); (e.currentTarget.form?.querySelector('[role="option"]:not(:disabled)') as HTMLButtonElement | null)?.focus(); return; } if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (mention) (e.currentTarget.form?.querySelector('[role="option"]:not(:disabled)') as HTMLButtonElement | null)?.click(); else e.currentTarget.form?.requestSubmit(); } }} />
+          <div className="authoring-composer-footer"><div className="authoring-composer-tools"><button className={`authoring-tool-trigger ${showTools ? 'selected' : ''}`} type="button" aria-label="Add tools and materials" aria-expanded={showTools || !!mention} aria-haspopup="dialog" disabled={active || !!busy} onClick={() => { setMention(null); setShowTools(value => !value); }}><Plus size={19} /></button><span>{active ? 'Task running' : session ? 'Progress saved' : 'Ideas welcome · context optional'}</span></div>{active ? <button type="button" className="authoring-send stop" aria-label="Stop task" disabled={!!busy} onClick={() => void act('cancel', async () => { receive(extract(await studioAuthoringApi.cancel(session!.id, session!.revision))); setPoll(v => v + 1); })}><Square size={15} fill="currentColor" /></button> : <button className="authoring-send" type="submit" aria-label={session ? 'Send message' : 'Start learning activity'} disabled={!!busy || loading || uncertain || !!pendingFiles.length || !!candidate || (session ? !text.trim() && !contextDirty.current : !text.trim() && !chips.length)}>{busy ? <Loader2 size={18} className="spin" /> : <ArrowUp size={20} />}</button>}</div>
+        </form>
+        <p className="authoring-composer-note">{!session ? 'Start with text only. You’ll approve the teaching plan before questions are generated.' : 'Enter to send · Shift + Enter for a new line · @ to reference context'}</p>
       </div>
-      {session && <aside className="authoring-artifact" aria-label="Activity workspace"><div className="authoring-artifact-header"><div><Layers3 size={17} /><strong>Question set preview</strong>{viewed && <span className="authoring-version-badge">v{viewed.number}{viewed.state === 'candidate' ? ' · proposed' : ''}</span>}</div><button className="authoring-icon" aria-label="Refresh activity" onClick={() => setPoll(v => v + 1)}><RefreshCw size={15} /></button></div>
+      {session && previewOpen && <aside className="authoring-artifact" aria-label="Activity workspace"><div className="authoring-artifact-header"><div><Layers3 size={17} /><strong>Question set preview</strong>{viewed && <span className="authoring-version-badge">v{viewed.number}{viewed.state === 'candidate' ? ' · proposed' : ''}</span>}</div><button className="authoring-icon" aria-label="Close preview" onClick={() => setPreviewOpen(false)}><X size={16} /></button><button className="authoring-icon" aria-label="Refresh activity" onClick={() => setPoll(v => v + 1)}><RefreshCw size={15} /></button></div>
         <div className="authoring-tabs" role="tablist" aria-label="Activity views">{(['preview', 'plan', 'questions'] as const).map(tab => <button key={tab} role="tab" aria-selected={panel === tab} aria-controls={`authoring-${tab}`} onClick={() => setPanel(tab)}>{tab === 'preview' ? 'Preview' : tab === 'plan' ? 'Teaching plan' : 'Questions & sources'}</button>)}</div>
         <div className="authoring-artifact-content" role="tabpanel" id={`authoring-${panel}`}>
-          {panel === 'preview' && (viewed ? <><div className="authoring-preview-version"><label>Viewing<select value={viewed.id} onChange={e => setViewVersion(e.target.value)}>{session.versions.filter(v => v.state !== 'rejected').map(v => <option key={v.id} value={v.id}>Version {v.number}{v.id === session.currentVersionId ? ' · current' : v.state === 'candidate' ? ' · proposed' : ''}</option>)}</select></label>{viewed.representation === 'native-fork' && <small>Independent Studio version</small>}</div><StudioPreview key={viewed.id} contentId={viewed.contentId} title={viewed.title} /></> : session.assistant?.generation?.readyCount ? <><div className="authoring-partial-banner" role="status"><strong>{session.assistant.generation.readyCount} of {session.assistant.generation.totalQuestions} questions checked</strong><p>{session.assistant.generation.published ? 'These questions are saved in your course. Unfinished questions are excluded; you can use the checked questions now.' : 'Live draft preview. Each question appears after its checks finish.'}</p></div><PreparedQuestionPreview key={`${session.assistant.id}:${session.assistant.generation.requestId}:${session.assistant.generation.readyCount}`} id={session.assistant.id} version={session.assistant.generation.readyCount} /></> : <div className="authoring-artifact-empty"><Layers3 size={38} strokeWidth={1.2} /><h3>A place for your ideas to take shape</h3><p>Questions appear here as they pass their checks. You can try the completed questions while the remaining items are generated or reworked.</p><button className="authoring-quiet" onClick={() => setPanel('plan')}>View teaching plan <ArrowUpRight size={14} /></button></div>)}
+          {panel === 'preview' && (viewed ? <><div className="authoring-preview-version"><label>Viewing<select value={viewed.id} onChange={e => setViewVersion(e.target.value)}>{session.versions.filter(v => v.state !== 'rejected').map(v => <option key={v.id} value={v.id}>Version {v.number}{v.id === session.currentVersionId ? ' · current' : v.state === 'candidate' ? ' · proposed' : ''}</option>)}</select></label>{viewed.representation === 'native-fork' && <small>Independent Studio version</small>}</div><StudioPreview key={viewed.id} contentId={viewed.contentId} title={viewed.title} /></> : session.assistant?.generation?.readyCount ? <><div className="authoring-partial-banner" role="status"><strong>{session.assistant.generation.readyCount} of {session.assistant.generation.totalQuestions} questions checked</strong><p>{session.assistant.generation.published ? 'These questions are saved in your course. Unfinished questions are excluded; you can use the checked questions now.' : 'Live draft preview. Each question appears after its checks finish.'}</p></div><PreparedQuestionPreview key={`${session.assistant.id}:${session.assistant.generation.requestId}:${session.assistant.generation.readyCount}`} id={session.assistant.id} version={session.assistant.generation.readyCount} /></> : <div className="authoring-artifact-empty"><Layers3 size={38} strokeWidth={1.2} /><h3>A place for your ideas to take shape</h3><p>Questions appear here as they pass their checks. You can try the completed questions while the remaining items are generated or reworked.</p><button className="authoring-quiet" onClick={() => { setPanel('plan'); setPreviewOpen(true); }}>View teaching plan <ArrowUpRight size={14} /></button></div>)}
           {panel === 'plan' && <div className="authoring-plan">{!planDraft?.objectives.length ? <div className="authoring-artifact-empty"><BookOpen size={32} strokeWidth={1.2} /><h3>Starting with the learning</h3><p>We’ll read your materials, identify learning objectives and recommend a question mix.</p></div> : <><div className="authoring-section-heading"><span className="authoring-kicker">LEARNING OBJECTIVES</span><span>{planDraft.objectives.length} objectives</span></div>{planDraft.objectives.map((lo, index) => <div className="authoring-objective" key={lo.id}><span>{String(index + 1).padStart(2, '0')}</span><div><textarea aria-label={`Learning objective ${index + 1}`} value={lo.text} rows={3} disabled={!editablePlan} onChange={e => { setPlanDraft(d => d ? { ...d, objectives: d.objectives.map(item => item.id === lo.id ? { ...item, text: e.target.value } : item) } : d); setPlanDirty(true); }} />{!!lo.sourceReferences?.length && <button className="authoring-source-link" onClick={() => setReference(lo.sourceReferences![0])}><FileText size={12} />{lo.sourceReferences[0].materialName || 'Source evidence'}{lo.sourceReferences[0].pageNumber ? ` · p. ${lo.sourceReferences[0].pageNumber}` : ''}</button>}</div></div>)}<div className="authoring-section-heading"><span className="authoring-kicker">QUESTION MIX</span><span>{total} questions</span></div>{planDraft.plan.map((row, index) => <div className="authoring-plan-row" key={row.id}><div><strong>{row.title}</strong><small>{row.questionType.replaceAll('-', ' ')}</small><textarea aria-label={`Question instructions for plan row ${index + 1}`} value={row.instructions} maxLength={4000} rows={4} disabled={!editablePlan} onChange={e => { setPlanDraft(d => d ? { ...d, plan: d.plan.map(item => item.id === row.id ? { ...item, instructions: e.target.value } : item) } : d); setPlanDirty(true); }} /></div><input aria-label={`Question count for plan row ${index + 1}`} type="number" min={1} max={20} value={row.count} disabled={!editablePlan} onChange={e => { setPlanDraft(d => d ? { ...d, plan: d.plan.map(item => item.id === row.id ? { ...item, count: Number(e.target.value) } : item) } : d); setPlanDirty(true); }} /></div>)}{planDirty && <div className="authoring-plan-save"><span>{validPlan ? 'Unsaved plan changes' : 'Keep 1–20 questions and complete each objective.'}</span><button className="btn btn-primary" disabled={!!busy || !validPlan} onClick={() => void act('plan', savePlan)}>Save plan</button></div>}</> }</div>}
           {panel === 'questions' && <div className="authoring-questions">{!visibleQuestions.length ? <div className="authoring-artifact-empty"><FileText size={32} /><h3>{viewed?.representation === 'native-fork' ? 'Review this version in Preview' : 'Questions will appear here'}</h3><p>{viewed?.representation === 'native-fork' ? 'Native Studio changes do not update the linked course questions or their evidence map.' : 'Each course question keeps its learning objective and supporting evidence.'}</p></div> : visibleQuestions.map(q => <article key={q.id}><small>QUESTION {q.index} · {q.type.replaceAll('-', ' ')}</small><h3>{q.text}</h3>{q.explanation && <p>{q.explanation}</p>}<div>{q.sourceReferences.map((source, i) => <button key={i} className="authoring-source-link" onClick={() => setReference(source)}><FileText size={12} />{source.materialName || source.sourceFile || 'Source'}{source.pageNumber ? ` · p. ${source.pageNumber}` : ''}</button>)}</div><button className="authoring-quiet" disabled={active || !!candidate || !viewed} title={!viewed ? 'Use Open course workspace to edit checked questions' : undefined} onClick={() => { setText(`Revise question ${q.index}: `); }}>Ask for a revision <ArrowUpRight size={13} /></button></article>)}</div>}
         </div>
         <footer className="authoring-artifact-footer">{viewed ? <><details className="authoring-versions"><summary><History size={14} /> Version history <ChevronDown size={13} /></summary><div>{session.versions.filter(v => v.state === 'accepted').map(v => <article key={v.id}><button onClick={() => { setViewVersion(v.id); setPanel('preview'); }}><strong>v{v.number}{v.id === session.currentVersionId ? ' · Current' : ''}</strong><span>{v.summary}</span></button>{v.id !== session.currentVersionId && <button className="authoring-icon" aria-label={`Restore version ${v.number}`} disabled={active || !!busy || !!candidate} onClick={() => void showConfirm({ title: `Restore version ${v.number}?`, description: 'This creates a new version from the saved content. Your history is kept. Linked course versions also restore their questions and plan; external downloads and deployments are unchanged.', confirmLabel: 'Restore version', cancelLabel: 'Keep current' }).then(ok => { if (ok) command('restore', { versionId: v.id }); })}><RotateCcw size={15} /></button>}</article>)}</div></details><div className="authoring-export-actions"><button className="authoring-quiet" disabled={!!busy || active || viewed.state !== 'accepted'} onClick={() => callbacks.current.onOpenActivity(viewed.contentId, false)}><SlidersHorizontal size={14} /> Advanced editor</button><button className="btn btn-primary" disabled={!!busy} onClick={() => void act('download', async () => { const blob = await h5pEditorApi.downloadContent(viewed.contentId); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${viewed.title.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 100) || 'activity'}-v${viewed.number}.h5p`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); })}><Download size={14} /> Download H5P</button></div></> : <span className="authoring-muted"><Clock3 size={14} /> Your activity and versions are saved here</span>}{session.quizId && <Link className="authoring-course-link" to={`/course/${session.courseId}/quiz/${session.quizId}?tab=review`}>Open course workspace <ArrowUpRight size={12} /></Link>}</footer>
       </aside>}
     </div>
+    {contextPreview && <div className="authoring-context-backdrop" onClick={() => setContextPreview(null)}><section className="authoring-context-preview" role="dialog" aria-modal="true" aria-label="Context preview" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setContextPreview(null); }}><header><ContextIcon kind={contextPreview.kind} /><strong>{contextPreview.name}</strong><button autoFocus className="authoring-icon" aria-label="Close context preview" onClick={() => setContextPreview(null)}><X size={18} /></button></header><p>{contextPreview.preview || 'This context is attached. Its content will be read when you send your message.'}</p>{contextPreview.kind === 'material' && <button className="authoring-quiet" onClick={() => { setReference({ materialId: contextPreview.id, materialName: contextPreview.name }); setContextPreview(null); }}>Open source document <ArrowUpRight size={14} /></button>}</section></div>}
     {reference && <SourceReferencePreviewModal reference={reference} onClose={() => setReference(null)} />}
   </section>;
 }

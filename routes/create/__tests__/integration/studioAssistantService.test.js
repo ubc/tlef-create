@@ -52,8 +52,8 @@ beforeEach(() => {
   }));
   completion = jest.spyOn(llmService, 'streamCompletion').mockImplementation(async ({ prompt, jsonSchema }) => {
     if (jsonSchema.name === 'studio_assistant_objectives') {
-      const id = JSON.parse(prompt.match(/AVAILABLE SOURCE IDS: (\[[^\n]+\])/)[1])[0];
-      return { content: JSON.stringify({ objectives: [{ text: 'Explain evaporation.', sourceIds: [id] }] }) };
+      const id = JSON.parse(prompt.match(/AVAILABLE SOURCE IDS: (\[[^\n]*\])/)[1])[0];
+      return { content: JSON.stringify({ objectives: [{ text: 'Explain evaporation.', sourceIds: id ? [id] : [] }] }) };
     }
     const approved = JSON.parse(prompt.match(/APPROVED OBJECTIVES: (\[[^\n]+\])/)[1]);
     return { content: JSON.stringify({ unsupportedRequirements: [], plan: [{ title: 'Evaporation check',
@@ -400,3 +400,25 @@ describe('assistant and canonical course workflow share the same records', () =>
       .toBe(committed.learningObjectives.length);
   });
 });
+
+ test('brainstorms and saves a prompt-only plan without inventing evidence', async () => {
+   const f = await fixture();
+   const value = await createAssistantSession(f.user, { ...f.body, materialIds: [], promptBased: true, instructions: 'Brainstorm objectives for first-year water science and two practice questions.' });
+   expect(value.status).toBe('awaiting_approval');
+   expect(value.promptBased).toBe(true);
+   expect(value.objectives[0].sourceReferences).toEqual([]);
+   const quiz = await Quiz.findById(value.quizId);
+   expect(quiz.materials).toHaveLength(0);
+   expect(quiz.settings.planItems[0].useCustomPromptOnly).toBe(true);
+   expect(quiz.settings.planItems[0].learningObjective).toBeTruthy();
+   expect(quiz.progress.materialsAssigned).toBe(false);
+ });
+ test('references an existing LO by copying it into the new plan without altering the original', async () => {
+   const f = await fixture({ existing: true, questions: true });
+   const value = await createAssistantSession(f.user, { ...f.body, quizId: undefined, materialIds: [], promptBased: true, objectiveIds: [String(f.objective._id)] });
+   expect(value.status).toBe('awaiting_approval');
+   expect(value.objectives[0].text).toBe(f.objective.text);
+   expect(value.objectives[0].id).not.toBe(String(f.objective._id));
+   expect(String((await Question.findById(f.question._id)).learningObjective)).toBe(String(f.objective._id));
+   expect(completion.mock.calls.some(([arg]) => arg.jsonSchema.name === 'studio_assistant_objectives')).toBe(false);
+ });

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { resolveAuthoringContext } from './authoring/authoringContext.js';
 import { canReviseAssistantPlan } from './authoring/assistantRecovery.js';
 import mongoose from 'mongoose';
 import Session from '../models/StudioAssistantSession.js';
@@ -60,7 +61,7 @@ export function serializeAssistantSession(session) {
   return {
     id: String(session._id), requestId: session.requestId, courseId: String(session.courseId),
     quizId: String(session.quizId), quizName: session.quizName, materialIds: session.materialIds.map(String),
-    instructions: session.instructions, revision: session.revision, status: session.status, phase: session.phase,
+    instructions: session.instructions, promptBased: session.promptBased === true, revision: session.revision, status: session.status, phase: session.phase,
     objectives: session.objectives, plan: session.plan, outputs: session.outputs, events: session.events,
     error: session.error, errorCode: session.errorCode, currentJobId: session.currentJobId,
     approvedAt: session.approvedAt, createdAt: session.createdAt, updatedAt: session.updatedAt
@@ -94,7 +95,7 @@ async function ensureQuiz(session) {
   if (!quiz && session.createdQuiz) {
     await Quiz.updateOne({ _id: session.quizId }, { $setOnInsert: {
       name: session.quizName, folder: session.courseId, createdBy: session.owner,
-      materials: session.materialIds, status: 'materials-assigned', 'progress.materialsAssigned': true
+      materials: session.materialIds, status: 'materials-assigned', 'progress.materialsAssigned': session.materialIds.length > 0
     } }, { upsert: true, runValidators: true, setDefaultsOnInsert: true });
     quiz = await loadQuiz(session.quizId, session.owner);
   }
@@ -106,7 +107,7 @@ async function ensureQuiz(session) {
   } });
   const missing = session.materialIds.filter(id => !quiz.materials.some(existing => String(existing) === String(id)));
   if (missing.length) await withQuestionMutation(Quiz, quiz._id, session.owner, mutation => mutation.writeQuiz({
-    $addToSet: { materials: { $each: missing } }, $set: { 'progress.materialsAssigned': true }
+    $addToSet: { materials: { $each: missing } }, $set: { 'progress.materialsAssigned': session.materialIds.length > 0 }
   }));
   return loadQuiz(session.quizId, session.owner);
 }
@@ -157,7 +158,7 @@ async function saveBlueprint(session, proposed, expectedFingerprint, assertActiv
         'settings.planMode': 'ai-auto', 'settings.deliveryTarget': 'h5p-package', 'settings.targetFormat': 'column',
         'settings.planItems': plan.map(row => ({ type: row.questionType, learningObjective: row.objectiveIds[0], count: row.count,
           customPrompt: row.instructions || '', difficulty: row.difficulty || 'moderate', pedagogicalIntent: 'support',
-          selectionMode: 'single', useCustomPromptOnly: false, rationale: row.title })),
+          selectionMode: 'single', useCustomPromptOnly: session.promptBased === true, rationale: row.title })),
         'progress.objectivesSet': true, 'progress.planGenerated': true, 'progress.planApproved': false,
         ...(current.questions.length ? {} : { status: 'plan-generated' })
       } });
@@ -179,17 +180,19 @@ async function planSession(session, assertActive) {
   const materials = await ownedMaterials(session);
   const quiz = await ensureQuiz(session);
   const before = quizFingerprint(quiz);
-  await patchActive(session, {}, event('materials', 'Reading the selected course materials and their source evidence.'));
-  const context = await buildAssistantContext(materials, { userId: String(session.owner) });
+  await patchActive(session, {}, event('materials', materials.length ? 'Reading the selected course materials and their source evidence.' : 'Developing the teaching idea from your brief. No source materials attached.'));
+  const context = materials.length ? await buildAssistantContext(materials, { userId: String(session.owner) }) : { context: 'Brainstorming specification from the instructor brief. No course material evidence is available. Do not invent citations.', sources: [], materialFingerprint: 'prompt-only' };
   await assertActive();
-  const reused = quiz.learningObjectives.map(objective => ({ id: String(objective._id), text: objective.text,
+  const selectedContext = await resolveAuthoringContext(String(session.owner), { courseId: String(session.courseId), objectiveIds: (session.objectiveIds || []).map(String) });
+  const selectedObjectives = quiz.learningObjectives.length ? quiz.learningObjectives : selectedContext.objectives;
+  const reused = selectedObjectives.map(objective => ({ id: String(objective._id), text: objective.text,
     sourceReferences: objective.generationMetadata?.sourceReferences || [] }));
   const sources = [...context.sources, ...reused.flatMap(objective => objective.sourceReferences)];
   session = await patchActive(session, { sources, materialSignature: fingerprintAssistantMaterials(materials), materialFingerprint: context.materialFingerprint },
-    event('objectives', reused.length ? 'Reusing the learning objectives already saved in this learning object.' : 'Drafting learning objectives from the selected materials.'));
+    event('objectives', reused.length ? 'Reusing the learning objectives already saved in this learning object.' : session.promptBased ? 'Brainstorming learning objectives from the teaching brief.' : 'Drafting learning objectives from the selected materials.'));
   const objectives = reused.length ? reused : session.canonicalObjectives
     ? await generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: session.instructions })
-    : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner) });
+    : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner), promptBased: session.promptBased });
   // Canonical LO generation may cite inventory chunks outside the small chat
   // sample. These references came from the server-owned generation pipeline.
   if (session.canonicalObjectives) sources.push(...objectives.flatMap(objective => objective.sourceReferences || []));
@@ -233,8 +236,8 @@ async function saveFinalContent(session, user, document, quiz, assertActive) {
 
 async function generateSession(session, user, assertActive) {
   await assertSources(session); await assertActive();
-  await patchActive(session, {}, event('generating', 'Retrieving evidence, generating questions and checking feedback. A rejected draft gets one automatic rework; checked questions remain usable even if another item fails.'));
-  const result = await runAssistantGeneration({ user, quizId: String(session.quizId), requestId: session.questionJobRequestId,
+  await patchActive(session, {}, event('generating', `${session.promptBased ? 'Generating questions from your teaching brief' : 'Retrieving evidence and generating questions'}, then checking feedback. A rejected draft gets one automatic rework; checked questions remain usable even if another item fails.`));
+  const result = await runAssistantGeneration({ user, quizId: String(session.quizId), requestId: session.questionJobRequestId, promptBased: session.promptBased === true,
     retryFromRequestId: session.questionJobRetryFromRequestId,
     materialIds: session.materialIds.map(String),
     assertQuizSnapshot: quiz => { if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged(); },
@@ -339,12 +342,13 @@ export async function listAssistantSessions(owner) {
 export async function createAssistantSession(user, body) {
   const owner = String(user.id);
   if (!requestIdValid(body.requestId) || !objectId(body.courseId) || (body.quizId && !objectId(body.quizId))
-    || !Array.isArray(body.materialIds) || !body.materialIds.length || body.materialIds.length > 20
+    || !Array.isArray(body.materialIds) || (!body.materialIds.length && body.promptBased !== true) || body.materialIds.length > 20
     || body.materialIds.some(id => !objectId(id)) || new Set(body.materialIds).size !== body.materialIds.length
     || typeof body.instructions !== 'string' || body.instructions.trim().length < 10 || body.instructions.length > 12000) {
-    fail('Choose a course, 1–20 processed materials, and describe the task in 10–12,000 characters.', 400, 'VALIDATION_ERROR');
+    fail('Describe the task in 10–12,000 characters and choose up to 20 processed materials, or use prompt-only brainstorming.', 400, 'VALIDATION_ERROR');
   }
-  const requestHash = digest({ courseId: body.courseId, quizId: body.quizId || null, materialIds: [...body.materialIds].sort(), instructions: body.instructions.trim() });
+  await resolveAuthoringContext(owner, { courseId: body.courseId, materialIds: body.materialIds, objectiveIds: body.objectiveIds || [] });
+  const requestHash = digest({ ...(body.promptBased ? { promptBased: true } : {}), ...((body.objectiveIds || []).length ? { objectiveIds: [...body.objectiveIds].sort() } : {}), courseId: body.courseId, quizId: body.quizId || null, materialIds: [...body.materialIds].sort(), instructions: body.instructions.trim() });
   const previous = await Session.findOne({ owner, requestId: body.requestId });
   if (previous) {
     if (previous.requestHash !== requestHash) fail('This request ID belongs to different instructions.', 409, 'REQUEST_ID_CONFLICT');
@@ -362,7 +366,7 @@ export async function createAssistantSession(user, body) {
     session = await Session.create({ ...draft, _id: id, requestId: body.requestId, requestHash,
       quizId: existingQuiz?._id || new mongoose.Types.ObjectId(), createdQuiz: !existingQuiz,
       quizName: existingQuiz?.name || `Studio learning object ${String(id).slice(-6)}`,
-      instructions: body.instructions.trim(), canonicalObjectives: body.canonicalObjectives === true,
+      instructions: body.instructions.trim(), promptBased: body.promptBased === true && !body.materialIds.length, objectiveIds: body.objectiveIds || [], canonicalObjectives: body.canonicalObjectives === true,
       status: 'planning', phase: 'planning', events: [event('started', 'Preparing the course workspace.')] });
   } catch (error) {
     if (error.code !== 11000) throw error;

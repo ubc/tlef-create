@@ -10,6 +10,8 @@ const schema = new mongoose.Schema({
   quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
   quizName: { type: String, required: true, maxlength: 200 },
   createdQuiz: { type: Boolean, default: false },
+  promptBased: { type: Boolean, default: false },
+  objectiveIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'LearningObjective' }],
   canonicalObjectives: { type: Boolean, default: false },
   materialIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Material' }],
   instructions: { type: String, required: true, maxlength: 12000 },

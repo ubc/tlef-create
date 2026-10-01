@@ -29,6 +29,9 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(first.navigationPath).toContain(`/help?doc=${documentId}&section=`);
   });
   test.each([
+    ['@ Add context icon chips Context preview Course Materials Learning objectives Upload files', 'h5p-studio', 'Add context with + or @'],
+    ['text-only Brainstormed draft brainstorm learning objectives teaching idea no source materials citations', 'h5p-studio', 'Brainstorm learning objectives in conversation'],
+    ['Learning objectives teaching plan Question set preview Close preview Accept plan generate', 'h5p-studio', 'Open a proposal or question set preview'],
     ['Create with AI Use course materials Quick activity keep teaching task unsaved plan New blank activity Import .h5p', 'h5p-studio', 'Advanced types'],
     ['Question collection select multiple types AI chooses when no cards selected quantities plan', 'h5p-studio', 'Advanced types'],
     ['Prompt helper conversation context selected objectives Yes generate prompt Not now Copy prompt Use this prompt', 'h5p-studio', 'Advanced types'],
@@ -241,8 +244,8 @@ describe('CREATE Guide knowledge retrieval', () => {
   });
 
   test.each([
-    ['Studio AI workspace Add course materials Accept plan generate Teaching plan', 'Create with AI'],
-    ['Studio AI workspace plus button Upload files drag PDF DOCX choose course automatic upload', 'Create with AI'],
+    ['Learning objectives teaching plan Question set preview Accept plan generate', 'Open a proposal or question set preview'],
+    ['Studio AI workspace plus button Upload files drag PDF DOCX choose course automatic upload', 'Add context with + or @'],
     ['Version history Restore version Accept changes Keep current Independent Studio version', 'Revise an activity and restore a version'],
     ['Resume conversational workspace Task history Stop task Resume task Check status interrupted', 'Resume a conversational workspace'],
     ['History search saved conversations restore task after refresh', 'Resume a conversational workspace']

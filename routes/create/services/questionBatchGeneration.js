@@ -14,12 +14,12 @@ import RejectedQuestionDraft from '../models/RejectedQuestionDraft.js';
  * Enrich question configs with learning objective ObjectIds from quiz.
  * Maps text or index-based LO references to actual Mongoose documents.
  */
-function enrichQuestionConfigsWithObjectives(questionConfigs, quiz) {
+function enrichQuestionConfigsWithObjectives(questionConfigs, quiz, preservePromptObjective = false) {
   const hasLOs = quiz.learningObjectives && quiz.learningObjectives.length > 0;
 
   return questionConfigs.map((config, index) => {
     // If the config has no LO reference and uses a custom prompt, allow null LO
-    if (!hasLOs || config.useCustomPromptOnly) {
+    if (!hasLOs || (config.useCustomPromptOnly && !preservePromptObjective)) {
       return { ...config, learningObjective: null };
     }
 
@@ -143,7 +143,7 @@ export function normalizeGenerationConfigs(configs) {
 
 // Shared by the existing Generate Questions endpoint and the Studio assistant.
 // QuestionGenerationJob owns staged persistence and atomic publication.
-export function createQuestionBatchWork({ quiz, questionConfigs, readiness, userId, mode = 'append', autoRework = false,
+export function createQuestionBatchWork({ quiz, questionConfigs, readiness, userId, mode = 'append', autoRework = false, preservePromptObjective = false,
   assertActive: assertContextActive = async () => {} }) {
   const quizId = String(quiz._id);
   return async function generateBatch({ job: receipt, assertActive: assertJobActive, updateItem, signal: jobSignal }) {
@@ -165,7 +165,7 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
       previousQuestions: mode === 'replace' ? [] : questionHistory.previousQuestions,
       duplicateCheckQuestions: mode === 'replace' ? [] : questionHistory.comparisonQuestions,
       customPrompt: coursePromptService.mergePromptParts(coursePrompt.prompt, historyPrompt.prompt, questionHistory.prompt, validationPrompt.prompt, config.customPrompt)
-    })), quiz));
+    })), quiz, preservePromptObjective));
     const { default: questionStreamingService } = await import('../services/questionStreamingService.js');
     const { default: ragService } = await import('../services/ragService.js');
     sseService.notifyBatchStarted(finalSessionId, { quizId, totalQuestions: configs.length, questionTypes: configs.map(config => config.questionType), userId });
@@ -177,7 +177,7 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
         const config = configs[index];
         const questionId = receipt.items[index].questionId;
         await assertActive();
-        await updateItem(index, { status: 'generating', phase: 'retrieve_evidence', startedAt: new Date() });
+        await updateItem(index, { status: 'generating', phase: config.useCustomPromptOnly ? 'prepare_prompt' : 'retrieve_evidence', startedAt: new Date() });
         try {
           await runWithGenerationDeadline(async ({ signal: deadlineSignal, beginPersistence }) => {
             const signal = AbortSignal.any([deadlineSignal, jobSignal]);

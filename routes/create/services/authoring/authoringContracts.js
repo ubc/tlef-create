@@ -14,7 +14,7 @@ export function validateCommand(body) {
   }
 }
 export function parseDecision(value, questionCount, allowedQuestionTypes = getH5PTypesForContainer('column')) {
-  if (!value || !['reply', 'revise_plan', 'revise_question', 'revise_activity'].includes(value.action)
+  if (!value || !['reply', 'revise_plan', 'revise_objectives', 'revise_question', 'revise_activity'].includes(value.action)
     || typeof value.reply !== 'string' || !value.reply.trim() || value.reply.length > 6000) {
     fail('The assistant returned an incomplete response. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
   }

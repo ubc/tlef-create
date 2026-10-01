@@ -125,6 +125,7 @@ describe('durable Studio authoring', () => {
       expect(read).toHaveBeenCalledTimes(1);
     }
     expect(complete).toHaveBeenCalledTimes(before);
+    await settle(f.owner, session.id);
   });
   test('rejects a foreign learning object before requirements assessment or paid planning', async () => {
     const f = await fixture();
@@ -162,13 +163,13 @@ describe('durable Studio authoring', () => {
     expect((await Session.findById(waiting.id)).requirementAnswers.map(a => a.text)).toEqual([answer.text]);
   });
 
-  test('honors explicit automatic-draft opt-in without a requirements conversation', async () => {
+  test('requires plan approval for a new conversation even with a stale automatic-draft client', async () => {
     const f = await fixture();
     const created = await createAuthoringSession(f.owner, { ...f.body, autoApprove: true });
     const result = await settle(f.owner, created.id);
-    expect(result.status).toBe('ready');
-    expect(assess).not.toHaveBeenCalled();
-    expect(approve).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('awaiting_approval');
+    expect(assess).toHaveBeenCalledTimes(1);
+    expect(approve).not.toHaveBeenCalled();
   });
 
   test('resumes planning after confirmed intake without replaying the answer as a paid modification', async () => {
@@ -402,3 +403,40 @@ describe('durable Studio authoring', () => {
     await expect(saveManualVersion(content, { ...normalized, title: 'Other edit' }, { id: f.owner })).rejects.toMatchObject({ status: 409 });
   });
 });
+
+ test('text-only conversations get stable draft storage and no fabricated material selection', async () => {
+   const owner = String(new mongoose.Types.ObjectId());
+   const body = { requestId: randomUUID(), instructions: 'Brainstorm two introductory mechanics objectives and one practice question.' };
+   const created = await createAuthoringSession(owner, body);
+   const planned = await settle(owner, created.id);
+   expect(planned.error).toBe('');
+   expect(planned.status).toBe('awaiting_approval');
+   expect(planned.materialIds).toEqual([]);
+   expect(start.mock.calls[0][1]).toMatchObject({ promptBased: true, canonicalObjectives: false, materialIds: [] });
+   expect((await createAuthoringSession(owner, body)).id).toBe(created.id);
+   expect(await Folder.countDocuments({ instructor: owner })).toBe(1);
+   expect(approve).not.toHaveBeenCalled();
+ });
+ test('owned objective context is available to clarification and cross-owner references are rejected', async () => {
+   const f = await fixture();
+   const loId = String(f.quiz.learningObjectives[0] || (await Objective.findOne({ quiz: f.quiz._id }))._id);
+   const body = { requestId: randomUUID(), objectiveIds: [loId], instructions: 'Use this objective for a first-year practice activity.' };
+   const created = await createAuthoringSession(f.owner, body);
+   await settle(f.owner, created.id);
+   expect(assess.mock.calls[0][0].instructions).toContain('Explain evaporation.');
+   expect(start.mock.calls[0][1].objectiveIds).toEqual([loId]);
+   await expect(createAuthoringSession(String(new mongoose.Types.ObjectId()), { ...body, requestId: randomUUID() })).rejects.toMatchObject({ status: 404 });
+ });
+ test('adding material after brainstorming creates a fresh grounded proposal before approval', async () => {
+   const f = await fixture();
+   const created = await createAuthoringSession(f.owner, { requestId: randomUUID(), instructions: 'Brainstorm introductory water objectives.' });
+   const draft = await settle(f.owner, created.id);
+   await authoringCommand(f.owner, created.id, 'message', { requestId: randomUUID(), revision: draft.revision, text: 'Now ground this in my notes.', context: { courseId: String(f.folder._id), materialIds: [String(f.material._id)], objectiveIds: [], contextCourse: false } });
+   const grounded = await settle(f.owner, created.id);
+   expect(grounded.error).toBe('');
+   expect(grounded.status).toBe('awaiting_approval');
+   expect(start).toHaveBeenCalledTimes(2);
+   expect(start.mock.calls[1][1]).toMatchObject({ canonicalObjectives: true, promptBased: false });
+   expect(start.mock.calls[1][1].requestId).not.toBe(start.mock.calls[0][1].requestId);
+   expect(approve).not.toHaveBeenCalled();
+ });

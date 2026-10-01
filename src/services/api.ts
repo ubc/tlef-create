@@ -1636,6 +1636,7 @@ export interface StudioAssistantSession {
   events: Array<{ stage: string; message: string; createdAt: string }>;
   error?: { code?: string; message: string } | string | null;
   currentJobId?: string | null;
+  promptBased?: boolean;
   previewVersion?: number;
   generation?: {
     requestId: string;
@@ -1688,7 +1689,7 @@ export interface AuthoringVersion {
 export interface AuthoringClarification { question: string; options: string[] }
 export interface AuthoringSession {
   id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
-  instructions: string; autoApprove: boolean; revision: number;
+  instructions: string; autoApprove: boolean; revision: number; objectiveIds?: string[]; contextCourse?: boolean;
   status: 'waiting_for_materials' | 'awaiting_requirements' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
   error: string; currentVersionId: string | null; candidateVersionId: string | null;
   messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; clarification?: AuthoringClarification[]; createdAt: string }>;
@@ -1696,14 +1697,22 @@ export interface AuthoringSession {
   taskSteps?: Array<{ name: string; createdAt: string }>;
   run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string; createdAt?: string; updatedAt?: string } | null; updatedAt: string;
 }
+export interface AuthoringContextSelection { courseId?: string | null; materialIds: string[]; objectiveIds?: string[]; contextCourse?: boolean }
+export interface AuthoringContextCatalog {
+  courses: Array<{ id: string; name: string; description: string }>;
+  materials: Array<{ id: string; name: string; type: string; status: string; preview: string }>;
+  objectives: Array<{ id: string; name: string; quizId: string; quizName: string; sourceReferences: SourceReference[] }>;
+}
 export const studioAuthoringApi = {
+  context: (courseId?: string): Promise<ApiResponse<AuthoringContextCatalog>> => apiClient.get(`/h5p-editor/authoring/context${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
+  draftCourse: (): Promise<ApiResponse<{ courseId: string; name: string }>> => apiClient.post('/h5p-editor/authoring/draft-course', {}),
   eventsUrl: (id: string) => `${API_BASE}/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/events`,
   list: (): Promise<ApiResponse<{ sessions: Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>> }>> =>
     apiClient.get('/h5p-editor/authoring/sessions'),
   get: (id: string): Promise<ApiResponse<{ session: AuthoringSession }>> => apiClient.get(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}`),
-  create: (body: { requestId: string; courseId: string; quizId?: string; materialIds: string[]; instructions: string; autoApprove: boolean }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+  create: (body: AuthoringContextSelection & { requestId: string; quizId?: string; instructions: string; autoApprove: boolean }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post('/h5p-editor/authoring/sessions', body),
-  command: (id: string, command: 'message' | 'approve' | 'retry' | 'accept' | 'reject' | 'restore', body: { requestId: string; revision: number; text?: string; versionId?: string; planRevision?: number }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+  command: (id: string, command: 'message' | 'approve' | 'retry' | 'accept' | 'reject' | 'restore', body: { requestId: string; revision: number; text?: string; versionId?: string; planRevision?: number; context?: AuthoringContextSelection }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/${command}`, body),
   cancel: (id: string, revision: number): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/cancel`, { revision }),

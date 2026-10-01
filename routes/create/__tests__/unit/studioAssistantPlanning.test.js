@@ -177,6 +177,15 @@ describe('canonical question type and teacher approval contract', () => {
 });
 
 describe('separate, bounded model stages', () => {
+  test('prompt-only brainstorming allows no citations while grounded planning still requires evidence', async () => {
+    completion.mockResolvedValue({ content: JSON.stringify({ objectives: [{ text: 'Explain constant velocity.', sourceIds: [] }] }) });
+    const result = await proposeAssistantObjectives({ ...request, sources: [], promptBased: true });
+    expect(result[0].sourceReferences).toEqual([]);
+    expect(completion.mock.calls[0][0].jsonSchema.schema.properties.objectives.items.properties.sourceIds.minItems).toBe(0);
+    await expect(proposeAssistantObjectives({ ...request, sources: [] })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_INVALID_SOURCE' });
+    completion.mockResolvedValue({ content: JSON.stringify({ objectives: [{ text: 'Invented source', sourceIds: ['fake'] }] }) });
+    await expect(proposeAssistantObjectives({ ...request, sources: [], promptBased: true })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_INVALID_RESPONSE' });
+  });
   test('objectives call preserves account access and maps model source IDs to actual references', async () => {
     completion.mockResolvedValue({ content: JSON.stringify({ objectives: [{ text: '解释蒸发。', sourceIds: [source.id] }] }) });
     const result = await proposeAssistantObjectives({ ...request, sources: [source] });

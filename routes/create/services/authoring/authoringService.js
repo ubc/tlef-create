@@ -1,3 +1,4 @@
+import { resolveAuthoringContext, ensureDraftCourse } from './authoringContext.js';
 import { buildAuthoringDecisionPrompt } from './authoringDecisionPrompt.js';
 import { assessAuthoringRequirements, effectiveTeachingBrief } from './authoringRequirements.js';
 import crypto from 'node:crypto';
@@ -8,7 +9,7 @@ import Folder from '../../models/Folder.js';
 import Material from '../../models/Material.js';
 import LegacySession from '../../models/StudioAssistantSession.js';
 import { createAssistantSession, readAssistantSession, approveAssistantPlan, resumeAssistantSession, updateAssistantPlan } from '../studioAssistantService.js';
-import { proposeAssistantPlan, buildAssistantContext, getAssistantQuestionTypes } from '../studioAssistantPlanning.js';
+import { proposeAssistantPlan, proposeAssistantObjectives, buildAssistantContext, getAssistantQuestionTypes } from '../studioAssistantPlanning.js';
 import llmService from '../llmService.js';
 import ragService from '../ragService.js';
 import questionStreamingService from '../questionStreamingService.js';
@@ -64,7 +65,7 @@ export async function readAuthoringSession(owner, id, attempt = 0) {
   const latest = await Session.findOne({ _id: id, owner }).select('updatedAt');
   if (latest && +latest.updatedAt !== +session.updatedAt && attempt < 2) return readAuthoringSession(owner, id, attempt + 1);
   return { id: String(session._id), title: session.title, courseId: String(session.courseId),
-    quizId: session.quizId ? String(session.quizId) : null, materialIds: session.materialIds.map(String),
+    quizId: session.quizId ? String(session.quizId) : null, materialIds: session.materialIds.map(String), objectiveIds: (session.objectiveIds || []).map(String), contextCourse: session.contextCourse === true,
     instructions: session.instructions, autoApprove: session.autoApprove, revision: session.revision,
     status: session.status, error: session.error || '', currentVersionId: session.currentVersionId ? String(session.currentVersionId) : null,
     candidateVersionId: session.candidateVersionId ? String(session.candidateVersionId) : null,
@@ -84,23 +85,22 @@ export async function listAuthoringSessions(owner) {
 
 export async function createAuthoringSession(owner, body) {
   await Promise.all([Session.init(), Run.init(), Message.init()]);
-  if (!requestId(body.requestId) || !objectId(body.courseId) || (body.quizId && !objectId(body.quizId))
-    || !Array.isArray(body.materialIds) || !body.materialIds.length || body.materialIds.length > 20
-    || body.materialIds.some(id => !objectId(id)) || new Set(body.materialIds).size !== body.materialIds.length
-    || (body.instructions != null && (typeof body.instructions !== 'string' || body.instructions.length > 12000))) {
-    fail('Choose a course and 1–20 materials to begin.', 400, 'AUTHORING_INPUT');
-  }
-  if (!await Folder.exists({ _id: body.courseId, instructor: owner })) fail('Course not found.', 404);
-  if (body.quizId && !await Quiz.exists({ _id: body.quizId, folder: body.courseId, createdBy: owner })) fail('Learning object not found in this course.', 404);
-  const materials = await Material.find({ _id: { $in: body.materialIds }, folder: body.courseId, uploadedBy: owner });
-  if (materials.length !== body.materialIds.length) fail('A selected material is not available in this course.', 404);
-  const instructions = body.instructions?.trim() || 'Create an evidence-grounded learning activity from these materials. Propose clear learning objectives, a manageable question plan, correct answers and helpful feedback.';
-  const input = { courseId: body.courseId, quizId: body.quizId || null, materialIds: [...body.materialIds].sort(), instructions, autoApprove: body.autoApprove === true };
+  if (!requestId(body.requestId) || (body.quizId && !objectId(body.quizId))
+    || (body.instructions != null && (typeof body.instructions !== 'string' || body.instructions.length > 12000))) fail('Write a teaching idea or attach context to begin.', 400, 'AUTHORING_INPUT');
+  const resolved = await resolveAuthoringContext(owner, body);
+  const materials = resolved.materials;
+  if (!body.instructions?.trim() && !materials.length && !resolved.objectives.length && !resolved.course) fail('Write a teaching idea or attach context to begin.', 400, 'AUTHORING_INPUT');
+  const course = resolved.course || await ensureDraftCourse(owner);
+  if (body.quizId && !await Quiz.exists({ _id: body.quizId, folder: course._id, createdBy: owner })) fail('Learning object not found in this course.', 404);
+  const instructions = body.instructions?.trim() || 'Propose learning objectives and an editable teaching plan from the attached context. Ask about missing teaching requirements.';
+  const input = { courseId: String(course._id), quizId: body.quizId || null, materialIds: materials.map(m => String(m._id)).sort(),
+    objectiveIds: resolved.objectives.map(lo => String(lo._id)).sort(), contextCourse: body.contextCourse === true,
+    instructions, autoApprove: false };
   const hash = digest(input);
   let session = await Session.findOne({ owner, requestId: body.requestId });
   if (session && session.requestHash !== hash) fail('This request ID belongs to a different task.');
   if (!session) {
-    const title = (body.instructions?.trim() || `Learning activity · ${materials[0].name}`).slice(0, 90);
+    const title = (body.instructions?.trim() || `Learning activity · ${materials[0]?.name || course.name}`).slice(0, 90);
     try { session = await Session.create({ _id: stableId(`${owner}:${body.requestId}`), owner, requestId: body.requestId,
       requestHash: hash, ...input, title }); }
     catch (error) {
@@ -162,9 +162,10 @@ export async function authoringCommand(owner, id, kind, body) {
   if (kind === 'message' && (typeof body.text !== 'string' || !body.text.trim() || body.text.length > 4000)) fail('Write a message of 1–4,000 characters.', 400);
   if (['accept', 'reject', 'restore'].includes(kind) && !objectId(body.versionId)) fail('Choose a saved version.', 400);
   if (kind === 'approve' && session.status !== 'awaiting_approval' && !await Run.exists({ owner, requestId: body.requestId })) fail('There is no current teaching plan to approve.');
+  if (kind === 'message' && body.context) await resolveAuthoringContext(owner, body.context);
   // Only the server chooses which previous execution a retry may resume.
   const input = { requestId: body.requestId, revision: body.revision,
-    ...(kind === 'message' ? { text: body.text.trim() } : {}),
+    ...(kind === 'message' ? { text: body.text.trim(), ...(body.context ? { context: { courseId: body.context.courseId || null, materialIds: body.context.materialIds || [], objectiveIds: body.context.objectiveIds || [], contextCourse: body.context.contextCourse === true } } : {}) } : {}),
     ...(['accept', 'reject', 'restore'].includes(kind) ? { versionId: body.versionId } : {}),
     ...(kind === 'approve' ? { planRevision: body.planRevision } : {}) };
   if (kind === 'retry') {
@@ -193,6 +194,12 @@ export async function cancelAuthoringRun(owner, id, body) {
   return readAuthoringSession(owner, id);
 }
 
+async function contextualTeachingBrief(session, answers) {
+  const context = await resolveAuthoringContext(String(session.owner), { courseId: String(session.courseId), objectiveIds: (session.objectiveIds || []).map(String) });
+  return [effectiveTeachingBrief(session, answers), session.contextCourse ? `REFERENCED COURSE (context data): ${JSON.stringify({ name: context.course.name, description: String(context.course.description || '').slice(0, 1500) })}` : '',
+    context.objectives.length ? `REFERENCED LEARNING OBJECTIVES (context data): ${JSON.stringify(context.objectives.map(lo => lo.text)).slice(0, 4500)}` : ''].filter(Boolean).join('\n\n').slice(0, 12000);
+}
+
 async function perform(run, session, guard, checkpoint, signal) {
   const owner = String(session.owner);
   const user = userFor(owner);
@@ -200,6 +207,18 @@ async function perform(run, session, guard, checkpoint, signal) {
   const patch = async values => { await guard(); return Session.updateOne({ _id: session._id, activeRunId: run._id }, { $set: values }); };
   const message = async (text, clarification = []) => { await guard(); return say(session, `result-${run._id}`, 'assistant', text, run._id, clarification); };
   const current = session.currentVersionId ? await Version.findOne({ _id: session.currentVersionId, owner, sessionId: session._id }) : null;
+  if (run.kind === 'message' && run.input.context && run.checkpoint === 'start') {
+    const resolved = await resolveAuthoringContext(owner, run.input.context);
+    const context = { courseId: String(resolved.course?._id || session.courseId), materialIds: resolved.materials.map(m => m._id),
+      objectiveIds: resolved.objectives.map(lo => lo._id), contextCourse: run.input.context.contextCourse };
+    if (current && String(context.courseId) !== String(session.courseId)) fail('Start a new conversation to use a different course with a saved activity.');
+    const changed = digest([context.courseId, context.materialIds.map(String).sort(), context.objectiveIds.map(String).sort(), context.contextCourse]) !== digest([String(session.courseId), session.materialIds.map(String).sort(), (session.objectiveIds || []).map(String).sort(), session.contextCourse]);
+    if (changed) {
+      const values = { ...context, ...(!current ? { assistantId: null, quizId: null, requirementsReady: false } : {}) };
+      await patch(values); Object.assign(session, values);
+      await checkpoint('context_attached');
+    }
+  }
   if (run.kind === 'retry' && run.input.resumeRunId) {
     let previous = await Run.findOne({ _id: run.input.resumeRunId, owner, sessionId: session._id });
     let depth = 0;
@@ -222,7 +241,7 @@ async function perform(run, session, guard, checkpoint, signal) {
     }
     const alreadyChecked = session.requirementsReady && (!latestAnswer || (session.requirementAnswers || []).some(answer => answer.requestId === run.input.requestId));
     if (alreadyChecked || (session.autoApprove && !latestAnswer)) return true;
-    const brief = effectiveTeachingBrief(session, answers);
+    const brief = await contextualTeachingBrief(session, answers);
     await checkpoint('clarify_requirements');
     const assessment = await assessAuthoringRequirements({ instructions: brief, materials, userId: owner, signal });
     await guard();
@@ -251,9 +270,10 @@ async function perform(run, session, guard, checkpoint, signal) {
       if (materials.some(m => !isMaterialReady(m))) { await patch({ status: 'waiting_for_materials' }); return false; }
       if (!await prepareRequirements(materials)) return true;
       await checkpoint('dispatch_planning');
-      const assistant = await createAssistantSession(user, { requestId: `authoring-${id}`, courseId: String(session.courseId),
-        ...(session.quizId ? { quizId: String(session.quizId) } : {}), materialIds: session.materialIds.map(String), instructions: effectiveTeachingBrief(session),
-        canonicalObjectives: true });
+      const instructions = await contextualTeachingBrief(session);
+      const assistant = await createAssistantSession(user, { requestId: `authoring-${id}-${digest({ courseId: session.courseId, materialIds: session.materialIds, objectiveIds: session.objectiveIds, instructions }).slice(0, 12)}`, courseId: String(session.courseId),
+        ...(session.quizId ? { quizId: String(session.quizId) } : {}), materialIds: session.materialIds.map(String), instructions,
+        canonicalObjectives: session.materialIds.length > 0, promptBased: !session.materialIds.length, objectiveIds: (session.objectiveIds || []).map(String) });
       await guard();
       await patch({ assistantId: assistant.id, quizId: assistant.quizId, status: 'planning' });
       return false;
@@ -333,7 +353,7 @@ async function perform(run, session, guard, checkpoint, signal) {
   const allowedQuestionTypes = getAssistantQuestionTypes().map(type => type.questionType);
   await checkpoint('model_call');
   const response = await llmService.streamCompletion({ userId: owner, signal, jsonMode: true, maxTokens: 1800, temperature: 0.1,
-    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history, allowedQuestionTypes }) });
+    prompt: buildAuthoringDecisionPrompt({ latestRequest: run.input.text, assistant, current, history, allowedQuestionTypes, referencedContext: await contextualTeachingBrief(session) }) });
   await guard();
   const decision = parseDecision(JSON.parse(extractBalancedJson(response.content) || '{}'), current?.snapshot?.questions?.length || 0, allowedQuestionTypes);
   await checkpoint('decision_saved', decision);
@@ -343,17 +363,18 @@ async function perform(run, session, guard, checkpoint, signal) {
       error: assistant?.status === 'failed' ? assistant.error || '' : '' });
     return true;
   }
-  if (decision.action === 'revise_plan') {
+  if (decision.action === 'revise_plan' || decision.action === 'revise_objectives') {
     if (current || !canReviseAssistantPlan(assistant)) fail('The plan cannot be changed in this state.');
     await checkpoint('model_call');
     const materials = await Material.find({ _id: { $in: session.materialIds }, folder: session.courseId, uploadedBy: owner });
-    const context = await buildAssistantContext(materials, { userId: owner, signal });
+    const context = materials.length ? await buildAssistantContext(materials, { userId: owner, signal }) : { context: 'Brainstorming from the instructor brief and selected objectives. No source evidence was supplied.' };
+    const objectives = decision.action === 'revise_objectives' ? await proposeAssistantObjectives({ instructions: `${effectiveTeachingBrief(session)}\nLatest revision: ${run.input.text}`, context: context.context, sources: context.sources || [], userId: owner, signal, promptBased: !materials.length }) : assistant.objectives;
     const plan = await proposeAssistantPlan({ instructions: effectiveTeachingBrief(session), currentPlan: assistant.plan, revisionRequest: run.input.text,
-      objectives: assistant.objectives, context: context.context, userId: owner, signal });
+      objectives, context: context.context, userId: owner, signal });
     await guard();
-    await updateAssistantPlan(user, assistant.id, { revision: assistant.revision, objectives: assistant.objectives, plan });
+    await updateAssistantPlan(user, assistant.id, { revision: assistant.revision, objectives, plan });
     await patch({ status: 'awaiting_approval', error: '' });
-    await message('I updated the proposed question plan. Review the new quantities, types and instructions before accepting it. Learning objectives are retained; use the objective fields to adjust their wording.');
+    await message(decision.action === 'revise_objectives' ? 'I revised the learning objectives and their question plan. Open the proposal to review or edit it before generating questions.' : 'I updated the proposed question plan. Review the quantities, types and instructions before accepting it.');
     return true;
   }
   if (!current) fail('Generate the first activity before requesting a content revision.');
@@ -374,9 +395,9 @@ async function perform(run, session, guard, checkpoint, signal) {
     const objective = snapshot.learningObjectives.find(lo => String(lo._id) === String(original.learningObjective?._id || original.learningObjective));
     const materials = await Material.find({ _id: { $in: session.materialIds }, uploadedBy: owner, folder: session.courseId });
     if (materials.length !== session.materialIds.length || materials.some(m => !isMaterialReady(m))) fail('The source materials are no longer ready.');
-    const retrieval = await ragService.retrieveRelevantContent(`${objective?.text || original.questionText}\n${run.input.text}`.slice(0, 5000), questionType,
-      { materialIds: session.materialIds.map(String), topK: 5, minScore: 0.3 });
-    if (!retrieval?.chunks?.length) fail('No supporting evidence was found. The original question is preserved.');
+    const retrieval = materials.length ? await ragService.retrieveRelevantContent(`${objective?.text || original.questionText}\n${run.input.text}`.slice(0, 5000), questionType,
+      { materialIds: session.materialIds.map(String), topK: 5, minScore: 0.3 }) : { chunks: [] };
+    if (materials.length && !retrieval?.chunks?.length) fail('No supporting evidence was found. The original question is preserved.');
     const result = await llmService.generateQuestion({ learningObjective: objective?.text || null, questionType,
       relevantContent: retrieval.chunks, difficulty, selectionMode, userId: owner, signal,
       customPrompt: `${run.input.text}\nRevise only this question: ${original.questionText}`,

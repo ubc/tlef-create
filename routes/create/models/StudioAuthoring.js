@@ -6,6 +6,7 @@ const id = mongoose.Schema.Types.ObjectId;
 const session = new mongoose.Schema({
   owner: { type: id, required: true }, requestId: { type: String, required: true }, requestHash: String,
   courseId: { type: id, required: true }, quizId: id, assistantId: id,
+  objectiveIds: [id], contextCourse: { type: Boolean, default: false },
   materialIds: [id], title: { type: String, maxlength: 200 }, instructions: { type: String, maxlength: 12000 },
   autoApprove: { type: Boolean, default: false },
   requirementsReady: { type: Boolean, default: false },

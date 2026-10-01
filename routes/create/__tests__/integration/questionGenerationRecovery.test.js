@@ -1020,3 +1020,19 @@ describe('Studio assistant reuses durable course question generation', () => {
     expect(() => expandAssistantQuestionPlan({ settings: { planItems: [{ type: 'essay', learningObjective: objective, count: 21 }] } })).toThrow();
   });
 });
+
+ test('prompt-only assistant questions keep their approved LO and publish without material retrieval or fake evidence', async () => {
+   const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+   await Quiz.updateOne({ _id: f.quizId }, { $set: { materials: [], 'settings.planItems.0.useCustomPromptOnly': true } });
+   const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+   try {
+     const result = await run({ userId: f.owner, quizId: f.quizId, requestId: randomUUID(), materialIds: [], promptBased: true });
+     expect(result.job.status).toBe('succeeded');
+     expect(mocks.retrieval).not.toHaveBeenCalled();
+     expect(mocks.model.mock.calls[0][0].relevantContent).toEqual([]);
+     const question = result.quiz.questions[1];
+     expect(String(question.learningObjective._id)).toBe(String(f.objective._id));
+     expect(question.generationMetadata.sourceReferences).toHaveLength(0);
+     expect(JSON.stringify(result.document)).toContain('Assistant candidate');
+   } finally { await jobs.waitForIdle(); mocks.restore(); }
+ });

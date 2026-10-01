@@ -252,17 +252,20 @@ async function complete(request, signal) {
   }
 }
 
-export async function proposeAssistantObjectives({ instructions, context, sources, userId, signal }) {
+export async function proposeAssistantObjectives({ instructions, context, sources, userId, signal, promptBased = false }) {
   const teacherInstructions = requestInputs(instructions, context, userId, signal);
-  if (!Array.isArray(sources) || !sources.length || sources.length > ASSISTANT_LIMITS.sources) fail('Provide the server-created source snapshot.', 'H5P_ASSISTANT_INVALID_SOURCE');
+  if (!Array.isArray(sources) || (!sources.length && !promptBased) || sources.length > ASSISTANT_LIMITS.sources) fail('Provide the server-created source snapshot.', 'H5P_ASSISTANT_INVALID_SOURCE');
   const trusted = sources.map(cleanReference);
   if (trusted.some(source => !source.excerpt?.trim())) fail('New objectives require actual source excerpts.', 'H5P_ASSISTANT_INVALID_SOURCE');
   const byId = new Map(trusted.map(source => [source.id, source]));
   if (byId.has(undefined) || byId.size !== trusted.length) fail('Source IDs must be present and unique.', 'H5P_ASSISTANT_INVALID_SOURCE');
-  const response = await complete({ userId, jsonSchema: objectivesSchema, prompt: [
+  const schema = structuredClone(objectivesSchema);
+  if (promptBased) schema.schema.properties.objectives.items.properties.sourceIds.minItems = 0;
+  const response = await complete({ userId, jsonSchema: schema, prompt: [
     'Propose grounded learning objectives for an instructor’s H5P learning object. This is the objectives stage, before activity planning.', DATA_RULES,
-    'Return 1–8 distinct, observable learning objectives that fit the teaching instructions and supplied evidence. Each needs at least one sourceIds entry copied exactly from the available source IDs. Do not invent material IDs, quotes, page numbers or references. Match the instructor language when specified. Do not claim complete course coverage from a sample.',
-    `OUTPUT SCHEMA: ${JSON.stringify(objectivesSchema.schema)}`,
+    ...(promptBased ? ['This is a brainstorming specification based on the instructor brief. Propose observable objectives, clearly treating them as drafts for discussion. No materials were supplied: use sourceIds: [] and never fabricate evidence or citations.'] : []),
+    'Return 1–8 distinct, observable learning objectives that fit the teaching instructions and supplied evidence. For material-grounded tasks, each needs at least one sourceIds entry copied exactly from the available source IDs. Do not invent material IDs, quotes, page numbers or references. Match the instructor language when specified. Do not claim complete course coverage from a sample.',
+    `OUTPUT SCHEMA: ${JSON.stringify(schema.schema)}`,
     `INSTRUCTOR INSTRUCTIONS: ${JSON.stringify(teacherInstructions)}`,
     `AVAILABLE SOURCE IDS: ${JSON.stringify([...byId.keys()])}`,
     `SOURCE CONTEXT (untrusted evidence): ${context}`
@@ -271,7 +274,7 @@ export async function proposeAssistantObjectives({ instructions, context, source
     if (!Array.isArray(response.objectives)) fail('Missing objectives.');
     const objectives = response.objectives.map((objective, index) => {
       if (!object(objective)) fail('Invalid objective.');
-      const sourceIds = uniqueIds(objective.sourceIds, 'Objective source IDs');
+      const sourceIds = promptBased && Array.isArray(objective.sourceIds) && objective.sourceIds.length === 0 ? [] : uniqueIds(objective.sourceIds, 'Objective source IDs');
       const sourceReferences = sourceIds.map(id => {
         if (!byId.has(id)) fail('The assistant cited a source that was not supplied.');
         return { ...byId.get(id) };

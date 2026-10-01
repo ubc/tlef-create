@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthoringWorkspace from './AuthoringWorkspace';
 import type { AuthoringSession } from '../../../services/api';
 
-const mocks = vi.hoisted(() => ({ stream: vi.fn(), folders: vi.fn(), materials: vi.fn(), uploadFiles: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), command: vi.fn(), cancel: vi.fn(), savePlan: vi.fn(), publish: vi.fn(), confirm: vi.fn(), session: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({ context: vi.fn(), draftCourse: vi.fn(), stream: vi.fn(), folders: vi.fn(), materials: vi.fn(), uploadFiles: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), command: vi.fn(), cancel: vi.fn(), savePlan: vi.fn(), publish: vi.fn(), confirm: vi.fn(), session: vi.fn(), open: vi.fn() }));
 vi.mock('../../../services/api', () => ({ ApiError: class ApiError extends Error { status = 0; }, foldersApi: { getFolders: mocks.folders }, materialsApi: { getMaterials: mocks.materials, uploadFiles: mocks.uploadFiles },
-  studioAuthoringApi: { eventsUrl: (id: string) => `/events/${id}`, list: mocks.list, get: mocks.get, create: mocks.create, command: mocks.command, cancel: mocks.cancel },
+  studioAuthoringApi: { context: mocks.context, draftCourse: mocks.draftCourse, eventsUrl: (id: string) => `/events/${id}`, list: mocks.list, get: mocks.get, create: mocks.create, command: mocks.command, cancel: mocks.cancel },
   studioAssistantApi: { previewUrl: (id: string, version: number) => `/preview/${id}?v=${version}`, savePlan: mocks.savePlan }, h5pEditorApi: {} }));
 vi.mock('../../../hooks/useSSE', () => ({ useSSE: mocks.stream }));
 vi.mock('../../../hooks/usePubSub', () => ({ usePubSub: () => ({ publish: mocks.publish }) }));
@@ -32,6 +32,8 @@ beforeEach(() => {
   mocks.folders.mockResolvedValue({ folders: [{ _id: 'course1', name: 'Water science', quizzes: [] }] });
   mocks.materials.mockResolvedValue({ materials: [{ _id: 'material1', name: 'Water.pdf', processingStatus: 'completed' }] });
   mocks.uploadFiles.mockResolvedValue({ materials: [{ _id: 'material2', name: 'Lecture.pdf', processingStatus: 'processing' }] });
+  mocks.context.mockResolvedValue({ data: { courses: [{ id: 'course1', name: 'Water science', description: 'Water course' }], materials: [{ id: 'material1', name: 'Water.pdf', status: 'completed', preview: 'Water evaporates.' }, { id: 'material2', name: 'Lecture.pdf', status: 'processing', preview: '' }], objectives: [{ id: 'lo1', name: 'Explain evaporation.', quizId: 'quiz1', quizName: 'Water activity', sourceReferences: [] }] } });
+  mocks.draftCourse.mockResolvedValue({ data: { courseId: 'course1', name: 'Studio drafts' } });
   mocks.list.mockResolvedValue({ data: { sessions: [] } });
   mocks.get.mockResolvedValue({ data: { session: structuredClone(saved) } });
   mocks.command.mockResolvedValue({ data: { session: { ...saved, status: 'working', run: { id: 'run2', status: 'queued', checkpoint: 'start' } } } });
@@ -47,6 +49,8 @@ describe('Studio AI workspace', () => {
         generation: { requestId: 'live-receipt', readyCount: 1, totalQuestions: 2, published: true,
           items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', attempts: 2, message: 'Answer ambiguous.' }] } } };
     act(() => callback(next));
+    expect(screen.queryByTitle('Checked question set preview')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /Question set preview/ }));
     expect(await screen.findByTitle('Checked question set preview')).toHaveAttribute('sandbox', 'allow-scripts');
     expect(screen.getByText('These questions are saved in your course. Unfinished questions are excluded; you can use the checked questions now.')).toBeInTheDocument();
     expect(screen.getByText('Automatic rework used (1 of 1)')).toBeInTheDocument();
@@ -88,6 +92,7 @@ describe('Studio AI workspace', () => {
           items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', reason: 'ANSWER_INVALID', message: 'Answer ambiguous.',
             review: { questionText: 'A rejected water draft.', correctAnswer: 'Rock', options: [{ text: 'Rock', isCorrect: true }], issues: ['Water changes phase, not rock.'], calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } } }] } } } } });
     mount('task1');
+    fireEvent.click(await screen.findByRole('button', { name: /Question set preview/ }));
     await screen.findByTitle('Checked question set preview');
     fireEvent.click(screen.getByRole('tab', { name: 'Teaching plan' }));
     const instructions = await screen.findByRole('textbox', { name: 'Question instructions for plan row 1' });
@@ -139,34 +144,57 @@ describe('Studio AI workspace', () => {
   it('opens real tools from the composer and uploads a chosen file into the selected course', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Add tools and materials' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Upload files/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Upload files/ }));
     const document = new File(['lecture content'], 'Lecture.pdf', { type: 'application/pdf' });
     fireEvent.change(screen.getByLabelText('Upload course materials'), { target: { files: [document] } });
     await waitFor(() => expect(mocks.uploadFiles).toHaveBeenCalledWith('course1', [document], expect.any(Function)));
-    await waitFor(() => expect(screen.getByRole('button', { name: '1 material attached' })).toBeVisible());
+    await waitFor(() => expect(screen.getByTitle('Preview Lecture.pdf')).toBeVisible());
     expect(screen.getByLabelText('Upload course materials')).toHaveClass('authoring-file-input');
   });
-  it('holds dropped files until a course is chosen, then uploads automatically', async () => {
+  it('uploads dropped files without requiring a course selection', async () => {
     mount(undefined, '');
     await screen.findByRole('button', { name: 'Add tools and materials' });
-    const document = new File(['lecture content'], 'Lecture.pdf', { type: 'application/pdf' });
+    const document = new File(['lecture'], 'Lecture.pdf', { type: 'application/pdf' });
     fireEvent.drop(screen.getByRole('region', { name: 'Studio AI workspace' }), { dataTransfer: { types: ['Files'], files: [document] } });
-    expect(await screen.findByText('Files waiting for a course')).toBeVisible();
-    expect(mocks.uploadFiles).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Course' }), { target: { value: 'course1' } });
+    await waitFor(() => expect(mocks.draftCourse).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.uploadFiles).toHaveBeenCalledWith('course1', [document], expect.any(Function)));
-    await waitFor(() => expect(screen.queryByText('Files waiting for a course')).not.toBeInTheDocument());
   });
-  it('keeps a saved task unchanged when files are dropped and asks to start a new activity', async () => {
+  it('adds files to the ongoing conversation and submits updated context explicitly', async () => {
     mount('task1');
     await screen.findByRole('button', { name: /Accept plan & generate/ });
-    const document = new File(['new notes'], 'New notes.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const document = new File(['notes'], 'Lecture.pdf', { type: 'application/pdf' });
     fireEvent.drop(screen.getByRole('region', { name: 'Studio AI workspace' }), { dataTransfer: { types: ['Files'], files: [document] } });
-    expect(await screen.findByText('Files for a new activity')).toBeVisible();
-    expect(mocks.uploadFiles).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: /Start new activity with these files/ }));
-    await waitFor(() => expect(mocks.session).toHaveBeenCalledWith(null));
     await waitFor(() => expect(mocks.uploadFiles).toHaveBeenCalledWith('course1', [document], expect.any(Function)));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: /Accept plan & generate/ })).toBeDisabled();
+    expect(mocks.command).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('task1', 'message', expect.objectContaining({ context: expect.objectContaining({ materialIds: ['material1', 'material2'] }) })));
+  });
+  it('starts from a text-only idea with no course, materials or objectives', async () => {
+    mocks.create.mockResolvedValue({ data: { session: saved } });
+    mount(undefined, '');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message Studio AI' }), { target: { value: 'Brainstorm LOs for introductory mechanics.' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start learning activity' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start learning activity' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ materialIds: [], objectiveIds: [], autoApprove: false, instructions: 'Brainstorm LOs for introductory mechanics.' })));
+  });
+  it('opens context tools beside an @ mention, attaches an LO, and previews it', async () => {
+    mount();
+    const input = screen.getByRole('textbox', { name: 'Message Studio AI' });
+    fireEvent.change(input, { target: { value: 'Use @' } });
+    expect(screen.getByRole('dialog', { name: 'Add context' })).toHaveClass('is-mention');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getAllByRole('option')[0]).toHaveFocus();
+    fireEvent.click(screen.getByRole('option', { name: /Learning objectives/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /Explain evaporation/ }));
+    expect(input).toHaveValue('Use ');
+    expect(screen.queryByRole('dialog', { name: 'Add context' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTitle('Preview Explain evaporation.'));
+    expect(screen.getByRole('dialog', { name: 'Context preview' })).toHaveTextContent('From: Water activity');
+    fireEvent.click(screen.getByRole('button', { name: 'Close context preview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove context Explain evaporation.' }));
+    expect(screen.queryByTitle('Preview Explain evaporation.')).not.toBeInTheDocument();
   });
   it('searches saved conversation history and switches tasks', async () => {
     mocks.list.mockResolvedValue({ data: { sessions: [{ id: 'task1', title: 'Water activity', status: 'awaiting_approval', updatedAt: '2026-09-27' }, { id: 'task2', title: 'Cell biology', status: 'ready', updatedAt: '2026-09-26' }] } });
@@ -182,8 +210,9 @@ describe('Studio AI workspace', () => {
     mocks.create.mockResolvedValue({ data: { session: { ...saved, status: 'planning' } } });
     mount();
     expect(await screen.findByText(/What will your students/)).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Add course materials' }));
-    fireEvent.click(await screen.findByRole('checkbox', { name: /Water.pdf/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add tools and materials' }));
+    fireEvent.click(screen.getByRole('option', { name: /^Materials/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /Water.pdf/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Start learning activity' }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ courseId: 'course1', materialIds: ['material1'], instructions: '', autoApprove: false })));
     await waitFor(() => expect(mocks.session).toHaveBeenCalledWith('task1'));
@@ -197,6 +226,7 @@ describe('Studio AI workspace', () => {
   });
   it('blocks approval while objective edits are unsaved', async () => {
     mount('task1');
+    fireEvent.click(await screen.findByRole('button', { name: /Learning objectives & teaching plan/ }));
     const objective = await screen.findByRole('textbox', { name: 'Learning objective 1' });
     fireEvent.change(objective, { target: { value: 'Explain condensation.' } });
     expect(screen.getByRole('button', { name: /Accept plan & generate/ })).toBeDisabled();
@@ -218,6 +248,7 @@ describe('Studio AI workspace', () => {
     mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'ready', currentVersionId: 'v1', candidateVersionId: 'v2',
       versions: [version, { ...version, id: 'v2', number: 2, contentId: 'content2', parentId: 'v1', state: 'candidate', changes: ['Only question 1 changed'] }] } } });
     mount('task1');
+    fireEvent.click(await screen.findByRole('button', { name: /Question set preview/ }));
     expect(await screen.findByTestId('preview')).toHaveTextContent('content2');
     fireEvent.click(screen.getByRole('button', { name: 'Keep current' }));
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('task1', 'reject', expect.objectContaining({ versionId: 'v2' })));

@@ -1,4 +1,5 @@
 import express from 'express';
+import { listAuthoringContext, ensureDraftCourse } from '../services/authoring/authoringContext.js';
 import { streamAuthoringSession } from '../services/authoring/authoringStream.js';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth.js';
@@ -14,6 +15,8 @@ const handle = action => async (req, res) => {
   try { await action(req, res); }
   catch (error) { errorResponse(res, error.status ? error.message : 'This request could not be completed. Refresh the saved task before retrying.', error.status ? error.code || 'AUTHORING_CONFLICT' : 'AUTHORING_FAILED', error.status || 500); }
 };
+router.get('/context', handle(async (req, res) => successResponse(res, await listAuthoringContext(String(req.user.id), req.query.courseId))));
+router.post('/draft-course', writes, handle(async (req, res) => { const course = await ensureDraftCourse(String(req.user.id)); successResponse(res, { courseId: String(course._id), name: course.name }); }));
 router.get('/sessions', handle(async (req, res) => successResponse(res, { sessions: await listAuthoringSessions(String(req.user.id)) })));
 router.post('/sessions', writes, handle(async (req, res) => successResponse(res, { session: await createAuthoringSession(String(req.user.id), req.body || {}) }, 'Task saved.', 202)));
 router.get('/sessions/:id', handle(async (req, res) => successResponse(res, { session: await readAuthoringSession(String(req.user.id), req.params.id) })));
