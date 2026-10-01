@@ -117,6 +117,13 @@ describe('independent question feedback review', () => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: jest.fn().mockRejectedValue(abort) }))
       .rejects.toBe(abort);
   });
+  test('distinguishes a review usage limit from an incorrect-answer verdict', async () => {
+    const limit = Object.assign(new Error('PRIVATE provider usage details'), { status: 429 });
+    const model = jest.fn().mockRejectedValue(limit);
+    await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: model }))
+      .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'REVIEW_LIMIT_REACHED' });
+    expect(model).toHaveBeenCalledTimes(1);
+  });
   test('requests learner-facing explanation without banning legitimate course vocabulary', async () => {
     const payload = { ...reviewed, explanation: 'The historical draft presents the author’s proposed policy.' };
     const model = complete(payload);

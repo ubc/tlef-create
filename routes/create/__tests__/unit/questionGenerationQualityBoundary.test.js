@@ -58,6 +58,15 @@ describe('question generation quality boundary', () => {
     expect(completion.mock.calls[0][0].jsonMode).toBe(true);
     expect(fallback).not.toHaveBeenCalled();
   });
+  test.each([{ status: 429 }, { code: 429 }, { code: 'insufficient_quota' }, { response: { status: 429 } }])(
+    'does not start fallback generation after a provider limit: %j', async fields => {
+      const completion = jest.spyOn(llmService, 'streamCompletion').mockRejectedValue(Object.assign(new Error('PRIVATE provider request'), fields));
+      const fallback = jest.spyOn(llmService, 'generateQuestion');
+      await expect(llmService.generateQuestionStreaming(config)).rejects.toMatchObject({ code: 'MODEL_SERVICE_LIMIT_REACHED', status: 429 });
+      expect(completion).toHaveBeenCalledTimes(1);
+      expect(fallback).not.toHaveBeenCalled();
+    }
+  );
 
   test('requests JSON through the non-streaming OpenAI toolkit transport', async () => {
     const sendMessage = jest.fn().mockResolvedValue({ content: 'draft', model: 'gpt-6-luna' });

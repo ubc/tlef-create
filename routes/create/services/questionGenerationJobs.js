@@ -41,6 +41,7 @@ export function safeQuestionJobFailure(error) {
   // persist model review prose, prompts, sources or provider error messages.
   const reviewReasons = {
     REVIEW_UNAVAILABLE: 'The feedback review service could not finish. No unchecked question was published.',
+    REVIEW_LIMIT_REACHED: 'The feedback review reached an AI rate limit or usage allowance. No unchecked question was published. Check the provider allowance or wait before explicitly retrying.',
     REVIEW_INVALID_RESPONSE: 'The feedback review returned an incomplete or unreadable result.',
     ANSWER_INVALID: 'The answer key or question was flagged as incorrect or ambiguous. Review its evidence and wording.',
     INSTRUCTION_MISMATCH: 'The draft did not follow the instructions for this question. Review its topic and constraints.',
@@ -56,6 +57,7 @@ export function safeQuestionJobFailure(error) {
   }
   const known = {
     QUESTION_INVALID_RESPONSE: 'The model returned an unreadable or invalid question. No question was saved. An explicit retry generates a new draft using additional AI credits.',
+    MODEL_SERVICE_LIMIT_REACHED: 'The AI service reached a rate limit or usage allowance. Check the provider allowance or wait before explicitly retrying. No fallback generation was started.',
     GENERATION_TIMEOUT: 'This question exceeded its generation deadline. No question from this batch was published.',
     QUESTION_QUALITY_REVIEW: 'This question did not pass the feedback check. Refine its instructions before starting a new attempt.',
     NO_API_KEY: 'An AI API key is required before generating questions.',

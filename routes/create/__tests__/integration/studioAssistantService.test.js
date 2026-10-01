@@ -14,6 +14,7 @@ import studioJobs from '../../services/studioGenerationJobs.js';
 import questionJobs from '../../services/questionGenerationJobs.js';
 import llmService from '../../services/llmService.js';
 import ragService from '../../services/ragService.js';
+import { normalizeModelServiceError } from '../../utils/modelServiceErrors.js';
 import { createAssistantSession, updateAssistantPlan, approveAssistantPlan,
   readAssistantSession, resumeAssistantSession } from '../../services/studioAssistantService.js';
 
@@ -100,6 +101,25 @@ function planEdit(session, changes = {}) {
 }
 
 describe('assistant and canonical course workflow share the same records', () => {
+  test('a planning quota failure retains a safe diagnosis and replay does not repeat the request or change existing questions', async () => {
+    const f = await fixture({ existing: true, questions: true });
+    const beforeQuestion = await Question.findById(f.question._id).lean();
+    const error = normalizeModelServiceError(Object.assign(new Error('PRIVATE provider request details.'), { status: 429 }));
+    completion.mockRejectedValueOnce(error);
+    await expect(createAssistantSession(f.user, f.body)).rejects.toMatchObject({ code: 'MODEL_SERVICE_LIMIT_REACHED' });
+    const stored = await Session.findOne({ owner: f.user.id, requestId: f.body.requestId });
+    const view = await readAssistantSession(f.user.id, String(stored._id));
+    expect(view).toMatchObject({ status: 'failed', errorCode: 'MODEL_SERVICE_LIMIT_REACHED', error: expect.stringContaining('usage allowance') });
+    expect(JSON.stringify(view)).not.toContain('PRIVATE');
+    const replay = await createAssistantSession(f.user, f.body);
+    expect(replay.id).toBe(view.id);
+    expect(replay.status).toBe('failed');
+    expect(completion).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(await Question.findById(f.question._id).lean()).toEqual(beforeQuestion);
+    expect((await Quiz.findById(f.quiz._id)).questions.map(String)).toEqual([String(f.question._id)]);
+  });
+
   test('reads rejected observations only for the owned quiz, receipt and failed item', async () => {
     const f = await fixture(); const planned = await createAssistantSession(f.user, f.body);
     const jobId = new mongoose.Types.ObjectId(); const requestId = randomUUID();

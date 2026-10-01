@@ -9,7 +9,7 @@ describe('safe question failure diagnostics', () => {
     expect(result.message).toContain('explicit retry');
     expect(JSON.stringify(result)).not.toContain('PRIVATE');
   });
-  test.each(['REVIEW_UNAVAILABLE', 'REVIEW_INVALID_RESPONSE', 'ANSWER_INVALID', 'INSTRUCTION_MISMATCH',
+  test.each(['REVIEW_UNAVAILABLE', 'REVIEW_LIMIT_REACHED', 'REVIEW_INVALID_RESPONSE', 'ANSWER_INVALID', 'INSTRUCTION_MISMATCH',
     'FEEDBACK_INVALID', 'ARITHMETIC_FALSE_EQUALITY', 'ARITHMETIC_INVALID_SCHEMA',
     'ARITHMETIC_DIVISION_BY_ZERO', 'ARITHMETIC_UNSUPPORTED_EXPRESSION', 'FEEDBACK_TEXT_LIMIT'])('persists and exposes the allowlisted diagnosis %s', reason => {
     const safe = safeQuestionJobFailure({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: reason,
@@ -25,5 +25,11 @@ describe('safe question failure diagnostics', () => {
     const result = safeQuestionJobFailure({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'PRIVATE key', message: 'PRIVATE source' });
     expect(result.reason).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  });
+  test('reports a provider usage limit without exposing provider messages or implying a bad answer', () => {
+    const safe = safeQuestionJobFailure({ code: 'MODEL_SERVICE_LIMIT_REACHED', message: 'PRIVATE key and source' });
+    expect(safe).toMatchObject({ code: 'MODEL_SERVICE_LIMIT_REACHED', message: expect.stringContaining('rate limit or usage allowance') });
+    expect(safe.message).toContain('No fallback generation');
+    expect(JSON.stringify(safe)).not.toContain('PRIVATE');
   });
 });

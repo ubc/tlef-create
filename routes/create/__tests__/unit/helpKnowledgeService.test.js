@@ -4,6 +4,7 @@ import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
   test.each([
+    ['AI rate limit usage allowance quota provider credits no fallback feedback review unpublished', 'h5p-studio', 'Questions needing attention'],
     ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
     ['Task steps Refine teaching requirements Learner level Teaching purpose Question difficulty Update proposal', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Use selected answers clarification selectable answers conflicting requirements Send message', 'h5p-studio', 'Task steps and teaching requirements'],

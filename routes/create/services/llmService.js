@@ -15,6 +15,8 @@ import { isConfiguredAdmin } from '../utils/adminIdentity.js';
 import { normalizeGeneratedQuestionText } from '../utils/questionTextLimits.js';
 import { reviewQuestionFeedback } from './questionFeedbackReview.js';
 import { getQuestionTypeAvailability } from '../utils/questionTypeAvailability.js';
+import { normalizeModelServiceError } from '../utils/modelServiceErrors.js';
+import { sendOpenAIMessageOnce } from '../utils/openAICompletion.js';
 import { buildBranchingPrompt, sourceScenarioChoiceCounts, validateBranchingDraft } from '../utils/branchingScenarioBuilder.js';
 import {
   buildOpenAIIncompleteResponseError,
@@ -227,7 +229,7 @@ class QuizLLMService {
 
   // Creates a temporary LLMModule instance for a single request using the given config.
   createLLMForConfig(config) {
-    return new LLMModule({
+    const moduleConfig = {
       provider: config.provider,
       apiKey: config.apiKey,
       defaultModel: config.model,
@@ -241,7 +243,12 @@ class QuizLLMService {
           ? { max_completion_tokens: 2000 }
           : { maxTokens: 2000 })
       }
-    });
+    };
+    const module = new LLMModule(moduleConfig);
+    if (config.provider === 'openai') {
+      module.sendMessage = (prompt, options = {}) => sendOpenAIMessageOnce(config, prompt, { ...moduleConfig.defaultOptions, ...options });
+    }
+    return module;
   }
 
   /**
@@ -302,7 +309,7 @@ class QuizLLMService {
     if (provider === 'openai') {
       const OpenAI = (await import('openai')).default;
       const endpoint = llmConfig.endpoint || 'https://api.openai.com/v1';
-      const openai = new OpenAI({ apiKey: llmConfig.apiKey, baseURL: endpoint });
+      const openai = new OpenAI({ apiKey: llmConfig.apiKey, baseURL: endpoint, maxRetries: 0 });
       const useResponsesApi = isGpt5Family(model)
         && endpoint.replace(/\/$/, '') === 'https://api.openai.com/v1';
       const request = buildOpenAIStreamingRequest({
@@ -316,9 +323,14 @@ class QuizLLMService {
         // Keep older models and third-party compatible endpoints on JSON mode.
         jsonSchema: supportsOpenAIStructuredOutputs(model, endpoint) ? jsonSchema : null
       });
-      const stream = useResponsesApi
-        ? await openai.responses.create(request, { signal })
-        : await openai.chat.completions.create(request, { signal });
+      let stream;
+      try {
+        stream = useResponsesApi
+          ? await openai.responses.create(request, { signal })
+          : await openai.chat.completions.create(request, { signal });
+      } catch (error) {
+        throw normalizeModelServiceError(error);
+      }
 
       for await (const chunk of stream) {
         signal?.throwIfAborted();
@@ -557,6 +569,8 @@ class QuizLLMService {
       };
     } catch (error) {
       signal?.throwIfAborted();
+      const providerFailure = normalizeModelServiceError(error);
+      if (providerFailure.code === 'MODEL_SERVICE_LIMIT_REACHED') throw providerFailure;
       if (error.code === 'QUESTION_QUALITY_REVIEW' || error.code === 'QUESTION_INVALID_RESPONSE' || error.name === 'AbortError'
         || error.name === 'APIUserAbortError' || error.code === 'ABORT_ERR') throw error;
       console.error(`❌ Streaming generation failed: ${error.message}`);
@@ -657,7 +671,7 @@ class QuizLLMService {
       const options = this.getSendMessageOptions(temperature, maxTokens, llmConfig, reasoningEffort);
       if (llmConfig.provider === 'openai') options.responseFormat = 'json';
       signal?.throwIfAborted();
-      const response = await llm.sendMessage(prompt, options);
+      const response = await llm.sendMessage(prompt, { ...options, ...(llmConfig.provider === 'openai' && signal ? { signal } : {}) });
       signal?.throwIfAborted();
       const responseContent = normalizeOptionalText(response?.content);
       if (!responseContent) {
@@ -720,7 +734,7 @@ class QuizLLMService {
 
     } catch (error) {
       console.error('LLM question generation failed.', { code: error.code || 'QUESTION_GENERATION_FAILED' });
-      throw error;
+      throw normalizeModelServiceError(error);
     }
   }
 

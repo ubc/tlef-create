@@ -49,7 +49,7 @@ const safeError = error => {
   const safe = /^(?:STUDIO_ASSISTANT_|H5P_ASSISTANT_|H5P_AI_|QUESTION_EDIT_)/.test(error?.code || '')
     || ['MATERIALS_NOT_READY', 'NOT_FOUND', 'H5P_EDITOR_NOT_READY', 'ASSISTANT_QUESTION_BATCH_FAILED',
       'ASSISTANT_CONTAINER_INCOMPATIBLE', 'ASSISTANT_MATERIALS_CHANGED', 'ASSISTANT_OBJECTIVES_CHANGED',
-      'ASSISTANT_PLAN_INVALID', 'GENERATION_SNAPSHOT_CHANGED', 'GENERATION_INTERRUPTED', 'REQUEST_ID_CONFLICT'].includes(error?.code);
+      'ASSISTANT_PLAN_INVALID', 'GENERATION_SNAPSHOT_CHANGED', 'GENERATION_INTERRUPTED', 'REQUEST_ID_CONFLICT', 'MODEL_SERVICE_LIMIT_REACHED'].includes(error?.code);
   return {
     error: safe ? error.message : 'This step could not finish. Check your model/key and materials, then explicitly retry. Existing course questions are preserved.',
     errorCode: safe ? error.code : 'STUDIO_ASSISTANT_FAILED'

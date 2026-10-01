@@ -1,6 +1,7 @@
 import { extractBalancedJson } from '../utils/openAIRequestUtils.js';
 import { QUESTION_TEXT_LIMITS } from '../utils/questionTextLimits.js';
 import { verifyAndRenderCalculations } from '../utils/arithmeticVerification.js';
+import { normalizeModelServiceError } from '../utils/modelServiceErrors.js';
 
 const text = { type: 'string' };
 const calculations = { type: 'array', maxItems: 8, items: {
@@ -89,6 +90,9 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
     // A review outage is not a failure to generate the original question. Do
     // not let streaming fallback pay for a second generation and another review.
     if (error?.name === 'AbortError' || error?.name === 'APIUserAbortError' || error?.code === 'ABORT_ERR') throw error;
+    if (normalizeModelServiceError(error)?.code === 'MODEL_SERVICE_LIMIT_REACHED') {
+      throw rejected('The feedback review reached the AI service limit. No unchecked question was saved. Check the provider allowance or wait before explicitly retrying.', error, 'REVIEW_LIMIT_REACHED');
+    }
     throw rejected('The feedback check could not finish. No unchecked question was saved. Please retry this question.', error, 'REVIEW_UNAVAILABLE');
   }
   try { review = JSON.parse(extractBalancedJson(response.content)); }
