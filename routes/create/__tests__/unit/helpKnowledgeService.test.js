@@ -9,7 +9,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['Use selected answers clarification selectable answers conflicting requirements Send message', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Waiting for your teaching choices missing teaching requirements before objectives plan', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Studio single-question revision question type difficulty multiple-answer unchanged properties Accept changes', 'h5p-studio', 'Revise an activity and restore a version'],
-    ['Rejected draft Failure details Calculation check computed result Discuss the failure Edit teaching plan Approved instructions', 'h5p-studio', 'Questions needing attention'],
+    ['Rejected draft Failure details Calculation check computed result AI review observations Discuss the failure Edit teaching plan Approved instructions', 'h5p-studio', 'Questions needing attention'],
     ['unreadable invalid question JSON output automatic fallback explicit retry', 'h5p-studio', 'Questions needing attention'],
     ['Questions needing attention instruction mismatch incomplete option feedback review service unavailable', 'h5p-studio', 'Questions needing attention'],
     ['Create Course optional Canvas step Connect to Canvas sign-in window blocked pop-ups', 'review-and-export', 'Connecting Canvas when creating a course'],

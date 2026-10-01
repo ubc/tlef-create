@@ -154,7 +154,9 @@ describe('independent question feedback review', () => {
     const payload = { ...reviewed, issues: [], feedback: reviewed.feedback.map((item, index) => index === 1
       ? { ...item, calculations: [{ expression: '9.8*(0.500+0.20*0.866)', result: 6.59 }] } : item) };
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(payload) }))
-      .rejects.toMatchObject({ rejectedDraft: { issues: [expect.stringContaining('Calculation check (option 2 feedback): 9.8*(0.500+0.20*0.866) evaluates to 6.59736; the feedback claimed 6.59.')] } });
+      .rejects.toMatchObject({ rejectedDraft: { issues: [], calculationCheck: {
+        location: 'option 2 feedback', expression: '9.8*(0.500+0.20*0.866)', computed: expect.closeTo(6.59736, 12), claimed: 6.59
+      } } });
   });
   test('requires calculation declarations but allows non-arithmetic hypothetical premises', async () => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete({ ...reviewed, calculations: undefined }) }))

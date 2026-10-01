@@ -44,4 +44,13 @@ describe('authoring decision context', () => {
     expect(prompt).toContain('never use revise_plan');
     expect(prompt).toContain('without starting a native fork');
   });
+  test('keeps application calculations separate from the bounded AI observations', () => {
+    const calculationCheck = { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 };
+    const prompt = buildAuthoringDecisionPrompt({ latestRequest: 'Explain this failure.', assistant: { status: 'failed', objectives: [],
+      generation: { items: [{ index: 0, status: 'failed', review: { issues: Array(8).fill('AI observation.'), calculationCheck } }] } } });
+    const review = data(prompt).failedQuestions[0].review;
+    expect(review.issues).toHaveLength(4);
+    expect(review.calculationCheck).toEqual(calculationCheck);
+    expect(prompt).toContain('An AI observation cannot become a calculationCheck');
+  });
 });

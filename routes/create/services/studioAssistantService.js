@@ -305,11 +305,11 @@ export async function readAssistantSession(owner, id) {
       value.generation = { ...serialized, totalQuestions: job.items.length, readyCount: job.items.filter(item => item.status === 'ready').length };
       const rejected = await RejectedQuestionDraft.find({ owner, quiz: session.quizId, job: job._id,
         index: { $in: job.items.filter(item => item.status === 'failed').map(item => item.index) }
-      }).select('index questionText correctAnswer options issues reason').lean();
+      }).select('index questionText correctAnswer options issues reason calculationCheck').lean();
       value.generation.items = value.generation.items.map(item => {
         const draft = rejected.find(entry => entry.index === item.index);
         return draft ? { ...item, review: { questionText: draft.questionText, correctAnswer: draft.correctAnswer,
-          options: draft.options, issues: draft.issues } } : item;
+          options: draft.options, issues: draft.issues, calculationCheck: draft.calculationCheck } } : item;
       });
       value.previewVersion = value.generation.readyCount;
     }

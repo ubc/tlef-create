@@ -136,8 +136,7 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
       const { expression, claimed, computed } = error.calculation;
       // Only bounded, parsed arithmetic reaches this owner-authorized draft.
       // Keep the concrete check out of job receipts and mutation audit data.
-      const displayedResult = Number(computed.toPrecision(15));
-      failure.rejectedDraft.issues.push(`Calculation check (${calculationLocation}): ${expression} evaluates to ${displayedResult}; the feedback claimed ${claimed}. The answer key was not changed.`);
+      failure.rejectedDraft.calculationCheck = { location: calculationLocation, expression, computed, claimed };
     }
     throw failure;
   }

@@ -1645,7 +1645,7 @@ export interface StudioAssistantSession {
     readyCount: number;
     reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[] } }>;
+    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
   };
   createdAt?: string;
   updatedAt?: string;

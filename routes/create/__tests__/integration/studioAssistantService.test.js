@@ -107,13 +107,15 @@ describe('assistant and canonical course workflow share the same records', () =>
     questionJobs.get.mockResolvedValue({ _id: jobId, quiz: planned.quizId, status: 'failed', active: false, requestId,
       items: [{ index: 0, status: 'failed' }, { index: 1, status: 'ready' }] });
     await RejectedQuestionDraft.create([
-      { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 0, questionText: 'Owned rejected draft', issues: ['Owned observation'] },
+      { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 0, questionText: 'Owned rejected draft', issues: ['Owned observation'],
+        calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } },
       { owner: new mongoose.Types.ObjectId(), quiz: planned.quizId, job: jobId, index: 0, questionText: 'Other account private draft' },
       { owner: f.user.id, quiz: planned.quizId, job: new mongoose.Types.ObjectId(), index: 0, questionText: 'Old attempt private draft' },
       { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 1, questionText: 'Prepared item obsolete review' }
     ]);
     const view = await readAssistantSession(f.user.id, planned.id);
-    expect(view.generation.items[0].review).toMatchObject({ questionText: 'Owned rejected draft', issues: ['Owned observation'] });
+    expect(view.generation.items[0].review).toMatchObject({ questionText: 'Owned rejected draft', issues: ['Owned observation'],
+      calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } });
     expect(view.generation.items[1].review).toBeUndefined();
     expect(JSON.stringify(view)).not.toContain('Other account private');
     expect(JSON.stringify(view)).not.toContain('Old attempt private');
