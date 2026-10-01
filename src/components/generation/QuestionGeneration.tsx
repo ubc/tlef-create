@@ -154,11 +154,11 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   const generationTask = useQuestionGenerationJob(quizId, ownerId, job => {
     dispatch(setQuestionsGenerating({ generating: false, quizId }));
     setStreamingState(previous => ({ ...previous, isStreaming: false, sessionId: null, batchStarted: false }));
-    if (job.status === 'succeeded') {
+    if (job.status === 'succeeded' || job.status === 'partial') {
       void reloadQuestions();
       hasUserSelectedViewRef.current = true;
       setCurrentView('results');
-      showNotification('success', 'Questions Saved', `Saved all ${job.totalQuestions} questions. The task is complete.`);
+      showNotification(job.status === 'partial' ? 'warning' : 'success', 'Questions Saved', job.status === 'partial' ? `Saved ${job.completedQuestions} of ${job.totalQuestions} checked questions. Return to Studio AI to resume the unfinished items.` : `Saved all ${job.totalQuestions} questions. The task is complete.`);
       if (isActive) onQuestionsGenerated?.();
     } else {
       showNotification('warning', 'Saved Questions Preserved', job.message || 'Generation did not publish. Your previous questions are still available.');

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { setActiveCourse, setActiveQuiz, setUser } from '../store/slices/appSlice';
 import { createQuiz } from '../store/slices/quizSlice';
-import { Plus, Search, ChevronDown, ChevronRight, User, X, Boxes } from 'lucide-react';
+import { Plus, Search, ChevronDown, ChevronRight, User, X, Boxes, PanelLeftClose } from 'lucide-react';
 import CreateCourseModal from './CreateCourseModal';
 import SearchModal from './SearchModal';
 import { foldersApi, materialsApi, Folder, ApiError } from '../services/api';
@@ -15,10 +15,12 @@ import '../styles/components/Sidebar.css';
 
 interface SidebarProps {
   isOpen?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   onClose?: () => void;
 }
 
-const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
+const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -323,10 +325,11 @@ const Sidebar = ({ isOpen = false, onClose }: SidebarProps) => {
   return (
       <>
         {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
-        <div className={`sidebar ${isOpen ? 'open' : ''}`}>
+        <div className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-header">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h1 className="sidebar-title">CREATE</h1>
+              <button className="sidebar-collapse-button" onClick={onToggleCollapse} aria-label="Collapse sidebar" aria-expanded={!collapsed}><PanelLeftClose size={20} /></button>
               <button
                 className="sidebar-close-button"
                 onClick={onClose}

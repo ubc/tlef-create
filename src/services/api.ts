@@ -1237,7 +1237,7 @@ export interface QuestionGenerationJob {
   quizId: string;
   sessionId: string;
   mode: 'append' | 'replace';
-  status: 'running' | 'committing' | 'succeeded' | 'failed' | 'interrupted' | 'conflict';
+  status: 'running' | 'committing' | 'succeeded' | 'partial' | 'failed' | 'interrupted' | 'conflict';
   totalQuestions: number;
   completedQuestions: number;
   reusedQuestions?: number;
@@ -1643,9 +1643,11 @@ export interface StudioAssistantSession {
     sessionId?: string;
     status: string;
     readyCount: number;
+    published?: boolean;
+    questions?: AuthoringVersion['questions'];
     reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
+    items: Array<{ index: number; questionId?: string; status: string; phase?: string; attempts?: number; startedAt?: string; completedAt?: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -1660,6 +1662,7 @@ export interface StudioAssistantCapabilities {
 }
 
 export const studioAssistantApi = {
+  previewUrl: (id: string, version: number) => `${API_BASE}/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/preview?v=${version}`,
   getCapabilities: (): Promise<ApiResponse<StudioAssistantCapabilities>> =>
     apiClient.get('/h5p-editor/assistant/capabilities'),
   createSession: (request: { courseId: string; quizId?: string; materialIds: string[]; instructions: string; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
@@ -1691,9 +1694,10 @@ export interface AuthoringSession {
   messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; clarification?: AuthoringClarification[]; createdAt: string }>;
   versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;
   taskSteps?: Array<{ name: string; createdAt: string }>;
-  run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string } | null; updatedAt: string;
+  run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string; createdAt?: string; updatedAt?: string } | null; updatedAt: string;
 }
 export const studioAuthoringApi = {
+  eventsUrl: (id: string) => `${API_BASE}/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/events`,
   list: (): Promise<ApiResponse<{ sessions: Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>> }>> =>
     apiClient.get('/h5p-editor/authoring/sessions'),
   get: (id: string): Promise<ApiResponse<{ session: AuthoringSession }>> => apiClient.get(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}`),

@@ -1,3 +1,4 @@
+import { generateWithRework } from './questionRework.js';
 import { planLOSlices } from './loSlicePlanner.js';
 import coursePromptService from './coursePromptService.js';
 import questionMemoryService, { buildQuestionMemory } from './questionMemoryService.js';
@@ -142,7 +143,7 @@ export function normalizeGenerationConfigs(configs) {
 
 // Shared by the existing Generate Questions endpoint and the Studio assistant.
 // QuestionGenerationJob owns staged persistence and atomic publication.
-export function createQuestionBatchWork({ quiz, questionConfigs, readiness, userId, mode = 'append',
+export function createQuestionBatchWork({ quiz, questionConfigs, readiness, userId, mode = 'append', autoRework = false,
   assertActive: assertContextActive = async () => {} }) {
   const quizId = String(quiz._id);
   return async function generateBatch({ job: receipt, assertActive: assertJobActive, updateItem, signal: jobSignal }) {
@@ -176,7 +177,7 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
         const config = configs[index];
         const questionId = receipt.items[index].questionId;
         await assertActive();
-        await updateItem(index, { status: 'generating' });
+        await updateItem(index, { status: 'generating', phase: 'retrieve_evidence', startedAt: new Date() });
         try {
           await runWithGenerationDeadline(async ({ signal: deadlineSignal, beginPersistence }) => {
             const signal = AbortSignal.any([deadlineSignal, jobSignal]);
@@ -220,14 +221,16 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
             }
             assertGenerationActive(signal);
             await assertActive();
-            await questionStreamingService.generateQuestionWithStreaming({
-              quizId, questionId, questionConfig: config, learningObjective: config.learningObjective,
+            await generateWithRework({ config, signal, enabled: autoRework,
+              onAttempt: async attempt => { await assertActive(); await updateItem(index, { attempts: attempt, phase: attempt === 1 ? 'generate_and_review' : 'rework_and_review' }); },
+              generate: questionConfig => questionStreamingService.generateQuestionWithStreaming({
+              quizId, questionId, questionConfig, learningObjective: config.learningObjective,
               relevantContent, sessionId: finalSessionId, userId, signal, beginPersistence,
               generationContext: { jobId: receipt._id, savedQuestionId: receipt.items[index].savedQuestionId,
-                order: (mode === 'append' ? receipt.baseQuestionIds.length : 0) + index, assertActive }
-            });
-          }, 120000);
-          await updateItem(index, { status: 'ready' });
+                order: (mode === 'append' ? (receipt.generationOffset ?? receipt.baseQuestionIds.length) : 0) + index, assertActive }
+            }) });
+          }, autoRework ? 240000 : 120000);
+          await updateItem(index, { status: 'ready', phase: 'saved', completedAt: new Date(), code: '', reason: '', message: '' });
         } catch (error) {
           const failure = safeQuestionJobFailure(error);
           if (error.code === 'QUESTION_QUALITY_REVIEW' && error.rejectedDraft) {
@@ -238,7 +241,7 @@ export function createQuestionBatchWork({ quiz, questionConfigs, readiness, user
               // Missing diagnostic storage must not hide the safe failed receipt.
             });
           }
-          await updateItem(index, { status: 'failed', ...failure });
+          await updateItem(index, { status: 'failed', phase: 'needs_attention', completedAt: new Date(), ...failure });
           sseService.emitError(finalSessionId, questionId, failure.message, failure.code);
           sseService.notifyQuestionComplete(finalSessionId, questionId, { error: true, errorMessage: failure.message, code: failure.code, questionId });
         }

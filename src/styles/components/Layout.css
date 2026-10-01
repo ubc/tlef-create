@@ -68,3 +68,14 @@
         justify-content: center;
     }
 }
+
+.sidebar-collapse-button,.sidebar-rail button { display:grid; place-items:center; border:0; border-radius:8px; width:36px; height:36px; background:transparent; color:var(--color-foreground); cursor:pointer; }
+.sidebar-collapse-button:hover,.sidebar-rail button:hover { background:var(--color-accent); }
+.sidebar-rail { position:fixed; inset:0 auto 0 0; width:56px; border-right:1px solid var(--color-border); padding:18px 10px; background:var(--color-card); z-index:1000; }
+@media (min-width:769px) {
+    .sidebar.is-collapsed { display:none; }
+    .sidebar-collapsed .main-content { margin-left:56px; }
+}
+@media (max-width:768px) {
+    .sidebar-collapse-button,.sidebar-rail { display:none; }
+}

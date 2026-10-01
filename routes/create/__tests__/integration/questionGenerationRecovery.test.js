@@ -113,6 +113,45 @@ afterAll(async () => {
 });
 
 describe('durable question generation and atomic publication on standalone MongoDB', () => {
+  test('assistant partial batches publish checked items and consecutive retries never duplicate them', async () => {
+    const f = await fixture(); const jobs = service(); const three = [configs[0], configs[0], configs[0]];
+    let previous;
+    for (let round = 0; round < 3; round++) {
+      const requestId = randomUUID();
+      const work = jest.fn(async context => {
+        expect(context.job.generationOffset).toBe(1);
+        if (round) expect(context.job.items.filter(item => item.status === 'ready')).toHaveLength(2);
+        await stage(context, f.owner, f.quizId, { objectiveId: f.objective._id, ...(round < 2 ? { failIndex: 1 } : {}) });
+      });
+      await jobs.start({ owner: f.owner, quizId: f.quizId, requestId, questionConfigs: three,
+        allowPartial: true, retryFromRequestId: previous, work });
+      await jobs.waitForIdle();
+      const result = await jobs.get(f.owner, requestId);
+      expect(result.status).toBe(round < 2 ? 'partial' : 'succeeded');
+      expect(serializeQuestionJob(result).published).toBe(true);
+      expect(serializeQuestionJob(result).questionIds).toHaveLength(round < 2 ? 2 : 3);
+      const quiz = await Quiz.findById(f.quizId);
+      expect(quiz.questions).toHaveLength(round < 2 ? 3 : 4);
+      expect(String(quiz.questions[0])).toBe(String(f.question._id));
+      expect(new Set(quiz.questions.map(String)).size).toBe(quiz.questions.length);
+      await jobs.start({ owner: f.owner, quizId: f.quizId, requestId, questionConfigs: three, allowPartial: true, work });
+      expect(work).toHaveBeenCalledTimes(1);
+      previous = requestId;
+    }
+  });
+  test('partial retry refuses a concurrent instructor edit before reusing or generating questions', async () => {
+    const f = await fixture(); const jobs = service(); const first = randomUUID(); const two = [configs[0], configs[0]];
+    await jobs.start({ owner: f.owner, quizId: f.quizId, requestId: first, questionConfigs: two, allowPartial: true,
+      work: context => stage(context, f.owner, f.quizId, { objectiveId: f.objective._id, failIndex: 1 }) });
+    await jobs.waitForIdle();
+    await Quiz.updateOne({ _id: f.quizId }, { $inc: { questionRevision: 1, __v: 1 } });
+    const work = jest.fn();
+    await expect(jobs.start({ owner: f.owner, quizId: f.quizId, requestId: randomUUID(), questionConfigs: two,
+      retryFromRequestId: first, allowPartial: true, work })).rejects.toMatchObject({ code: 'GENERATION_SNAPSHOT_CHANGED' });
+    expect(work).not.toHaveBeenCalled();
+    expect((await Quiz.findById(f.quizId)).questions).toHaveLength(2);
+  });
+
   test('explicit retry reuses prepared candidates and generates only the missing items', async () => {
     const f = await fixture(); const jobs = service(); const firstId = randomUUID(); const retryId = randomUUID();
     const two = [configs[0], configs[0]];
@@ -925,18 +964,18 @@ describe('Studio assistant reuses durable course question generation', () => {
     expect(work).not.toHaveBeenCalled(); expect(await Job.countDocuments({})).toBe(0);
   });
 
-  test('partially generated assistant batch remains staged and a repeated failed receipt never pays again', async () => {
+  test('partially generated assistant batch is usable and replaying its receipt never pays again', async () => {
     const f = await assistantFixture(); const jobs = service(); const requestId = randomUUID(); const preview = jest.fn();
     const quiz = await Quiz.findById(f.quizId); quiz.settings.planItems[0].count = 2; await quiz.save();
     const work = jest.fn(context => stage(context, f.owner, f.quizId, { failIndex: 1, objectiveId: f.objective._id }));
     const run = createAssistantGenerationService({ jobs, createWork: () => work, buildDocument: preview, pollMs: 5 });
     const args = { userId: f.owner, quizId: f.quizId, requestId, materialIds: [f.selected._id] };
-    await expect(run(args)).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED', job: { status: 'failed' } });
-    await expect(run(args)).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
-    expect(work).toHaveBeenCalledTimes(1); expect(preview).not.toHaveBeenCalled();
-    expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+    await expect(run(args)).resolves.toMatchObject({ job: { status: 'partial', completedQuestions: 1, published: true } });
+    await expect(run(args)).resolves.toMatchObject({ job: { status: 'partial' } });
+    expect(work).toHaveBeenCalledTimes(1); expect(preview).toHaveBeenCalledTimes(2);
+    expect((await Quiz.findById(f.quizId)).questions).toHaveLength(2);
     const visible = await request(app).get(`/questions/quiz/${f.quizId}`).set('x-test-owner', String(f.owner)).expect(200);
-    expect(visible.body.data.questions).toHaveLength(1);
+    expect(visible.body.data.questions).toHaveLength(2);
   });
 
   test('external source invalidation aborts an accepted worker and fences late candidates', async () => {

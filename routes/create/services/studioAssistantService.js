@@ -233,7 +233,7 @@ async function saveFinalContent(session, user, document, quiz, assertActive) {
 
 async function generateSession(session, user, assertActive) {
   await assertSources(session); await assertActive();
-  await patchActive(session, {}, event('generating', 'Building the approved questions. Live previews are drafts until the whole batch succeeds.'));
+  await patchActive(session, {}, event('generating', 'Retrieving evidence, generating questions and checking feedback. A rejected draft gets one automatic rework; checked questions remain usable even if another item fails.'));
   const result = await runAssistantGeneration({ user, quizId: String(session.quizId), requestId: session.questionJobRequestId,
     retryFromRequestId: session.questionJobRetryFromRequestId,
     materialIds: session.materialIds.map(String),
@@ -241,10 +241,17 @@ async function generateSession(session, user, assertActive) {
     assertActive: async () => { await assertActive(); await assertSources(session); },
     onProgress: async progress => {
       await assertActive();
-      await patchActive(session, {}, event(progress.stage || 'generating', progress.message || 'Generating the approved question batch.'));
+      const activeItems = progress.items.filter(item => item.status === 'generating');
+      const tools = { retrieve_evidence: 'Retrieve source evidence', generate_and_review: 'Generate question and run checks', rework_and_review: 'Rework rejected question and review again' };
+      const detail = activeItems.map(item => `Question ${item.index + 1}: ${tools[item.phase] || 'Generate question'}`).join(' · ');
+      await patchActive(session, {}, event(progress.stage || 'generating', `${progress.readyCount}/${progress.totalQuestions} checked. ${detail || progress.message || 'Saving checked results.'}`));
     }
   });
   await assertActive();
+  if (result.job.status === 'partial') {
+    await patchActive(session, { quizFingerprint: quizFingerprint(result.quiz) });
+    throw Object.assign(new Error(`${result.job.completedQuestions} of ${result.job.totalQuestions} checked questions are saved in the course and available in Question set preview. The remaining questions still need attention after automatic rework. Resume task retries only unfinished items and may use additional AI credits.`), { code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+  }
   await patchActive(session, {}, event('studio', 'Questions are saved in the course. Preparing the official H5P editor draft.'));
   const content = await saveFinalContent(session, user, result.document, result.quiz, assertActive);
   await patchActive(session, { status: 'completed', error: '', errorCode: '', outputs: [{
@@ -311,6 +318,13 @@ export async function readAssistantSession(owner, id) {
         return draft ? { ...item, review: { questionText: draft.questionText, correctAnswer: draft.correctAnswer,
           options: draft.options, issues: draft.issues, calculationCheck: draft.calculationCheck } } : item;
       });
+      const checked = await Question.find({ _id: { $in: job.items.filter(item => item.status === 'ready').map(item => item.savedQuestionId) },
+        quiz: session.quizId, createdBy: owner, generationJob: job._id }).select('questionText type explanation generationMetadata.sourceReferences').lean();
+      value.generation.questions = job.items.filter(item => item.status === 'ready').flatMap(item => {
+        const question = checked.find(entry => String(entry._id) === String(item.savedQuestionId));
+        return question ? [{ id: String(question._id), index: item.index + 1, type: question.type, text: question.questionText,
+          explanation: question.explanation, sourceReferences: question.generationMetadata?.sourceReferences || [] }] : [];
+      });
       value.previewVersion = value.generation.readyCount;
     }
   }
@@ -366,8 +380,8 @@ export async function updateAssistantPlan(user, id, body) {
   await assertSources(session);
   if (session.status === 'failed') {
     const job = session.questionJobRequestId ? await questionJobs.get(String(user.id), session.questionJobRequestId) : null;
-    if (!job || job.active || job.status !== 'failed' || String(job.quiz) !== String(session.quizId)) {
-      fail('Only a failed, unpublished question batch can return to plan editing. Check task status first.');
+    if (!job || job.active || !['failed', 'partial'].includes(job.status) || String(job.quiz) !== String(session.quizId)) {
+      fail('Only a stopped question batch can return to plan editing. Check task status first.');
     }
   }
   // Reserve this edit before changing the shared learning object. Approval and
@@ -420,11 +434,15 @@ export async function resumeAssistantSession(user, id, body) {
     const previous = await questionJobs.get(String(user.id), session.questionJobRequestId);
     if (!previous || !['running', 'succeeded'].includes(previous.status)) {
       const quiz = await loadQuiz(session.quizId, session.owner);
-      if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged();
-      session.questionJobRetryFromRequestId = previous?.status === 'failed' ? session.questionJobRequestId : undefined;
+      if (quizFingerprint(quiz) !== session.quizFingerprint) {
+        if (previous?.status !== 'partial' || String(quiz.lastQuestionGenerationJob) !== String(previous._id)
+          || quiz.__v !== previous.baseQuizVersion + 1 || quiz.questionRevision !== previous.baseRevision + 1) sourceChanged();
+        session.quizFingerprint = quizFingerprint(quiz);
+      }
+      session.questionJobRetryFromRequestId = ['failed', 'partial'].includes(previous?.status) ? session.questionJobRequestId : undefined;
       session.questionJobRequestId = `asst-q-${session._id}-${session.attempt + 1}`;
       const saved = await Session.findOneAndUpdate({ _id: session._id, owner: session.owner, revision: session.revision, status: session.status }, {
-        $set: { questionJobRequestId: session.questionJobRequestId,
+        $set: { quizFingerprint: session.quizFingerprint, questionJobRequestId: session.questionJobRequestId,
           questionJobRetryFromRequestId: session.questionJobRetryFromRequestId || null }, $inc: { revision: 1 }
       }, { new: true });
       if (!saved) fail('This task changed before retry.');

@@ -6,6 +6,8 @@ describe('CREATE Guide knowledge retrieval', () => {
   test.each([
     ['AI rate limit usage allowance quota provider credits no fallback feedback review unpublished', 'h5p-studio', 'Questions needing attention'],
     ['54 content types Cornell Notes Virtual Tour Flashcards Game Map Advanced Fill in the Blanks manual authoring', 'h5p-studio', 'Content type availability'],
+    ['Collapse sidebar Expand sidebar Question set preview Working for Worked for SSE Live', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Automatic rework partial result checked questions Resume task unfinished slots', 'h5p-studio', 'Questions needing attention'],
     ['Task steps Refine teaching requirements Learner level Teaching purpose Question difficulty Update proposal', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Use selected answers clarification selectable answers conflicting requirements Send message', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Waiting for your teaching choices missing teaching requirements before objectives plan', 'h5p-studio', 'Task steps and teaching requirements'],

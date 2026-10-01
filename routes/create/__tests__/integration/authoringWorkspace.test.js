@@ -1,4 +1,5 @@
 import { beforeAll, afterAll, beforeEach, describe, test, expect, jest } from '@jest/globals';
+import { EventEmitter } from 'node:events';
 import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
@@ -47,6 +48,7 @@ const { default: Content } = await import('../../models/H5PContent.js');
 const { createAuthoringSession, authoringCommand, readAuthoringSession, cancelAuthoringRun, tickAuthoringWorker } = await import('../../services/authoring/authoringService.js');
 const { buildH5PSourceFingerprint } = await import('../../services/h5pEditorService.js');
 const { saveManualVersion } = await import('../../services/authoring/artifactVersionService.js');
+const { streamAuthoringSession } = await import('../../services/authoring/authoringStream.js');
 const models = [Session, Run, Message, Version, Folder, Quiz, Material, Question, Objective, Content];
 const dbName = `tlef_qa_authoring_${randomUUID().replaceAll('-', '')}`;
 beforeAll(async () => {
@@ -104,6 +106,26 @@ async function ready(f) {
 }
 
 describe('durable Studio authoring', () => {
+  test('SSE snapshots enforce ownership, reconnect without paid work, and stop reading on disconnect', async () => {
+    const f = await fixture(); const session = await createAuthoringSession(f.owner, f.body);
+    const response = () => Object.assign(new EventEmitter(), { req: { headers: {} }, writeHead: jest.fn(),
+      flushHeaders: jest.fn(), write: jest.fn(() => true), end() { this.emit('close'); } });
+    const foreign = response();
+    await expect(streamAuthoringSession({ user: { id: String(new mongoose.Types.ObjectId()) }, params: { id: session.id } }, foreign))
+      .rejects.toMatchObject({ status: 404 });
+    expect(foreign.writeHead).not.toHaveBeenCalled();
+    const before = complete.mock.calls.length;
+    for (let i = 0; i < 2; i++) {
+      const res = response();
+      const read = jest.fn(readAuthoringSession);
+      await streamAuthoringSession({ user: { id: f.owner }, params: { id: session.id } }, res, { read, intervalMs: 5 });
+      expect(res.write.mock.calls.some(([text]) => text.includes('event: authoring-snapshot'))).toBe(true);
+      res.end();
+      await new Promise(resolve => setTimeout(resolve, 15));
+      expect(read).toHaveBeenCalledTimes(1);
+    }
+    expect(complete).toHaveBeenCalledTimes(before);
+  });
   test('rejects a foreign learning object before requirements assessment or paid planning', async () => {
     const f = await fixture();
     const foreign = await Quiz.create({ name: 'Foreign', folder: f.folder._id, createdBy: new mongoose.Types.ObjectId() });

@@ -11,6 +11,10 @@ const interruptedMessage = 'Generation was interrupted. Your previous questions 
 const conflictMessage = 'The learning object or its questions changed while this batch was generating. Your current questions are unchanged. Review them before starting a new attempt.';
 const failureMessage = 'This batch could not be completed. Your previous questions are unchanged. Review the failed items before starting a new attempt.';
 const abandonedMessage = 'This request was not accepted for generation and is now closed. Your questions are unchanged. You can start a new attempt.';
+const published = job => ['succeeded', 'partial'].includes(job.status);
+const resultStatus = job => job.items.every(item => item.status === 'ready') ? 'succeeded' : 'partial';
+const resultMessage = job => resultStatus(job) === 'succeeded' ? 'All questions were saved successfully.' : 'Checked questions were saved. The remaining questions need attention; retry only the unfinished items.';
+const readyIds = job => job.items.filter(item => item.status === 'ready').map(item => item.savedQuestionId);
 const ABANDONED_REQUEST_HASH = 'abandoned-before-acceptance-v1';
 const jobError = (message, code, status = 409) => Object.assign(new Error(message), { code, status });
 const stableJson = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
@@ -28,9 +32,11 @@ export function serializeQuestionJob(job) {
     completedQuestions: job.items.filter(item => item.status === 'ready').length,
     reusedQuestions: job.items.filter(item => item.reused).length,
     failedQuestions: job.items.filter(item => item.status === 'failed').length,
-    questionIds: job.status === 'succeeded' ? (job.questionIds || []).map(String) : [],
+    published: published(job),
+    questionIds: published(job) ? (job.questionIds || []).map(String) : [],
     items: job.items.map(item => ({ index: item.index, questionId: item.questionId, status: item.status,
-      ...(job.status === 'succeeded' ? { savedQuestionId: String(item.savedQuestionId) } : {}),
+      ...(published(job) && item.status === 'ready' ? { savedQuestionId: String(item.savedQuestionId) } : {}),
+      phase: item.phase, attempts: item.attempts || 0, startedAt: item.startedAt, completedAt: item.completedAt,
       ...(item.code ? { code: item.code } : {}), ...(item.reason ? { reason: item.reason } : {}), ...(item.message ? { message: item.message } : {}) })),
     message: job.message || '', createdAt: job.createdAt, updatedAt: job.updatedAt
   };
@@ -58,7 +64,7 @@ export function safeQuestionJobFailure(error) {
   const known = {
     QUESTION_INVALID_RESPONSE: 'The model returned an unreadable or invalid question. No question was saved. An explicit retry generates a new draft using additional AI credits.',
     MODEL_SERVICE_LIMIT_REACHED: 'The AI service reached a rate limit or usage allowance. Check the provider allowance or wait before explicitly retrying. No fallback generation was started.',
-    GENERATION_TIMEOUT: 'This question exceeded its generation deadline. No question from this batch was published.',
+    GENERATION_TIMEOUT: 'This question exceeded its generation deadline. This item was not published.',
     QUESTION_QUALITY_REVIEW: 'This question did not pass the feedback check. Refine its instructions before starting a new attempt.',
     NO_API_KEY: 'An AI API key is required before generating questions.',
     MATERIALS_NOT_READY: 'Assigned materials are not ready for question generation.',
@@ -125,7 +131,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
     const quiz = await QuizModel.findOne({ _id: job.quiz, createdBy: job.owner });
     if (quiz && String(quiz.lastQuestionGenerationJob || '') === String(job._id)) {
       await JobModel.updateOne({ _id: job._id, active: true }, { $set: {
-        status: 'succeeded', active: false, questionIds: job.items.map(item => item.savedQuestionId), message: 'All questions were saved successfully.'
+        status: resultStatus(job), active: false, questionIds: readyIds(job), message: resultMessage(job)
       } });
     } else if (!quiz || expired(job)) {
       await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken, leaseUntil: job.leaseUntil }, {
@@ -185,7 +191,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
         return recover(winner);
       }
     },
-    async start({ owner, quizId, requestId, mode = 'append', questionConfigs, expectedQuizVersion, signal, retryFromRequestId,
+    async start({ owner, quizId, requestId, mode = 'append', questionConfigs, expectedQuizVersion, signal, retryFromRequestId, allowPartial = false,
       assertContextActive = async () => {}, work, onSettled }) {
       if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) throw jobError('A valid generation request ID is required.', 'INVALID_GENERATION_REQUEST', 400);
       if (!['append', 'replace'].includes(mode) || !Array.isArray(questionConfigs) || questionConfigs.length < 1 || questionConfigs.length > 100) {
@@ -204,7 +210,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
         return recover(previous);
       }
       const retrySource = retryFromRequestId ? await service.get(owner, retryFromRequestId) : null;
-      if (retryFromRequestId && (!retrySource || retrySource.status !== 'failed'
+      if (retryFromRequestId && (!retrySource || !['failed', 'partial'].includes(retrySource.status)
         || String(retrySource.quiz) !== String(quizId) || retrySource.requestHash !== requestHash)) {
         throw jobError('The previous batch cannot be reused with this question plan. Review the current plan before starting a new task.', 'GENERATION_SNAPSHOT_CHANGED');
       }
@@ -212,7 +218,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
       await service.list(owner, quizId);
       let job;
       try {
-        job = await JobModel.create({ owner, quiz: quizId, requestId, requestHash, mode, retryFromRequestId,
+        job = await JobModel.create({ owner, quiz: quizId, requestId, requestHash, mode, retryFromRequestId, allowPartial: allowPartial === true && mode === 'append',
           sessionId: randomUUID(), leaseToken: randomUUID(), leaseUntil: new Date(+now() + LEASE_MS), status: 'running', active: true,
           items: questionConfigs.map((_config, index) => ({ index, questionId: `question-${index + 1}`, savedQuestionId: new mongoose.Types.ObjectId(), status: 'queued' })) });
       } catch (error) {
@@ -241,16 +247,20 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
         }
         throw jobError('A question edit or another generation is still finishing. Please try again.', 'QUESTION_GENERATION_BUSY');
       }
-      if (retrySource && (retrySource.baseQuizVersion !== (quiz.__v || 0)
-        || retrySource.baseRevision !== (quiz.questionRevision || 0)
-        || JSON.stringify(retrySource.baseQuestionIds.map(String)) !== JSON.stringify(quiz.questions.map(String)))) {
+      const retryPublished = retrySource?.status === 'partial';
+      const retryBaseIds = retrySource ? [...(retryPublished ? (retrySource.publishedBaseQuestionIds || retrySource.baseQuestionIds) : retrySource.baseQuestionIds), ...(retryPublished ? retrySource.questionIds : [])] : [];
+      if (retrySource && (retrySource.baseQuizVersion + (retryPublished ? 1 : 0) !== (quiz.__v || 0)
+        || retrySource.baseRevision + (retryPublished ? 1 : 0) !== (quiz.questionRevision || 0)
+        || JSON.stringify(retryBaseIds.map(String)) !== JSON.stringify(quiz.questions.map(String))
+        || (retryPublished && String(quiz.lastQuestionGenerationJob) !== String(retrySource._id)))) {
         await terminal(job, 'conflict', conflictMessage);
         throw jobError('The learning object changed since the failed batch. Review the current plan before starting a new task.', 'GENERATION_SNAPSHOT_CHANGED');
       }
       job.baseQuestionIds = [...(quiz.questions || [])];
+      job.generationOffset = retryPublished ? (retrySource.publishedBaseQuestionIds || retrySource.baseQuestionIds).length : job.baseQuestionIds.length;
       job.baseRevision = quiz.questionRevision || 0;
       job.baseQuizVersion = quiz.__v || 0;
-      await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, { $set: { baseQuestionIds: job.baseQuestionIds, baseRevision: job.baseRevision, baseQuizVersion: job.baseQuizVersion } });
+      await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, { $set: { baseQuestionIds: job.baseQuestionIds, generationOffset: job.generationOffset, baseRevision: job.baseRevision, baseQuizVersion: job.baseQuizVersion } });
 
       const abortController = new AbortController();
       const abortFromParent = () => abortController.abort(jobError(interruptedMessage, 'GENERATION_INTERRUPTED'));
@@ -286,8 +296,8 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
 
       const execution = (async () => {
         try {
-          // Copy confirmed unpublished candidates under the new receipt. Never
-          // reassign the old receipt's documents or publish a partial batch.
+          // Copy confirmed candidates under the new receipt. Partial retries replace
+          // only their own previous published candidates, never append duplicates.
           if (retrySource) for (const previousItem of retrySource.items) {
             if (previousItem.status !== 'ready') continue;
             await assertActive();
@@ -301,14 +311,16 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
             await QuestionModel.create({ ...content, _id: item.savedQuestionId, generationJob: job._id });
             await assertActive();
             const updated = await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, {
-              $set: { [`items.${item.index}.status`]: 'ready', [`items.${item.index}.reused`]: true }
+              $set: { [`items.${item.index}.status`]: 'ready', [`items.${item.index}.reused`]: true, [`items.${item.index}.phase`]: 'saved',
+                [`items.${item.index}.attempts`]: previousItem.attempts || 0,
+                [`items.${item.index}.startedAt`]: previousItem.startedAt, [`items.${item.index}.completedAt`]: previousItem.completedAt }
             });
             if (!updated.matchedCount) throw jobError(interruptedMessage, 'GENERATION_INTERRUPTED');
             item.status = 'ready'; item.reused = true;
           }
           await work({ job, signal: abortController.signal, assertActive, async updateItem(index, values) {
             await assertActive();
-            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message'].includes(key)));
+            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message', 'phase', 'attempts', 'startedAt', 'completedAt'].includes(key)));
             const result = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, {
               $set: Object.fromEntries(Object.entries(allowed).map(([key, value]) => [`items.${index}.${key}`, value]))
             });
@@ -316,17 +328,19 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
           } });
           await assertActive();
           const ready = await JobModel.findOne({ _id: job._id, active: true, leaseToken: job.leaseToken });
-          if (!ready || ready.items.some(item => item.status !== 'ready')) {
+          if (!ready || (ready.items.some(item => item.status !== 'ready') && (!job.allowPartial || !readyIds(ready).length))) {
             await terminal(job, 'failed', failureMessage);
             return;
           }
-          const ids = ready.items.map(item => item.savedQuestionId);
+          const ids = readyIds(ready);
           const persisted = await QuestionModel.countDocuments({ _id: { $in: ids }, quiz: quizId, createdBy: owner, generationJob: job._id });
           if (persisted !== ids.length) throw jobError('Generated questions could not be confirmed in storage.', 'GENERATION_INTERRUPTED');
           await assertActive();
-          const committing = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, { $set: { status: 'committing' } });
+          const committing = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, { $set: { status: 'committing', publishedBaseQuestionIds: job.baseQuestionIds.filter(id => !(retryPublished ? retrySource.questionIds.map(String) : []).includes(String(id))) } });
           if (!committing.matchedCount) throw jobError(interruptedMessage, 'GENERATION_INTERRUPTED');
-          const publishedIds = mode === 'replace' ? ids : [...job.baseQuestionIds, ...ids];
+          const priorBatchIds = new Set(retryPublished ? retrySource.questionIds.map(String) : []);
+          const prefix = job.baseQuestionIds.filter(id => !priorBatchIds.has(String(id)));
+          const publishedIds = mode === 'replace' ? ids : [...prefix, ...ids];
           const commit = await QuizModel.updateOne({ _id: quizId, createdBy: owner, questionRevision: job.baseRevision, __v: job.baseQuizVersion,
             questions: { $eq: job.baseQuestionIds }, 'questionGenerationLease.token': job.leaseToken,
             'questionGenerationLease.leaseUntil': { $gte: now() }, ...freeQuestionMutation(now())
@@ -339,7 +353,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
             return;
           }
           await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken }, { $set: {
-            status: 'succeeded', active: false, questionIds: ids, message: 'All questions were saved successfully.'
+            status: resultStatus(ready), active: false, questionIds: ids, message: resultMessage(ready)
           } });
         } catch (error) {
           // A write may have committed even if its response was lost. Never mark

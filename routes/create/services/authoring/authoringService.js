@@ -72,7 +72,7 @@ export async function readAuthoringSession(owner, id, attempt = 0) {
     versions: versions.map(versionSummary), assistant,
     taskSteps: pastRuns.flatMap(entry => (entry.steps || []).map(step => ({ name: step.name, createdAt: step.createdAt })))
       .sort((a, b) => +a.createdAt - +b.createdAt).slice(-100),
-    run: run ? { id: String(run._id), status: run.status, checkpoint: run.checkpoint, steps: run.steps || [], error: run.error } : null,
+    run: run ? { id: String(run._id), status: run.status, checkpoint: run.checkpoint, steps: run.steps || [], error: run.error, createdAt: run.createdAt, updatedAt: run.updatedAt } : null,
     updatedAt: session.updatedAt };
 }
 

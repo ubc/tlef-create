@@ -7,7 +7,7 @@ export function normalizeModelServiceError(error) {
   const errors = [error, error?.cause];
   const limited = errors.some(value => value && (
     [value.status, value.statusCode, value.code, value.response?.status].some(status => status === 429 || status === '429')
-    || [value.code, value.error?.code].some(code => ['insufficient_quota', 'rate_limit_exceeded'].includes(code))
+    || [value.code, value.error?.code].some(code => ['insufficient_quota', 'rate_limit_exceeded', 'credit_balance_exhausted', 'billing_hard_limit_reached', 'usage_limit_reached'].includes(code))
   ));
   return limited ? Object.assign(new Error(MODEL_SERVICE_LIMIT_MESSAGE, { cause: error }), {
     code: 'MODEL_SERVICE_LIMIT_REACHED', status: 429

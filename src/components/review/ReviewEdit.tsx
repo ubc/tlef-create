@@ -143,7 +143,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
   };
   const ownerId = useSelector((state: RootState) => state.app.user?.id);
   const generationTask = useSingleQuestionGeneration(quizId, ownerId, job => {
-    if (job.status === 'succeeded') {
+    if (job.status === 'succeeded' || job.status === 'partial') {
       void dispatch(fetchQuestions(quizId));
       markReviewPending();
       setCoverageMap(null);

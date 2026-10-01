@@ -1,4 +1,5 @@
 import express from 'express';
+import { streamAuthoringSession } from '../services/authoring/authoringStream.js';
 import rateLimit from 'express-rate-limit';
 import { authenticateToken } from '../middleware/auth.js';
 import { successResponse, errorResponse } from '../utils/responseFormatter.js';
@@ -16,6 +17,9 @@ const handle = action => async (req, res) => {
 router.get('/sessions', handle(async (req, res) => successResponse(res, { sessions: await listAuthoringSessions(String(req.user.id)) })));
 router.post('/sessions', writes, handle(async (req, res) => successResponse(res, { session: await createAuthoringSession(String(req.user.id), req.body || {}) }, 'Task saved.', 202)));
 router.get('/sessions/:id', handle(async (req, res) => successResponse(res, { session: await readAuthoringSession(String(req.user.id), req.params.id) })));
+router.get('/sessions/:id/events', handle(async (req, res) => {
+  await streamAuthoringSession(req, res);
+}));
 router.post('/sessions/:id/cancel', writes, handle(async (req, res) => successResponse(res, { session: await cancelAuthoringRun(String(req.user.id), req.params.id, req.body || {}) })));
 router.post('/sessions/:id/:command', writes, handle(async (req, res) => successResponse(res, { session: await authoringCommand(String(req.user.id), req.params.id, req.params.command, req.body || {}) }, 'Request saved.', 202)));
 export default router;

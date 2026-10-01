@@ -188,3 +188,24 @@
 .authoring-failed-question { margin: 12px 0; border-top: 1px solid #f1b8b8; padding-top: 10px; }
 .authoring-failed-question p { white-space: pre-wrap; }
 .authoring-plan-row textarea { width: 100%; resize: vertical; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; line-height: 1.5; }
+
+.authoring-task-trace { margin:18px 0; }
+.authoring-live-line { display:flex; align-items:center; gap:8px; color:var(--aw-muted); font-size:12px; padding:8px 0; }
+.authoring-live-line span { min-width:0; overflow-wrap:anywhere; }
+.authoring-progress { border:0; border-top:1px solid var(--aw-line); border-radius:0; padding:10px 0; background:transparent; }
+.authoring-progress>summary { display:flex; align-items:center; gap:8px; color:var(--aw-muted); cursor:pointer; font-size:12px; }
+.authoring-progress>summary small { margin-left:auto; font-size:10px; }
+.authoring-progress ol,.authoring-question-checks { padding:0; list-style:none; }
+.authoring-progress li { display:flex; align-items:flex-start; justify-content:flex-start; gap:8px; margin:12px 0; font-size:12px; }
+.authoring-progress li>svg { flex-shrink:0; margin-top:3px; color:var(--aw-accent); }
+.authoring-progress li details { flex:1; min-width:0; }
+.authoring-progress li summary { cursor:pointer; text-transform:capitalize; }
+.authoring-progress li small { display:block; color:var(--aw-muted); margin-top:5px; }
+.authoring-progress p { color:var(--aw-muted); line-height:1.6; font-size:11px; }
+.authoring-partial-banner { padding:16px 20px; border-bottom:1px solid var(--aw-line); background:#eff6f3; font-size:12px; line-height:1.6; }
+.authoring-partial-banner p { margin:5px 0 0; color:var(--aw-muted); }
+.authoring-prepared-preview { width:100%; min-height:420px; border:0; display:block; background:white; }
+.authoring-result-card { display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:18px; border:1px solid var(--aw-line); background:#f8faf9; border-radius:12px; color:var(--aw-ink); margin:16px 0; }
+.authoring-result-card span { flex:1; }
+.authoring-result-card strong,.authoring-result-card small { display:block; }
+.authoring-result-card small { margin-top:5px; color:var(--aw-muted); font-size:11px; }

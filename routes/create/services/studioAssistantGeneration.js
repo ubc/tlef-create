@@ -60,14 +60,14 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
     let lastProgress;
     const report = async job => {
       const serialized = serializeQuestionJob(job);
-      const signature = JSON.stringify(serialized);
+      const signature = JSON.stringify({ status: serialized.status, items: serialized.items });
       if (signature === lastProgress) return;
       lastProgress = signature;
       // Delivery is optional; the durable question receipt remains authoritative.
       try { await onProgress({ ...serialized,
-        stage: job.status === 'succeeded' ? 'questions-published' : job.active ? 'generating-questions' : 'generation-stopped',
+        stage: ['succeeded', 'partial'].includes(job.status) ? 'questions-published' : job.active ? 'generating-questions' : 'generation-stopped',
         readyCount: serialized.completedQuestions,
-        published: job.status === 'succeeded'
+        published: ['succeeded', 'partial'].includes(job.status)
       }); } catch { /* A failed progress notification must not purchase a retry. */ }
     };
 
@@ -114,13 +114,13 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
       // approved Quiz snapshot was checked above; regenerate those items on
       // an explicit retry instead of reusing candidates from another contract.
       const retrySource = retryFromRequestId ? await jobs.get(owner, retryFromRequestId) : null;
-      const reusableRequestId = retrySource?.status === 'failed' && String(retrySource.quiz) === String(quizId)
+      const reusableRequestId = ['failed', 'partial'].includes(retrySource?.status) && String(retrySource.quiz) === String(quizId)
         && retrySource.requestHash === questionGenerationRequestHash({ quizId, mode: 'append', questionConfigs: configs })
         ? retryFromRequestId : undefined;
       let job = await jobs.start({ owner, quizId, requestId, mode: 'append', questionConfigs: configs,
-        retryFromRequestId: reusableRequestId,
+        retryFromRequestId: reusableRequestId, allowPartial: true,
         expectedQuizVersion: quiz.__v || 0, signal: controller.signal, assertContextActive: checkContext,
-        work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append' }) });
+        work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append', autoRework: true }) });
       while (true) {
         await checkContext();
         await report(job);
@@ -129,7 +129,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
         job = await jobs.get(owner, requestId);
         if (!job) throw failure('The generation receipt could not be found. Keep the request ID and check again.', 'GENERATION_RECOVERY_FAILED', 503);
       }
-      if (job.status !== 'succeeded') {
+      if (!['succeeded', 'partial'].includes(job.status)) {
         throw Object.assign(failure(job.status === 'failed'
           ? 'The question batch failed. No questions from this batch were added. An explicit retry reuses confirmed prepared questions when the plan and course are unchanged, and regenerates the remaining questions using additional AI credits.'
           : job.message || 'Generation did not complete. Existing questions are unchanged.',

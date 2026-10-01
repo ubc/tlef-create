@@ -166,7 +166,7 @@ describe('assistant and canonical course workflow share the same records', () =>
     await Session.updateOne({ _id: planned.id }, { $set: { status: 'failed', phase: 'generating',
       errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED', questionJobRequestId: randomUUID() } });
     questionJobs.get.mockResolvedValue({ quiz: planned.quizId, status, active: status === 'running' });
-    await expect(updateAssistantPlan(f.user, planned.id, planEdit(planned))).rejects.toThrow('unpublished');
+    await expect(updateAssistantPlan(f.user, planned.id, planEdit(planned))).rejects.toThrow('stopped question batch');
   });
 
   test.each(['branching-scenario', 'crossword', 'sort-paragraphs'])(

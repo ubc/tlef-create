@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthoringWorkspace from './AuthoringWorkspace';
 import type { AuthoringSession } from '../../../services/api';
 
-const mocks = vi.hoisted(() => ({ folders: vi.fn(), materials: vi.fn(), uploadFiles: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), command: vi.fn(), cancel: vi.fn(), savePlan: vi.fn(), publish: vi.fn(), confirm: vi.fn(), session: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({ stream: vi.fn(), folders: vi.fn(), materials: vi.fn(), uploadFiles: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), command: vi.fn(), cancel: vi.fn(), savePlan: vi.fn(), publish: vi.fn(), confirm: vi.fn(), session: vi.fn(), open: vi.fn() }));
 vi.mock('../../../services/api', () => ({ ApiError: class ApiError extends Error { status = 0; }, foldersApi: { getFolders: mocks.folders }, materialsApi: { getMaterials: mocks.materials, uploadFiles: mocks.uploadFiles },
-  studioAuthoringApi: { list: mocks.list, get: mocks.get, create: mocks.create, command: mocks.command, cancel: mocks.cancel },
-  studioAssistantApi: { savePlan: mocks.savePlan }, h5pEditorApi: {} }));
+  studioAuthoringApi: { eventsUrl: (id: string) => `/events/${id}`, list: mocks.list, get: mocks.get, create: mocks.create, command: mocks.command, cancel: mocks.cancel },
+  studioAssistantApi: { previewUrl: (id: string, version: number) => `/preview/${id}?v=${version}`, savePlan: mocks.savePlan }, h5pEditorApi: {} }));
+vi.mock('../../../hooks/useSSE', () => ({ useSSE: mocks.stream }));
 vi.mock('../../../hooks/usePubSub', () => ({ usePubSub: () => ({ publish: mocks.publish }) }));
 vi.mock('../../system-dialog/SystemDialogProvider', () => ({ useSystemDialog: () => ({ showConfirm: mocks.confirm }) }));
 vi.mock('../../SourceReferencePreviewModal', () => ({ default: () => <div>Source preview</div> }));
@@ -27,6 +28,7 @@ function mount(sessionId?: string, initialCourseId = 'course1') {
 }
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear();
+  mocks.stream.mockReturnValue({ connectionStatus: 'connected' });
   mocks.folders.mockResolvedValue({ folders: [{ _id: 'course1', name: 'Water science', quizzes: [] }] });
   mocks.materials.mockResolvedValue({ materials: [{ _id: 'material1', name: 'Water.pdf', processingStatus: 'completed' }] });
   mocks.uploadFiles.mockResolvedValue({ materials: [{ _id: 'material2', name: 'Lecture.pdf', processingStatus: 'processing' }] });
@@ -36,6 +38,21 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 describe('Studio AI workspace', () => {
+  it('receives a live partial result over SSE, opens its preview, and never resubmits generation', async () => {
+    mount('task1');
+    await screen.findByRole('button', { name: /Accept plan & generate/ });
+    const callback = mocks.stream.mock.calls.at(-1)![1].onAuthoringSnapshot;
+    const next = { ...saved, revision: 5, status: 'needs_attention',
+      assistant: { ...saved.assistant, status: 'failed', phase: 'generating', errorCode: 'ASSISTANT_QUESTION_BATCH_FAILED',
+        generation: { requestId: 'live-receipt', readyCount: 1, totalQuestions: 2, published: true,
+          items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', attempts: 2, message: 'Answer ambiguous.' }] } } };
+    act(() => callback(next));
+    expect(await screen.findByTitle('Checked question set preview')).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(screen.getByText('These questions are saved in your course. Unfinished questions are excluded; you can use the checked questions now.')).toBeInTheDocument();
+    expect(screen.getByText('Automatic rework used (1 of 1)')).toBeInTheDocument();
+    expect(mocks.command).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it('offers initial teaching choices without showing plan approval before requirements are answered', async () => {
     mocks.get.mockResolvedValue({ data: { session: { ...saved, status: 'awaiting_requirements', assistant: null,
       messages: [{ id: 'intake1', role: 'assistant', text: 'Tell me the intended learning task.', createdAt: '2026-09-30',
@@ -71,6 +88,8 @@ describe('Studio AI workspace', () => {
           items: [{ index: 0, status: 'ready' }, { index: 1, status: 'failed', reason: 'ANSWER_INVALID', message: 'Answer ambiguous.',
             review: { questionText: 'A rejected water draft.', correctAnswer: 'Rock', options: [{ text: 'Rock', isCorrect: true }], issues: ['Water changes phase, not rock.'], calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } } }] } } } } });
     mount('task1');
+    await screen.findByTitle('Checked question set preview');
+    fireEvent.click(screen.getByRole('tab', { name: 'Teaching plan' }));
     const instructions = await screen.findByRole('textbox', { name: 'Question instructions for plan row 1' });
     expect(instructions).toBeEnabled();
     fireEvent.change(instructions, { target: { value: 'Ask about condensation, with one answer.' } });

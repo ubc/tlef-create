@@ -16,7 +16,9 @@ export function assistantRecoveryMessage(assistant) {
   const rows = assistantQuestionRows(assistant);
   const ready = generation.readyCount ?? generation.completedQuestions ?? 0;
   return [
-    `${failed.length} of ${generation.totalQuestions} questions need attention. ${ready} prepared questions are retained, but no questions from this batch have been added to the course.`,
+    generation.published
+      ? `${ready} of ${generation.totalQuestions} checked questions are saved and available in Question set preview. ${failed.length} questions still need attention after automatic rework.`
+      : `${failed.length} of ${generation.totalQuestions} questions need attention. ${ready} prepared questions are retained and available in Question set preview.`,
     ...failed.map(item => `Question ${item.index + 1}${rows[item.index]?.title ? ` (${rows[item.index].title})` : ''}: ${item.message || 'This draft did not pass its checks.'}`),
     failed.some(item => item.review)
       ? 'Expand Questions needing attention to inspect the rejected drafts and review observations. An AI review flag is not a proof of correctness.'

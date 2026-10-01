@@ -5,6 +5,10 @@ import llmService from '../../services/llmService.js';
 import { normalizeModelServiceError } from '../../utils/modelServiceErrors.js';
 
 describe('model usage-limit boundary', () => {
+  test('recognizes statusless credit exhaustion without exposing provider prose', () => {
+    expect(normalizeModelServiceError({ code: 'credit_balance_exhausted', message: 'private data' })).toMatchObject({ code: 'MODEL_SERVICE_LIMIT_REACHED', status: 429 });
+    expect(normalizeModelServiceError({ cause: { code: 'credit_balance_exhausted' } }).message).not.toContain('private data');
+  });
   test('the real SDK sends one local HTTP request for a quota error, without hidden retries', async () => {
     let requests = 0;
     const server = createServer((req, res) => {
