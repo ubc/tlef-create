@@ -17,7 +17,8 @@ jest.unstable_mockModule('../../services/lumiService.js', () => ({ getEditor: ()
   toLumiUser: user => user, finalizeContentOwnership: () => {} }));
 const start = jest.fn(); const approve = jest.fn();
 jest.unstable_mockModule('../../services/studioAssistantService.js', () => ({ createAssistantSession: start,
-  readAssistantSession: async () => null, approveAssistantPlan: approve, resumeAssistantSession: jest.fn(), updateAssistantPlan: jest.fn() }));
+  readAssistantSession: async () => null, approveAssistantPlan: approve, resumeAssistantSession: jest.fn(),
+  updateAssistantPlan: jest.fn(), updateAssistantObjectives: jest.fn() }));
 const complete = jest.fn(); const generate = jest.fn(); const agent = jest.fn();
 jest.unstable_mockModule('../../services/authoring/authoringAgent.js', () => ({ runAuthoringAgent: agent,
   canResumeAuthoringAgent: run => run?.errorCode !== 'AUTHORING_RESPONSE' }));
@@ -123,7 +124,8 @@ async function retry(f, view) {
 async function createNativeCandidate(f) {
   agent.mockResolvedValueOnce({ action: 'build_native_plan', library, reply: 'Propose a survey chart.' });
   const created = await createAuthoringSession(f.owner, { requestId: randomUUID(), courseId: String(f.course._id),
-    materialIds: [String(f.material._id)], objectiveIds: [String(f.objective._id)], instructions: 'Create a chart using the recorded water survey.' });
+    materialIds: [String(f.material._id)], objectiveIds: [String(f.objective._id)],
+    instructions: 'Create a chart using the recorded water survey. First present a confirmable plan.' });
   const planned = await settle(f.owner, created.id);
   await authoringCommand(f.owner, created.id, 'approve', { requestId: randomUUID(), revision: planned.revision, planRevision: planned.nativePlan.revision });
   return settle(f.owner, created.id);

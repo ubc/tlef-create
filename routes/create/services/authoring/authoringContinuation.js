@@ -3,7 +3,7 @@ import { requestedAuthoringMode } from './authoringMode.js';
 export const MAX_AUTOMATIC_CONTINUATIONS = 2;
 const clauses = text => text.split(/[.!?。！？;；\n]|\bbut\b|但是/i).map(value => value.trim()).filter(Boolean);
 const questionDeferral = /\b(?:do not|don't|not yet|no need to)\s+(?:\w+\s+){0,3}(?:generate|create|make|prepare|write|draft)\b[^.!?;\n]{0,50}\b(?:questions?|quiz|quizzes)\b|(?:不要|不|别|暂不|先不)(?:生成|出|创建|制作|设计)[^。！？；\n]{0,20}(?:题|测验)/i;
-const planFirst = /\b(?:only|just)\s+(?:a\s+)?(?:plan|blueprint|objectives?)\b|\b(?:review|approve|confirm)\b[^.!?;\n]{0,50}\b(?:before|first)\b|\b(?:before|until|after)\b[^.!?;\n]{0,50}\b(?:approval|approve|confirmation|confirm|review)\b|(?:先|只|仅)[^。！？；\n]{0,30}(?:计划|方案)[^。！？；\n]{0,20}(?:确认|审批|审阅)|(?:计划|方案)[^。！？；\n]{0,20}(?:供我|让我|等待|等我)(?:确认|审批|审阅)/i;
+const planFirst = /\b(?:only|just)\s+(?:a\s+)?(?:plan|blueprint|objectives?)\b|\bfirst\s+(?:give|present|show|propose|prepare|draft)\b[^.!?;\n]{0,60}\b(?:plan|blueprint)\b|\b(?:review|approve|confirm)\b[^.!?;\n]{0,50}\b(?:before|first)\b|\b(?:before|until|after)\b[^.!?;\n]{0,50}\b(?:approval|approve|confirmation|confirm|review)\b|(?:先|只|仅)[^。！？；\n]{0,30}(?:计划|方案)[^。！？；\n]{0,20}(?:确认|审批|审阅)|(?:计划|方案)[^。！？；\n]{0,20}(?:供我|让我|等待|等我)(?:确认|审批|审阅)/i;
 const construction = /\b(?:create|generate|make|draft|prepare|write|produce|build|brainstorm|give me|i want|i would like)\b|生成|创建|制作|设计|出题|拟定|给我|提出|我想要|构思/gi;
 
 function directTarget(clause, target) {

@@ -22,6 +22,15 @@ describe('instructor authorization for bounded continuation', () => {
     expect(authoringWorkflowForRequest({ version: 1, target: 'objectives', autoContinue: false },
       'Create 15 questions.', 'answer', { clarification: true }).autoContinue).toBe(false);
   });
+  test.each([
+    'Create a chart using the recorded water survey. First present a confirmable plan.',
+    'Create a chart of the supplied survey. First give me a confirmable activity plan. Do not add conclusions or questions.',
+    'Generate 15 questions about motion. First show me a blueprint.'
+  ])('honors an explicit plan-first request without authorizing construction: %s', text => {
+    const workflow = authoringWorkflowForRequest(null, text, 'request-1');
+    expect(workflow).toMatchObject({ target: 'plan', autoContinue: false });
+    expect(workflow.activityAuthorization).toBeUndefined();
+  });
   test('a later explicit deferral revokes automatic generation', () => {
     const previous = authoringWorkflowForRequest(null, 'Create 15 questions.', 'first');
     expect(authoringWorkflowForRequest(previous, 'Do not generate questions yet.', 'stop').autoContinue).toBe(false);

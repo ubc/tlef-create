@@ -55,7 +55,9 @@ ask for the activity in the conversation. CREATE checks the installed type and
 offers a **Native activity plan** with your teaching goals and selected source scope.
 A clear request to generate the activity can continue from the checked plan
 automatically. If you ask to review the plan first, choose **Accept plan & generate**
-when ready. The resulting
+when ready. For example, add “First present a confirmable plan” or “First give
+me a confirmable activity plan” to pause before purchasing activity generation.
+The resulting
 **Activity preview** is an independent Studio proposal. Try it and inspect its
 recorded text check and sources before choosing **Accept changes**; afterward
 you can open the official editor or download it. Source changes after approval

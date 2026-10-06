@@ -355,7 +355,8 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['computed decimal long results shortened rounded approximation full precision calculation check', 'Open a proposal or question set preview', 'shortened for readability'],
     ['multiple-choice randomize answer positions H5P preview export correctness feedback option order', 'Open a proposal or question set preview', 'randomize answer positions'],
     ['multiple-choice feedback numerical formula server computes result approximation incorrect exact equality calculation check', 'Open a proposal or question set preview', 'CREATE\ncomputes its result'],
-    ['Native activity plan clear generate request continue automatically review plan first Accept plan generate', 'Create with AI', 'A clear request to generate the activity can continue']
+    ['Native activity plan clear generate request continue automatically review plan first Accept plan generate', 'Create with AI', 'A clear request to generate the activity can continue'],
+    ['First present a confirmable plan before generating an activity', 'Create with AI', 'pause before purchasing activity generation']
   ])('retrieves the objective-first autonomous workflow: %s', async (query, section, content) => {
     const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
     expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === section && source.content.includes(content))).toBe(true);
