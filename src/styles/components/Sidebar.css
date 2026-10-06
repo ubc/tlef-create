@@ -1,19 +1,34 @@
 /* Sidebar Component Styles */
 .sidebar {
+    --color-background: #fff;
+    --color-foreground: #171717;
+    --color-primary: #000;
+    --color-primary-foreground: #fff;
+    --color-secondary: #f0f0f0;
+    --color-secondary-foreground: #171717;
+    --color-muted: #f5f5f5;
+    --color-muted-foreground: #737373;
+    --color-accent: #ededed;
+    --color-accent-foreground: #171717;
+    --color-border: #e5e5e5;
+    --color-card: #fff;
+    --color-ring: #000;
     position: fixed;
     left: 0;
     top: 0;
     width: 240px;
     background-color: var(--color-card);
+    color: var(--color-foreground);
     border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    overflow-y: auto;
+    height: 100dvh;
+    overflow: hidden;
     z-index: 1000;
 }
 
 .sidebar-header {
+    flex: none;
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
     display: flex;
@@ -31,16 +46,25 @@
 
 /* Create Course Button Specific Styling */
 .sidebar-header .btn-primary:hover:not(:disabled) {
-    background-color: #4a4a4a;
+    background-color: #262626;
     color: #ffffff;
-    border-color: #4a4a4a;
+    border-color: #262626;
     opacity: 1;
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
 }
 
 .sidebar-section {
+    flex: none;
     padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.sidebar-courses {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
 }
 
 .sidebar-section-title {
@@ -66,8 +90,8 @@
 }
 
 .course-item.active {
-    background-color: var(--color-primary);
-    color: var(--color-primary-foreground);
+    background-color: var(--color-secondary);
+    color: var(--color-secondary-foreground);
 }
 
 .course-name {
@@ -148,6 +172,7 @@
 }
 
 .sidebar-footer {
+    flex: none;
     margin-top: auto;
     padding: var(--spacing-lg);
     border-top: 1px solid var(--color-border);
@@ -231,8 +256,8 @@
 .studio-trigger-badge {
     padding: 2px 6px;
     border-radius: 999px;
-    background: #e0f2fe;
-    color: #0369a1;
+    background: var(--color-secondary);
+    color: var(--color-muted-foreground);
     font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -268,13 +293,19 @@
     color: var(--color-foreground);
 }
 
+.sidebar :is(button, a, input, [role="button"]):focus-visible,
+.sidebar-rail :is(button, a):focus-visible {
+    outline: 2px solid #000;
+    outline-offset: 2px;
+}
+
 @media (max-width: 768px) {
     .sidebar {
         position: fixed;
         left: -240px;
         width: 240px;
-        height: 100vh;
-        max-height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
         z-index: 1002;
         transition: transform 0.3s ease;
     }

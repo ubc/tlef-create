@@ -890,6 +890,7 @@ function assistantModelMocks(f, implementation) {
     jest.spyOn(llmService, 'resolveUserLLMConfig').mockResolvedValue({ provider: 'synthetic', model: 'isolated-test' }),
     jest.spyOn(questionMemoryService, 'reserveIfNovel').mockResolvedValue({ novel: true, noveltyScore: 1 }),
     jest.spyOn(llmService, 'questionMatchesPlannedTask').mockReturnValue({ valid: true }),
+    jest.spyOn(ragService, 'assertMaterialsIndexed').mockResolvedValue({ materialCount: 1 }),
     jest.spyOn(ragService, 'retrieveRelevantContent').mockResolvedValue({ chunks: [{ content: 'Synthetic selected source.', score: 0.91,
       metadata: { materialId: String(f.selected._id), materialName: f.selected.name, sourceFile: 'source.pdf', pageNumber: 3, chunkIndex: 0 } }] })
   ];
@@ -900,6 +901,114 @@ function assistantModelMocks(f, implementation) {
 }
 
 describe('Studio assistant reuses durable course question generation', () => {
+  test('approved task excerpts ground the saved question without another vector lookup', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    const trustedSources = [{ id: 'src-selected', materialId: String(f.selected._id), materialName: f.selected.name,
+      sourceFile: 'source.pdf', pageNumber: 3, chunkIndex: 0, excerpt: 'Synthetic selected source.' }];
+    ragService.assertMaterialsIndexed.mockRejectedValue(Object.assign(new Error('No index'), { code: 'MATERIAL_INDEX_MISSING' }));
+    try {
+      const result = await run({ userId: f.owner, quizId: f.quizId, requestId: randomUUID(), materialIds: [f.selected._id], trustedSources,
+        questionConfigs: [{ questionType: 'multiple-choice', learningObjectiveId: String(f.objective._id), customPrompt: 'Use the approved task excerpt.',
+          questionTaskId: 'task-one', taskSourceIds: ['src-selected'], focusArea: 'Selected example' }] });
+      expect(result.job.status).toBe('succeeded');
+      expect(ragService.assertMaterialsIndexed).not.toHaveBeenCalled(); expect(mocks.retrieval).not.toHaveBeenCalled();
+      expect(mocks.model.mock.calls[0][0].relevantContent).toEqual([expect.objectContaining({ content: 'Synthetic selected source.', metadata: expect.objectContaining({ materialId: String(f.selected._id), pageNumber: 3 }) })]);
+      const reference = result.quiz.questions[1].generationMetadata.sourceReferences[0].toObject();
+      expect(String(reference.materialId)).toBe(String(f.selected._id));
+      expect(reference).toMatchObject({ pageNumber: 3, excerpt: 'Synthetic selected source.' });
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('a forged task source stops before a model call or publication', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    const requestId = randomUUID();
+    try {
+      await expect(run({ userId: f.owner, quizId: f.quizId, requestId, materialIds: [f.selected._id],
+        questionConfigs: [{ questionType: 'multiple-choice', learningObjectiveId: String(f.objective._id), taskSourceIds: ['src-forged'], questionTaskId: 'forged' }] })).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+      const receipt = serializeQuestionJob(await jobs.get(f.owner, requestId));
+      expect(receipt.items[0]).toMatchObject({ attempts: 0, failure: { code: 'H5P_ASSISTANT_INVALID_TASK_PLAN', stage: 'evidence' } });
+      expect(mocks.model).not.toHaveBeenCalled(); expect(mocks.retrieval).not.toHaveBeenCalled();
+      expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('a vector lookup cannot introduce evidence outside the selected material', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 }); const requestId = randomUUID();
+    mocks.retrieval.mockResolvedValueOnce({ chunks: [{ content: 'Unselected source must not be used.', metadata: { materialId: String(f.other._id) } }] });
+    try {
+      await expect(run({ userId: f.owner, quizId: f.quizId, requestId, materialIds: [f.selected._id] })).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+      const receipt = serializeQuestionJob(await jobs.get(f.owner, requestId));
+      expect(receipt.items[0]).toMatchObject({ attempts: 0, failure: { code: 'QUESTION_EVIDENCE_SCOPE', stage: 'evidence' } });
+      expect(mocks.model).not.toHaveBeenCalled();
+      expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('evidence repair expands only selected sources before purchasing one new draft', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    mocks.model.mockRejectedValueOnce(Object.assign(new Error('Evidence unsupported'), { code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'EVIDENCE_INSUFFICIENT', rejectedDraft: { questionText: 'Rejected task' } }));
+    mocks.retrieval.mockResolvedValueOnce({ chunks: [{ content: 'Additional selected supporting principle.', metadata: { materialId: String(f.selected._id), pageNumber: 4, chunkIndex: 1 } }] });
+    try {
+      const result = await run({ userId: f.owner, quizId: f.quizId, requestId: randomUUID(), materialIds: [f.selected._id],
+        trustedSources: [{ id: 'src-first', materialId: String(f.selected._id), excerpt: 'Synthetic selected source.' }],
+        questionConfigs: [{ questionType: 'multiple-choice', learningObjectiveId: String(f.objective._id), taskSourceIds: ['src-first'], questionTaskId: 'task-one' }] });
+      expect(result.job.status).toBe('succeeded'); expect(result.job.items[0]).toMatchObject({ attempts: 2, repairStrategy: 'evidence' });
+      expect(mocks.model).toHaveBeenCalledTimes(2);
+      expect(mocks.retrieval).toHaveBeenCalledTimes(1);
+      expect(mocks.retrieval.mock.calls[0][2]).toMatchObject({ materialIds: [String(f.selected._id)], topK: 20 });
+      expect(mocks.model.mock.calls[1][0].relevantContent.map(chunk => chunk.content)).toEqual(['Synthetic selected source.', 'Additional selected supporting principle.']);
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('a prompt-only evidence failure cannot search an empty or unrelated material scope', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    mocks.model.mockRejectedValueOnce(Object.assign(new Error('Missing self-contained inputs'), { code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'EVIDENCE_INSUFFICIENT', rejectedDraft: { questionText: 'Incomplete task' } }));
+    const requestId = randomUUID();
+    try {
+      await expect(run({ userId: f.owner, quizId: f.quizId, requestId, materialIds: [], promptBased: true,
+        questionConfigs: [{ questionType: 'multiple-choice', learningObjectiveId: String(f.objective._id), customPrompt: 'Use only these instructor premises.', useCustomPromptOnly: true }] })).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+      expect(mocks.retrieval).not.toHaveBeenCalled(); expect(ragService.assertMaterialsIndexed).not.toHaveBeenCalled(); expect(mocks.model).toHaveBeenCalledTimes(1);
+      const receipt = serializeQuestionJob(await jobs.get(f.owner, requestId));
+      expect(receipt.items[0]).toMatchObject({ attempts: 1, code: 'QUESTION_QUALITY_REVIEW', reason: 'EVIDENCE_INSUFFICIENT' });
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('a continued failed item receives owned prior review observations without changing its plan', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    const requestId = randomUUID();
+    const rejected = () => Object.assign(new Error('Instructions rejected'), { code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'INSTRUCTION_MISMATCH',
+      rejectedDraft: { questionText: 'PRIVATE rejected hypothetical', issues: ['PRIVATE: Keep the stipulated net force direction.'], contentSummary: 'Old task data' } });
+    mocks.model.mockRejectedValueOnce(rejected()).mockRejectedValueOnce(rejected());
+    try {
+      await expect(run({ userId: f.owner, quizId: f.quizId, requestId, materialIds: [f.selected._id] })).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+      const result = await run({ userId: f.owner, quizId: f.quizId, requestId: randomUUID(), retryFromRequestId: requestId, materialIds: [f.selected._id] });
+      expect(result.job.status).toBe('succeeded'); expect(mocks.model).toHaveBeenCalledTimes(3);
+      expect(mocks.model.mock.calls[2][0].customPrompt).toContain('Keep the stipulated net force direction.');
+      expect(mocks.model.mock.calls[2][0].customPrompt).toContain('Use the selected synthetic example.');
+      expect(result.job.items[0]).toMatchObject({ attempts: 1, repairStrategy: 'instructions' });
+      expect(JSON.stringify(result.job)).not.toContain('PRIVATE');
+      expect(result.quiz.questions).toHaveLength(2);
+    } finally { await jobs.waitForIdle(); mocks.restore(); }
+  });
+  test('a missing current material index saves all 15 evidence failures before any search embedding, draft or review', async () => {
+    const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f);
+    const quiz = await Quiz.findById(f.quizId); quiz.settings.planItems[0].count = 15; await quiz.save();
+    ragService.assertMaterialsIndexed.mockRejectedValue(Object.assign(new Error('PRIVATE connection detail'), { code: 'MATERIAL_INDEX_MISSING' }));
+    const run = createAssistantGenerationService({ jobs, pollMs: 5 });
+    const requestId = randomUUID();
+    try {
+      await expect(run({ userId: f.owner, quizId: f.quizId, requestId, materialIds: [f.selected._id] })).rejects.toMatchObject({ code: 'ASSISTANT_QUESTION_BATCH_FAILED' });
+      const saved = serializeQuestionJob(await jobs.get(f.owner, requestId));
+      expect(saved.failedQuestions).toBe(15);
+      expect(saved.items).toHaveLength(15);
+      expect(saved.items.every(item => item.attempts === 0 && item.failure?.code === 'MATERIAL_INDEX_MISSING' && item.failure.stage === 'evidence')).toBe(true);
+      expect(ragService.assertMaterialsIndexed).toHaveBeenCalledTimes(1);
+      expect(mocks.retrieval).not.toHaveBeenCalled(); expect(mocks.model).not.toHaveBeenCalled();
+      expect(JSON.stringify(saved)).not.toContain('PRIVATE');
+      expect((await Quiz.findById(f.quizId)).questions.map(String)).toEqual([String(f.question._id)]);
+    } finally { mocks.restore(); }
+  });
   test('selected subset reaches retrieval, real questions append atomically, and the native package includes original and generated content', async () => {
     const f = await assistantFixture(); const jobs = service(); const mocks = assistantModelMocks(f); const progress = [];
     const run = createAssistantGenerationService({ jobs, pollMs: 5 });

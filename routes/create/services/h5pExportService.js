@@ -948,7 +948,7 @@ function convertQuestionToH5PLegacy(question, quiz) {
           "enableCheckButton": true,
           "type": selectionMode === 'multiple' ? 'multi' : 'single',
           "singlePoint": true,
-          "randomAnswers": false,
+          "randomAnswers": true,
           "showSolutionsRequiresInput": true,
           "confirmCheckDialog": false,
           "confirmRetryDialog": false,

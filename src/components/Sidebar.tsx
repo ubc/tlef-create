@@ -370,7 +370,7 @@ const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse 
             </button>
           </div>
 
-          <div className="sidebar-section">
+          <div className="sidebar-section sidebar-courses" role="navigation" aria-label="Courses">
             <h2 className="sidebar-section-title">Courses</h2>
             {loading ? (
                 <p style={{ color: 'var(--color-muted-foreground)', fontSize: 'var(--font-size-sm)' }}>

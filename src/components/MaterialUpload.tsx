@@ -5,6 +5,7 @@ import { useFeatureOnboarding } from '../hooks/useFeatureOnboarding';
 import { materialsApi } from '../services/api';
 import FeatureCoachmark from './onboarding/FeatureCoachmark';
 import SourceReferencePreviewModal from './SourceReferencePreviewModal';
+import CanvasMaterialImportModal from './CanvasMaterialImportModal';
 import '../styles/components/MaterialUpload.css';
 
 interface Material {
@@ -18,9 +19,11 @@ interface Material {
   processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
   processingError?: string;
   parserVersion?: string;
+  canvasSource?: { resourceType: 'file' | 'page' };
 }
 
 interface MaterialUploadProps {
+  folderId?: string;
   materials: Material[];
   onAddMaterial: (
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
@@ -32,6 +35,7 @@ interface MaterialUploadProps {
 }
 
 const MaterialUpload = ({
+  folderId,
   materials,
   onAddMaterial,
   onRemoveMaterial,
@@ -43,6 +47,7 @@ const MaterialUpload = ({
   const [textInput, setTextInput] = useState('');
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [showTextForm, setShowTextForm] = useState(false);
+  const [showCanvasImport, setShowCanvasImport] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [reprocessingMaterialIds, setReprocessingMaterialIds] = useState<Set<string>>(new Set());
@@ -290,6 +295,7 @@ const MaterialUpload = ({
             />
 
             <div className="upload-buttons">
+              {folderId && <button type="button" className="btn btn-outline" onClick={() => setShowCanvasImport(true)}>Import from Canvas</button>}
               <button
                   className="btn btn-outline"
                   disabled={submittingType !== null}
@@ -309,6 +315,8 @@ const MaterialUpload = ({
               </button>
             </div>
           </div>
+
+          {folderId && <CanvasMaterialImportModal isOpen={showCanvasImport} folderId={folderId} onClose={() => setShowCanvasImport(false)} onImported={onMaterialReprocessed} />}
 
           {/* URL Form */}
           {showUrlForm && (
@@ -442,6 +450,7 @@ const MaterialUpload = ({
                             <div className="material-name">{material.name}</div>
                             <div className="material-meta">
                               {material.type.toUpperCase()} • {material.uploadDate}
+                              {material.canvasSource && <span> · Canvas {material.canvasSource.resourceType}</span>}
                               {isProcessing && (
                                 <span className="processing-badge">
                                   Processing...

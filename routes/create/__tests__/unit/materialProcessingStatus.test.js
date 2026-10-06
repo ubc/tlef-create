@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, afterEach, describe, expect, jest, test } from '@jest/globals';
 import Material from '../../models/Material.js';
 import FileService from '../../services/fileService.js';
 import processingJobs from '../../services/processingJobService.js';
 import agendaJobs from '../../services/jobQueueService.js';
 process.env.RAG_SKIP_AUTO_INIT = 'true';
 const { default: ragService } = await import('../../services/ragService.js');
+beforeEach(() => jest.replaceProperty(ragService, 'isInitialized', true));
 
 afterEach(() => jest.restoreAllMocks());
 

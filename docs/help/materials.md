@@ -10,6 +10,20 @@ Materials are the evidence base used for learning-objective generation, question
 
 Cloud-storage sharing links, direct image/audio/video files, and archive files are not accepted as URL materials. Download a cloud-hosted document first, then upload the file.
 
+## Import from Canvas
+
+In a CREATE course, open **Course Materials → Import from Canvas**. Connect your instructor account if needed, choose a **Canvas course**, then select PDF files, DOCX files, or Canvas pages. You can search by name, select several materials, or use **Select up to 10**. Choose **Import selected** to copy those materials into the current CREATE course. The originals stay in Canvas. This first version lists courses where you have a Canvas Teacher enrollment.
+
+The import accepts up to 10 materials per batch. The file-size limit is displayed in the window; its default is 50 MB per file. Canvas pages import readable text, not interactive elements, embedded media, or page layout. PowerPoint, video, and other unsupported files remain visible with a conversion message and cannot be selected. Convert slides to PDF or DOCX before importing.
+
+**Import results** lists **Imported**, **Already present**, and **Import failed** separately. Unchanged content is skipped without reprocessing. If the Canvas source has changed, CREATE saves a new material with **(Canvas update)** in its name and keeps the previous material. New versions are not automatically assigned to existing learning objects. Continuous background synchronization is not part of this import.
+
+An imported material still needs processing for search before it is ready for generation. Check its material card after closing the window. Embedding usage may apply according to the configured provider; importing does not generate objectives or questions. If processing fails, read the material-card explanation and use **Retry**.
+
+If some imports fail, successful materials are kept and failed selections remain selected. Retry the remaining items. If the response is interrupted, reload or retry; already-present content will be skipped.
+
+If Canvas denies file or page access, select **Reconnect Canvas**. Existing connections may need fresh authorization for material read permissions. If that does not help, ask the administrator to enable the corresponding OAuth Developer Key scopes. An access failure is shown as an error rather than an empty course. Use **Reload materials** after fixing access. Canvas connection expiry does not sign you out of CREATE.
+
 ## Upload and processing states
 
 File upload and content processing are separate stages. After a file reaches 100% upload, CREATE parses its content, creates retrievable chunks, and indexes them. URL and pasted-text materials are also processed before use. Do not generate grounded objectives or questions from a material until it reports a completed or ready state.

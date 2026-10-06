@@ -78,6 +78,11 @@ The OAuth Developer Key needs these scopes:
 ```text
 url:GET|/api/v1/courses
 url:GET|/api/v1/courses/:course_id/modules
+url:GET|/api/v1/courses/:course_id/files
+url:GET|/api/v1/courses/:course_id/files/:id
+url:GET|/api/v1/files/:id/public_url
+url:GET|/api/v1/courses/:course_id/pages
+url:GET|/api/v1/courses/:course_id/pages/:url_or_id
 url:POST|/api/v1/courses/:course_id/modules
 url:POST|/api/v1/courses/:course_id/pages
 url:POST|/api/v1/courses/:course_id/modules/:module_id/items
@@ -118,7 +123,9 @@ const file = await canvas.downloadFile(client, courseId, fileId, {
 });
 ```
 
-File imports are not yet connected to CREATE's material upload UI. They require size and type limits, course ownership checks, a material processing path, and the corresponding Canvas scopes.
+In a CREATE course, **Course Materials → Import from Canvas** now lists teaching courses and supports batches of up to 10 PDF/DOCX files or Canvas pages. `canvasMaterialImportService.js` checks CREATE ownership and Canvas Teacher enrollment, downloads through the toolkit with the configured material size limit, converts page HTML to text, and saves stable Canvas provenance. It registers new Material records and uses the shared processing queue for parsing and indexing. Unchanged checksums are skipped; changed sources create a new snapshot without replacing existing evidence. Per-material results preserve partial success. This is instructor-selected import; continuous synchronization is not implemented.
+
+The [2026-10-05 material-import feasibility check](plans/canvas-material-import-feasibility-2026-10-05.md) first verified local reads and PDF parsing without indexing. The subsequent [implementation record](plans/canvas-material-import-implementation-2026-10-05.md) covers the product workflow, actual Material persistence, local PDF/DOCX/page indexing, and duplicate-import verification. The scope list above includes the new read permissions; an administrator must allow them on the Developer Key and existing scoped connections must be reauthorized. Local success does not establish UBC Canvas access. `scripts/check-canvas-material-import.mjs` still reproduces the original local read checks without LLM or embedding calls.
 
 The toolkit also provides `matchCourseRoster`, `preflightGradeExport`, `postGrades`, and feedback PDF upload. These are suitable for instructor-reviewed bulk grade and feedback operations. The current integration does not enable those features or replace the learner-facing LTI AGS grade-return path. UBC roster matching uses PUID (`integration_id`); do not substitute a CWL name or student number for a PUID.
 

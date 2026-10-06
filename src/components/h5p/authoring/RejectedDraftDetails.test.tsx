@@ -16,4 +16,25 @@ describe('rejected draft calculation provenance', () => {
     expect(screen.getByText('Calculation check: the application confirmed 7 * 8 = 54.')).toBeVisible();
     expect(screen.getByText('AI observations may need instructor review.')).toBeVisible();
   });
+  it('labels saved duplicate diagnostics as an application check and preserves the rejected draft and matching observations', () => {
+    const issues = ['The rejected candidate repeats an existing assessment task.', 'Existing question: Calculate the net force on the object.'];
+    render(<RejectedDraftDetails review={{ ...review, issues, novelty: {
+      method: 'lexical-and-semantic', similarity: 0.96, noveltyScore: 0.04,
+      lexical: { similarity: 0.81, threshold: 0.76, questionId: 'checked-question-1', questionText: 'Calculate the net force on the object.' },
+      semantic: { similarity: 0.96, threshold: 0.9, questionId: 'checked-question-1', questionText: 'Calculate the net force on the object.' }
+    } }} />);
+    expect(screen.getByText('Application duplicate check')).toBeVisible();
+    expect(screen.queryByText('AI review observations')).not.toBeInTheDocument();
+    expect(screen.getByText('Similarity checks may need instructor review.')).toBeVisible();
+    expect(screen.queryByText('AI observations may need instructor review.')).not.toBeInTheDocument();
+    expect(screen.getByText(review.questionText)).toBeVisible();
+    expect(screen.getByText('56 (draft answer key)')).toBeVisible();
+    for (const issue of issues) expect(screen.getByText(issue)).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Calculation check' })).not.toBeInTheDocument();
+  });
+  it('does not attribute a missing application diagnostic to the AI reviewer', () => {
+    render(<RejectedDraftDetails review={{ ...review, novelty: { method: 'lexical' } }} />);
+    expect(screen.getByText('No detailed similarity observation was recorded.')).toBeVisible();
+    expect(screen.queryByText('The AI review did not return a detailed observation.')).not.toBeInTheDocument();
+  });
 });

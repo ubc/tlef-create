@@ -12,6 +12,7 @@ import { importH5PContent, renderContent } from '../services/lumiService.js';
 import { createH5PPackage } from '../services/h5pExportService.js';
 import Quiz from '../models/Quiz.js';
 import { createMixedActivitySnapshot, validateMixedActivitySnapshot } from '../services/mixedActivityService.js';
+import canvasMaterialImportController from './canvasMaterialImportController.js';
 
 const router = express.Router();
 
@@ -36,6 +37,7 @@ router.get('/config', (req, res) => {
 
 // All remaining routes require authentication
 router.use(authenticateToken);
+router.use('/material-import', canvasMaterialImportController);
 
 // ============================================================
 // Canvas OAuth2 endpoints

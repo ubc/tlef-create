@@ -3,11 +3,21 @@ import { buildAuthoringDecisionPrompt } from '../../services/authoring/authoring
 
 const data = prompt => JSON.parse(prompt.split('\n').at(-1));
 describe('authoring decision context', () => {
+  test('an initial build uses an actual proposal action without conflicting revision instructions', () => {
+    const prompt = buildAuthoringDecisionPrompt({ latestRequest: 'Now create 2 questions.', initial: true });
+    expect(prompt).toContain('"action":"reply|build_plan"');
+    expect(prompt).toContain('Never return fictional completed steps or a plan as ordinary reply text');
+    expect(prompt).not.toContain('Use revise_objectives');
+    expect(prompt).not.toContain('"action":"reply|revise_plan');
+    expect(prompt).toContain('latest explicit build request supersedes');
+    expect(prompt).toContain('A prompt-only teaching activity is supported');
+    expect(prompt).toContain('do not require course materials or a new conversation');
+  });
   test('keeps the latest vague request separate from plan data and asks for clarification', () => {
     const prompt = buildAuthoringDecisionPrompt({ latestRequest: 'Make it better.', current: null,
       assistant: { status: 'awaiting_approval', plan: [{ count: 1 }], objectives: [{ id: 'lo-1', text: 'Explain net force.' }] } });
-    expect(prompt).toContain('ask at most three targeted questions');
-    expect(prompt).toContain('never retry generation based on a message');
+    expect(prompt).toContain('ask only about critical unknown topics');
+    expect(prompt).toContain('A discussion does not retry work');
     expect(data(prompt)).toMatchObject({ latestRequest: 'Make it better.', taskStatus: 'awaiting_approval', plan: [{ count: 1 }], current: null });
   });
 

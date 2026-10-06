@@ -261,7 +261,7 @@ async function generateOwnedDraft(user, body, assertActive = async () => {}) {
   }
   const effectiveInstructions = resolveStudioInstructions(instructions,
     !!quiz && ((Array.isArray(objectiveIds) && objectiveIds.length > 0) || (Array.isArray(materialIds) && materialIds.length > 0)));
-  validateStudioRequestFeasibility(library, effectiveInstructions);
+  await validateStudioRequestFeasibility(library, effectiveInstructions);
   let record;
   try {
     const materialContext = materialIds?.length ? await (async () => {
@@ -344,7 +344,7 @@ router.post('/ai/generate', aiLimiter, asyncHandler(async (req, res) => {
 
 router.post('/ai/jobs', asyncHandler(async (req, res) => {
   try {
-    validateStudioRequestFeasibility(req.body?.library, req.body?.instructions);
+    await validateStudioRequestFeasibility(req.body?.library, req.body?.instructions);
     const job = await studioJobs.start(String(req.user.id), req.body?.requestId, async assertActive => {
       const record = await generateOwnedDraft(req.user, req.body, assertActive);
       return record.lumiContentId;

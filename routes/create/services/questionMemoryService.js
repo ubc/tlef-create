@@ -201,7 +201,9 @@ export function buildQuestionMemory(existingQuestions = [], { recentLimit = 12 }
   };
 }
 
-class QuestionMemoryService {
+export class QuestionMemoryService {
+  #reservationQueues = new Map();
+
   constructor() {
     this.sessionQuestions = new Map();
     this.semanticQueue = Promise.resolve();
@@ -240,14 +242,39 @@ class QuestionMemoryService {
     return queuedCheck;
   }
 
-  async reserveIfNovel({
+  async reserveIfNovel(options) {
+    const { sessionId } = options;
+    let queue = this.#reservationQueues.get(sessionId);
+    if (!queue) {
+      queue = { tail: Promise.resolve() };
+      this.#reservationQueues.set(sessionId, queue);
+    }
+    const assertSessionActive = () => {
+      if (this.#reservationQueues.get(sessionId) !== queue) {
+        throw Object.assign(new Error('The question novelty-check session was cleared.'), { code: 'GENERATION_INTERRUPTED' });
+      }
+    };
+    // Compare and reserve together: an async semantic check must not leave
+    // concurrent candidates using the same stale comparison pool. Other
+    // sessions have independent queues; model generation stays parallel.
+    const result = queue.tail.then(() => {
+      assertSessionActive();
+      return this.#checkAndReserve(options, assertSessionActive);
+    });
+    // A rejected check must not poison later work in this session. Keep the
+    // original result for its caller and only recover the queue's tail.
+    queue.tail = result.catch(() => {});
+    return result;
+  }
+
+  async #checkAndReserve({
     sessionId,
     questionId,
     candidate,
     existingQuestions = [],
     threshold = 0.76,
     semanticThreshold = 0.9
-  }) {
+  }, assertSessionActive) {
     const sessionQuestions = this.sessionQuestions.get(sessionId) || [];
     const comparisonPool = [
       ...existingQuestions,
@@ -261,6 +288,9 @@ class QuestionMemoryService {
     } catch (error) {
       console.warn(`⚠️ Semantic duplicate check unavailable; using lexical fallback: ${error.message}`);
     }
+    // Clearing a session also invalidates checks already awaiting embeddings.
+    // They may finish, but must never recreate cleared reservations.
+    assertSessionActive();
 
     const semanticSimilarity = semanticClosest?.similarity || 0;
     const effectiveSimilarity = Math.max(lexicalClosest.similarity, semanticSimilarity);
@@ -283,12 +313,15 @@ class QuestionMemoryService {
       semanticSimilarity,
       method: semanticClosest ? 'lexical-and-semantic' : 'lexical',
       noveltyScore: Number((1 - effectiveSimilarity).toFixed(4)),
+      lexicalClosest: { questionId: lexicalClosest.questionId, questionText: lexicalClosest.questionText },
+      semanticClosest: semanticClosest ? { questionId: semanticClosest.questionId, questionText: semanticClosest.questionText } : null,
       mostSimilarQuestionId: closest.questionId,
       mostSimilarQuestionText: closest.questionText
     };
   }
 
   clearSession(sessionId) {
+    this.#reservationQueues.delete(sessionId);
     this.sessionQuestions.delete(sessionId);
   }
 }

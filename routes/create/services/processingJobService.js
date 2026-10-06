@@ -41,6 +41,8 @@ class ProcessingJobService {
         return false;
       }
 
+      if (this.jobQueue.some(job => String(job.materialId) === String(materialId))) return false;
+
       const job = {
         id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         materialId,
@@ -76,20 +78,20 @@ class ProcessingJobService {
 
     this.isProcessing = true;
 
-    while (this.jobQueue.length > 0 && this.currentJobs < this.maxConcurrentJobs) {
-      const job = this.jobQueue.shift();
-      if (job) {
-        this.processJob(job);
-      }
-    }
-
-    if (this.jobQueue.length > 0) {
-      setTimeout(() => {
-        if (this.currentJobs < this.maxConcurrentJobs) {
-          this.startProcessing();
+    try {
+      while (this.jobQueue.length > 0 && this.currentJobs < this.maxConcurrentJobs) {
+        const index = this.jobQueue.findIndex(job => !job.retryAt || job.retryAt.getTime() <= Date.now());
+        if (index < 0) {
+          const delay = Math.max(1, Math.min(...this.jobQueue.map(job => job.retryAt.getTime())) - Date.now());
+          setTimeout(() => this.startProcessing(), delay);
+          break;
         }
-      }, 1000);
-    } else {
+        const [job] = this.jobQueue.splice(index, 1);
+        void this.processJob(job);
+      }
+    } finally {
+      // This flag protects the drain operation, not the lifetime of running jobs.
+      // Otherwise a batch larger than the concurrency limit can remain stuck forever.
       this.isProcessing = false;
     }
   }
@@ -114,6 +116,11 @@ class ProcessingJobService {
 
       // Use ragService for all material types (handles text, url, pdf, docx)
       const ragService = (await import('./ragService.js')).default;
+      const deadline = Date.now() + 30000;
+      while (!ragService.isInitialized && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      if (!ragService.isInitialized) throw new Error('Material processing is unavailable. Try again after the retrieval service is ready.');
       const result = await ragService.processAndEmbedMaterial(material);
 
       if (!result.success) {

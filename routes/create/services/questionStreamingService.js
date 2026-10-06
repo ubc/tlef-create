@@ -6,6 +6,7 @@
 import sseService from './sseService.js';
 import llmService from './llmService.js';
 import questionMemoryService from './questionMemoryService.js';
+import { buildRejectedNoveltyDraft } from './questionNoveltyDiagnostic.js';
 import { formatContentForDatabase } from './questionContentService.js';
 import { assertGenerationActive, generationOutcomeUnconfirmed } from '../utils/generationDeadline.js';
 
@@ -163,6 +164,9 @@ class QuestionStreamingService {
       };
       let retryGuidance = '';
       let finalFailureReason = 'LLM generation failed';
+      let finalFailureCode = 'QUESTION_GENERATION_FAILED';
+      let repairContext;
+      let rejectedNoveltyDraft;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         assertGenerationActive(signal);
@@ -203,6 +207,7 @@ class QuestionStreamingService {
         result = await llmService.generateQuestionStreaming({
           disableGenerationFallback: questionConfig.maxGenerationAttempts === 1,
           repairDraft: questionConfig.repairDraft, repairObservation: questionConfig.repairObservation,
+          requiredLearningGoals: questionConfig.requiredLearningGoals,
           learningObjective: learningObjective?.text || (typeof learningObjective === 'string' ? learningObjective : null),
           questionType: questionConfig.questionType,
           relevantContent: relevantContent || [],
@@ -222,12 +227,15 @@ class QuestionStreamingService {
 
         if (!result?.success) {
           finalFailureReason = result?.error || 'LLM generation failed';
+          finalFailureCode = result?.errorCode || result?.code || 'QUESTION_GENERATION_FAILED';
           continue;
         }
 
         finalValidation = llmService.questionMatchesPlannedTask(result.questionData, plannedTask);
         if (!finalValidation.valid) {
           finalFailureReason = `Failed to match the planned slice: ${finalValidation.reason}`;
+          finalFailureCode = 'QUESTION_PLANNED_SLICE_MISMATCH';
+          repairContext = { slice: plannedTask?.sliceLabel, reason: String(finalValidation.reason).slice(0, 1000) };
           retryGuidance = [
             'RETRY CORRECTION:',
             finalValidation.reason,
@@ -263,8 +271,11 @@ class QuestionStreamingService {
         assertGenerationActive(signal);
 
         if (!noveltyResult.novel) {
+          rejectedNoveltyDraft = buildRejectedNoveltyDraft({ question: result.questionData, candidate: noveltyCandidate, result: noveltyResult });
           const similarStem = noveltyResult.mostSimilarQuestionText?.slice(0, 240) || 'an existing question';
           finalFailureReason = `Generated question was too similar to an existing question (${Math.round(noveltyResult.similarity * 100)}% similarity)`;
+          finalFailureCode = 'QUESTION_DUPLICATE_DETECTED';
+          repairContext = { similarStem, similarity: noveltyResult.similarity, slice: plannedTask?.sliceLabel };
           retryGuidance = [
             'NOVELTY RETRY REQUIRED:',
             `The previous candidate was too similar to: "${similarStem}".`,
@@ -302,7 +313,8 @@ class QuestionStreamingService {
       }
       
       if (!result?.success) {
-        throw new Error(finalFailureReason);
+        throw Object.assign(new Error(finalFailureReason), { code: finalFailureCode, repairContext,
+          ...(finalFailureCode === 'QUESTION_DUPLICATE_DETECTED' && rejectedNoveltyDraft ? { rejectedDraft: rejectedNoveltyDraft } : {}) });
       }
 
       console.log(`[${questionId}] LLM returned, success=${result.success}`);
@@ -408,6 +420,7 @@ class QuestionStreamingService {
             supportingLearningObjectives: questionConfig.supportingLearningObjectiveIds || [],
             useCustomPromptOnly: questionConfig.useCustomPromptOnly === true,
             qualityReview: result.questionData.generationMetadata?.qualityReview,
+            reviewSummary: result.questionData.generationMetadata?.reviewSummary,
             generatedFrom: sourceReferences
               .map(ref => ref.materialId)
               .filter(Boolean),
@@ -420,7 +433,7 @@ class QuestionStreamingService {
             bloomLevel: questionConfig.bloomLevel || null,
             planRationale: questionConfig.planRationale || null,
             confidence: 0.9,
-            processingTime: result.metadata?.processingTime || 2000,
+            processingTime: result.questionData.generationMetadata?.processingTime ?? result.metadata?.processingTime,
             streamingGenerated: true,
             plannedSlice: plannedTask?.sliceLabel || null,
             plannedIntent: plannedTask?.questionIntent || null,

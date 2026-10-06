@@ -63,6 +63,14 @@ const falseEquality = (expression, claimed, computed, message) => Object.assign(
 const normalize = value => value.replace(/\s+/g, '').replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/');
 const isConstant = value => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(normalize(value).replace(/[()]/g, ''));
 
+// Keep full precision for validation; only shorten the displayed derivation.
+// A rounded display must never masquerade as an exact equality.
+const renderCalculation = item => {
+  const computed = evaluateArithmetic(item.expression);
+  const display = Number(computed.toPrecision(10));
+  return `${item.expression.trim()} ${display === computed ? '=' : '≈'} ${display}.`;
+};
+
 /** Verify declared calculations and recognized explicit equations, then render. */
 export function verifyAndRenderCalculations(text, calculations) {
   if (!Array.isArray(calculations) || calculations.length > 8) throw fail('ARITHMETIC_INVALID_SCHEMA', 'Missing or excessive declared calculations');
@@ -74,7 +82,7 @@ export function verifyAndRenderCalculations(text, calculations) {
   const equations = [];
   // Only plain numerical equalities are recognized in free text. Scientific
   // symbols, units and arbitrary natural-language claims are not inferred.
-  const equationPattern = /(?<![\w.,])([\d.()+*/−×÷\s-]+)\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?![\w.])/g;
+  const equationPattern = /(?<![\w.,])([\d.()+*/−×÷\s-]+)\s*=\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?!\w|\.\d)/g;
   for (const match of String(text).matchAll(equationPattern)) {
     const expression = match[1].trim();
     if (!/[+*/−×÷-]/.test(expression) && !isConstant(expression)) continue;
@@ -90,7 +98,22 @@ export function verifyAndRenderCalculations(text, calculations) {
   }
   const meaningfulCalculations = calculations.filter(item => !isConstant(item.expression));
   const additions = meaningfulCalculations.filter(item => !equations.some(equation => normalize(equation.expression) === normalize(item.expression) && equal(equation.result, item.result)))
-    .map(item => `${item.expression.trim()} = ${item.result}.`);
+    .map(renderCalculation);
   return { text: [String(text).trim(), ...additions].filter(Boolean).join(' '),
     verifiedCount: meaningfulCalculations.length + equations.filter(equation => !isConstant(equation.expression) && !calculations.some(item => normalize(equation.expression) === normalize(item.expression))).length };
+}
+
+/** A feedback writer supplies formulas; the application supplies their values.
+ * Legacy explicit claims and free-text equalities retain the strict verifier.
+ * Computing a formula does not establish that it models the teaching task.
+ */
+export function computeAndRenderCalculations(text, calculations) {
+  if (!Array.isArray(calculations) || calculations.length > 8) throw fail('ARITHMETIC_INVALID_SCHEMA', 'Missing or excessive declared calculations');
+  const computed = calculations.map(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)
+      || Object.keys(item).some(key => !['expression', 'result'].includes(key))
+      || typeof item.expression !== 'string') throw fail('ARITHMETIC_INVALID_SCHEMA', 'Malformed declared calculation');
+    return Object.hasOwn(item, 'result') ? item : { expression: item.expression, result: evaluateArithmetic(item.expression) };
+  });
+  return verifyAndRenderCalculations(text, computed);
 }

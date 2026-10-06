@@ -250,8 +250,42 @@ it('carries a unified course brief into the linked course assistant', async () =
 it('preserves legacy quick-activity URLs and offers secondary blank and import actions', async () => {
   render(<MemoryRouter initialEntries={['/h5p-studio?create=ai']}><H5PStudio /></MemoryRouter>);
   expect(await screen.findByLabelText('Teaching instructions')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'More Studio actions' }));
   expect(screen.getByRole('button', { name: 'New blank activity' })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Import .h5p' })).toBeEnabled();
   expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+});
+
+it('opens the blank editor through the shared actions and keeps the advanced brief when returning', async () => {
+  render(<MemoryRouter initialEntries={['/h5p-studio?create=ai']}><H5PStudio /></MemoryRouter>);
+  fireEvent.change(await screen.findByLabelText('Teaching instructions'), { target: { value: 'Teach momentum with everyday examples.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'More Studio actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'New blank activity' }));
+  expect(await screen.findByTestId('h5p-editor')).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'H5P Studio Official editor' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'More Studio actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Advanced types' }));
+  expect(await screen.findByLabelText('Teaching instructions')).toHaveValue('Teach momentum with everyday examples.');
+});
+
+it('opens the H5P file picker without clearing the advanced brief', async () => {
+  const { container } = render(<MemoryRouter initialEntries={['/h5p-studio?create=ai']}><H5PStudio /></MemoryRouter>);
+  fireEvent.change(await screen.findByLabelText('Teaching instructions'), { target: { value: 'Keep this teaching brief.' } });
+  const picker = container.querySelector<HTMLInputElement>('input[type="file"][accept=".h5p,application/zip"]')!;
+  const click = vi.spyOn(picker, 'click').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', { name: 'More Studio actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Import .h5p' }));
+  expect(click).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText('Teaching instructions')).toHaveValue('Keep this teaching brief.');
+  expect(screen.queryByRole('group', { name: 'Other Studio actions' })).not.toBeInTheDocument();
+});
+
+it('returns to the saved AI workspace from the compact editor header', async () => {
+  render(<MemoryRouter initialEntries={['/h5p-studio?contentId=content-1&authoringSession=saved-task']}><H5PStudio /></MemoryRouter>);
+  await screen.findByTestId('h5p-editor');
+  fireEvent.click(screen.getByRole('button', { name: 'Return to AI workspace' }));
+  expect(screen.getByRole('region', { name: 'Studio AI workspace' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Return to AI workspace' })).not.toBeInTheDocument();
+  expect(screen.queryByTestId('h5p-editor')).not.toBeInTheDocument();
 });
 });

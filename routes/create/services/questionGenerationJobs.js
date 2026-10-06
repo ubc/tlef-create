@@ -4,6 +4,8 @@ import QuestionGenerationJob from '../models/QuestionGenerationJob.js';
 import Quiz from '../models/Quiz.js';
 import Question from '../models/Question.js';
 import { freeQuestionMutation } from './questionPublication.js';
+import { QUESTION_REVIEW_POLICY_VERSION } from './questionReviewContract.js';
+import { safeQuestionFailure, savedQuestionFailure } from './questionGenerationFailure.js';
 
 const LEASE_MS = 120_000;
 const MAX_RUN_MS = 90 * 60_000;
@@ -22,7 +24,8 @@ const stableJson = value => JSON.stringify(value, (_key, item) => item && typeof
 
 export function questionGenerationRequestHash({ quizId, mode, questionConfigs }) {
   // Session identifiers are transport details, never part of generation intent.
-  return createHash('sha256').update(stableJson({ quizId: String(quizId), mode, questionConfigs })).digest('hex');
+  return createHash('sha256').update(stableJson({ quizId: String(quizId), mode, questionConfigs,
+    reviewPolicyVersion: QUESTION_REVIEW_POLICY_VERSION })).digest('hex');
 }
 
 export function serializeQuestionJob(job) {
@@ -36,42 +39,15 @@ export function serializeQuestionJob(job) {
     questionIds: published(job) ? (job.questionIds || []).map(String) : [],
     items: job.items.map(item => ({ index: item.index, questionId: item.questionId, status: item.status,
       ...(published(job) && item.status === 'ready' ? { savedQuestionId: String(item.savedQuestionId) } : {}),
+      ...(savedQuestionFailure(item) ? { failure: savedQuestionFailure(item) } : {}),
       repairStrategy: item.repairStrategy, phase: item.phase, attempts: item.attempts || 0, startedAt: item.startedAt, completedAt: item.completedAt,
       ...(item.code ? { code: item.code } : {}), ...(item.reason ? { reason: item.reason } : {}), ...(item.message ? { message: item.message } : {}) })),
     message: job.message || '', createdAt: job.createdAt, updatedAt: job.updatedAt
   };
 }
 
-export function safeQuestionJobFailure(error) {
-  // Only application-owned diagnoses cross the receipt/API boundary. Never
-  // persist model review prose, prompts, sources or provider error messages.
-  const reviewReasons = {
-    REVIEW_UNAVAILABLE: 'The feedback review service could not finish. No unchecked question was published.',
-    REVIEW_LIMIT_REACHED: 'The feedback review reached an AI rate limit or usage allowance. No unchecked question was published. Check the provider allowance or wait before explicitly retrying.',
-    REVIEW_INVALID_RESPONSE: 'The feedback review returned an incomplete or unreadable result.',
-    ANSWER_INVALID: 'The answer key or question was flagged as incorrect or ambiguous. Review its evidence and wording.',
-    INSTRUCTION_MISMATCH: 'The draft did not follow the instructions for this question. Review its topic and constraints.',
-    FEEDBACK_INVALID: 'The feedback review did not match every original answer option or returned incomplete feedback.',
-    ARITHMETIC_INVALID_SCHEMA: 'The feedback review omitted required calculation details.',
-    ARITHMETIC_FALSE_EQUALITY: 'A feedback calculation produced an incorrect result.',
-    ARITHMETIC_DIVISION_BY_ZERO: 'A feedback calculation divided by zero.',
-    ARITHMETIC_UNSUPPORTED_EXPRESSION: 'A feedback calculation used an expression that could not be verified.',
-    FEEDBACK_TEXT_LIMIT: 'The reviewed feedback exceeded the supported text length.'
-  };
-  if (error?.code === 'QUESTION_QUALITY_REVIEW' && Object.hasOwn(reviewReasons, error.qualityFailureReason)) {
-    return { code: error.code, reason: error.qualityFailureReason, message: reviewReasons[error.qualityFailureReason] };
-  }
-  const known = {
-    QUESTION_INVALID_RESPONSE: 'The model returned an unreadable or invalid question. No question was saved. An explicit retry generates a new draft using additional AI credits.',
-    MODEL_SERVICE_LIMIT_REACHED: 'The AI service reached a rate limit or usage allowance. Check the provider allowance or wait before explicitly retrying. No fallback generation was started.',
-    GENERATION_TIMEOUT: 'This question exceeded its generation deadline. This item was not published.',
-    QUESTION_QUALITY_REVIEW: 'This question did not pass the feedback check. Refine its instructions before starting a new attempt.',
-    NO_API_KEY: 'An AI API key is required before generating questions.',
-    MATERIALS_NOT_READY: 'Assigned materials are not ready for question generation.',
-    QUESTION_TYPE_UNAVAILABLE: 'The selected question type is temporarily unavailable.',
-    GENERATION_INTERRUPTED: interruptedMessage
-  };
-  return { code: Object.hasOwn(known, error?.code) ? error.code : 'QUESTION_GENERATION_FAILED', message: known[error?.code] || 'This question could not be completed. Check the instructions and services before starting a new attempt.' };
+export function safeQuestionJobFailure(error, stage) {
+  return safeQuestionFailure(error, stage);
 }
 
 // Durable receipts plus fenced publication, not an automatically replayed queue.
@@ -321,7 +297,7 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
           }
           await work({ job, signal: abortController.signal, assertActive, async updateItem(index, values) {
             await assertActive();
-            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message', 'phase', 'repairStrategy', 'attempts', 'startedAt', 'completedAt'].includes(key)));
+            const allowed = Object.fromEntries(Object.entries(values).filter(([key]) => ['status', 'code', 'reason', 'message', 'failure', 'phase', 'repairStrategy', 'attempts', 'startedAt', 'completedAt'].includes(key)));
             const result = await JobModel.updateOne({ _id: job._id, active: true, status: 'running', leaseToken: job.leaseToken, leaseUntil: { $gte: now() } }, {
               $set: Object.fromEntries(Object.entries(allowed).map(([key, value]) => [`items.${index}.${key}`, value]))
             });
@@ -360,7 +336,15 @@ export function createQuestionJobService({ JobModel = QuestionGenerationJob, Qui
           // A write may have committed even if its response was lost. Never mark
           // a committed batch failed; the durable Quiz marker resolves ambiguity.
           const current = await recover(await JobModel.findById(job._id));
-          if (current?.active) await terminal(job, error.code === 'GENERATION_INTERRUPTED' ? 'interrupted' : 'failed', error.code === 'GENERATION_INTERRUPTED' ? interruptedMessage : failureMessage);
+          if (current?.active) {
+            const safe = safeQuestionJobFailure(error, 'preparation');
+            for (const item of current.items.filter(item => !['ready', 'failed'].includes(item.status))) {
+              await JobModel.updateOne({ _id: job._id, active: true, leaseToken: job.leaseToken, [`items.${item.index}.status`]: { $nin: ['ready', 'failed'] } }, {
+                $set: Object.fromEntries(Object.entries({ status: 'failed', phase: 'needs_attention', completedAt: now(), ...safe }).map(([key, value]) => [`items.${item.index}.${key}`, value]))
+              });
+            }
+            await terminal(job, error.code === 'GENERATION_INTERRUPTED' ? 'interrupted' : 'failed', error.code === 'GENERATION_INTERRUPTED' ? interruptedMessage : failureMessage);
+          }
         } finally {
           clearInterval(heartbeat);
           signal?.removeEventListener('abort', abortFromParent);

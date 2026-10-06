@@ -15,9 +15,9 @@ export default function RejectedDraftDetails({ review }: { review: Review }) {
       <p><code>{check.expression}</code> evaluates to {display(check.computed)}; the feedback claimed {display(check.claimed)}. The answer key was not changed.</p>
       <p>This checks the arithmetic in feedback, not the correctness of the entire question.</p>
     </section>}
-    <p><strong>AI review observations</strong></p>
+    <p><strong>{review.novelty ? 'Application duplicate check' : 'AI review observations'}</strong></p>
     {review.issues.length ? <ul>{review.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
-      : <p>The AI review did not return a detailed observation.</p>}
-    <p>AI observations may need instructor review.</p>
+      : <p>{review.novelty ? 'No detailed similarity observation was recorded.' : 'The AI review did not return a detailed observation.'}</p>}
+    <p>{review.novelty ? 'Similarity checks may need instructor review.' : 'AI observations may need instructor review.'}</p>
   </div>;
 }

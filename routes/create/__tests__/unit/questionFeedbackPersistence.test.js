@@ -11,8 +11,12 @@ const options = [
   { text: '105 liters', isCorrect: false, tip: 'Check evaporation.', chosenFeedback: 'Original distractor feedback.', notChosenFeedback: 'Original omission feedback.' },
   { text: '-85 liters', isCorrect: false, tip: 'Check the sign.', chosenFeedback: 'Original distractor feedback.', notChosenFeedback: 'Original omission feedback.' }
 ];
+const goals = [{ id: 'water-budget', text: 'Calculate storage change from input minus outputs.' },
+  { id: 'two-outputs', text: 'Account for both evaporation and runoff when calculating the water budget.' }];
+const goalCoverage = goals.map(goal => ({ id: goal.id, isCovered: true }));
 const review = {
-  answerIsCorrect: true, followsInstructorRequest: true, issues: ['Option feedback contradicts the answer key.'],
+  goalCoverage,
+  contentIsValid: true, answerIsCorrect: true, rubricIsAppropriate: true, evidenceIsSufficient: true, followsInstructorRequest: true, issues: ['Option feedback contradicts the answer key.'],
   explanation: 'Storage change = 150 - (20 + 45) = 85 liters.',
   calculations: [{ expression: '150 - (20 + 45)', result: 85 }],
   feedback: [
@@ -36,6 +40,31 @@ describe('reviewed feedback survives the real question persistence pipeline', ()
     jest.spyOn(Quiz, 'findById').mockResolvedValue({ addQuestion: jest.fn(async () => {}) });
   });
   afterEach(() => jest.restoreAllMocks());
+
+  test.each([
+    ['generator duration', { processingTime: 16543 }, { processingTime: 2000 }, 16543],
+    ['reported zero', { processingTime: 0 }, {}, 0],
+    ['legacy duration', {}, { processingTime: 4532 }, 4532],
+    ['unknown duration', {}, {}, undefined]
+  ])('preserves %s without inventing a two-second duration', async (_label, generationMetadata, metadata, expected) => {
+    jest.spyOn(llmService, 'generateQuestionStreaming').mockResolvedValue({ success: true, metadata,
+      questionData: { type: 'multiple-choice', questionText: 'Which synthetic conclusion is supported?',
+        correctAnswer: 'Supported', explanation: 'The synthetic source supports it.',
+        content: { options: [{ text: 'Supported', isCorrect: true }, { text: 'Unsupported', isCorrect: false }] },
+        generationMetadata } });
+    let persisted;
+    jest.spyOn(Question.prototype, 'save').mockImplementation(async function () {
+      persisted = this.toObject();
+      return this;
+    });
+    await questionStreamingService.generateQuestionWithStreaming({
+      quizId: '507f1f77bcf86cd799439011', questionId: 'synthetic-duration', sessionId: 'synthetic-session',
+      userId: '507f1f77bcf86cd799439012', learningObjective: null, relevantContent: [],
+      questionConfig: { questionType: 'multiple-choice', customPrompt: 'Assess this synthetic case.', useCustomPromptOnly: true }
+    });
+    if (expected === undefined) expect(persisted.generationMetadata).not.toHaveProperty('processingTime');
+    else expect(persisted.generationMetadata.processingTime).toBe(expected);
+  });
 
   test.each([
     ['streaming root options', false, false],
@@ -70,7 +99,7 @@ describe('reviewed feedback survives the real question persistence pipeline', ()
     await questionStreamingService.generateQuestionWithStreaming({
       quizId: '507f1f77bcf86cd799439011', questionId: 'synthetic-feedback-check', sessionId: 'synthetic-session',
       userId: '507f1f77bcf86cd799439012', learningObjective: null,
-      questionConfig: { questionType: 'multiple-choice', customPrompt: 'Course and history guidance. Use the given water-budget premise.', instructorPrompt: 'Use the given water-budget premise.', useCustomPromptOnly: true },
+      questionConfig: { questionType: 'multiple-choice', requiredLearningGoals: goals, customPrompt: 'Course and history guidance. Use the given water-budget premise.', instructorPrompt: 'Use the given water-budget premise.', useCustomPromptOnly: true },
       relevantContent: [{ content: 'Storage change is input minus the sum of outputs.', metadata: { materialName: 'Synthetic source', chunkIndex: 0 } }]
     });
 
@@ -81,6 +110,9 @@ describe('reviewed feedback survives the real question persistence pipeline', ()
     expect(persisted.correctAnswer).toBe('85 liters');
     expect(persisted.explanation).toBe(review.explanation);
     expect(persisted.generationMetadata.qualityReview).toBe('ai-feedback-reviewed');
+    expect(persisted.generationMetadata.reviewSummary).toMatchObject({ kind: 'feedback',
+      checks: { answerIsCorrect: true, evidenceIsSufficient: true, contentIsValid: true }, mediaInspection: 'not-performed' });
+    expect(persisted.generationMetadata.reviewSummary.goalCoverage).toEqual(goalCoverage);
     expect(persisted.content.selectionMode).toBe('single');
     expect(persisted.content.options.map(({ text, isCorrect, tip, chosenFeedback, notChosenFeedback }) => ({ text, isCorrect, tip, chosenFeedback, notChosenFeedback })))
       .toEqual(options.map((option, index) => ({

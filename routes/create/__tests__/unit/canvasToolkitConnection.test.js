@@ -31,6 +31,11 @@ describe('official UBC Canvas toolkit connection', () => {
     expect(url.searchParams.get('state')).toBe('random-state');
     expect(url.searchParams.get('scope').split(' ')).toEqual(CANVAS_SCOPES);
     expect(CANVAS_SCOPES).toContain('url:POST|/api/v1/courses/:course_id/external_tools');
+    expect(CANVAS_SCOPES).toEqual(expect.arrayContaining([
+      'url:GET|/api/v1/courses/:course_id/files', 'url:GET|/api/v1/courses/:course_id/files/:id',
+      'url:GET|/api/v1/files/:id/public_url', 'url:GET|/api/v1/courses/:course_id/pages',
+      'url:GET|/api/v1/courses/:course_id/pages/:url_or_id'
+    ]));
   });
   test('exchanges a code through the real toolkit and preserves omitted refresh tokens', async () => {
     global.fetch.mockResolvedValue(json({ access_token: 'next', expires_in: 3600, user: { id: 42 } }));

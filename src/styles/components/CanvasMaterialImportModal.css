@@ -1,0 +1,35 @@
+.dialog-content.canvas-material-import { width: min(740px, calc(100vw - 32px)); max-width: 740px; max-height: calc(100dvh - 40px); padding: 24px; display: flex; flex-direction: column; gap: 20px; color: #222; background: #fff; border: 1px solid #ddd; border-radius: 16px; }
+.canvas-material-import .dialog-header { padding-right: 24px; }
+.canvas-material-import[aria-busy="true"] .dialog-close { display: none; }
+.canvas-import-body { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+.canvas-import-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+.canvas-import-field .input { border: 1px solid #d8d8d8; border-radius: 8px; min-height: 40px; background: #fff; color: #222; font-weight: 400; }
+.canvas-import-tools { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.canvas-import-tools .canvas-import-field { flex: 1; min-width: 180px; }
+.canvas-import-hint, .canvas-import-footer p { font-size: 12px; color: #666; line-height: 1.6; margin: 0; }
+.canvas-import-list { border: 1px solid #e5e5e5; border-radius: 10px; max-height: 340px; overflow: auto; }
+.canvas-import-row { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #eee; cursor: pointer; }
+.canvas-import-row:last-child { border-bottom: 0; }
+.canvas-import-row:hover { background: #f7f7f7; }
+.canvas-import-row input { margin-top: 4px; accent-color: #222; flex-shrink: 0; }
+.canvas-import-row span { min-width: 0; overflow-wrap: anywhere; }
+.canvas-import-row strong { font-size: 14px; font-weight: 500; }
+.canvas-import-row small { display: block; margin-top: 4px; color: #666; font-size: 12px; }
+.canvas-import-row.is-unsupported { background: #fafafa; cursor: default; }
+.canvas-import-notice { padding: 12px 14px; border: 1px solid #bbb; border-radius: 8px; font-size: 13px; margin: 0; }
+.canvas-import-loading { min-height: 120px; display: grid; place-items: center; color: #666; }
+.canvas-import-empty { padding: 24px; font-size: 14px; color: #666; }
+.canvas-import-connect { display: flex; flex-wrap: wrap; gap: 12px; }
+.canvas-import-connect p { width: 100%; }
+.canvas-import-results h4 { font-size: 14px; margin: 0 0 8px; }
+.canvas-import-result { border-top: 1px solid #eee; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+.canvas-import-result span { display: block; color: #666; margin-top: 4px; }
+.canvas-import-footer { border-top: 1px solid #eee; padding-top: 16px; display: flex; align-items: center; gap: 16px; }
+.canvas-import-footer p { flex: 1; }
+.canvas-import-footer > div { display: flex; gap: 8px; flex-shrink: 0; }
+.canvas-material-import .btn-primary { background: #222; border-color: #222; color: #fff; }
+.canvas-material-import .btn { transition: transform 150ms ease, background-color 150ms ease; }
+.canvas-material-import .btn:active:not(:disabled) { transform: scale(.98); }
+.canvas-material-import :is(button, input, select):focus-visible { outline: 2px solid #222; outline-offset: 3px; }
+@media (max-width: 600px) { .dialog-content.canvas-material-import { padding: 20px 16px; } .canvas-import-footer { flex-direction: column; align-items: stretch; } .canvas-import-footer > div { justify-content: flex-end; } }
+@media (prefers-reduced-motion: reduce) { .dialog-content.canvas-material-import, .canvas-material-import .btn { transition: none; animation: none; } .canvas-material-import .btn:active { transform: none; } }

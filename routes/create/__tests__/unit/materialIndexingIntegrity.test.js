@@ -67,6 +67,20 @@ describe('material indexing integrity', () => {
     expect(await service.processAndEmbedMaterial(material)).toMatchObject({ success: true, chunksCount: 3 });
   });
 
+  test('index restoration uses cached text without re-parsing or mutating the approved source record', async () => {
+    const { service, material, vectors } = fixture();
+    material.type = 'pdf'; material.filePath = '/unavailable/source.pdf';
+    material.processingMetadata = { parserVersion: 'original-page-parser', chunkCount: 35 };
+    const metadata = structuredClone(material.processingMetadata);
+    const parse = jest.spyOn(service, 'loadMaterialChunks');
+    const guard = jest.fn(async () => {});
+    expect(await service.processAndEmbedMaterial(material, { indexOnly: true, assertActive: guard })).toMatchObject({ success: true, chunksCount: 3 });
+    expect(vectors).toEqual([0, 1, 2]);
+    expect(material.processingMetadata).toEqual(metadata);
+    expect(material.save).not.toHaveBeenCalled(); expect(parse).not.toHaveBeenCalled();
+    expect(guard).toHaveBeenCalled();
+  });
+
   test('concurrent retries for the same material share one indexing attempt', async () => {
     const { service, material, vectors } = fixture();
     const results = await Promise.all([service.processAndEmbedMaterial(material), service.processAndEmbedMaterial(material)]);

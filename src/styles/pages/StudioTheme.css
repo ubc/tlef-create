@@ -1,0 +1,26 @@
+/* Shared by the Studio workspace, editor shell, and prompt-helper portal. */
+:where(.h5p-studio-page, .authoring-workspace, .studio-prompt-popup) {
+  --studio-ink: #171717;
+  --studio-text: #404040;
+  --studio-muted: #737373;
+  --studio-line: #e5e5e5;
+  --studio-line-strong: #bdbdbd;
+  --studio-surface: #fff;
+  --studio-soft: #f7f7f7;
+  --studio-hover: #f0f0f0;
+  --studio-selected: #ebebeb;
+  --studio-primary: #000;
+  --studio-primary-hover: #262626;
+  --color-foreground: var(--studio-ink);
+  --color-muted-foreground: var(--studio-muted);
+  --color-primary: var(--studio-primary);
+  --color-primary-foreground: var(--studio-surface);
+  --color-secondary: var(--studio-hover);
+  --color-secondary-foreground: var(--studio-ink);
+  --color-muted: var(--studio-soft);
+  --color-accent: var(--studio-selected);
+  --color-accent-foreground: var(--studio-ink);
+  --color-border: var(--studio-line);
+  --color-ring: var(--studio-primary);
+  color: var(--studio-ink);
+}

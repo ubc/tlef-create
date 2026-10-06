@@ -44,6 +44,16 @@ const materialSchema = new mongoose.Schema({
     type: String,
     index: true
   }, // For deduplication (same file uploaded twice)
+
+  // Stable provenance only; never persist Canvas tokens or signed download URLs.
+  canvasSource: {
+    instance: { type: String },
+    courseId: { type: String },
+    resourceType: { type: String, enum: ['file', 'page'] },
+    resourceId: { type: String },
+    updatedAt: { type: String },
+    importedAt: { type: Date }
+  },
   
   // Relationships
   folder: {
@@ -104,6 +114,10 @@ const materialSchema = new mongoose.Schema({
 materialSchema.index({ folder: 1, processingStatus: 1 });
 materialSchema.index({ uploadedBy: 1, createdAt: -1 });
 materialSchema.index({ type: 1 });
+materialSchema.index({
+  folder: 1, 'canvasSource.instance': 1, 'canvasSource.courseId': 1,
+  'canvasSource.resourceType': 1, 'canvasSource.resourceId': 1, checksum: 1
+}, { unique: true, partialFilterExpression: { 'canvasSource.resourceId': { $exists: true } } });
 
 // Virtual for file size in human readable format
 materialSchema.virtual('fileSizeFormatted').get(function() {

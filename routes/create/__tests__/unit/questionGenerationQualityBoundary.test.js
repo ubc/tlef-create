@@ -49,6 +49,37 @@ describe('question generation quality boundary', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
+  test.each(['generateQuestion', 'generateQuestionStreaming'])(
+    '%s feedback-only repair preserves saved constraints alongside the latest request and rejects their violation', async method => {
+      const completion = jest.spyOn(llmService, 'streamCompletion').mockResolvedValue({ content: JSON.stringify({
+        contentIsValid: true, answerIsCorrect: true, rubricIsAppropriate: true,
+        evidenceIsSufficient: true, followsInstructorRequest: false,
+        issues: ['The revised explanation contradicts the retained hypothetical premise.']
+      }) });
+      const provider = jest.spyOn(llmService, 'createLLMForConfig');
+      await expect(llmService[method]({ ...config, repairDraft: structuredClone(draft),
+        instructorPrompt: 'Improve the learner feedback.' })).rejects.toMatchObject({
+        code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'INSTRUCTION_MISMATCH'
+      });
+      expect(completion).toHaveBeenCalledTimes(1);
+      expect(provider).not.toHaveBeenCalled();
+      expect(llmService.buildExpertPrompt).not.toHaveBeenCalled();
+      const prompt = completion.mock.calls[0][0].prompt;
+      for (const value of [config.learningObjective, config.courseContext, config.customPrompt, 'Improve the learner feedback.']) {
+        expect(prompt).toContain(value);
+      }
+    }
+  );
+
+  test.each(['AUTHORING_MODEL_UNCERTAIN', 'AUTHORING_CONTRACT_CHANGED', 'GENERATION_INTERRUPTED'])(
+    'a review checkpoint %s cannot trigger a paid streaming fallback', async code => {
+      const error = Object.assign(new Error('Saved execution cannot continue.'), { code });
+      const completion = jest.spyOn(llmService, 'streamCompletion').mockResolvedValueOnce({ content: 'draft' }).mockRejectedValueOnce(error);
+      const fallback = jest.spyOn(llmService, 'generateQuestion');
+      await expect(llmService.generateQuestionStreaming(config)).rejects.toBe(error);
+      expect(completion).toHaveBeenCalledTimes(2); expect(fallback).not.toHaveBeenCalled();
+    });
+
   test('requests JSON and stops after a completed malformed draft without a paid fallback', async () => {
     llmService.parseAndValidateResponse.mockRestore();
     const completion = jest.spyOn(llmService, 'streamCompletion').mockResolvedValue({ content: '{"questionText": + "bad"}', model: 'gpt-6-luna' });

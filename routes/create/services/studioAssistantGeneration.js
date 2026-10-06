@@ -6,6 +6,7 @@ import { createQuestionBatchWork, normalizeGenerationConfigs } from './questionB
 import { getGenerationReadiness, isMaterialReady } from '../utils/generationReadiness.js';
 import { getH5PTypeAdapter } from '../config/h5pTypeAdapterRegistry.js';
 import { buildNativeH5PDocument } from './h5pExportService.js';
+import { validateQuestionTasks } from './studioQuestionTaskPlan.js';
 
 const failure = (message, code, status = 409) => Object.assign(new Error(message), { code, status });
 
@@ -26,12 +27,21 @@ export function expandAssistantQuestionPlan(quiz) {
         .filter(key => row[key] !== undefined && row[key] !== null).map(key => [key, row[key]])),
       ...(row.rationale ? { planRationale: row.rationale } : {})
     };
-    for (let index = 0; index < row.count; index++) configs.push({ ...config, customPrompt: [
+    const tasks = validateQuestionTasks(row, { promptBased: config.useCustomPromptOnly });
+    for (let index = 0; index < row.count; index++) {
+      const task = tasks?.[index];
+      configs.push({ ...config,
+        ...(task ? { questionTaskId: task.id, taskSourceIds: task.sourceIds, focusArea: task.focus,
+          plannedTask: { sliceId: task.id, sliceLabel: task.focus, sliceKind: 'assessment-task', questionIntent: task.instructions } } : {}),
+        customPrompt: [
       `SINGLE-QUESTION TASK: Generate exactly one ${row.type} question, one of ${row.count} items in this approved plan row.`,
       'The application creates the other items separately. Any total question counts or distribution across questions in the row instructions below describe the whole row, not the output of this call. Do not generate a collection.',
       'Use the assigned planned slice for this item when supplied. Preserve the row’s subject, source requirements, scenario, answer constraints and exclusions. Do not omit evidence or change the requested topic to achieve variety.',
-      `APPROVED ROW INSTRUCTIONS:\n${row.customPrompt || ''}`
+      `APPROVED ROW INSTRUCTIONS:\n${row.customPrompt || ''}`,
+      ...(task ? [`ASSIGNED QUESTION TASK ${index + 1}:\nFocus: ${task.focus}\n${task.instructions}`,
+        'Assess this assigned task only. It is text-only; provide all learner-facing data and do not refer to an absent figure or visual asset.'] : [])
     ].join('\n\n') });
+    }
   }
   return configs;
 }
@@ -42,7 +52,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
     .populate('materials').populate('learningObjectives')
     .populate({ path: 'questions', populate: { path: 'learningObjective', select: 'text order' }, options: { sort: { order: 1 } } });
 
-  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs, retryFromRequestId, promptBased = false,
+  return async function runAssistantGeneration({ user, userId, quizId, requestId, materialIds, questionConfigs, retryFromRequestId, promptBased = false, trustedSources = [],
     assertActive = async () => {}, assertQuizSnapshot = async () => {}, onProgress = async () => {}, signal }) {
     const owner = String(userId || user?.id || user?._id || '');
     if (!mongoose.isValidObjectId(owner) || !mongoose.isValidObjectId(quizId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId || '')) {
@@ -120,7 +130,7 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
       let job = await jobs.start({ owner, quizId, requestId, mode: 'append', questionConfigs: configs,
         retryFromRequestId: reusableRequestId, allowPartial: true,
         expectedQuizVersion: quiz.__v || 0, signal: controller.signal, assertContextActive: checkContext,
-        work: createWork({ quiz, questionConfigs: configs, readiness, userId: owner, mode: 'append', autoRework: true, preservePromptObjective: promptBased }) });
+        work: createWork({ quiz, questionConfigs: configs, readiness, trustedSources, userId: owner, mode: 'append', autoRework: true, preservePromptObjective: promptBased }) });
       while (true) {
         await checkContext();
         await report(job);
@@ -130,11 +140,15 @@ export function createAssistantGenerationService({ QuizModel = Quiz, jobs = ques
         if (!job) throw failure('The generation receipt could not be found. Keep the request ID and check again.', 'GENERATION_RECOVERY_FAILED', 503);
       }
       if (!['succeeded', 'partial'].includes(job.status)) {
+        const serialized = serializeQuestionJob(job);
+        const stopped = serialized.items.filter(item => item.status === 'failed');
+        const cause = stopped[0]?.failure;
+        const sharedCause = cause && stopped.every(item => item.failure?.code === cause.code && item.failure?.stage === cause.stage);
         throw Object.assign(failure(job.status === 'failed'
-          ? 'The question batch failed. No questions from this batch were added. An explicit retry reuses confirmed prepared questions when the plan and course are unchanged, and regenerates the remaining questions using additional AI credits.'
+          ? `The question batch failed. No questions from this batch were added. ${sharedCause ? `${stopped.length} questions stopped during ${cause.stage}: ${cause.message} Next step: ${cause.recovery}` : 'Review the failed-item details before explicitly retrying. Confirmed prepared questions can be reused when the plan and course are unchanged.'}`
           : job.message || 'Generation did not complete. Existing questions are unchanged.',
         job.status === 'conflict' ? 'GENERATION_SNAPSHOT_CHANGED' : job.status === 'interrupted' ? 'GENERATION_INTERRUPTED' : 'ASSISTANT_QUESTION_BATCH_FAILED'), {
-          job: serializeQuestionJob(job)
+          job: serialized
         });
       }
       await checkContext();

@@ -15,6 +15,21 @@ export function supportsOpenAIStructuredOutputs(model = '', endpoint = '') {
     && !/(?:audio|realtime|transcribe|search|chat-latest)/.test(name);
 }
 
+// Preserve the existing completion facade fields while retaining reported
+// subsets. Missing provider counts stay unknown; token limits are not usage.
+export function normalizeCompletionUsage(value) {
+  const usage = value && typeof value === 'object' ? value : {};
+  const reported = (...values) => values.find(value => Number.isFinite(value) && value >= 0);
+  return {
+    promptTokens: reported(usage.prompt_tokens, usage.input_tokens, usage.promptTokens, usage.prompt_eval_count),
+    completionTokens: reported(usage.completion_tokens, usage.output_tokens, usage.completionTokens, usage.eval_count),
+    totalTokens: reported(usage.total_tokens, usage.totalTokens),
+    cachedTokens: reported(usage.prompt_tokens_details?.cached_tokens, usage.input_tokens_details?.cached_tokens, usage.cachedTokens),
+    cacheWriteTokens: reported(usage.prompt_tokens_details?.cache_write_tokens, usage.input_tokens_details?.cache_write_tokens, usage.cacheWriteTokens),
+    reasoningTokens: reported(usage.completion_tokens_details?.reasoning_tokens, usage.output_tokens_details?.reasoning_tokens, usage.reasoningTokens)
+  };
+}
+
 export function extractBalancedJson(value = '') {
   // Scanning starts at the first JSON delimiter, so outer Markdown fences
   // need no replacement. Preserve literal fences inside question strings.
@@ -79,6 +94,7 @@ export function buildOpenAIStreamingRequest({
     messages: [{ role: 'user', content: prompt }],
     max_completion_tokens: maxTokens,
     stream: true,
+    stream_options: { include_usage: true },
     ...(format ? { response_format: jsonSchema
       ? { type: 'json_schema', json_schema: { name: jsonSchema.name, schema: jsonSchema.schema, strict: true } }
       : format } : {}),

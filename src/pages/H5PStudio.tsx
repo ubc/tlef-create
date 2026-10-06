@@ -2,15 +2,16 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { H5PEditorUI } from '@lumieducation/h5p-react';
 import { waitForH5PEditorAssets } from '../utils/h5pEditorReady';
+import { downloadBlob } from '../utils/downloadBlob';
 import type { IContentMetadata, IEditorModel } from '@lumieducation/h5p-server';
 import {
   Download,
   Eye,
-  FilePlus2,
+  Boxes,
+  ChevronDown,
   Loader2,
   Save,
   Trash2,
-  Upload,
   Wand2
 } from 'lucide-react';
 import {
@@ -27,6 +28,7 @@ import StudioAIComposer from '../components/h5p/StudioAIComposer';
 import StudioAssistant from '../components/h5p/StudioAssistant';
 import StudioPreview from '../components/h5p/StudioPreview';
 import AuthoringWorkspace from '../components/h5p/authoring/AuthoringWorkspace';
+import AuthoringStudioActions from '../components/h5p/authoring/AuthoringStudioActions';
 import '../styles/pages/H5PStudio.css';
 
 function formatStudioTimestamp(value: string) {
@@ -89,6 +91,7 @@ const H5PStudio = () => {
   const [contents, setContents] = useState<H5PStudioContent[]>([]);
   const [selectedContentId, setSelectedContentId] = useState(searchParams.get('contentId') || 'new');
   const [loadingList, setLoadingList] = useState(true);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [editorModelLoaded, setEditorModelLoaded] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
@@ -345,14 +348,7 @@ const H5PStudio = () => {
         downloadId = result.contentId;
       }
       const blob = await h5pEditorApi.downloadContent(downloadId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${selectedContent.title.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'h5p-content'}.h5p`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${selectedContent.title.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'h5p-content'}.h5p`);
     } catch (error) {
       setSaving(false);
       showNotification('error', 'Download failed', error instanceof Error ? error.message : 'Could not download this H5P package.');
@@ -380,50 +376,40 @@ const H5PStudio = () => {
   };
 
   return (
-    <div className="h5p-studio-page">
-      <header className="h5p-studio-hero">
-        <div>
-          <span className="h5p-studio-eyebrow">Advanced authoring</span>
-          <h1>H5P Studio</h1>
-          <p>Turn a teaching idea into an H5P activity. Use AI for a first draft, then make it yours in the official editor.</p>
+    <div className={`h5p-studio-page ${showAuthoring ? 'is-conversational' : ''}`}>
+      <input ref={fileInputRef} type="file" accept=".h5p,application/zip" hidden onChange={handleImport} />
+      {!showAuthoring && <header className="h5p-studio-header">
+        <div className="h5p-studio-header-title"><span className="h5p-studio-mode-icon"><Boxes size={18} /></span><div>
+          <h1>H5P Studio <span>{showAI || showAssistant ? 'Advanced types' : 'Official editor'}</span></h1>
+          <p>{showAI || showAssistant ? 'Choose a format and build your activity' : 'Create and edit native H5P activities'}</p>
+        </div></div>
+        <div className="h5p-studio-header-actions">
+          <button className="btn btn-primary" onClick={openAIMode} disabled={aiBusy}><Wand2 size={16} /> {authoringSessionId ? 'Return to AI workspace' : 'Create with AI'}</button>
+          <AuthoringStudioActions disabled={aiBusy} importing={importing} onImport={() => fileInputRef.current?.click()}
+            onNewBlank={() => selectContent('new', true)} onAdvanced={openAdvancedAIMode} />
         </div>
-        <div className="h5p-studio-hero-actions">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".h5p,application/zip"
-            hidden
-            onChange={handleImport}
-          />
-          <button className="btn btn-outline" onClick={() => fileInputRef.current?.click()} disabled={importing || aiBusy}>
-            {importing ? <Loader2 className="spin" size={17} /> : <Upload size={17} />}
-            {importing ? 'Importing…' : 'Import .h5p'}
-          </button>
-          <button className="btn btn-outline" onClick={() => selectContent('new', true)} disabled={aiBusy}>
-            <FilePlus2 size={17} /> New blank activity
-          </button>
-          <button className="btn btn-primary" onClick={openAIMode} disabled={aiBusy}><Wand2 size={17} /> Create with AI</button>
-        </div>
-      </header>
+      </header>}
 
       {showAuthoring && <AuthoringWorkspace key={ownerId} ownerId={ownerId} sessionId={authoringSessionId || undefined}
         initialCourseId={sourceCourseId} initialQuizId={sourceQuizId} onAdvanced={openAdvancedAIMode}
+        onImport={() => fileInputRef.current?.click()} onNewBlank={() => selectContent('new', true)} importing={importing}
+        onReturnCoursePlan={assistantDirty ? () => { setShowAuthoring(false); setShowAssistant(true); setShowAI(false); } : undefined}
         onSessionChange={id => { setAuthoringSessionId(id || ''); setSearchParams({ create: 'workspace', ...(id ? { authoringSession: id } : {}), ...(sourceCourseId ? { courseId: sourceCourseId } : {}), ...(sourceQuizId ? { quizId: sourceQuizId } : {}) }); }}
         onOpenActivity={(contentId, preview) => { selectContent(contentId); setShowPreview(preview);
           setSearchParams({ contentId, ...(preview ? { view: 'preview' } : {}), ...(authoringSessionId ? { authoringSession: authoringSessionId } : {}) }); void loadContents(); }} />}
-      {!showAuthoring && authoringSessionId && <button className="btn btn-ghost" onClick={openAIMode}>Return to AI workspace</button>}
+      <div className={`h5p-studio-surface ${!showAI && !showAssistant ? 'is-editor' : 'is-builder'}`} hidden={showAuthoring}>
 
       {showAI && sourceQuizId && sourceCourseId && <Link className="studio-back-link" to={`/course/${encodeURIComponent(sourceCourseId)}/quiz/${encodeURIComponent(sourceQuizId)}?tab=generation`}>Back to source Quiz</Link>}
-      {!showAuthoring && !showAI && !showAssistant && selectedContent && <div className="studio-ai-guidance" role="status">
-        <strong>Independent Studio draft</strong>
+      {!showAuthoring && !showAI && !showAssistant && selectedContent && <details className="studio-ai-guidance studio-draft-notice" open={['changed', 'unknown', 'unavailable'].includes(sourceStatus?.state || '')}>
+        <summary><strong>Independent Studio draft</strong><span>Edits stay in this H5P activity</span></summary>
         <p>Edits here affect only this H5P activity. They do not update Quiz questions, learning objectives or other drafts.</p>
         {sourceStatus?.state === 'changed' && <p>The source Quiz has changed since this draft was created. Your Studio edits are preserved; create a new draft if you want the latest Quiz content.</p>}
         {sourceStatus?.state === 'unknown' && <p>This older draft has no recorded source revision. Check its content against the source Quiz before sharing.</p>}
         {sourceStatus?.state === 'unavailable' && <p>The source Quiz is no longer available. This independent activity can still be edited and downloaded.</p>}
         {sourceStatus?.quizId && sourceStatus.folderId && <Link to={`/course/${encodeURIComponent(sourceStatus.folderId)}/quiz/${encodeURIComponent(sourceStatus.quizId)}?tab=review`}>View source Quiz: {sourceStatus.title}</Link>}
-      </div>}
+      </details>}
 
-      {assistantDirty && !showAssistant && <div className="studio-ai-guidance" role="status"><p>Your unsaved course plan is kept while you work here.</p><button className="btn btn-outline" onClick={() => { setShowAssistant(true); setShowAI(false); }}>Return to course plan</button></div>}
+      {assistantDirty && !showAssistant && !showAuthoring && <div className="studio-ai-guidance" role="status"><p>Your unsaved course plan is kept while you work here.</p><button className="btn btn-outline" onClick={() => { setShowAssistant(true); setShowAI(false); }}>Return to course plan</button></div>}
       {(assistantVisited || quickVisited) && <section className="studio-ai-hub" hidden={!showAI && !showAssistant} aria-labelledby="studio-ai-hub-heading">
         <h2 id="studio-ai-hub-heading" className="sr-only">Create with AI</h2>
         {assistantSessionId && <div className="studio-legacy-task-switch"><button className="btn btn-ghost" onClick={() => { setShowAssistant(false); setShowAI(true); }} disabled={aiBusy}>New AI activity</button><button className="btn btn-ghost" onClick={() => { setShowAssistant(true); setShowAI(false); }} disabled={aiBusy}>Resume saved course task</button></div>}
@@ -456,22 +442,23 @@ const H5PStudio = () => {
       {!showAuthoring && !showAssistant && !showAI && (
 
       <div className={`h5p-studio-workspace${showPreview ? ' is-preview' : ''}`}>
-        <aside className="h5p-studio-library" aria-label="Your H5P content">
+        <aside className={`h5p-studio-library ${libraryOpen ? 'is-expanded' : ''}`} aria-label="Your H5P content">
           <div className="h5p-studio-library-heading">
             <h2>Your content</h2>
             <span>{contents.length}</span>
+            <button className="h5p-studio-library-toggle" aria-label="Show saved H5P content" aria-expanded={libraryOpen} aria-controls="studio-content-list" onClick={() => setLibraryOpen(value => !value)}><ChevronDown size={17} /></button>
           </div>
           {loadingList ? (
             <div className="h5p-studio-empty"><Loader2 className="spin" size={20} /> Loading…</div>
           ) : contents.length === 0 ? (
             <div className="h5p-studio-empty">Create your first H5P activity or upload an existing package.</div>
           ) : (
-            <div className="h5p-studio-content-list">
+            <div className="h5p-studio-content-list" id="studio-content-list">
               {contents.map(content => (
                 <button
                   key={content.id}
                   className={`h5p-studio-content-item ${selectedContentId === content.contentId ? 'active' : ''}`}
-                  onClick={() => selectContent(content.contentId)}
+                  onClick={() => { selectContent(content.contentId); setLibraryOpen(false); }}
                 >
                   <span className="h5p-studio-content-title">{content.title}</span>
                   <span className="h5p-studio-content-meta">
@@ -552,9 +539,10 @@ const H5PStudio = () => {
       </div>
       )}
 
-      <p className="h5p-studio-note">
+      {!showAuthoring && <p className="h5p-studio-note">
         CREATE authors can use installed H5P libraries. Uploads that require unreviewed libraries are rejected until an administrator adds and validates those libraries.
-      </p>
+      </p>}
+      </div>
     </div>
   );
 };

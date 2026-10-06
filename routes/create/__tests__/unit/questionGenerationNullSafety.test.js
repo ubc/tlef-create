@@ -1,5 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 import llmService, { normalizeLearningObjectiveText } from '../../services/llmService.js';
+const semanticVerdict = { contentIsValid: true, answerIsCorrect: true, rubricIsAppropriate: true,
+  feedbackIsConsistent: true, followsInstructorRequest: true, evidenceIsSufficient: true, issues: [], calculations: [] };
 
 describe('question generation null safety', () => {
   test('normalizes missing and object learning objectives without throwing', () => {
@@ -44,6 +46,8 @@ describe('question generation null safety', () => {
 
   test('generates through the non-streaming fallback contract with a null objective', async () => {
     const originalCreateLLMForConfig = llmService.createLLMForConfig;
+    const originalStreamCompletion = llmService.streamCompletion;
+    llmService.streamCompletion = async () => ({ content: JSON.stringify(semanticVerdict) });
     llmService.createLLMForConfig = () => ({
       sendMessage: async () => ({
         content: JSON.stringify({
@@ -78,12 +82,13 @@ describe('question generation null safety', () => {
       expect(result.questionData.generationMetadata.subObjective).toContain('Assess the instructor-provided case.');
     } finally {
       llmService.createLLMForConfig = originalCreateLLMForConfig;
+      llmService.streamCompletion = originalStreamCompletion;
     }
   });
 
   test('streams GPT-5 nano questions with a reasoning-safe output budget', async () => {
     const originalStreamCompletion = llmService.streamCompletion;
-    let completionOptions;
+    const completionOptions = [];
     const content = JSON.stringify({
       questionText: 'What force balances gravity in this diagram?',
       content: {
@@ -95,8 +100,8 @@ describe('question generation null safety', () => {
     });
 
     llmService.streamCompletion = async options => {
-      completionOptions = options;
-      return { content, model: options.llmConfig.model };
+      completionOptions.push(options);
+      return { content: options.jsonSchema?.name === 'question_semantic_review' ? JSON.stringify(semanticVerdict) : content, model: options.llmConfig.model };
     };
 
     try {
@@ -112,8 +117,9 @@ describe('question generation null safety', () => {
         }
       });
 
-      expect(completionOptions.maxTokens).toBe(8000);
-      expect(completionOptions.reasoningEffort).toBe('low');
+      expect(completionOptions[0].maxTokens).toBe(8000);
+      expect(completionOptions[0].reasoningEffort).toBe('low');
+      expect(completionOptions[1].jsonSchema.name).toBe('question_semantic_review');
       expect(result.questionData.content.solutionText).toBe('The upward normal force.');
     } finally {
       llmService.streamCompletion = originalStreamCompletion;

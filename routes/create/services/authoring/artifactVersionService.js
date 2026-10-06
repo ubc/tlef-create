@@ -8,9 +8,11 @@ import { getEditor, getSystemUser, toLumiUser, finalizeContentOwnership } from '
 import { buildNativeH5PDocument } from '../h5pExportService.js';
 import { buildH5PSourceFingerprint, saveNativeH5PDocumentAndRecord } from '../h5pEditorService.js';
 import { collectTemplateMedia, studioMediaPaths } from '../h5pStudioSemantics.js';
-import { getStudioCatalog } from '../h5pStudioCatalog.js';
+import { getStudioCatalog, libraryProblems } from '../h5pStudioCatalog.js';
 import { withQuestionMutation } from '../questionPublication.js';
 import { digest, fail, stableId } from './authoringContracts.js';
+import { validateNativeSourceContract } from './nativeActivityAuthoring.js';
+import { validateAuthoringSourceContract } from './authoringSourceContract.js';
 
 const plain = value => JSON.parse(JSON.stringify(value));
 // Compare every field this workflow may replace, not merely the H5P-rendered
@@ -58,7 +60,10 @@ export async function cloneDocument(contentId, owner, parameters, metadata) {
 }
 
 export async function createVersion({ session, run, snapshot, document, title, summary, changes = [],
-  representation = 'course-linked', restoredFromId, sourceFingerprint, assertActive = async () => {} }) {
+  representation = 'course-linked', restoredFromId, sourceFingerprint, reviewSummary, sourceReferences, nativeSourceContract, authoringSourceContract, teachingBrief, nativeTeachingSources, assertActive = async () => {} }) {
+  if (representation === 'course-linked' && authoringSourceContract) {
+    await validateAuthoringSourceContract({ session, contract: authoringSourceContract, guard: assertActive });
+  }
   await Promise.all([AuthoringVersion.init(), H5PContent.init()]);
   const previous = await AuthoringVersion.findOne({ owner: session.owner, runId: run._id });
   if (previous) return previous;
@@ -105,7 +110,7 @@ export async function createVersion({ session, run, snapshot, document, title, s
   try {
     return await AuthoringVersion.create({ owner: session.owner, sessionId: session._id, runId: run._id,
       number: reserved.versionCounter, parentId: session.currentVersionId, restoredFromId,
-      title: title || content.title, summary, changes, representation, snapshot,
+      title: title || content.title, summary, changes, representation, snapshot, reviewSummary, sourceReferences, nativeSourceContract, authoringSourceContract, teachingBrief, nativeTeachingSources,
       fingerprint: snapshot ? courseFingerprint(snapshot) : digest(document), contentId: content.lumiContentId });
   } catch (error) {
     if (error.code !== 11000) throw error;
@@ -127,7 +132,8 @@ export async function publishCourseVersion(session, version, assertActive) {
   const marker = String(version._id);
   let current = await Quiz.findOne({ _id: session.quizId, createdBy: session.owner }).populate('questions').populate('learningObjectives');
   if (!current) fail('The linked Learning Object is no longer available.', 404);
-  if (current.authoringCommitId === marker) return { fingerprint: courseFingerprint(current), h5pFingerprint: buildH5PSourceFingerprint(current) };
+  if (current.authoringCommitId === marker) return { fingerprint: courseFingerprint(current), h5pFingerprint: buildH5PSourceFingerprint(current),
+    publicationObjectiveMapping: version.publicationObjectiveMapping };
   if (courseFingerprint(current) !== session.publishedFingerprint) {
     fail('The course was edited elsewhere. Your proposed version is kept; review the course before applying it.');
   }
@@ -137,6 +143,21 @@ export async function publishCourseVersion(session, version, assertActive) {
     [String(item._id), new mongoose.Types.ObjectId(stableId(`${marker}:lo:${index}`))]));
   const questionIds = new Map((snapshot.questions || []).map((item, index) =>
     [String(item._id), new mongoose.Types.ObjectId(stableId(`${marker}:question:${index}`))]));
+  const previousObjectiveIds = current.learningObjectives.map(objective => String(objective._id));
+  const previousMembership = new Set(previousObjectiveIds);
+  const publishedIds = Object.fromEntries([...objectiveIds].map(([source, target]) => [source, String(target)]));
+  for (const objective of snapshot.learningObjectives || []) {
+    for (const source of objective.generationMetadata?.objectiveRevision?.sourceObjectiveIds || []) {
+      if (previousMembership.has(String(source))) publishedIds[String(source)] = String(objectiveIds.get(String(objective._id)));
+    }
+  }
+  // Save the remapping before publishing the manifest so an interrupted accept
+  // can repair selected context without depending on the old live records.
+  const publicationObjectiveMapping = { previousObjectiveIds, publishedIds };
+  await assertActive();
+  await AuthoringVersion.updateOne({ _id: version._id, owner: session.owner, sessionId: session._id },
+    { $set: { publicationObjectiveMapping } });
+  version.publicationObjectiveMapping = publicationObjectiveMapping;
   for (const objective of snapshot.learningObjectives || []) {
     await assertActive();
     const data = { ...cleanRecord(objective), quiz: session.quizId, createdBy: session.owner };
@@ -147,6 +168,10 @@ export async function publishCourseVersion(session, version, assertActive) {
     await assertActive();
     const data = { ...cleanRecord(question), quiz: session.quizId, createdBy: session.owner,
       learningObjective: objectiveIds.get(String(question.learningObjective?._id || question.learningObjective)) || null };
+    if (data.generationMetadata?.supportingLearningObjectives) {
+      data.generationMetadata.supportingLearningObjectives = data.generationMetadata.supportingLearningObjectives
+        .map(value => publishedIds[String(value?._id || value)]).filter(Boolean);
+    }
     delete data.generationJob;
     await new Question({ ...data, _id: questionIds.get(String(question._id)) }).validate();
     await Question.updateOne({ _id: questionIds.get(String(question._id)) }, { $setOnInsert: data }, { upsert: true, runValidators: true });
@@ -158,23 +183,51 @@ export async function publishCourseVersion(session, version, assertActive) {
     if (courseFingerprint(current) !== session.publishedFingerprint) fail('The course changed before this version could be applied.');
     const settings = plain(snapshot.settings || {});
     settings.planItems = (settings.planItems || []).map(row => ({ ...row,
-      learningObjective: objectiveIds.get(String(row.learningObjective?._id || row.learningObjective)) || null }));
+      learningObjective: objectiveIds.get(String(row.learningObjective?._id || row.learningObjective)) || null,
+      ...(row.supportingLearningObjectives ? { supportingLearningObjectives: row.supportingLearningObjectives
+        .map(value => publishedIds[String(value?._id || value)]).filter(Boolean) } : {}) }));
     await mutation.writeQuiz({ $set: { name: snapshot.name, learningObjectives: [...objectiveIds.values()],
       questions: [...questionIds.values()], settings,
       chapters: (snapshot.chapters || []).map(chapter => ({ ...chapter,
         questionIds: (chapter.questionIds || []).map(id => questionIds.get(String(id))).filter(Boolean) })),
       authoringCommitId: marker, 'progress.reviewCompleted': false } });
   });
-  return readCourseSnapshot(session);
+  return { ...await readCourseSnapshot(session), publicationObjectiveMapping };
 }
 
 export async function acceptVersion(session, version, run, assertActive) {
   if (String(session.currentVersionId || '') === String(version._id)) return;
   if (String(version.parentId || '') !== String(session.currentVersionId || '')) fail('This proposal is based on an older version. Your current version was kept.');
+  if (version.representation === 'course-linked' && version.authoringSourceContract) {
+    await assertActive();
+    // The owned Quiz manifest is the publication receipt. If publication already
+    // committed before cancellation, finish its bookkeeping without treating
+    // the published objective-ID mapping as a new, stale generation request.
+    const committed = (session.currentVersionId || version.authoringSourceContract) && await Quiz.exists({ _id: session.quizId,
+      createdBy: session.owner, authoringCommitId: String(version._id) });
+    if (!committed) await validateAuthoringSourceContract({ session, contract: version.authoringSourceContract, guard: assertActive });
+  }
+  if (version.representation === 'native-fork' && version.nativeSourceContract) {
+    await assertActive();
+    if (version.reviewSummary?.policyVersion !== version.nativeSourceContract.reviewPolicyVersion) {
+      fail('The proposed activity used a different review policy. Request a new proposal.', 409, 'AUTHORING_CONTRACT_CHANGED');
+    }
+    await validateNativeSourceContract({ session, contract: version.nativeSourceContract });
+  } else if (version.representation === 'native-fork' && version.state === 'candidate' && !version.restoredFromId) {
+    const origin = await AuthoringRun.findOne({ _id: version.runId, owner: session.owner, sessionId: session._id }).select('kind');
+    if (origin?.kind !== 'manual') fail('The proposed activity has no current generation review contract. Request a new proposal.', 409, 'AUTHORING_CONTRACT_CHANGED');
+  }
   let fingerprint = session.publishedFingerprint;
-  if (version.representation === 'course-linked' && session.currentVersionId) {
+  let selectedObjectiveIds = (session.objectiveIds || []).map(String);
+  if (version.representation === 'course-linked' && (session.currentVersionId || version.authoringSourceContract)) {
     const published = await publishCourseVersion(session, version, assertActive);
     fingerprint = published.fingerprint;
+    const mapping = published.publicationObjectiveMapping;
+    if (mapping) {
+      const previousMembership = new Set(mapping.previousObjectiveIds || []);
+      selectedObjectiveIds = [...new Set(selectedObjectiveIds.flatMap(id => mapping.publishedIds?.[id]
+        ? [mapping.publishedIds[id]] : previousMembership.has(id) ? [] : [id]))];
+    }
     await H5PContent.updateOne({ lumiContentId: version.contentId, owner: session.owner },
       { $set: { sourceFingerprint: published.h5pFingerprint } });
   }
@@ -182,10 +235,25 @@ export async function acceptVersion(session, version, run, assertActive) {
   const updated = await AuthoringSession.findOneAndUpdate({ _id: session._id, owner: session.owner,
     activeRunId: run._id, currentVersionId: session.currentVersionId || null }, {
     $set: { currentVersionId: version._id, candidateVersionId: null, status: 'ready',
-      publishedFingerprint: fingerprint || version.fingerprint }, $inc: { revision: 1 }
+      ...(version.teachingBrief ? { teachingBrief: version.teachingBrief } : {}),
+      publishedFingerprint: fingerprint || version.fingerprint, objectiveIds: selectedObjectiveIds }, $inc: { revision: 1 }
   });
   if (!updated) fail('The workspace changed before this version could be accepted.');
   await AuthoringVersion.updateOne({ _id: version._id, owner: session.owner }, { $set: { state: 'accepted' } });
+}
+
+export function validateManualActivityLibrary(originalLibrary, editedLibrary, catalog = getStudioCatalog()) {
+  if (editedLibrary === originalLibrary) return;
+  const original = catalog.libraries.get(originalLibrary)?.descriptor;
+  const edited = catalog.libraries.get(editedLibrary)?.descriptor;
+  // The official editor upgrades a saved library when getContent is called.
+  // A healthy installed minor upgrade preserves the activity's type; a new
+  // machine name, major version or downgrade still needs a separate activity.
+  if (!original || !edited || original.machineName !== edited.machineName
+    || original.majorVersion !== edited.majorVersion || edited.minorVersion < original.minorVersion
+    || libraryProblems(editedLibrary, catalog.libraries).length) {
+    fail('Keep the current activity type when editing this version.', 400);
+  }
 }
 
 export async function saveManualVersion(record, normalized, user) {
@@ -207,7 +275,7 @@ export async function saveManualVersion(record, normalized, user) {
   }
   const active = session.activeRunId ? await AuthoringRun.findById(session.activeRunId) : null;
   if (active && ['queued', 'running', 'waiting'].includes(active.status)) fail('Another task is running. Return to the AI workspace before saving.');
-  if (!run) run = await AuthoringRun.create({ owner, sessionId: session._id, requestId: operation,
+  if (!run) run = await AuthoringRun.create({ owner, sessionId: session._id, requestId: operation, tokenUsageVersion: 1,
     kind: 'manual', status: 'running', checkpoint: 'manual_save', baseVersionId: base._id,
     leaseToken: operation, leaseUntil: new Date(Date.now() + 90_000) });
   else await AuthoringRun.updateOne({ _id: run._id, owner }, { $set: { status: 'running', leaseToken: operation, leaseUntil: new Date(Date.now() + 90_000) } });
@@ -226,7 +294,7 @@ export async function saveManualVersion(record, normalized, user) {
   };
   try {
     const original = await readNative(record.lumiContentId, owner);
-    if (normalized.library !== original.library) fail('Keep the current activity type when editing this version.', 400);
+    validateManualActivityLibrary(original.library, normalized.library);
     // Only existing saved media gets a copy-from-content prefix. New temporary
     // uploads stay unchanged and are checked by Lumi for this authenticated user.
     const media = collectTemplateMedia(original.library, original.params.params, getStudioCatalog().libraries, record.lumiContentId);

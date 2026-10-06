@@ -32,6 +32,7 @@ export default {
         '<rootDir>/__tests__/integration/studioAssistantService.test.js',
         '<rootDir>/__tests__/integration/studioJobRecovery.test.js',
         '<rootDir>/__tests__/integration/authoringWorkspace.test.js',
+        '<rootDir>/__tests__/integration/authoringNativeRevision.test.js',
         '<rootDir>/__tests__/integration/authoringNativeVersion.test.js'
       ],
       setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js']
@@ -46,6 +47,7 @@ export default {
         '<rootDir>/__tests__/integration/studioAssistantService.test.js',
         '<rootDir>/__tests__/integration/studioJobRecovery.test.js',
         '<rootDir>/__tests__/integration/authoringWorkspace.test.js',
+        '<rootDir>/__tests__/integration/authoringNativeRevision.test.js',
         '<rootDir>/__tests__/integration/authoringNativeVersion.test.js'
       ]
     }

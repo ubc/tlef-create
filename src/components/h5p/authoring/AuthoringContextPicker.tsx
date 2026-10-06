@@ -55,7 +55,7 @@ export default function AuthoringContextPicker({ courseId, initialTool = 'tools'
     <div role="listbox" aria-label="Context options">
       {tool === 'tools' ? <>{[
         { id: 'upload', label: 'Upload files', detail: 'PDF or DOCX · add teaching material', icon: <Upload size={18} /> },
-        { id: 'course', label: 'Course', detail: 'Reference a course', icon: <BookOpen size={18} /> },
+        { id: 'course', label: 'Course', detail: 'Explore your materials and LOs in a course', icon: <BookOpen size={18} /> },
         { id: 'material', label: 'Materials', detail: 'Reference source documents', icon: <FileText size={18} /> },
         { id: 'objective', label: 'Learning objectives', detail: 'Build on existing LOs', icon: <Target size={18} /> }
       ].filter(item => matching(item.label)).map(item => <button role="option" aria-selected={false} type="button" key={item.id} onClick={() => item.id === 'upload' ? onUpload() : chooseTool(item.id as ContextTool)}>{item.icon}<span><strong>{item.label}</strong><small>{item.detail}</small></span></button>)}</> : loading ? <p>Loading your context…</p> : error ? <p role="alert">{error}</p> : <>

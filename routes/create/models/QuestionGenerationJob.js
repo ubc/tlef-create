@@ -1,4 +1,13 @@
 import mongoose from 'mongoose';
+import { QUESTION_FAILURE_STAGES } from '../services/questionGenerationFailure.js';
+
+const failureSchema = new mongoose.Schema({
+  code: { type: String, required: true, maxlength: 80 },
+  stage: { type: String, enum: QUESTION_FAILURE_STAGES, required: true },
+  message: { type: String, required: true, maxlength: 600 },
+  recovery: { type: String, required: true, maxlength: 600 },
+  retryable: { type: Boolean, required: true }
+}, { _id: false });
 
 // Durable receipts contain no credentials, prompts, source text or model output.
 // Do not TTL-delete idempotency keys: an old POST must never purchase a new run.
@@ -12,6 +21,7 @@ const itemSchema = new mongoose.Schema({
   attempts: { type: Number, default: 0 },
   startedAt: Date,
   completedAt: Date,
+  failure: { type: failureSchema, default: undefined },
   code: String,
   reason: { type: String, maxlength: 80 },
   reused: { type: Boolean, default: false },

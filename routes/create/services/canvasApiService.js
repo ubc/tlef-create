@@ -11,6 +11,7 @@ export const getAuthorizationUrl = state => connection.getAuthorizationUrl(state
 export const exchangeCode = (code, userId) => connection.exchangeCode(code, userId);
 export const hasValidToken = userId => connection.hasValidToken(userId);
 export const deleteToken = userId => connection.disconnect(userId);
+export const getClient = userId => connection.getClient(userId);
 
 // Modules/pages/LTI placement are CREATE-specific operations, sent through
 // the toolkit's authenticated client. Lists always follow Canvas pagination.

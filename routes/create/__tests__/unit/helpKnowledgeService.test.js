@@ -4,7 +4,40 @@ import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
   test.each([
+    ['Where can I expand the task summary to see Input tokens Output tokens Total tokens and elapsed time for the same execution?', 'same execution'],
+    ['Does recorded token usage include AI model calls from failed checks and automatic rework rather than just the successful question?', 'failed checks and automatic rework'],
+    ['Does reusing saved model output add token usage or generate another question when I expand the details?', 'adds no new token usage'],
+    ['Why does the task token summary show 12.3k tokens rounded from 12,345 and 10k without a decimal?', 'Expand the details for the full reported counts'],
+    ['What does 12.3k+ tokens recorded usage mean when only some provider usage has been reported?', 'rounded recorded subtotal, not complete usage'],
+    ['Should reasoning tokens and cached input tokens be added again to Total tokens?', 'Do not add those subsets'],
+    ['What do Token usage pending Token usage not recorded and Token usage unavailable mean?', 'unavailable rather than zero'],
+    ['Is Conversation total token usage across requests in this conversation or account-wide spending?', 'combines recorded usage across requests'],
+    ['Does task token usage include AI model calls or embedding and vector-search token counters?', 'not embedding or vector-search token counters'],
+    ['How much API cost per question-generation task in dollars including paid retries and a spending limit?', 'Total tokens is not a dollar bill or a spending limit'],
+    ['How can I reduce spending before Resume task when a repetitive teaching plan failed?', 'adjust a conflicting or repetitive teaching plan']
+  ])('retrieves task token receipts and their limits: %s', async (query, content) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio'
+      && source.section === 'Task steps and teaching requirements' && source.content.includes(content))).toBe(true);
+  });
+
+  test.each([
+    ['Expand Independent Studio draft editing boundary source link source-change unavailable-source notices', 'h5p-studio', 'Important editing boundary'],
+    ['Explore teaching idea Build activity discuss teaching approaches without creating a plan', 'h5p-studio', 'Explore before building'],
+    ['Scroll Conversation latest messages message input Close preview full width short screen', 'h5p-studio', 'Resume a conversational workspace'],
+    ['Queue message Queued follow-ups safe task boundary submission order eight Stop task cancels pending messages', 'h5p-studio', 'Queue a follow-up while CREATE works'],
+    ['AI text check completed answer sample response assessment criteria declared arithmetic images audio video', 'h5p-studio', 'Open a proposal or question set preview'],
+    ['Native activity plan Chart Timeline Activity preview Accept changes independent Studio proposal', 'h5p-studio', 'Create with AI'],
+    ['revise several questions count-only reduction combine objectives exclude objectives preserve retained questions', 'h5p-studio', 'Revise an activity and restore a version'],
+    ['saved version Teaching plan proposed objective merge question allocation read-only compare earlier objectives Viewing', 'h5p-studio', 'Revise an activity and restore a version'],
+    ['Advanced editor Column Page installed minor version upgrade same activity type original version history', 'h5p-studio', 'Revise an activity and restore a version'],
+    ['whole native activity text answers feedback saved draft review responses changed template sources blocks Accept changes', 'h5p-studio', 'Checks for generated native proposals'],
+    ['Discussing a failed native attempt keeps Resume task available pending plan Accept plan generate changed teaching requirements updated plan', 'h5p-studio', 'Checks for generated native proposals'],
+    ['Course authorized materials search extracted text read source range select ready initial proposal', 'h5p-studio', 'Add context with + or @'],
+    ['saved source text ranges follow-up checks chapter restriction exclusion selected LOs', 'h5p-studio', 'Add context with + or @'],
+    ['existing Learning Object saved questions material selection match New task different materials before paid planning', 'h5p-studio', 'Add context with + or @'],
     ['Teaching requirements recorded instructor wording saved question count outstanding questions', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Chinese question total 生成十五道题 总共1道 Fill in the Blank 再增加两题 第十五题 总题数减到两道 十二至十五道题', 'h5p-studio', 'Task steps and teaching requirements'],
     ['actual operation starts completions nested checks durations completion not recorded', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Feedback only Answer redraft Instruction correction repair strategy', 'h5p-studio', 'Questions needing attention'],
     ['AI rate limit usage allowance quota provider credits no fallback feedback review unpublished', 'h5p-studio', 'Questions needing attention'],
@@ -12,7 +45,7 @@ describe('CREATE Guide knowledge retrieval', () => {
     ['Collapse sidebar Expand sidebar Question set preview Working for Worked for SSE Live', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Automatic rework partial result checked questions Resume task unfinished slots', 'h5p-studio', 'Questions needing attention'],
     ['Task steps Refine teaching requirements Learner level Teaching purpose Question difficulty Update proposal', 'h5p-studio', 'Task steps and teaching requirements'],
-    ['Use selected answers clarification selectable answers conflicting requirements Send message', 'h5p-studio', 'Task steps and teaching requirements'],
+    ['Confirm and continue clarification selectable answers conflicting requirements submitted reply', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Waiting for your teaching choices missing teaching requirements before objectives plan', 'h5p-studio', 'Task steps and teaching requirements'],
     ['Studio single-question revision question type difficulty multiple-answer unchanged properties Accept changes', 'h5p-studio', 'Revise an activity and restore a version'],
     ['Rejected draft Failure details Calculation check computed result AI review observations Discuss the failure Edit teaching plan Approved instructions', 'h5p-studio', 'Questions needing attention'],
@@ -30,6 +63,16 @@ describe('CREATE Guide knowledge retrieval', () => {
     const [first] = await helpKnowledgeService.retrieve(query, {}, 1);
     expect(first).toMatchObject({ documentId, section });
     expect(first.navigationPath).toContain(`/help?doc=${documentId}&section=`);
+  });
+
+  test.each([
+    'Import from Canvas Course Materials select several PDF DOCX page text Select up to 10',
+    'Canvas Import results Imported Already present Import failed unchanged content skipped',
+    'Canvas denied files pages Reconnect Canvas Reload materials OAuth Developer Key material read permissions',
+    'Canvas update new material old version kept continuous background synchronization embedding usage'
+  ])('retrieves Canvas material import and recovery instructions: %s', async query => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/courses/example' }, 5);
+    expect(sources.some(source => source.documentId === 'materials' && source.section === 'Import from Canvas')).toBe(true);
   });
   test.each([
     ['@ Add context icon chips Context preview Course Materials Learning objectives Upload files', 'h5p-studio', 'Add context with + or @'],
@@ -257,12 +300,73 @@ describe('CREATE Guide knowledge retrieval', () => {
     expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === section)).toBe(true);
   });
 
+  test.each([
+    ['Where is Import .h5p in More Studio actions?', 'Upload an H5P package', 'import an existing package'],
+    ['More Studio actions New blank activity official editor', 'Create new H5P content', 'More Studio actions → New blank activity'],
+    ['More Studio actions Advanced types One activity Question collection', 'Advanced types', 'More Studio actions → Advanced types'],
+    ['AI workspace header H5P Studio History New task More Studio actions', 'Resume a conversational workspace', 'compact header'],
+    ['Short screen Conversation message input stays in view Close preview narrow screens preview covers workspace', 'Resume a conversational workspace', 'preview covers the workspace'],
+    ['Courses sidebar scroll branding search account controls stay visible', 'Resume a conversational workspace', 'account controls stay visible']
+  ])('retrieves the compact workspace layout and action paths: %s', async (query, section, content) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio'
+      && source.section === section && source.content.includes(content))).toBe(true);
+  });
+
+  test.each([
+    ['I am in the Official editor. How do I Return to AI workspace or open Create with AI?', 'Create new H5P content', 'Official editor'],
+    ['On a narrow screen how do I Show saved H5P content and choose an older activity?', 'Create new H5P content', 'Selecting an activity closes the list again'],
+    ['Where can I Save Preview or Download after scrolling through a long official editor?', 'Preview and download', 'the toolbar keeps'],
+    ['Advanced types numbered cards scroll form later steps return to the conversation', 'Advanced types', 'scroll inside the form']
+  ])('retrieves navigation through the official editor and native builder: %s', async (query, section, content) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio'
+      && source.section === section && source.content.includes(content))).toBe(true);
+  });
+
+  test.each([
+    ['Select one or more teaching topics Write my own answer Your answer multiple selection', 'Task steps and teaching requirements', 'several topics or requirements together'],
+    ['Select one alternative scope Write my own answer replaces the listed choice', 'Task steps and teaching requirements', 'your own answer replaces the listed choice'],
+    ['Confirm and continue selected custom answers one reply unsent chat draft preserved Retry same request', 'Task steps and teaching requirements', 'your unsent chat draft remains in the message box'],
+    ['Why generation stopped Stage Next step Error code several questions share the same cause', 'Questions needing attention', 'shows that explanation once with the number of affected questions'],
+    ['Why a question needs attention task still running automatic repair Next step stopped Task steps', 'Questions needing attention', 'gives the recovery action after the task has stopped'],
+    ['Activity check stopped native activity installed H5P unsupported interaction model configuration', 'Questions needing attention', 'does not mean the model configuration is wrong'],
+    ['No questions prepared supporting material stopped before AI review question generation', 'Questions needing attention', 'it is not an incorrect-answer verdict'],
+    ['No questions prepared no checked questions to preview earlier accepted activity remains available', 'Questions needing attention', 'An earlier accepted activity remains available'],
+    ['MATERIAL_INDEX_MISSING Restore material search Materials are searchable again Resume task upload files again', 'Questions needing attention', 'restore selected material search without changing the files or generating questions'],
+    ['QUESTION_DUPLICATE_DETECTED duplicate check too similar change fact subpoint reasoning focus preserve topic exclusions', 'Questions needing attention', 'review the updated proposal before choosing **Accept plan & generate** to explicitly retry'],
+    ['Question set preview refused-to-connect blocked connection refresh Studio saved preview', 'Media preview and save troubleshooting', 'it does not generate questions again']
+  ])('retrieves actionable clarification and preview recovery guidance: %s', async (query, section, content) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio'
+      && source.section === section && source.content.includes(content))).toBe(true);
+  });
+
+  test.each([
+    ['Task teaching brief Material review sampled source excerpts classifications inferred file details reading scope', 'Inspect and edit the task teaching brief', 'does not mean the entire document'],
+    ['Edit learning objectives Pause and edit Save objectives real text candidate old checks', 'Inspect and edit the task teaching brief', 'require new checks rather than inheriting their previous verdicts'],
+    ['New task History Advanced editor unsaved teaching brief learning objective assumptions Save or cancel navigation', 'Inspect and edit the task teaching brief', 'not discarded by navigation'],
+    ['Edit teaching assumptions default inferred audience learner purpose difficulty Save teaching assumptions', 'Inspect and edit the task teaching brief', 'They are not pasted into the message box'],
+    ['Brainstorm learning objectives without generating questions Learning objectives ready no material', 'Brainstorm learning objectives in conversation', 'stop at **Learning objectives ready**'],
+    ['automatic question workflow evidence refresh same approved material two further rounds partial incomplete', 'Questions needing attention', 'a partial result remains marked incomplete'],
+    ['Application duplicate check lexical semantic similarity threshold closest question excerpt paid retry', 'Questions needing attention', 'may identify different closest questions'],
+    ['Learning objectives teaching plan side preview Question focus row distinct assessment focus', 'Open a proposal or question set preview', 'Expand **Question focus** under a row'],
+    ['repeated question tasks identical instructions across rows same objective Question focus label scenario', 'Open a proposal or question set preview', 'not only the **Question focus** label'],
+    ['computed decimal long results shortened rounded approximation full precision calculation check', 'Open a proposal or question set preview', 'shortened for readability'],
+    ['multiple-choice randomize answer positions H5P preview export correctness feedback option order', 'Open a proposal or question set preview', 'randomize answer positions'],
+    ['multiple-choice feedback numerical formula server computes result approximation incorrect exact equality calculation check', 'Open a proposal or question set preview', 'CREATE\ncomputes its result'],
+    ['Native activity plan clear generate request continue automatically review plan first Accept plan generate', 'Create with AI', 'A clear request to generate the activity can continue']
+  ])('retrieves the objective-first autonomous workflow: %s', async (query, section, content) => {
+    const sources = await helpKnowledgeService.retrieve(query, { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === section && source.content.includes(content))).toBe(true);
+  });
+
   test('retrieves the unified AI entrance and distinguishes its two saving boundaries', async () => {
     const sources = await helpKnowledgeService.retrieve(
       'How do I Create with AI in H5P Studio and does the new AI draft replace my Quiz questions?',
       { route: '/h5p-studio', activeTab: 'H5P Studio' }, 4
     );
-    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Create with AI' && source.content.includes('native AI draft does not replace or update Quiz questions'))).toBe(true);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Create with AI' && source.content.includes('does not create or replace course'))).toBe(true);
   });
 
   test('retrieves real-media template and maintenance limitations for Studio AI', async () => {

@@ -1,6 +1,17 @@
 import mongoose from 'mongoose';
 import { beginQuestionMutation, withQuestionMutation } from '../services/questionPublication.js';
 
+const objectiveRevisionSchema = new mongoose.Schema({
+  kind: { type: String, enum: ['merge', 'edit'], required: true },
+  sourceObjectiveIds: [{ type: mongoose.Schema.Types.ObjectId }],
+  sourceGoals: { type: [{ _id: false, id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    text: { type: String, required: true, maxlength: 500 } }], default: undefined },
+  authorizationQuote: { type: String, maxlength: 1000, required: true },
+  requestId: { type: String, required: true },
+  baseVersionId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  revisedAt: { type: Date, required: true }
+}, { _id: false });
+
 const learningObjectiveSchema = new mongoose.Schema({
   // The actual learning objective text
   text: {
@@ -62,6 +73,7 @@ const learningObjectiveSchema = new mongoose.Schema({
       enum: ['bloomLevel', 'subpoints']
     }],
     rationale: { type: String },
+    objectiveRevision: { type: objectiveRevisionSchema, default: undefined },
     promptSource: { type: String },
     promptVersion: { type: Number },
     coverageDiagnostics: {

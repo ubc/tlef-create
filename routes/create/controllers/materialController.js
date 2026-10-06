@@ -555,6 +555,12 @@ router.get('/:materialId/reference', authenticateToken, asyncHandler(async (req,
  * POST /api/materials/:materialId/reprocess
  * Re-index an existing material with the latest page-aware parser.
  */
+router.post('/:materialId/reindex', authenticateToken, validateMaterialId, asyncHandler(async (req, res) => {
+  const { default: restoreMaterialIndex } = await import('../services/materialIndexRecovery.js');
+  const result = await restoreMaterialIndex({ materialId: req.params.materialId, userId: req.user.id });
+  return successResponse(res, { processing: result }, 'Saved material index restored successfully');
+}));
+
 router.post('/:materialId/reprocess', authenticateToken, validateMaterialId, asyncHandler(async (req, res) => {
   const { materialId } = req.params;
   const userId = req.user.id;

@@ -13,6 +13,48 @@ function expectValidSubContentId(obj) {
 }
 
 describe('h5pExportService', () => {
+  describe('multiple-choice answer presentation', () => {
+    test.each(['single', 'multiple'])('%s-choice answers randomize in Column, Question Set and Book without changing saved answer or feedback identity', selectionMode => {
+      const question = {
+        _id: 'mc-randomized', type: 'multiple-choice', questionText: 'Choose the supported claim.',
+        correctAnswer: 'Supported claim',
+        content: { selectionMode, options: [
+          { id: 'supported', text: 'Supported claim', isCorrect: true, tip: 'Hint A',
+            chosenFeedback: 'Chosen A', notChosenFeedback: 'Not chosen A' },
+          { id: 'unsupported', text: 'Unsupported claim', isCorrect: false, tip: 'Hint B',
+            chosenFeedback: 'Chosen B', notChosenFeedback: 'Not chosen B' },
+          { id: 'alternative', text: 'Alternative claim', isCorrect: selectionMode === 'multiple', tip: 'Hint C',
+            chosenFeedback: 'Chosen C', notChosenFeedback: 'Not chosen C' }
+        ] }
+      };
+      const savedQuestion = structuredClone(question);
+      const quiz = { name: 'Randomized answers' };
+      const outputs = [
+        convertQuestionToH5P(question, quiz).params,
+        generateH5PColumn(quiz, [], [question]).content[0].content.params,
+        generateH5PQuestionSet([question]).questions[0].params,
+        buildIBChapter({ title: 'Practice', questionIds: [question._id], containerType: 'column' }, [question], quiz)
+          .params.content[0].content.params
+      ];
+
+      for (const params of outputs) {
+        expect(params.behaviour).toMatchObject({ randomAnswers: true,
+          type: selectionMode === 'multiple' ? 'multi' : 'single' });
+        // The native runtime shuffles whole answer objects. Correctness, tips
+        // and both learner-action feedback fields must stay on that object.
+        expect(params.answers.map(answer => ({ ...answer, text: answer.text.trim() }))).toEqual([
+          { text: '<div>Supported claim</div>', correct: true,
+            tipsAndFeedback: { tip: '<p>Hint A</p>', chosenFeedback: '<div>Chosen A</div>', notChosenFeedback: '<div>Not chosen A</div>' } },
+          { text: '<div>Unsupported claim</div>', correct: false,
+            tipsAndFeedback: { tip: '<p>Hint B</p>', chosenFeedback: '<div>Chosen B</div>', notChosenFeedback: '<div>Not chosen B</div>' } },
+          { text: '<div>Alternative claim</div>', correct: selectionMode === 'multiple',
+            tipsAndFeedback: { tip: '<p>Hint C</p>', chosenFeedback: '<div>Chosen C</div>', notChosenFeedback: '<div>Not chosen C</div>' } }
+        ]);
+      }
+      expect(question).toEqual(savedQuestion);
+    });
+  });
+
   describe('convertQuestionToH5P', () => {
     test('multiple-choice: returns H5P.MultiChoice 1.16 with correct option mapping', () => {
       const question = {

@@ -2,12 +2,105 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { getStudioCatalog, libraryProblems } from '../../services/h5pStudioCatalog.js';
 import { buildStudioContract, buildStudioJSONContract, collectTemplateMedia, normalizeStudioParameters, validateStudioMediaTemplate } from '../../services/h5pStudioSemantics.js';
 import { generateStudioActivity, proposeStudioQuestionPlan, resolveStudioInstructions, validateStudioQuestionPlan, validateStudioRequestFeasibility } from '../../services/h5pStudioAIService.js';
+import { StudioAuthoringStrategyRegistry, semanticsAuthoringStrategy } from '../../services/studioAuthoringStrategies.js';
 
 const catalog = getStudioCatalog();
 const chart = { graphMode: 'barChart', listOfTypes: [{ text: 'Oak', value: 12 }] };
 const complete = () => jest.fn().mockResolvedValue({ model: 'test-model', content: JSON.stringify({ title: 'Tree survey', params: chart }) });
 
 describe('native Studio AI authoring', () => {
+  test('a registered strategy specializes generation and repair within shared H5P validation', async () => {
+    class SurveyStrategy {
+      id = 'survey-chart';
+      #checks = 0;
+      validateRequest({ instructions }) { expect(instructions).toContain('survey'); }
+      buildContract(context) {
+        return { ...semanticsAuthoringStrategy.buildContract(context), guidance: ['Only include observed survey totals.'] };
+      }
+      postValidate({ parameters }) {
+        this.#checks++;
+        if (parameters.listOfTypes[0].value < 10) {
+          throw Object.assign(new Error('Survey total must be at least ten.'), { code: 'H5P_AI_INVALID' });
+        }
+      }
+      get checks() { return this.#checks; }
+    }
+    const strategy = new SurveyStrategy();
+    const strategies = new StudioAuthoringStrategyRegistry().register('H5P.Chart', strategy);
+    const completion = jest.fn()
+      .mockResolvedValueOnce({ content: JSON.stringify({ title: 'Survey', params: { ...chart, listOfTypes: [{ text: 'Oak', value: 2 }] } }) })
+      .mockResolvedValueOnce({ content: JSON.stringify({ title: 'Survey', params: chart }) });
+    const result = await generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Create a tree survey chart.', complete: completion, catalog, strategies });
+    expect(strategy.checks).toBe(2);
+    expect(completion.mock.calls[0][0].prompt).toContain('Only include observed survey totals.');
+    expect(result.provenance).toMatchObject({ strategyId: strategy.id, attempts: 2 });
+    const invalid = jest.fn().mockResolvedValue({ content: JSON.stringify({ title: 'Survey', params: { listOfTypes: [] } }) });
+    await expect(generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Create a tree survey chart.', complete: invalid, catalog, strategies }))
+      .rejects.toMatchObject({ code: 'H5P_AI_INVALID' });
+    expect(strategy.checks).toBe(2);
+  });
+
+  test('waits for an asynchronous request check before purchasing a model response', async () => {
+    const validateRequest = jest.fn(async () => {
+      await Promise.resolve();
+      throw Object.assign(new Error('This survey needs observed totals.'), { code: 'H5P_AI_INPUT', status: 400 });
+    });
+    const buildContract = jest.fn();
+    const strategies = new StudioAuthoringStrategyRegistry().register('H5P.Chart', {
+      id: 'observed-survey', validateRequest, buildContract
+    });
+    const completion = complete();
+    await expect(generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Create a tree survey chart.',
+      complete: completion, catalog, strategies })).rejects.toMatchObject({ code: 'H5P_AI_INPUT', status: 400 });
+    expect(validateRequest).toHaveBeenCalledTimes(1);
+    expect(buildContract).not.toHaveBeenCalled();
+    expect(completion).not.toHaveBeenCalled();
+    await expect(validateStudioRequestFeasibility('H5P.Chart 1.2', 'Create a tree survey chart.', strategies))
+      .rejects.toThrow('observed totals');
+  });
+
+  test('uses an asynchronously built contract before calling the model', async () => {
+    const outputSchema = { name: 'survey_output', schema: { type: 'object', properties: {
+      title: { type: 'string' }, params: { type: 'object' }
+    }, required: ['title', 'params'] } };
+    const buildContract = jest.fn(async context => {
+      await Promise.resolve();
+      return { ...semanticsAuthoringStrategy.buildContract(context), outputSchema,
+        guidance: ['Use only the observed survey counts.'], contractVersion: 2 };
+    });
+    const strategies = new StudioAuthoringStrategyRegistry().register('H5P.Chart', {
+      id: 'survey-schema', buildContract
+    });
+    const completion = complete();
+    const result = await generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Create a tree survey chart.',
+      complete: completion, catalog, strategies });
+    expect(buildContract).toHaveBeenCalledTimes(1);
+    expect(completion.mock.calls[0][0].jsonSchema).toBe(outputSchema);
+    expect(completion.mock.calls[0][0].prompt).toContain('Use only the observed survey counts.');
+    expect(result.provenance).toMatchObject({ strategyId: 'survey-schema', contractVersion: 2 });
+  });
+
+  test('awaits asynchronous result validation and repairs a rejected draft once', async () => {
+    const postValidate = jest.fn(async ({ parameters }) => {
+      await Promise.resolve();
+      if (parameters.listOfTypes[0].value < 10) {
+        throw Object.assign(new Error('Survey total must be at least ten.'), { code: 'H5P_AI_INVALID' });
+      }
+    });
+    const strategies = new StudioAuthoringStrategyRegistry().register('H5P.Chart', {
+      id: 'checked-survey', postValidate
+    });
+    const completion = jest.fn()
+      .mockResolvedValueOnce({ content: JSON.stringify({ title: 'Survey', params: { ...chart, listOfTypes: [{ text: 'Oak', value: 2 }] } }) })
+      .mockResolvedValueOnce({ content: JSON.stringify({ title: 'Survey', params: chart }) });
+    const result = await generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Create a tree survey chart.',
+      complete: completion, catalog, strategies });
+    expect(postValidate).toHaveBeenCalledTimes(2);
+    expect(completion).toHaveBeenCalledTimes(2);
+    expect(completion.mock.calls[1][0].prompt).toContain('Validation failed: Survey total must be at least ten.');
+    expect(result.document.parameters.listOfTypes[0].value).toBe(12);
+    expect(result.provenance.attempts).toBe(2);
+  });
   test('accepts blank instructions only when selected course evidence can ground the request', () => {
     expect(resolveStudioInstructions('', true)).toContain('selected course evidence');
     expect(() => resolveStudioInstructions('', false)).toThrow('select at least one ready course material');
@@ -93,9 +186,9 @@ describe('native Studio AI authoring', () => {
     expect(completion).not.toHaveBeenCalled();
   });
 
-  test('allows an explicit instruction to omit multiple-choice from a Documentation Tool', () => {
-    expect(() => validateStudioRequestFeasibility('H5P.DocumentationTool 1.8',
-      'Use written response fields and export answers to Word. Do not include multiple-choice questions.')).not.toThrow();
+  test('allows an explicit instruction to omit multiple-choice from a Documentation Tool', async () => {
+    await expect(validateStudioRequestFeasibility('H5P.DocumentationTool 1.8',
+      'Use written response fields and export answers to Word. Do not include multiple-choice questions.')).resolves.toBeUndefined();
   });
 
   test('rejects extra native items outside the approved collection plan', async () => {
@@ -264,7 +357,7 @@ describe('native Studio AI authoring', () => {
     const result = await generateStudioActivity({ library: 'H5P.Chart 1.2', instructions: 'Chart the provided tree counts.', userId: 'teacher', complete: complete(), catalog });
     expect(result.document.library).toBe('H5P.Chart 1.2');
     expect(result.document.parameters.listOfTypes[0].value).toBe(12);
-    expect(result.provenance).toEqual({ model: 'test-model', library: 'H5P.Chart 1.2', attempts: 1, validation: 'structural', contractVersion: 1 });
+    expect(result.provenance).toEqual({ model: 'test-model', library: 'H5P.Chart 1.2', strategyId: 'installed-semantics', attempts: 1, validation: 'structural', contractVersion: 1 });
   });
 
   test('repairs one invalid response and rejects repeated invalid output', async () => {

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import teachingBriefSchema from './studioTeachingBriefSchema.js';
 
 // This is instructor-owned authoring data, not an audit log. It preserves the
 // approved brief and plan across browser disconnects without replaying AI calls.
@@ -13,11 +14,15 @@ const schema = new mongoose.Schema({
   promptBased: { type: Boolean, default: false },
   objectiveIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'LearningObjective' }],
   canonicalObjectives: { type: Boolean, default: false },
+  workflowTarget: { type: String, enum: ['objectives', 'questions'], default: 'questions' },
+  objectiveEditReceipt: mongoose.Schema.Types.Mixed,
+  planningProposal: mongoose.Schema.Types.Mixed,
   materialIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Material' }],
   teachingRequirements: mongoose.Schema.Types.Mixed,
+  teachingBrief: { type: teachingBriefSchema, default: undefined },
   instructions: { type: String, required: true, maxlength: 12000 },
   revision: { type: Number, default: 0 },
-  status: { type: String, required: true, enum: ['planning', 'awaiting_approval', 'generating', 'completed', 'failed', 'interrupted'] },
+  status: { type: String, required: true, enum: ['planning', 'objectives_ready', 'awaiting_approval', 'generating', 'completed', 'failed', 'interrupted'] },
   phase: { type: String, enum: ['planning', 'generating'], default: 'planning' },
   objectives: { type: [mongoose.Schema.Types.Mixed], default: [] },
   plan: { type: [mongoose.Schema.Types.Mixed], default: [] },

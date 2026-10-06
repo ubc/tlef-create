@@ -465,6 +465,30 @@ export class QuizRAGService {
   /**
    * Retrieve relevant content chunks for question generation
    */
+  async assertMaterialsIndexed(materialIds, { userId, assertActive = async () => {} } = {}) {
+    const ids = [...new Set((materialIds || []).map(String))];
+    const fail = code => { throw Object.assign(new Error('Selected material retrieval is unavailable.'), { code }); };
+    const provider = this.ragModule?.ragProvider;
+    if (!ids.length || !provider?.client?.count || !provider.config?.collectionName) fail('MATERIAL_RETRIEVAL_UNAVAILABLE');
+    // Count in the active collection before purchasing a search embedding. A
+    // completed Material can still belong to an older embedding configuration.
+    for (const id of ids) {
+      await assertActive();
+      let result;
+      try {
+        const materialScope = qdrantMetadataFilter('materialId', [id]);
+        result = await provider.client.count(provider.config.collectionName, {
+          exact: true,
+          filter: userId ? { must: [materialScope, qdrantMetadataFilter('uploadedBy', [String(userId)])] } : materialScope
+        });
+      } catch { fail('MATERIAL_RETRIEVAL_UNAVAILABLE'); }
+      await assertActive();
+      if (!Number.isFinite(result?.count) || result.count < 0) fail('MATERIAL_RETRIEVAL_UNAVAILABLE');
+      if (!result.count) fail('MATERIAL_INDEX_MISSING');
+    }
+    return { materialCount: ids.length };
+  }
+
   async retrieveRelevantContent(learningObjective, questionType, options = {}) {
     const { 
       topK = 5, 
@@ -485,7 +509,9 @@ export class QuizRAGService {
         query: this.buildSearchQuery(learningObjective, questionType),
         chunks: [],
         totalResults: 0,
-        filteredResults: 0
+        filteredResults: 0,
+        error: 'RAG search unavailable',
+        errorCode: 'MATERIAL_RETRIEVAL_UNAVAILABLE'
       };
     }
 
@@ -496,6 +522,7 @@ export class QuizRAGService {
 
       // Query RAG system - check which method is available
       let results;
+      let retrievalStage = 'search';
       try {
         // UBC 0.1.5 ignores RetrievalOptions.filter in its Qdrant provider.
         // Use the configured client directly so scope is applied before top-K;
@@ -507,11 +534,13 @@ export class QuizRAGService {
         const filter = materialIds.length
           ? qdrantMetadataFilter('materialId', materialIds)
           : qdrantMetadataFilter('quizId', quizId ? [quizId] : []);
+        retrievalStage = 'embedding';
         const [embedding] = await this.embeddings.embed([searchQuery]);
         const vector = convertEmbeddingToArray(embedding);
         if (!vector.length || vector.some(value => !Number.isFinite(value))) {
           throw new Error('No valid embedding was returned for material retrieval.');
         }
+        retrievalStage = 'search';
         const points = await provider.client.search(provider.config.collectionName, {
           vector,
           filter,
@@ -522,13 +551,18 @@ export class QuizRAGService {
         });
         results = points.map(readQdrantChunk);
       } catch (error) {
-        console.error('❌ RAG search failed completely:', error.message);
+        const status = error?.status ?? error?.statusCode ?? error?.response?.status;
+        const errorCode = retrievalStage === 'embedding'
+          ? (status === 429 ? 'MODEL_SERVICE_LIMIT_REACHED' : [401, 403].includes(status) ? 'EMBEDDING_AUTH_FAILED' : 'MATERIAL_EMBEDDING_UNAVAILABLE')
+          : 'MATERIAL_RETRIEVAL_UNAVAILABLE';
+        console.error('RAG scoped search failed.', { code: errorCode });
         return {
           query: searchQuery,
           chunks: [],
           totalResults: 0,
           filteredResults: 0,
-          error: 'RAG search unavailable'
+          error: 'RAG search unavailable',
+          errorCode
         };
       }
 
@@ -1147,10 +1181,10 @@ export class QuizRAGService {
    * Process and embed a single material immediately upon upload
    * This replaces the job queue approach with immediate processing
    */
-  async processAndEmbedMaterial(material) {
+  async processAndEmbedMaterial(material, options = {}) {
     const materialId = material._id.toString();
     if (this.materialProcessing.has(materialId)) return this.materialProcessing.get(materialId);
-    const processing = this.processMaterialChunks(material);
+    const processing = this.processMaterialChunks(material, options);
     this.materialProcessing.set(materialId, processing);
     try {
       return await processing;
@@ -1159,7 +1193,7 @@ export class QuizRAGService {
     }
   }
 
-  async processMaterialChunks(material) {
+  async processMaterialChunks(material, { indexOnly = false, assertActive = async () => {} } = {}) {
     console.log(`🔄 Processing and embedding material: ${material.name}`);
     
     if (!this.ragModule || !this.embeddings || !this.documentParser) {
@@ -1176,7 +1210,12 @@ export class QuizRAGService {
       let parsedPages = [];
       
       // Extract content based on material type
-      if (material.type === 'text') {
+      if (indexOnly) {
+        // Restore retrieval infrastructure without changing an approved source
+        // version or re-reading a remote URL. The owned domain caller fences
+        // this cached source before and after each indexing operation.
+        content = material.content;
+      } else if (material.type === 'text') {
         content = material.content;
       } else if (material.type === 'url') {
         // Use cached content if already extracted, otherwise fetch from URL
@@ -1258,6 +1297,7 @@ export class QuizRAGService {
       // addDocument allocates new vector IDs, including for its internal chunks.
       // Complete deletion must precede every attempt so retries cannot duplicate
       // vectors, even when the previous write succeeded before its response failed.
+      await assertActive();
       const cleanup = await this.cleanupMaterialEmbeddings(material._id.toString());
       if (!cleanup.success) {
         return { success: false, error: `Could not prepare material for indexing: ${cleanup.error}. Please retry.`, chunksCount: 0 };
@@ -1268,6 +1308,7 @@ export class QuizRAGService {
       
       // Add each chunk to the vector database
       for (const [index, chunk] of chunks.entries()) {
+        await assertActive();
         try {
           const metadata = {
             materialId: material._id.toString(),
@@ -1291,6 +1332,7 @@ export class QuizRAGService {
           
           // Add document to RAG system
           const chunkIds = await this.ragModule.addDocument(chunk.content, metadata);
+          await assertActive();
           if (!Array.isArray(chunkIds) || chunkIds.length === 0) {
             throw new Error('Embedding service returned no vectors');
           }
@@ -1303,20 +1345,22 @@ export class QuizRAGService {
         }
       }
 
-      material.processingMetadata = {
-        ...(material.processingMetadata?.toObject?.() || material.processingMetadata || {}),
-        pageCount: parsedPages.length || material.processingMetadata?.pageCount,
-        chunkCount: chunks.length,
-        embeddedChunkCount: successCount,
-        failedChunkIndices,
-        parserVersion: parsedPages.length ? 'page-aware-v1' : 'section-aware-v1',
-        processedAt: new Date(),
-        embeddingProvider: this.embeddingConfig.provider,
-        embeddingModel: this.embeddingConfig.model,
-        embeddingDimensions: this.embeddingConfig.dimensions,
-        embeddingCollection: this.embeddingConfig.collectionName
-      };
-      await material.save();
+      if (!indexOnly) {
+        material.processingMetadata = {
+          ...(material.processingMetadata?.toObject?.() || material.processingMetadata || {}),
+          pageCount: parsedPages.length || material.processingMetadata?.pageCount,
+          chunkCount: chunks.length,
+          embeddedChunkCount: successCount,
+          failedChunkIndices,
+          parserVersion: parsedPages.length ? 'page-aware-v1' : 'section-aware-v1',
+          processedAt: new Date(),
+          embeddingProvider: this.embeddingConfig.provider,
+          embeddingModel: this.embeddingConfig.model,
+          embeddingDimensions: this.embeddingConfig.dimensions,
+          embeddingCollection: this.embeddingConfig.collectionName
+        };
+        await material.save();
+      }
 
       if (failedChunkIndices.length || chunks.length === 0) {
         return {

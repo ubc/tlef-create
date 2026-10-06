@@ -79,3 +79,34 @@
 @media (max-width:768px) {
     .sidebar-collapse-button,.sidebar-rail { display:none; }
 }
+
+/* Studio surfaces own a bounded viewport. Course pages
+   retain their existing page scroll and anchor behavior. */
+.app-layout:has(.h5p-studio-page) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.app-layout:has(.h5p-studio-page) .main-content {
+    min-height: 0;
+}
+
+.app-layout:has(.h5p-studio-page) .content-area {
+    display: flex;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+@media (max-width:768px) {
+    .app-layout:has(.h5p-studio-page) .mobile-menu-button {
+        top: 10px;
+        left: 10px;
+        width: 36px;
+        height: 36px;
+        box-shadow: none;
+        border: 0;
+        background: transparent;
+    }
+}

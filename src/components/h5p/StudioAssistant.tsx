@@ -29,6 +29,7 @@ interface Props {
 }
 const statusLabels: Record<StudioAssistantSession['status'], string> = {
   planning: 'Planning', awaiting_approval: 'Needs your approval', generating: 'Generating questions',
+  objectives_ready: 'Learning objectives ready',
   completed: 'Completed', failed: 'Failed', interrupted: 'Interrupted',
 };
 const isRunning = (session: StudioAssistantSession | null) => session?.status === 'planning' || session?.status === 'generating';

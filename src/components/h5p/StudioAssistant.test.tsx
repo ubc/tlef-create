@@ -155,7 +155,7 @@ it('shows actual prepared-question preview and completed outputs without forcing
   mount('session1');
   await act(async () => { await Promise.resolve(); });
   expect(screen.getByTitle('Prepared question preview')).toHaveAttribute('src', '/api/create/h5p-editor/assistant/sessions/session1/preview?v=1');
-  expect(screen.getByText(/the batch is not saved/)).toBeInTheDocument();
+  expect(screen.getByText(/checked questions are saved even if other items need attention/)).toBeInTheDocument();
   mocks.getSession.mockResolvedValue(response({ ...session, status: 'completed', outputs: [{ contentId: 'content1', title: 'Combined lesson' }] }));
   await act(async () => vi.advanceTimersByTimeAsync(2100));
   expect(screen.getByText('Combined lesson')).toBeInTheDocument();

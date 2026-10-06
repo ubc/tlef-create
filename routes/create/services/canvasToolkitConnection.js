@@ -4,6 +4,11 @@ import { canvas } from '@ubc/ubc-genai-toolkit-lms-integration';
 export const CANVAS_SCOPES = [
   'url:GET|/api/v1/courses',
   'url:GET|/api/v1/courses/:course_id/modules',
+  'url:GET|/api/v1/courses/:course_id/files',
+  'url:GET|/api/v1/courses/:course_id/files/:id',
+  'url:GET|/api/v1/files/:id/public_url',
+  'url:GET|/api/v1/courses/:course_id/pages',
+  'url:GET|/api/v1/courses/:course_id/pages/:url_or_id',
   'url:POST|/api/v1/courses/:course_id/modules',
   'url:POST|/api/v1/courses/:course_id/pages',
   'url:POST|/api/v1/courses/:course_id/modules/:module_id/items',

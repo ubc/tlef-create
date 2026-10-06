@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { reviewQuestionFeedback } from '../../services/questionFeedbackReview.js';
+import { feedbackReviewSchema, reviewQuestionFeedback } from '../../services/questionFeedbackReview.js';
 
 const question = {
   questionText: 'What is condensation?', correctAnswer: 'Gas changes to liquid.', explanation: 'Original explanation',
@@ -8,7 +8,7 @@ const question = {
     { text: 'Liquid changes to gas.', isCorrect: false, chosenFeedback: 'Incorrect.', notChosenFeedback: 'You confused the direction.' }
   ] }
 };
-const reviewed = { answerIsCorrect: true, followsInstructorRequest: true, issues: ['The omission feedback reverses the correct concept.'], explanation: 'Condensation converts gas to liquid as energy is lost.', calculations: [], feedback: [
+const reviewed = { contentIsValid: true, answerIsCorrect: true, rubricIsAppropriate: true, evidenceIsSufficient: true, followsInstructorRequest: true, issues: ['The omission feedback reverses the correct concept.'], explanation: 'Condensation converts gas to liquid as energy is lost.', calculations: [], feedback: [
   { optionText: 'Gas changes to liquid.', isCorrect: true, rationale: 'Condensation changes gas to liquid.', calculations: [] },
   { optionText: 'Liquid changes to gas.', isCorrect: false, rationale: 'Liquid changing to gas describes evaporation.', calculations: [] }
 ] };
@@ -28,6 +28,9 @@ describe('independent question feedback review', () => {
   test.each([
     [{ ...reviewed, answerIsCorrect: false }, 'ANSWER_INVALID'],
     [{ ...reviewed, followsInstructorRequest: false }, 'INSTRUCTION_MISMATCH'],
+    [{ ...reviewed, evidenceIsSufficient: false }, 'EVIDENCE_INSUFFICIENT'],
+    [{ ...reviewed, contentIsValid: false }, 'ANSWER_INVALID'],
+    [{ ...reviewed, rubricIsAppropriate: false }, 'RUBRIC_INVALID'],
     [{ ...reviewed, feedback: [] }, 'FEEDBACK_INVALID'],
     [{}, 'REVIEW_INVALID_RESPONSE']
   ])('reports a structured failure without storing review prose', async (payload, reason) => {
@@ -140,6 +143,31 @@ describe('independent question feedback review', () => {
     expect(result.correctAnswer).toBe(question.correctAnswer);
     expect(result.content.options.map(option => option.isCorrect)).toEqual([true, false]);
     expect(model).toHaveBeenCalledTimes(1);
+  });
+  test('computes newly written incline feedback while preserving the correct rounded answer and option identities', async () => {
+    const incline = { ...question, questionText: 'A block slides down a 30° incline with kinetic friction 0.20 and g = 9.80 m/s². Find its acceleration to two decimal places.',
+      correctAnswer: '3.20 m/s²', content: { ...question.content, options: [
+        { ...question.content.options[0], text: '3.20 m/s²' },
+        { ...question.content.options[1], text: '6.60 m/s²' }
+      ] } };
+    const payload = { ...reviewed, issues: [], explanation: 'Friction opposes motion, so the downslope acceleration is approximately 3.20 m/s².',
+      calculations: [{ expression: '9.8*(0.5-0.2*0.8660254037844386)' }],
+      feedback: [
+        { optionText: '3.20 m/s²', isCorrect: true, rationale: 'Subtract kinetic friction from the downslope gravitational component.', calculations: [] },
+        { optionText: '6.60 m/s²', isCorrect: false, rationale: 'Adding friction in the direction of motion would produce approximately 6.60 m/s².', calculations: [{ expression: '9.8*(0.5+0.2*0.8660254037844386)' }] }
+      ] };
+    const model = complete(payload);
+    const result = await reviewQuestionFeedback(incline, { questionType: 'multiple-choice', complete: model });
+    expect(result.explanation).toContain('≈ 3.202590209.');
+    expect(result.content.options[1].chosenFeedback).toContain('≈ 6.597409791.');
+    expect(result.reviewSummary.arithmeticChecks).toBe(2);
+    expect(result.questionText).toBe(incline.questionText);
+    expect(result.correctAnswer).toBe('3.20 m/s²');
+    expect(result.content.options.map(({ text, isCorrect }) => ({ text, isCorrect })))
+      .toEqual(incline.content.options.map(({ text, isCorrect }) => ({ text, isCorrect })));
+    expect(feedbackReviewSchema.schema.properties.calculations.items).toMatchObject({ required: ['expression'], properties: { expression: { type: 'string' } }, additionalProperties: false });
+    expect(feedbackReviewSchema.schema.properties.calculations.items.properties).not.toHaveProperty('result');
+    expect(model.mock.calls[0][0].prompt).toContain('expression only');
   });
   test.each([
     ['wrong distractor derivation', { expression: '12 + 8 - 3', result: 20 }, 'ARITHMETIC_FALSE_EQUALITY'],

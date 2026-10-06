@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { questionReviewSummarySchema } from './questionReviewSummarySchema.js';
 import { QUESTION_TYPES, DIFFICULTY_LEVELS, REVIEW_STATUS } from '../config/constants.js';
 import { QUESTION_TEXT_LIMITS } from '../utils/questionTextLimits.js';
 import { beginQuestionMutation } from '../services/questionPublication.js';
@@ -185,7 +186,8 @@ const questionSchema = new mongoose.Schema({
     instructorPrompt: { type: String }, // Original custom-only instructions, without system/course additions
     supportingLearningObjectives: [{ type: mongoose.Schema.Types.ObjectId, ref: 'LearningObjective' }],
     useCustomPromptOnly: { type: Boolean },
-    qualityReview: { type: String, enum: ['ai-feedback-reviewed'] },
+    qualityReview: { type: String, enum: ['ai-feedback-reviewed', 'ai-semantic-reviewed'] },
+    reviewSummary: { type: questionReviewSummarySchema, default: undefined },
     sourceReferences: [{
       materialId: { type: mongoose.Schema.Types.ObjectId, ref: 'Material' },
       materialName: { type: String },

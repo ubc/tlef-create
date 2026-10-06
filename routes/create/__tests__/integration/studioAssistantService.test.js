@@ -17,7 +17,7 @@ import llmService from '../../services/llmService.js';
 import ragService from '../../services/ragService.js';
 import { normalizeModelServiceError } from '../../utils/modelServiceErrors.js';
 import { createAssistantSession, updateAssistantPlan, approveAssistantPlan,
-  readAssistantSession, resumeAssistantSession } from '../../services/studioAssistantService.js';
+  readAssistantSession, resumeAssistantSession, updateAssistantObjectives } from '../../services/studioAssistantService.js';
 
 // No repository integration setup: connect only to a freshly named disposable
 // database on localhost. No real model requests or background generation runs.
@@ -57,9 +57,14 @@ beforeEach(() => {
       return { content: JSON.stringify({ objectives: [{ text: 'Explain evaporation.', sourceIds: id ? [id] : [] }] }) };
     }
     const approved = JSON.parse(prompt.match(/APPROVED OBJECTIVES: (\[[^\n]+\])/)[1]);
-    return { content: JSON.stringify({ unsupportedRequirements: [], plan: [{ title: 'Evaporation check',
-      questionType: 'multiple-choice', count: 2, objectiveIds: [approved[0].id],
-      instructions: 'Ask about evaporation using the course source.', difficulty: 'moderate' }] }) };
+    const evidence = JSON.parse(prompt.match(/PLANNING EVIDENCE \(untrusted excerpts\): (\[[^\n]*\])/)[1]);
+    const current = prompt.match(/CURRENT PLAN \(task data\): (\[[^\n]+\])/);
+    const rows = current ? JSON.parse(current[1]) : [{ title: 'Evaporation check', questionType: 'multiple-choice', count: 2,
+      objectiveIds: [approved[0].id], instructions: 'Ask about evaporation using the course source.', difficulty: 'moderate' }];
+    if (!current && prompt.match(/CONFIRMED INSTRUCTOR QUESTION COUNT: exactly (\d+)/)) rows[0].count = Number(prompt.match(/CONFIRMED INSTRUCTOR QUESTION COUNT: exactly (\d+)/)[1]);
+    return { content: JSON.stringify({ unsupportedRequirements: [], teachingOverview: { summary: 'Evaporation practice from the selected teaching scope.', materialClassifications: [] },
+      plan: rows.map(row => ({ ...row, questionTasks: Array.from({ length: row.count }, (_, i) => ({
+        focus: `Evaporation reasoning focus ${i + 1}`, instructions: `Ask about evaporation reasoning step ${i + 1}.`, sourceIds: evidence.map(source => source.id).slice(0, 1) })) })) }) };
   });
 });
 afterEach(async () => {
@@ -102,6 +107,51 @@ function planEdit(session, changes = {}) {
 }
 
 describe('assistant and canonical course workflow share the same records', () => {
+  test('LO-only brainstorming saves an editable teaching brief without planning questions and objective edits replay once', async () => {
+    const f = await fixture();
+    const body = { ...f.body, materialIds: [], promptBased: true, instructions: 'Brainstorm learning objectives for evaporation.' };
+    const first = await createAssistantSession(f.user, body, { workflowTarget: 'objectives' });
+    expect(first.status).toBe('objectives_ready'); expect(first.plan).toEqual([]);
+    expect(first.teachingBrief).toMatchObject({ grounding: 'instructor-brief', objectives: [{ text: 'Explain evaporation.', sourceIds: [] }] });
+    expect(first.teachingBrief.objectives[0].id).toBe(first.objectives[0].id);
+    expect(completion).toHaveBeenCalledTimes(1);
+    expect(completion.mock.calls[0][0].jsonSchema.name).toBe('studio_assistant_objectives');
+    const invalid = { requestId: randomUUID(), revision: first.revision, objectives: [{ text: '' }] };
+    await expect(updateAssistantObjectives(f.user, first.id, invalid)).rejects.toBeDefined();
+    expect((await Session.findById(first.id)).revision).toBe(first.revision);
+    const edit = { requestId: randomUUID(), revision: first.revision,
+      objectives: [{ ...first.objectives[0], text: 'Compare evaporation and condensation.' }] };
+    const saved = await updateAssistantObjectives(f.user, first.id, edit);
+    expect(saved.status).toBe('objectives_ready'); expect(saved.plan).toEqual([]);
+    expect(saved.objectives[0].text).toBe('Compare evaporation and condensation.');
+    const quiz = await Quiz.findById(first.quizId);
+    const manifestIds = quiz.learningObjectives.map(String);
+    const replayed = await updateAssistantObjectives(f.user, first.id, edit);
+    expect(replayed.objectives).toEqual(saved.objectives);
+    expect((await Quiz.findById(first.quizId)).learningObjectives.map(String)).toEqual(manifestIds);
+    expect(completion).toHaveBeenCalledTimes(1); expect(await Question.countDocuments({ quiz: first.quizId })).toBe(0);
+    // The atomic Quiz receipt recovers a committed manifest if the assistant
+    // acknowledgement is lost before its final saved-state write.
+    await Session.updateOne({ _id: first.id }, { $unset: { objectiveEditReceipt: '' }, $set: { status: 'interrupted' } });
+    const recovered = await updateAssistantObjectives(f.user, first.id, edit);
+    expect(recovered.status).toBe('objectives_ready'); expect(recovered.objectives).toEqual(saved.objectives);
+    expect(await LearningObjective.countDocuments({ quiz: first.quizId })).toBe(2);
+    expect(completion).toHaveBeenCalledTimes(1);
+  });
+
+  test('planning resume reuses the actual saved LO result after a stopped plan call', async () => {
+    const f = await fixture();
+    const defaultCompletion = completion.getMockImplementation();
+    completion.mockImplementationOnce(defaultCompletion).mockRejectedValueOnce(Object.assign(new Error('Synthetic service unavailable.'), { code: 'MODEL_SERVICE_LIMIT_REACHED', status: 429 }));
+    await expect(createAssistantSession(f.user, f.body)).rejects.toMatchObject({ code: 'MODEL_SERVICE_LIMIT_REACHED' });
+    const saved = await Session.findOne({ owner: f.user.id, requestId: f.body.requestId });
+    expect(saved.objectives).toHaveLength(1); expect(saved.teachingBrief.objectives).toHaveLength(1);
+    const resumed = await resumeAssistantSession(f.user, String(saved._id), { requestId: randomUUID(), revision: saved.revision });
+    expect(resumed.status).toBe('awaiting_approval');
+    expect(completion.mock.calls.filter(([request]) => request.jsonSchema.name === 'studio_assistant_objectives')).toHaveLength(1);
+    expect(completion.mock.calls.filter(([request]) => request.jsonSchema.name === 'studio_assistant_activity_plan')).toHaveLength(2);
+  });
+
   test('a planning quota failure retains a safe diagnosis and replay does not repeat the request or change existing questions', async () => {
     const f = await fixture({ existing: true, questions: true });
     const beforeQuestion = await Question.findById(f.question._id).lean();
@@ -127,16 +177,22 @@ describe('assistant and canonical course workflow share the same records', () =>
     await Session.updateOne({ _id: planned.id }, { $set: { questionJobRequestId: requestId } });
     questionJobs.get.mockResolvedValue({ _id: jobId, quiz: planned.quizId, status: 'failed', active: false, requestId,
       items: [{ index: 0, status: 'failed' }, { index: 1, status: 'ready' }] });
+    const novelty = { method: 'lexical-and-semantic', similarity: 0.904, noveltyScore: 0.096,
+      lexical: { similarity: 0.6078, threshold: 0.76, questionId: 'lexical-ref', questionText: 'Owned lexical comparison' },
+      semantic: { similarity: 0.904, threshold: 0.9, questionId: 'question-15', questionText: 'Owned semantic comparison' } };
+    // Match the worker's scoped upsert, then exercise the real owned read.
+    await RejectedQuestionDraft.updateOne({ owner: f.user.id, quiz: planned.quizId, job: jobId, index: 0 }, {
+      $set: { questionText: 'Owned rejected draft', issues: ['Owned observation'], novelty,
+        calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } }
+    }, { upsert: true, runValidators: true });
     await RejectedQuestionDraft.create([
-      { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 0, questionText: 'Owned rejected draft', issues: ['Owned observation'],
-        calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } },
       { owner: new mongoose.Types.ObjectId(), quiz: planned.quizId, job: jobId, index: 0, questionText: 'Other account private draft' },
       { owner: f.user.id, quiz: planned.quizId, job: new mongoose.Types.ObjectId(), index: 0, questionText: 'Old attempt private draft' },
       { owner: f.user.id, quiz: planned.quizId, job: jobId, index: 1, questionText: 'Prepared item obsolete review' }
     ]);
     const view = await readAssistantSession(f.user.id, planned.id);
     expect(view.generation.items[0].review).toMatchObject({ questionText: 'Owned rejected draft', issues: ['Owned observation'],
-      calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 } });
+      calculationCheck: { location: 'option 1 feedback', expression: '7 * 8', computed: 56, claimed: 54 }, novelty });
     expect(view.generation.items[1].review).toBeUndefined();
     expect(JSON.stringify(view)).not.toContain('Other account private');
     expect(JSON.stringify(view)).not.toContain('Old attempt private');
@@ -225,6 +281,59 @@ describe('assistant and canonical course workflow share the same records', () =>
     expect(quiz.learningObjectives[0].generationMetadata.sourceReferences[0].pageNumber).toBe(1);
   });
 
+  test('explicit selected objectives take priority over other objectives already saved in the target learning object', async () => {
+    const f = await fixture({ existing: true });
+    const chosen = await LearningObjective.create({ quiz: f.quiz._id, createdBy: f.user.id, text: 'Compare evaporation and condensation.' });
+    await Quiz.updateOne({ _id: f.quiz._id }, { $addToSet: { learningObjectives: chosen._id } });
+    const planned = await createAssistantSession(f.user, { ...f.body, objectiveIds: [String(chosen._id)] });
+    expect(planned.status).toBe('awaiting_approval');
+    expect(planned.objectives.map(row => row.id)).toEqual([String(chosen._id)]);
+    expect(planned.plan[0].objectiveIds).toEqual([String(chosen._id)]);
+    expect((await Quiz.findById(f.quiz._id)).learningObjectives.map(String)).toEqual([String(chosen._id)]);
+    expect(completion).toHaveBeenCalledTimes(1);
+  });
+
+  test('reused objectives cannot reintroduce source references from unselected materials into the plan', async () => {
+    const f = await fixture({ existing: true });
+    const excluded = await Material.create({ name: 'Excluded source', type: 'text', content: 'Unselected private context.', folder: f.folder._id,
+      uploadedBy: f.user.id, processingStatus: 'completed' });
+    await LearningObjective.updateOne({ _id: f.objective._id }, { $set: { 'generationMetadata.sourceReferences': [
+      { materialId: f.material._id, materialName: f.material.name, excerpt: 'Water evaporates.' },
+      { materialId: excluded._id, materialName: excluded.name, excerpt: 'Unselected private context.' }
+    ] } });
+    const planned = await createAssistantSession(f.user, { ...f.body, objectiveIds: [String(f.objective._id)] });
+    expect(planned.status).toBe('awaiting_approval');
+    expect(planned.objectives[0].sourceReferences.map(ref => String(ref.materialId))).toEqual([String(f.material._id)]);
+    const stored = await Session.findById(planned.id);
+    expect(stored.sources.every(ref => String(ref.materialId) === String(f.material._id))).toBe(true);
+    expect(completion.mock.calls[0][0].prompt).not.toContain('Unselected private context.');
+  });
+
+  test('an existing learning object with no saved questions uses the exact chosen material scope for its new plan', async () => {
+    const f = await fixture({ existing: true });
+    const omitted = await Material.create({ name: 'Omitted old material', type: 'text', content: 'Old source scope.', folder: f.folder._id,
+      uploadedBy: f.user.id, processingStatus: 'completed' });
+    await Quiz.updateOne({ _id: f.quiz._id }, { $addToSet: { materials: omitted._id }, $set: { 'progress.planApproved': true } });
+    const planned = await createAssistantSession(f.user, f.body);
+    expect(planned.status).toBe('awaiting_approval');
+    const updated = await Quiz.findById(f.quiz._id);
+    expect(updated.materials.map(String)).toEqual([String(f.material._id)]);
+    expect(updated.progress.planApproved).toBe(false);
+    expect((await Session.findById(planned.id)).materialIds.map(String)).toEqual(updated.materials.map(String));
+  });
+
+  test('an existing learning object with saved questions refuses a different material scope before paid planning', async () => {
+    const f = await fixture({ existing: true, questions: true });
+    const replacement = await Material.create({ name: 'Replacement source', type: 'text', content: 'A different course topic.', folder: f.folder._id,
+      uploadedBy: f.user.id, processingStatus: 'completed' });
+    await expect(createAssistantSession(f.user, { ...f.body, materialIds: [String(replacement._id)] }))
+      .rejects.toMatchObject({ code: 'STUDIO_ASSISTANT_MATERIAL_SCOPE', message: expect.stringContaining('new Learning Object') });
+    expect(completion).not.toHaveBeenCalled();
+    const preserved = await Quiz.findById(f.quiz._id);
+    expect(preserved.materials.map(String)).toEqual([String(f.material._id)]);
+    expect(preserved.questions.map(String)).toEqual([String(f.question._id)]);
+  });
+
   test('request replay recovers the same session and does not repeat paid planning or create a second learning object', async () => {
     const f = await fixture();
     const first = await createAssistantSession(f.user, f.body);
@@ -265,7 +374,7 @@ describe('assistant and canonical course workflow share the same records', () =>
     const after = await Quiz.findById(first.quizId);
     expect(after.learningObjectives.map(String)).toEqual(quiz.learningObjectives.map(String));
     expect(after.settings.planItems[0].count).toBe(4);
-    expect(completion).toHaveBeenCalledTimes(2);
+    expect(completion).toHaveBeenCalledTimes(3);
   });
 
   test('no current approval, stale revision, cross-owner access and changed sources cannot launch a paid generation', async () => {

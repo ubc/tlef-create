@@ -4,10 +4,11 @@ import { AuthoringRun } from '../../models/StudioAuthoring.js';
 import sseService from '../sseService.js';
 const context = new AsyncLocalStorage();
 export const withAuthoringOperations = (run, work) => context.run({ runId: String(run._id), sessionId: String(run.sessionId), owner: String(run.owner) }, work);
+export const getAuthoringOperationScope = () => context.getStore();
 
 // Record actual operation boundaries, not generated explanations or hidden
 // reasoning. The authoritative snapshot also contains these items for replay.
-export async function authoringOperation(name, label, work) {
+export async function authoringOperation(name, label, work, summarize) {
   const scope = context.getStore();
   if (!scope) return work();
   const operation = { id: randomUUID(), runId: scope.runId, name, label, status: 'running', startedAt: new Date(), parentId: scope.parentId };
@@ -17,7 +18,13 @@ export async function authoringOperation(name, label, work) {
   const emit = () => sseService.emit('authoring-operation', { ...scope, operation: { ...operation } });
   emit();
   let failed = false;
-  try { return await context.run({ ...scope, parentId: operation.id }, work); }
+  try {
+    const result = await context.run({ ...scope, parentId: operation.id, operationName: name }, work);
+    // Callers supply a bounded, user-facing outcome. Never serialize raw model
+    // requests, material content or errors into operation telemetry.
+    if (summarize) try { operation.summary = String(summarize(result) || '').slice(0, 600); } catch { /* Telemetry cannot discard the result. */ }
+    return result;
+  }
   catch (error) { failed = true; throw error; }
   finally {
     operation.status = failed ? 'failed' : 'completed';

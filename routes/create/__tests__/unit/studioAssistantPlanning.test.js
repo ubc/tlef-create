@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import ragService from '../../services/ragService.js';
 import llmService from '../../services/llmService.js';
-import { getStudioCatalog } from '../../services/h5pStudioCatalog.js';
+import { getStudioCatalog, libraryProblems } from '../../services/h5pStudioCatalog.js';
 import { getH5PTypeAdapter, getH5PTypesForContainer } from '../../config/h5pTypeAdapterRegistry.js';
 import {
   ASSISTANT_LIMITS, buildAssistantContext, fingerprintAssistantMaterials, getAssistantQuestionTypes,
@@ -28,7 +28,12 @@ const catalog = { types: [
   { library: 'H5P.Dialogcards 1.9', mode: 'template' }
 ] };
 const request = { instructions: 'Teach the water cycle in Chinese.', context: 'Source: water evaporates.', userId };
-const planResponse = (changes = {}) => ({ plan: [{ ...row, id: undefined }], unsupportedRequirements: [], ...changes });
+const questionTasks = [
+  { id: 'task-activity-1-1', focus: 'Identify the liquid-to-gas change', instructions: 'Identify what changes when a puddle evaporates.', sourceIds: [source.id], visualRequirement: 'none' },
+  { id: 'task-activity-1-2', focus: 'Correct the disappearing-water misconception', instructions: 'Explain why evaporated water has not ceased to exist.', sourceIds: [source.id], visualRequirement: 'none' }
+];
+const planResponse = (changes = {}) => ({ plan: [{ ...row, id: undefined, questionTasks: questionTasks.map(({ id: _id, ...task }) => task) }],
+  unsupportedRequirements: [], teachingOverview: { summary: 'Evaporation practice.', materialClassifications: [] }, ...changes });
 let inventory;
 let completion;
 beforeEach(() => {
@@ -109,17 +114,23 @@ describe('bounded, authorized course material context', () => {
 });
 
 describe('canonical question type and teacher approval contract', () => {
-  test('requires both an AI-enabled Column adapter and an exact healthy generate catalog entry', () => {
+  test('requires an AI-enabled Column adapter and a healthy installed native or embedded library', () => {
     expect(getAssistantQuestionTypes(catalog).map(type => type.questionType)).toEqual(['multiple-choice', 'documentation-tool']);
     const real = getAssistantQuestionTypes();
+    const installed = getStudioCatalog();
     expect(real.length).toBeGreaterThanOrEqual(10);
     for (const type of real) {
       expect(getH5PTypesForContainer('column')).toContain(type.questionType);
       expect(getH5PTypeAdapter(type.questionType).mainLibrary).toBe(type.library);
-      expect(getStudioCatalog().types.find(entry => entry.library === type.library).mode).toBe('generate');
+      const native = installed.types.find(entry => entry.library === type.library);
+      if (native) expect(native.mode).toBe('generate');
+      else {
+        expect([0, false]).toContain(installed.libraries.get(type.library).descriptor.runnable);
+        expect(libraryProblems(type.library, installed.libraries)).toEqual([]);
+      }
     }
     expect(real.map(type => type.questionType)).not.toContain('branching-scenario');
-    expect(real.map(type => type.questionType)).not.toContain('discussion');
+    expect(real.map(type => type.questionType)).toContain('discussion');
   });
 
   test('accepts teacher text/count/difficulty edits and restores trusted citation metadata', () => {
@@ -212,7 +223,7 @@ describe('separate, bounded model stages', () => {
 
   test('planning uses approved IDs and canonical types; it neither re-generates objectives nor creates activities', async () => {
     completion.mockResolvedValue({ content: JSON.stringify(planResponse()) });
-    expect(await proposeAssistantPlan({ ...request, objectives, catalog })).toEqual([row]);
+    expect(await proposeAssistantPlan({ ...request, objectives, catalog })).toEqual([{ ...row, questionTasks }]);
     expect(completion).toHaveBeenCalledTimes(1);
     const options = completion.mock.calls[0][0];
     const properties = options.jsonSchema.schema.properties.plan.items.properties;
@@ -223,6 +234,97 @@ describe('separate, bounded model stages', () => {
     expect(options.prompt).toContain(objectives[0].text);
     expect(options.userId).toBe(userId);
     expect(inventory).not.toHaveBeenCalled();
+  });
+
+  test('rejects identical, missing, foreign-source or unavailable-visual tasks before generation', async () => {
+    for (const tasks of [undefined, questionTasks.slice(0, 1), [questionTasks[0], questionTasks[0]],
+      questionTasks.map(task => ({ ...task, sourceIds: ['src-foreign'] })),
+      questionTasks.map(task => ({ ...task, visualRequirement: 'image' }))]) {
+      completion.mockResolvedValue({ content: JSON.stringify(planResponse({ plan: [{ ...row, questionTasks: tasks }] })) });
+      await expect(proposeAssistantPlan({ ...request, objectives, catalog })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_INVALID_RESPONSE' });
+    }
+    expect(completion).toHaveBeenCalledTimes(5);
+  });
+
+  test('rejects exact repeated task instructions across rows at both proposal and approval boundaries', async () => {
+    const repeated = [
+      { ...row, count: 1, questionTasks: [questionTasks[0]] },
+      { ...row, id: 'activity-2', count: 1, questionTasks: [{ ...questionTasks[0], id: 'task-other',
+        focus: 'A different label', instructions: `  ${questionTasks[0].instructions.toUpperCase()}  ` }] }
+    ];
+    expect(() => validateAssistantApproval({ objectives, plan: repeated }, catalog, [source])).toThrow('across the activity plan');
+    completion.mockResolvedValue({ content: JSON.stringify(planResponse({ plan: repeated })) });
+    await expect(proposeAssistantPlan({ ...request, objectives, catalog })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_INVALID_RESPONSE' });
+    expect(completion).toHaveBeenCalledTimes(1);
+    const distinct = repeated.map((value, index) => ({ ...value, questionTasks: [questionTasks[index]] }));
+    expect(validateAssistantApproval({ objectives, plan: distinct }, catalog, [source]).totalQuestions).toBe(2);
+  });
+
+  test('model planning receives one source copy including evidence beyond the old 700-character slice', async () => {
+    const expanded = { ...source, excerpt: `${'e'.repeat(750)} IMPORTANT-END-FACT` };
+    completion.mockResolvedValue({ content: JSON.stringify(planResponse()) });
+    await proposeAssistantPlan({ ...request, context: JSON.stringify({ sampled: true, sources: [expanded] }),
+      sources: [expanded], objectives: [{ ...objectives[0], sourceReferences: [expanded] }], catalog });
+    const prompt = completion.mock.calls[0][0].prompt;
+    expect(prompt.split('IMPORTANT-END-FACT')).toHaveLength(2);
+    expect(prompt).toContain('"sampled":true');
+    expect(prompt).not.toContain('SOURCE CONTEXT');
+  });
+
+  test('persists the factual brief after the actual objectives before a separate planning call', async () => {
+    const stages = [];
+    completion.mockResolvedValue({ content: JSON.stringify({ objectives: [{ text: 'Explain evaporation.', sourceIds: [source.id] }] }) });
+    await proposeAssistantObjectives({ ...request, sources: [source], materials: [material()], onTeachingBrief: brief => stages.push(brief) });
+    expect(stages).toHaveLength(1);
+    expect(stages[0]).toMatchObject({ grounding: 'material-grounded', objectives: [{ id: 'lo-1', text: 'Explain evaporation.', sourceIds: ['src-water'] }] });
+    expect(completion).toHaveBeenCalledTimes(1);
+    expect(completion.mock.calls[0][0].prompt).toContain('assessable action verb');
+  });
+
+  test('a known count mismatch gets one complete task replan while preserving the confirmed count', async () => {
+    const thirdTask = { focus: 'Describe the destination of water vapor', instructions: 'Explain where the evaporated water is present in the air.', sourceIds: [source.id], visualRequirement: 'none' };
+    completion.mockResolvedValueOnce({ content: JSON.stringify(planResponse()) })
+      .mockResolvedValueOnce({ content: JSON.stringify(planResponse({ plan: [{ ...row, count: 3, questionTasks: [...questionTasks, thirdTask] }] })) });
+    const observations = [];
+    const result = await proposeAssistantPlan({ ...request, objectives, catalog, targetQuestionCount: 3, onCountMismatch: observation => observations.push(observation) });
+    expect(completion).toHaveBeenCalledTimes(2);
+    expect(observations).toMatchObject([{ attempt: 1, targetCount: 3, actualCount: 2 }]);
+    expect(result[0].count).toBe(3);
+    expect(result[0].questionTasks).toHaveLength(3);
+    expect(new Set(result[0].questionTasks.map(task => task.focus)).size).toBe(3);
+    expect(completion.mock.calls[0][0].prompt).toContain('exactly 3');
+    expect(completion.mock.calls[1][0].prompt).toContain('previous validated plan allocated 2');
+  });
+
+  test('two valid but undersized plans stop without changing the teacher requirement or synthesizing tasks', async () => {
+    completion.mockResolvedValue({ content: JSON.stringify(planResponse()) });
+    await expect(proposeAssistantPlan({ ...request, objectives, catalog, targetQuestionCount: 15 })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_COUNT_MISMATCH', status: 422 });
+    expect(completion).toHaveBeenCalledTimes(2);
+    expect(completion.mock.calls[1][0].prompt).toContain('exactly 15');
+  });
+
+  test('count correction cannot automatically replay an unreadable or unconfirmed model call', async () => {
+    completion.mockResolvedValue({ content: 'unreadable' });
+    await expect(proposeAssistantPlan({ ...request, objectives, catalog, targetQuestionCount: 15 })).rejects.toMatchObject({ code: 'H5P_ASSISTANT_INVALID_RESPONSE' });
+    expect(completion).toHaveBeenCalledTimes(1);
+    completion.mockClear();
+    const unknown = Object.assign(new Error('Transport failed'), { code: 'NETWORK_UNCONFIRMED' });
+    completion.mockRejectedValue(unknown);
+    await expect(proposeAssistantPlan({ ...request, objectives, catalog, targetQuestionCount: 15 })).rejects.toBe(unknown);
+    expect(completion).toHaveBeenCalledTimes(1);
+  });
+
+  test('numeric storage error codes propagate without masking the cause or buying another model call', async () => {
+    const error = Object.assign(new Error('Storage operation failed'), { code: 11000 });
+    completion.mockResolvedValue({ content: JSON.stringify(planResponse()) });
+    await expect(proposeAssistantPlan({ ...request, objectives, catalog, teachingBrief: { summary: '', materials: [] },
+      onTeachingBrief: async () => { throw error; } })).rejects.toBe(error);
+    expect(completion).toHaveBeenCalledTimes(1);
+    completion.mockClear();
+    completion.mockResolvedValue({ content: JSON.stringify({ objectives: [{ text: objectives[0].text, sourceIds: [source.id] }] }) });
+    await expect(proposeAssistantObjectives({ ...request, materials: [material()], sources: [source],
+      onTeachingBrief: async () => { throw error; } })).rejects.toBe(error);
+    expect(completion).toHaveBeenCalledTimes(1);
   });
 
   test('surfaces native capability limits without silently substituting the requested activity', async () => {

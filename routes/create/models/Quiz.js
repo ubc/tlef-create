@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import questionTaskSchema from './studioQuestionTaskSchema.js';
+import { validateQuestionTasks } from '../services/studioQuestionTaskPlan.js';
 import { PEDAGOGICAL_APPROACHES, DIFFICULTY_LEVELS, QUIZ_STATUS, QUESTION_TYPES } from '../config/constants.js';
 import { withQuestionMutation } from '../services/questionPublication.js';
 
@@ -35,6 +37,7 @@ const quizSchema = new mongoose.Schema({
   }],
   questionRevision: { type: Number, default: 0 },
   authoringCommitId: String,
+  objectiveEditReceipt: mongoose.Schema.Types.Mixed,
   questionMutation: { token: String, leaseUntil: Date },
   questionGenerationLease: { jobId: mongoose.Schema.Types.ObjectId, token: String, leaseUntil: Date },
   lastQuestionGenerationJob: mongoose.Schema.Types.ObjectId,
@@ -142,6 +145,13 @@ const quizSchema = new mongoose.Schema({
         required: true,
         min: 1
       },
+      questionTasks: { type: [questionTaskSchema], default: undefined, validate: {
+        validator(value) {
+          if (value === undefined) return true;
+          try { validateQuestionTasks({ count: this.count, questionTasks: value.map(task => task.toObject?.() || task) }, { promptBased: this.useCustomPromptOnly === true }); return true; }
+          catch { return false; }
+        }, message: 'Each question requires a distinct task matching the planned count.'
+      } },
       pedagogicalIntent: {
         type: String,
         enum: ['support', 'assess', 'gamify']

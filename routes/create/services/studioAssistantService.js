@@ -3,6 +3,7 @@ import { authoringOperation } from './authoring/authoringOperations.js';
 import { AuthoringSession } from '../models/StudioAuthoring.js';
 import crypto from 'node:crypto';
 import { resolveAuthoringContext } from './authoring/authoringContext.js';
+import { allowedObjectiveSourceReferences } from './authoring/authoringTaskContext.js';
 import { canReviseAssistantPlan } from './authoring/assistantRecovery.js';
 import mongoose from 'mongoose';
 import Session from '../models/StudioAssistantSession.js';
@@ -23,7 +24,9 @@ import { buildH5PSourceFingerprint, saveNativeH5PDocumentAndRecord } from './h5p
 import { buildNativeH5PDocument } from './h5pExportService.js';
 import { getEditor, getSystemUser, toLumiUser, finalizeContentOwnership } from './lumiService.js';
 import { buildAssistantContext, proposeAssistantObjectives, proposeAssistantPlan,
-  validateAssistantApproval, fingerprintAssistantMaterials } from './studioAssistantPlanning.js';
+  validateAssistantApproval, validateAssistantObjectives, fingerprintAssistantMaterials } from './studioAssistantPlanning.js';
+import { buildMaterialTeachingBrief, normalizePlanningSources, teachingObjectiveInstruction } from './studioTeachingBrief.js';
+import { needsQuestionTaskReallocation, assertQuestionTaskAllocation } from './studioQuestionTaskPlan.js';
 import { runAssistantGeneration } from './studioAssistantGeneration.js';
 import { generateCourseObjectives } from './authoring/courseObjectiveService.js';
 
@@ -43,6 +46,7 @@ const event = (stage, message) => ({ stage, message, createdAt: new Date() });
 const sourceChanged = () => fail('The course materials or learning object changed. Start a new assistant task to review an updated plan. Existing work is preserved.', 409, 'STUDIO_ASSISTANT_SOURCE_CHANGED');
 const loadQuiz = (id, owner) => Quiz.findOne({ _id: id, createdBy: owner }).populate('learningObjectives').populate('questions');
 const quizFingerprint = quiz => digest({ content: buildH5PSourceFingerprint(quiz), materials: quiz.materials.map(material => String(material._id || material)), settings: quiz.settings });
+const settingsSignature = settings => digest(Object.entries(settings?.toObject?.() || settings || {}).sort(([a], [b]) => a.localeCompare(b)));
 function assertColumnCompatibleQuiz(quiz) {
   if ((quiz.questions || []).some(question => !getH5PTypeAdapter(question?.type)?.containers?.includes('column'))) {
     fail('This learning object contains questions that cannot be combined in a Column package. Choose a compatible learning object or create a new one. Existing questions and settings are unchanged.',
@@ -64,7 +68,8 @@ export function serializeAssistantSession(session) {
   return {
     id: String(session._id), requestId: session.requestId, courseId: String(session.courseId),
     quizId: String(session.quizId), quizName: session.quizName, materialIds: session.materialIds.map(String),
-    teachingRequirements: session.teachingRequirements, instructions: session.instructions, promptBased: session.promptBased === true, revision: session.revision, status: session.status, phase: session.phase,
+    teachingRequirements: session.teachingRequirements, teachingBrief: session.teachingBrief || null,
+    workflowTarget: session.workflowTarget || 'questions', instructions: session.instructions, promptBased: session.promptBased === true, revision: session.revision, status: session.status, phase: session.phase,
     objectives: session.objectives, plan: session.plan, outputs: session.outputs, events: session.events,
     error: session.error, errorCode: session.errorCode, currentJobId: session.currentJobId,
     approvedAt: session.approvedAt, createdAt: session.createdAt, updatedAt: session.updatedAt
@@ -108,17 +113,26 @@ async function ensureQuiz(session) {
   await Folder.updateOne({ _id: session.courseId, instructor: session.owner }, { $set: {
     'stats.totalQuizzes': await Quiz.countDocuments({ folder: session.courseId, createdBy: session.owner })
   } });
-  const missing = session.materialIds.filter(id => !quiz.materials.some(existing => String(existing) === String(id)));
-  if (missing.length) await withQuestionMutation(Quiz, quiz._id, session.owner, mutation => mutation.writeQuiz({
-    $addToSet: { materials: { $each: missing } }, $set: { 'progress.materialsAssigned': session.materialIds.length > 0 }
-  }));
+  const sameMaterials = current => digest(current.materials.map(String).sort()) === digest(session.materialIds.map(String).sort());
+  const rejectChangedSavedScope = current => {
+    if (!sameMaterials(current) && current.questions.length) fail('This learning object already has saved questions. Start a new task and create a new Learning Object to use different materials.', 409, 'STUDIO_ASSISTANT_MATERIAL_SCOPE');
+  };
+  rejectChangedSavedScope(quiz);
+  if (!sameMaterials(quiz)) await withQuestionMutation(Quiz, quiz._id, session.owner, async mutation => {
+    const current = await loadQuiz(session.quizId, session.owner);
+    if (!current || String(current.folder) !== String(session.courseId)) sourceChanged();
+    rejectChangedSavedScope(current);
+    if (!sameMaterials(current)) await mutation.writeQuiz({ $set: { materials: session.materialIds,
+      'progress.materialsAssigned': session.materialIds.length > 0, 'progress.planGenerated': false, 'progress.planApproved': false } });
+  });
   return loadQuiz(session.quizId, session.owner);
 }
 
 // New objectives are staged first and published by one Quiz manifest update.
 // Existing objectives referenced by questions retain their identity and text.
-async function saveBlueprint(session, proposed, expectedFingerprint, assertActive = async () => {}) {
-  const normalized = validateAssistantApproval(proposed, undefined, session.sources);
+async function saveBlueprint(session, proposed, expectedFingerprint, assertActive = async () => {}, { objectivesOnly = false, objectiveEditReceipt } = {}) {
+  const normalized = objectivesOnly ? { objectives: validateAssistantObjectives(proposed.objectives, session.sources), plan: [] }
+    : validateAssistantApproval(proposed, undefined, session.sources);
   const original = await loadQuiz(session.quizId, session.owner);
   if (!original || (expectedFingerprint && quizFingerprint(original) !== expectedFingerprint)) sourceChanged();
   assertColumnCompatibleQuiz(original);
@@ -137,7 +151,7 @@ async function saveBlueprint(session, proposed, expectedFingerprint, assertActiv
     const previous = existing.get(objective.id);
     if (previous && previous.text === objective.text) {
       mapping.set(objective.id, String(previous._id));
-      objectives.push({ ...objective, id: String(previous._id), sourceReferences: previous.generationMetadata?.sourceReferences || [] });
+      objectives.push({ ...objective, id: String(previous._id), sourceReferences: allowedObjectiveSourceReferences(previous.generationMetadata?.sourceReferences, session.materialIds) });
     } else {
       const candidate = new LearningObjective({ quiz: session.quizId, createdBy: session.owner,
         text: objective.text, order: objectives.length, generatedFrom: session.materialIds,
@@ -158,15 +172,25 @@ async function saveBlueprint(session, proposed, expectedFingerprint, assertActiv
       if (quizFingerprint(current) !== quizFingerprint(original)) sourceChanged();
       await mutation.writeQuiz({ $set: {
         learningObjectives: objectives.map(objective => new mongoose.Types.ObjectId(objective.id)),
+        ...(objectiveEditReceipt ? { objectiveEditReceipt: { ...objectiveEditReceipt, objectives, plan,
+          contentFingerprint: buildH5PSourceFingerprint({ ...original.toObject(), learningObjectives: objectives.map(objective => ({ _id: objective.id, text: objective.text, order: objectives.indexOf(objective) })) }),
+          settingsSignature: settingsSignature({ ...original.settings.toObject(), planMode: 'ai-auto', deliveryTarget: 'h5p-package', targetFormat: 'column', planItems: [] }) } } : {}),
         'settings.planMode': 'ai-auto', 'settings.deliveryTarget': 'h5p-package', 'settings.targetFormat': 'column',
         'settings.planItems': plan.map(row => ({ type: row.questionType, learningObjective: row.objectiveIds[0], count: row.count,
           customPrompt: row.instructions || '', difficulty: row.difficulty || 'moderate', pedagogicalIntent: 'support',
+          ...(row.questionTasks ? { questionTasks: row.questionTasks } : {}),
           selectionMode: 'single', useCustomPromptOnly: session.promptBased === true, rationale: row.title })),
-        'progress.objectivesSet': true, 'progress.planGenerated': true, 'progress.planApproved': false,
-        ...(current.questions.length ? {} : { status: 'plan-generated' })
+        'progress.objectivesSet': true, 'progress.planGenerated': !objectivesOnly, 'progress.planApproved': false,
+        ...(current.questions.length ? {} : { status: objectivesOnly ? 'objectives-set' : 'plan-generated' })
       } });
     });
-    return { objectives, plan, quizFingerprint: quizFingerprint(await loadQuiz(session.quizId, session.owner)) };
+    const teachingBrief = session.teachingBrief ? { ...(session.teachingBrief.toObject?.() || session.teachingBrief),
+      objectives: objectives.map(objective => {
+        const references = normalizePlanningSources(objective.sourceReferences || []).filter(source => source.excerpt?.trim());
+        return { id: objective.id, text: objective.text, sourceIds: references.map(source => source.id).slice(0, 16),
+          grounding: references.length ? 'material-grounded' : 'instructor-brief' };
+      }) } : undefined;
+    return { objectives, plan, ...(teachingBrief ? { teachingBrief } : {}), quizFingerprint: quizFingerprint(await loadQuiz(session.quizId, session.owner)) };
 }
 
 async function patchActive(session, values, nextEvent) {
@@ -187,23 +211,46 @@ async function planSession(session, assertActive) {
   const context = materials.length ? await authoringOperation('retrieve_materials', 'Read selected course evidence', () => buildAssistantContext(materials, { userId: String(session.owner) })) : { context: 'Brainstorming specification from the instructor brief. No course material evidence is available. Do not invent citations.', sources: [], materialFingerprint: 'prompt-only' };
   await assertActive();
   const selectedContext = await resolveAuthoringContext(String(session.owner), { courseId: String(session.courseId), objectiveIds: (session.objectiveIds || []).map(String) });
-  const selectedObjectives = quiz.learningObjectives.length ? quiz.learningObjectives : selectedContext.objectives;
+  const selectedObjectives = session.objectiveIds?.length ? selectedContext.objectives : quiz.learningObjectives;
   const reused = selectedObjectives.map(objective => ({ id: String(objective._id), text: objective.text,
-    sourceReferences: objective.generationMetadata?.sourceReferences || [] }));
-  const sources = [...context.sources, ...reused.flatMap(objective => objective.sourceReferences)];
+    sourceReferences: allowedObjectiveSourceReferences(objective.generationMetadata?.sourceReferences, session.materialIds) }));
+  const staged = !reused.length && session.objectives.length && session.materialSignature === fingerprintAssistantMaterials(materials)
+    ? validateAssistantObjectives(session.objectives, session.sources) : [];
+  const sources = [...context.sources, ...reused.flatMap(objective => objective.sourceReferences), ...staged.flatMap(objective => objective.sourceReferences || [])];
   session = await patchActive(session, { sources, materialSignature: fingerprintAssistantMaterials(materials), materialFingerprint: context.materialFingerprint },
     event('objectives', reused.length ? 'Reusing the learning objectives already saved in this learning object.' : session.promptBased ? 'Brainstorming learning objectives from the teaching brief.' : 'Drafting learning objectives from the selected materials.'));
-  const objectives = reused.length ? reused : session.canonicalObjectives
-    ? await authoringOperation('propose_objectives', 'Generate evidence-linked learning objectives', () => generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: session.instructions }))
-    : await proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner), promptBased: session.promptBased });
+  const objectives = reused.length ? reused : staged.length ? staged : session.canonicalObjectives
+    ? await authoringOperation('propose_objectives', 'Generate evidence-linked learning objectives', () => generateCourseObjectives({ materials, quiz, owner: String(session.owner), instructions: `${session.instructions}\n\n${teachingObjectiveInstruction}` }))
+    : await authoringOperation('propose_objectives', 'Brainstorm observable learning objectives', () => proposeAssistantObjectives({ instructions: session.instructions, context: context.context, sources, userId: String(session.owner), promptBased: session.promptBased }));
   // Canonical LO generation may cite inventory chunks outside the small chat
   // sample. These references came from the server-owned generation pipeline.
-  if (session.canonicalObjectives) sources.push(...objectives.flatMap(objective => objective.sourceReferences || []));
+  if (session.canonicalObjectives) sources.push(...allowedObjectiveSourceReferences(objectives.flatMap(objective => objective.sourceReferences || []), session.materialIds));
   session.objectives = objectives;
-  session.sources = sources;
+  session.sources = normalizePlanningSources(sources);
   await assertActive();
-  await patchActive(session, { objectives, sources }, event('plan', 'Recommending question types and quantities for the learning objectives.'));
-  const plan = reconcileQuestionCount(await proposeAssistantPlan({ instructions: `${session.instructions}\n${teachingRequirementsPrompt(session.teachingRequirements)}`, objectives, context: context.context, userId: String(session.owner) }), session.teachingRequirements);
+  const teachingBrief = await authoringOperation('classify_materials', 'Classify materials and summarize teaching goals', async () => buildMaterialTeachingBrief({ materials, objectives,
+    sources: session.sources, instructions: session.instructions, teachingRequirements: session.teachingRequirements, userId: String(session.owner) }));
+  session = await patchActive(session, { objectives, sources: session.sources, teachingBrief },
+    event('objectives-ready', 'Learning objectives and the teaching overview are ready to inspect.'));
+  if (session.workflowTarget === 'objectives') {
+    await assertActive(); await assertSources(session);
+    const saved = await authoringOperation('save_objectives', 'Save learning objectives', () => saveBlueprint(session, { objectives }, before, assertActive, { objectivesOnly: true }));
+    await patchActive(session, { ...saved, status: 'objectives_ready', error: '', errorCode: '' },
+      event('objectives-completed', 'Your requested learning objectives are saved. Question planning and generation have not started.'));
+    return;
+  }
+  await patchActive(session, {}, event('plan', 'Recommending question types and quantities for the learning objectives.'));
+  const proposed = await authoringOperation('propose_plan', 'Plan distinct question tasks', () => proposeAssistantPlan({ instructions: `${session.instructions}\n${teachingRequirementsPrompt(session.teachingRequirements)}`, objectives,
+    context: context.context, sources: session.sources, teachingBrief, userId: String(session.owner), onTeachingBrief: async value => {
+      await assertActive(); session = await patchActive(session, { teachingBrief: value }, event('teaching-overview', 'Updated the teaching overview from the selected material evidence.'));
+    }, targetQuestionCount: session.teachingRequirements?.fields?.questionCount?.value,
+    onCountMismatch: async mismatch => {
+      await Session.updateOne({ _id: session._id, owner: session.owner, currentJobId: session.currentJobId },
+        { $set: { planningProposal: { attempt: mismatch.attempt, targetCount: mismatch.targetCount, actualCount: mismatch.actualCount, plan: mismatch.plan } } });
+      await assertActive(); await patchActive(session, {}, event('plan-count-check',
+      `The proposed total was ${mismatch.actualCount}; rebuilding distinct question tasks for the confirmed ${mismatch.targetCount} questions.`)); }
+  }));
+  const plan = proposed.some(row => row.questionTasks) ? proposed : reconcileQuestionCount(proposed, session.teachingRequirements);
   await assertActive(); await assertSources(session);
   const saved = await authoringOperation('save_plan', 'Save objectives and the proposed question plan', () => saveBlueprint(session, { objectives, plan }, before, assertActive));
   await patchActive(session, { ...saved, status: 'awaiting_approval', error: '', errorCode: '' },
@@ -242,7 +289,7 @@ async function generateSession(session, user, assertActive) {
   await patchActive(session, {}, event('generating', `${session.promptBased ? 'Generating questions from your teaching brief' : 'Retrieving evidence and generating questions'}, then checking feedback. A rejected draft gets one automatic rework; checked questions remain usable even if another item fails.`));
   const result = await runAssistantGeneration({ user, quizId: String(session.quizId), requestId: session.questionJobRequestId, promptBased: session.promptBased === true,
     retryFromRequestId: session.questionJobRetryFromRequestId,
-    materialIds: session.materialIds.map(String),
+    materialIds: session.materialIds.map(String), trustedSources: session.sources || [],
     assertQuizSnapshot: quiz => { if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged(); },
     assertActive: async () => { await assertActive(); await assertSources(session); },
     onProgress: async progress => {
@@ -318,18 +365,20 @@ export async function readAssistantSession(owner, id) {
       value.generation = { ...serialized, totalQuestions: job.items.length, readyCount: job.items.filter(item => item.status === 'ready').length };
       const rejected = await RejectedQuestionDraft.find({ owner, quiz: session.quizId, job: job._id,
         index: { $in: job.items.filter(item => item.status === 'failed').map(item => item.index) }
-      }).select('index questionText correctAnswer options issues reason calculationCheck').lean();
+      }).select('index questionText correctAnswer options issues reason calculationCheck contentSummary reviewSummary novelty').lean();
       value.generation.items = value.generation.items.map(item => {
         const draft = rejected.find(entry => entry.index === item.index);
         return draft ? { ...item, review: { questionText: draft.questionText, correctAnswer: draft.correctAnswer,
-          options: draft.options, issues: draft.issues, calculationCheck: draft.calculationCheck } } : item;
+          options: draft.options, issues: draft.issues, calculationCheck: draft.calculationCheck,
+          contentSummary: draft.contentSummary, reviewSummary: draft.reviewSummary, novelty: draft.novelty } } : item;
       });
       const checked = await Question.find({ _id: { $in: job.items.filter(item => item.status === 'ready').map(item => item.savedQuestionId) },
-        quiz: session.quizId, createdBy: owner, generationJob: job._id }).select('questionText type explanation generationMetadata.sourceReferences').lean();
+        quiz: session.quizId, createdBy: owner, generationJob: job._id }).select('questionText type explanation generationMetadata.sourceReferences generationMetadata.reviewSummary').lean();
       value.generation.questions = job.items.filter(item => item.status === 'ready').flatMap(item => {
         const question = checked.find(entry => String(entry._id) === String(item.savedQuestionId));
         return question ? [{ id: String(question._id), index: item.index + 1, type: question.type, text: question.questionText,
-          explanation: question.explanation, sourceReferences: question.generationMetadata?.sourceReferences || [] }] : [];
+          explanation: question.explanation, sourceReferences: question.generationMetadata?.sourceReferences || [],
+          reviewSummary: question.generationMetadata?.reviewSummary }] : [];
       });
       value.previewVersion = value.generation.readyCount;
     }
@@ -351,7 +400,8 @@ export async function createAssistantSession(user, body, internal = {}) {
     fail('Describe the task in 10–12,000 characters and choose up to 20 processed materials, or use prompt-only brainstorming.', 400, 'VALIDATION_ERROR');
   }
   await resolveAuthoringContext(owner, { courseId: body.courseId, materialIds: body.materialIds, objectiveIds: body.objectiveIds || [] });
-  const requestHash = digest({ ...(body.promptBased ? { promptBased: true } : {}), ...((body.objectiveIds || []).length ? { objectiveIds: [...body.objectiveIds].sort() } : {}), courseId: body.courseId, quizId: body.quizId || null, materialIds: [...body.materialIds].sort(), instructions: body.instructions.trim() });
+  const workflowTarget = internal.workflowTarget === 'objectives' ? 'objectives' : 'questions';
+  const requestHash = digest({ ...(workflowTarget === 'objectives' ? { workflowTarget } : {}), ...(body.promptBased ? { promptBased: true } : {}), ...((body.objectiveIds || []).length ? { objectiveIds: [...body.objectiveIds].sort() } : {}), courseId: body.courseId, quizId: body.quizId || null, materialIds: [...body.materialIds].sort(), instructions: body.instructions.trim() });
   const previous = await Session.findOne({ owner, requestId: body.requestId });
   if (previous) {
     if (previous.requestHash !== requestHash) fail('This request ID belongs to different instructions.', 409, 'REQUEST_ID_CONFLICT');
@@ -369,7 +419,8 @@ export async function createAssistantSession(user, body, internal = {}) {
     session = await Session.create({ ...draft, _id: id, requestId: body.requestId, requestHash,
       quizId: existingQuiz?._id || new mongoose.Types.ObjectId(), createdQuiz: !existingQuiz,
       quizName: existingQuiz?.name || `Studio learning object ${String(id).slice(-6)}`,
-      teachingRequirements: internal.teachingRequirements || updateTeachingRequirements(null, body.instructions, body.requestId), instructions: body.instructions.trim(), promptBased: body.promptBased === true && !body.materialIds.length, objectiveIds: body.objectiveIds || [], canonicalObjectives: body.canonicalObjectives === true,
+      teachingRequirements: internal.teachingRequirements || updateTeachingRequirements(null, body.instructions, body.requestId), workflowTarget,
+      instructions: body.instructions.trim(), promptBased: body.promptBased === true && !body.materialIds.length, objectiveIds: body.objectiveIds || [], canonicalObjectives: body.canonicalObjectives === true,
       status: 'planning', phase: 'planning', events: [event('started', 'Preparing the course workspace.')] });
   } catch (error) {
     if (error.code !== 11000) throw error;
@@ -398,6 +449,22 @@ export async function updateAssistantPlan(user, id, body, internal = {}) {
   }, { new: true });
   if (!reserved) fail('This plan is already being changed. Reload it before continuing.');
   try {
+    if (needsQuestionTaskReallocation(body.plan)) {
+      // Validate the instructor's allocation without treating stale task text as
+      // a newly approved per-question plan. The model must rebuild distinct tasks.
+      const requested = { ...body, plan: body.plan.map(({ questionTasks, ...row }) => row) };
+      validateAssistantApproval(requested, undefined, session.sources);
+      const materials = await ownedMaterials(reserved);
+      const context = materials.length ? await buildAssistantContext(materials, { userId: String(session.owner) })
+        : { context: 'Brainstorming from the saved teaching brief. No source materials were supplied.' };
+      const targetCount = body.plan.reduce((sum, row) => sum + row.count, 0);
+      const rebuilt = await authoringOperation('rebuild_question_tasks', 'Rebuild the edited question allocation',
+        () => proposeAssistantPlan({ instructions: session.instructions, objectives: body.objectives,
+          sources: session.sources, context: context.context, teachingBrief: session.teachingBrief, userId: String(session.owner),
+          currentPlan: requested.plan, targetQuestionCount: targetCount,
+          revisionRequest: `Use exactly this instructor-edited allocation, in the same row order, without changing objectives, types, difficulty or counts. Rebuild every distinct per-question task. ${JSON.stringify(requested.plan)}` }));
+      body = { ...body, plan: assertQuestionTaskAllocation(requested.plan, rebuilt) };
+    }
     validateAssistantApproval(body, undefined, session.sources);
     const total = (body.plan || []).reduce((n, row) => n + row.count, 0);
     const spec = internal.teachingRequirements || updateTeachingRequirements(session.teachingRequirements, `${total} questions`, `plan-edit-${reserved.revision}`);
@@ -413,6 +480,49 @@ export async function updateAssistantPlan(user, id, body, internal = {}) {
     throw error;
   }
   return readAssistantSession(String(user.id), id);
+}
+
+export async function updateAssistantObjectives(user, id, body) {
+  const session = await ownedSession(String(user.id), id);
+  if (!requestIdValid(body.requestId)) fail('A valid edit request ID is required.', 400, 'VALIDATION_ERROR');
+  const editHash = digest({ objectives: body.objectives.map(({ id: objectiveId, text }) => ({ id: objectiveId, text })).sort((a, b) => a.id.localeCompare(b.id)) });
+  if (session.objectiveEditReceipt?.requestId === body.requestId) {
+    if (session.objectiveEditReceipt.hash !== editHash) fail('This request ID belongs to different objective edits.', 409, 'REQUEST_ID_CONFLICT');
+    return readAssistantSession(String(user.id), id);
+  }
+  const materials = await assertSources(session);
+  const quiz = await loadQuiz(session.quizId, session.owner);
+  const receipt = quiz.objectiveEditReceipt?.requestId === body.requestId ? quiz.objectiveEditReceipt : null;
+  if (receipt && receipt.hash !== editHash) fail('This request ID belongs to different objective edits.', 409, 'REQUEST_ID_CONFLICT');
+  const finish = async (reserved, saved) => {
+    const teachingBrief = buildMaterialTeachingBrief({ materials, objectives: saved.objectives, sources: reserved.sources,
+      instructions: reserved.instructions, teachingRequirements: reserved.teachingRequirements, userId: String(session.owner) });
+    const completed = await Session.updateOne({ _id: session._id, owner: session.owner, revision: reserved.revision },
+      { $set: { ...saved, teachingBrief, objectiveEditReceipt: { requestId: body.requestId, hash: editHash },
+        status: 'objectives_ready', workflowTarget: 'objectives', error: '', errorCode: '' } });
+    if (!completed.matchedCount) fail('The objective edit committed, but the assistant changed. Reload the task.');
+    return readAssistantSession(String(user.id), id);
+  };
+  if (receipt) {
+    if (receipt.contentFingerprint !== buildH5PSourceFingerprint(quiz) || receipt.settingsSignature !== settingsSignature(quiz.settings)) sourceChanged();
+    return finish(session, { objectives: receipt.objectives, plan: receipt.plan, quizFingerprint: quizFingerprint(quiz) });
+  }
+  if (!['objectives_ready', 'awaiting_approval', 'failed', 'interrupted'].includes(session.status)
+    || body.revision !== session.revision) fail('Pause the task and reload its current objectives before editing.');
+  if (quizFingerprint(quiz) !== session.quizFingerprint) sourceChanged();
+  const normalized = validateAssistantObjectives(body.objectives, session.sources);
+  const reserved = await Session.findOneAndUpdate({ _id: session._id, owner: session.owner, revision: session.revision, status: session.status },
+    { $set: { status: 'planning' }, $inc: { revision: 1 } }, { new: true });
+  if (!reserved) fail('The learning objectives changed before this edit was accepted.');
+  try {
+    const saved = await saveBlueprint(reserved, { objectives: normalized }, session.quizFingerprint,
+      body.assertActive || (async () => {}), { objectivesOnly: true, objectiveEditReceipt: { requestId: body.requestId, hash: editHash } });
+    return finish(reserved, saved);
+  } catch (error) {
+    await Session.updateOne({ _id: session._id, owner: session.owner, revision: reserved.revision, status: 'planning' },
+      { $set: { status: session.status } });
+    throw error;
+  }
 }
 
 export async function approveAssistantPlan(user, id, body) {

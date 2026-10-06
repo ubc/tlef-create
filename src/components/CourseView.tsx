@@ -677,6 +677,7 @@ const CourseView = () => {
               </span>
             </div>
             <MaterialUpload
+              folderId={courseId}
               materials={materials.map(m => ({
                 id: m._id,
                 name: m.name,
@@ -685,7 +686,8 @@ const CourseView = () => {
                 content: m.content || m.url,
                 processingStatus: m.processingStatus,
                 processingError: m.processingError?.message,
-                parserVersion: m.processingMetadata?.parserVersion
+                parserVersion: m.processingMetadata?.parserVersion,
+                canvasSource: m.canvasSource
               }))}
               onAddMaterial={handleAddMaterial}
               onRemoveMaterial={handleDeleteMaterial}

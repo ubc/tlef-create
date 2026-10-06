@@ -70,6 +70,14 @@ export interface Material {
   content?: string;
   fileSize?: number;
   checksum?: string;
+  canvasSource?: {
+    instance: string;
+    courseId: string;
+    resourceType: 'file' | 'page';
+    resourceId: string;
+    updatedAt?: string;
+    importedAt: string;
+  };
   folder: string;
   uploadedBy: string;
   processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
@@ -798,6 +806,15 @@ export const coursePromptsApi = {
   },
 };
 
+export interface MaterialIndexRestoration {
+  materialId: string;
+  chunksCount: number;
+  restored: true;
+  embeddingProvider?: string;
+  embeddingModel?: string;
+  embeddingDimensions?: number;
+}
+
 // Materials API
 export const materialsApi = {
   // POST /api/create/materials/upload - Upload files (PDF, DOCX)
@@ -863,6 +880,14 @@ export const materialsApi = {
   // POST /api/create/materials/:id/reprocess - Retry parsing and embedding
   reprocessMaterial: async (id: string): Promise<{ material: Material }> => {
     const response = await apiClient.post<{ success: boolean; data: { material: Material }; message: string }>(`/materials/${id}/reprocess`, {});
+    return response.data;
+  },
+
+  // Restore the saved material's search index without changing its source.
+  reindexMaterial: async (id: string): Promise<{ processing: MaterialIndexRestoration }> => {
+    const response = await apiClient.post<{ success: boolean; data: { processing: MaterialIndexRestoration }; message: string }>(
+      `/materials/${encodeURIComponent(id)}/reindex`, {}
+    );
     return response.data;
   },
 
@@ -1465,6 +1490,16 @@ export const questionsApi = {
 };
 
 // Question interface
+export interface QuestionReviewSummary {
+  kind: 'feedback' | 'semantic';
+  policyVersion: string;
+  checks: Partial<Record<'contentIsValid' | 'answerIsCorrect' | 'rubricIsAppropriate' | 'feedbackIsConsistent' | 'followsInstructorRequest' | 'evidenceIsSufficient', boolean>>;
+  arithmeticChecks: number;
+  mediaInspection: 'not-performed';
+  goalCoveragePolicyVersion?: string;
+  goalCoverage?: Array<{ id: string; isCovered: boolean }>;
+}
+
 export interface Question {
   _id: string;
   quiz: string;
@@ -1505,6 +1540,7 @@ export interface Question {
   reviewStatus: 'pending' | 'approved' | 'needs-review' | 'rejected';
   generationMetadata?: {
     instructorPrompt?: string;
+    reviewSummary?: QuestionReviewSummary;
     useCustomPromptOnly?: boolean;
     generatedFrom: string[];
     llmModel: string;
@@ -1614,9 +1650,57 @@ export interface StudioAssistantPlanItem {
   count: number;
   objectiveIds: string[];
   instructions: string;
+  questionTasks?: Array<{ id: string; focus: string; instructions: string; sourceIds: string[]; visualRequirement: 'none' }>;
+}
+
+export interface StudioQuestionFailure {
+  code: string;
+  stage: string;
+  message: string;
+  recovery: string;
+  retryable: boolean;
+}
+
+export interface StudioQuestionNoveltyComparison {
+  similarity?: number;
+  threshold?: number;
+  questionId?: string;
+  questionText?: string;
+}
+
+export interface StudioQuestionNoveltyCheck {
+  method?: 'lexical' | 'lexical-and-semantic';
+  similarity?: number;
+  noveltyScore?: number;
+  lexical?: StudioQuestionNoveltyComparison;
+  semantic?: StudioQuestionNoveltyComparison;
+}
+
+export interface StudioQuestionGenerationItem {
+  index: number;
+  questionId?: string;
+  status: string;
+  phase?: string;
+  repairStrategy?: string;
+  attempts?: number;
+  startedAt?: string;
+  completedAt?: string;
+  message?: string;
+  code?: string;
+  reason?: string;
+  failure?: StudioQuestionFailure;
+  review?: {
+    questionText: string;
+    correctAnswer: string;
+    options: Array<{ text: string; isCorrect: boolean }>;
+    issues: string[];
+    calculationCheck?: { location: string; expression: string; computed: number; claimed: number };
+    novelty?: StudioQuestionNoveltyCheck;
+  };
 }
 
 export interface StudioAssistantSession {
+  teachingBrief?: AuthoringTeachingBrief | null;
   teachingRequirements?: TeachingRequirements;
   id: string;
   requestId?: string;
@@ -1630,7 +1714,7 @@ export interface StudioAssistantSession {
   revision: number;
   phase?: 'planning' | 'generating';
   errorCode?: string | null;
-  status: 'planning' | 'awaiting_approval' | 'generating' | 'completed' | 'failed' | 'interrupted';
+  status: 'planning' | 'objectives_ready' | 'awaiting_approval' | 'generating' | 'completed' | 'failed' | 'interrupted';
   objectives: StudioAssistantObjective[];
   plan: StudioAssistantPlanItem[];
   outputs: Array<{ planItemId?: string; index?: number; contentId: string; title: string }>;
@@ -1649,7 +1733,7 @@ export interface StudioAssistantSession {
     questions?: AuthoringVersion['questions'];
     reusedQuestions?: number;
     totalQuestions: number;
-    items: Array<{ index: number; questionId?: string; status: string; phase?: string; repairStrategy?: string; attempts?: number; startedAt?: string; completedAt?: string; message?: string; code?: string; reason?: string; review?: { questionText: string; correctAnswer: string; options: Array<{ text: string; isCorrect: boolean }>; issues: string[]; calculationCheck?: { location: string; expression: string; computed: number; claimed: number } } }>;
+    items: StudioQuestionGenerationItem[];
   };
   createdAt?: string;
   updatedAt?: string;
@@ -1664,7 +1748,8 @@ export interface StudioAssistantCapabilities {
 }
 
 export const studioAssistantApi = {
-  previewUrl: (id: string, version: number) => `${API_BASE}/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/preview?v=${version}`,
+  // Embedded previews must use the page's proxy origin for SAMEORIGIN framing.
+  previewUrl: (id: string, version: number) => `/api/create/h5p-editor/assistant/sessions/${encodeURIComponent(id)}/preview?v=${version}`,
   getCapabilities: (): Promise<ApiResponse<StudioAssistantCapabilities>> =>
     apiClient.get('/h5p-editor/assistant/capabilities'),
   createSession: (request: { courseId: string; quizId?: string; materialIds: string[]; instructions: string; requestId: string }): Promise<ApiResponse<{ session: StudioAssistantSession }>> =>
@@ -1685,28 +1770,84 @@ export interface AuthoringVersion {
   id: string; number: number; parentId: string | null; restoredFromId: string | null;
   contentId: string; title: string; summary: string; changes: string[];
   representation: 'course-linked' | 'native-fork'; state: 'candidate' | 'accepted' | 'rejected'; createdAt: string;
-  questions: Array<{ id: string; index: number; type: string; text: string; explanation?: string; sourceReferences: SourceReference[] }>;
+  reviewSummary?: QuestionReviewSummary;
+  sourceReferences?: SourceReference[];
+  teachingBrief?: AuthoringTeachingBrief | null;
+  teachingPlan?: { objectives: StudioAssistantObjective[]; plan: StudioAssistantPlanItem[] } | null;
+  questions: Array<{ id: string; index: number; type: string; text: string; explanation?: string; sourceReferences: SourceReference[]; reviewSummary?: QuestionReviewSummary }>;
 }
-export interface AuthoringClarification { question: string; options: string[] }
+export interface AuthoringClarification {
+  question: string; options: string[];
+  selectionMode?: 'single' | 'multiple';
+  allowCustomInput?: boolean;
+}
+export interface AuthoringClarificationAnswers {
+  messageId: string;
+  answers: Array<{ questionIndex: number; selectedOptions: string[]; customAnswer?: string }>;
+}
 export interface AuthoringOperation {
   id: string; runId: string; parentId?: string; name: string; label: string;
   status: 'running' | 'completed' | 'failed'; startedAt: string; completedAt?: string; durationMs?: number;
+  summary?: string;
+}
+export type AuthoringMode = 'explore' | 'build';
+export interface AuthoringQueuedMessage {
+  id: string; text: string; createdAt: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 }
 export interface TeachingRequirements {
   fields: Record<string, { value: string | number; quote?: string; source: string; approximate?: boolean }>;
   openQuestions?: string[]; countIssue?: string;
 }
+export interface AuthoringTeachingBrief {
+  version: 1;
+  grounding: 'material-grounded' | 'instructor-brief';
+  summary: string;
+  materials: Array<{ id: string; name: string; format: 'pdf' | 'docx' | 'url' | 'text' | 'unknown';
+    classification: 'lecture-notes' | 'slides' | 'worked-examples' | 'assessment' | 'reference-reading' | 'mixed' | 'unknown';
+    basis: 'metadata' | 'text-excerpts' | 'uncertain'; readStatus: 'sampled' | 'not-read'; sourceCount: number; sourceIds: string[] }>;
+  scope: { topics: string[]; exclusions: string[]; coverage: 'sampled' | 'instructor-brief' | 'not-read' };
+  objectives: Array<{ id: string; text: string; sourceIds: string[]; grounding: 'material-grounded' | 'instructor-brief' }>;
+  assumptions: Array<{ key: string; value: string; reason: string; provenance: 'default' | 'inferred' }>;
+  visualSupport: 'text-only' | 'none';
+}
+export interface AuthoringWorkflow {
+  target: 'objectives' | 'questions' | 'native' | 'plan';
+  autoContinue: boolean;
+}
+export interface AuthoringTokenUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  reasoningTokens: number | null;
+  cachedInputTokens: number | null;
+  cacheWriteTokens: number | null;
+  calls: number;
+  reportedCalls: number;
+  pendingCalls: number;
+  unknownCalls: number;
+  untrackedRuns?: number;
+  status: 'complete' | 'partial' | 'unavailable' | 'pending';
+  models: string[];
+}
 export interface AuthoringSession {
+  mode?: AuthoringMode;
+  queuedMessages?: AuthoringQueuedMessage[];
   teachingRequirements?: TeachingRequirements;
+  teachingBrief?: AuthoringTeachingBrief | null;
+  workflow?: AuthoringWorkflow | null;
+  nativePlan?: { version: number; revision: number; status: 'awaiting_approval' | 'generating' | 'generated'; library: string; title: string; brief: string; materialIds: string[]; objectiveIds: string[] } | null;
+  nativeGeneration?: { phase: string; failure?: { code: string; reason: string; message: string; issues: string[]; reviewSummary?: QuestionReviewSummary } | null } | null;
   operations?: AuthoringOperation[];
   id: string; title: string; courseId: string; quizId: string | null; materialIds: string[];
   instructions: string; autoApprove: boolean; revision: number; objectiveIds?: string[]; contextCourse?: boolean;
-  status: 'waiting_for_materials' | 'awaiting_requirements' | 'planning' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
+  status: 'exploring' | 'waiting_for_materials' | 'awaiting_requirements' | 'planning' | 'objectives_ready' | 'awaiting_approval' | 'generating' | 'ready' | 'working' | 'needs_attention' | 'cancelled';
   error: string; currentVersionId: string | null; candidateVersionId: string | null;
   messages: Array<{ id: string; role: 'user' | 'assistant'; text: string; clarification?: AuthoringClarification[]; createdAt: string }>;
   versions: AuthoringVersion[]; assistant: StudioAssistantSession | null;
   taskSteps?: Array<{ name: string; createdAt: string }>;
-  run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; error?: string; createdAt?: string; updatedAt?: string } | null; updatedAt: string;
+  tokenUsage?: AuthoringTokenUsage;
+  run: { id: string; status: string; checkpoint: string; steps?: Array<{ name: string; createdAt: string }>; tokenUsage?: AuthoringTokenUsage; error?: string; createdAt?: string; startedAt?: string; updatedAt?: string } | null; updatedAt: string;
 }
 export interface AuthoringContextSelection { courseId?: string | null; materialIds: string[]; objectiveIds?: string[]; contextCourse?: boolean }
 export interface AuthoringContextCatalog {
@@ -1717,13 +1858,13 @@ export interface AuthoringContextCatalog {
 export const studioAuthoringApi = {
   context: (courseId?: string): Promise<ApiResponse<AuthoringContextCatalog>> => apiClient.get(`/h5p-editor/authoring/context${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
   draftCourse: (): Promise<ApiResponse<{ courseId: string; name: string }>> => apiClient.post('/h5p-editor/authoring/draft-course', {}),
-  eventsUrl: (id: string) => `${API_BASE}/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/events`,
+  eventsUrl: (id: string) => `${API_BASE}/api/create/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/events`,
   list: (): Promise<ApiResponse<{ sessions: Array<Pick<AuthoringSession, 'id' | 'title' | 'status' | 'updatedAt'>> }>> =>
     apiClient.get('/h5p-editor/authoring/sessions'),
   get: (id: string): Promise<ApiResponse<{ session: AuthoringSession }>> => apiClient.get(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}`),
-  create: (body: AuthoringContextSelection & { requestId: string; quizId?: string; instructions: string; autoApprove: boolean }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+  create: (body: AuthoringContextSelection & { requestId: string; quizId?: string; instructions: string; autoApprove: boolean; mode?: AuthoringMode }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post('/h5p-editor/authoring/sessions', body),
-  command: (id: string, command: 'message' | 'approve' | 'retry' | 'accept' | 'reject' | 'restore', body: { requestId: string; revision: number; text?: string; versionId?: string; planRevision?: number; context?: AuthoringContextSelection }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
+  command: (id: string, command: 'message' | 'save_objectives' | 'approve' | 'retry' | 'accept' | 'reject' | 'restore', body: { requestId: string; revision: number; text?: string; clarificationAnswers?: AuthoringClarificationAnswers; objectives?: Array<{ id: string; text: string }>; assistantRevision?: number; versionId?: string; planRevision?: number; context?: AuthoringContextSelection; delivery?: 'queue'; mode?: AuthoringMode }): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/${command}`, body),
   cancel: (id: string, revision: number): Promise<ApiResponse<{ session: AuthoringSession }>> =>
     apiClient.post(`/h5p-editor/authoring/sessions/${encodeURIComponent(id)}/cancel`, { revision }),
@@ -1812,7 +1953,41 @@ export const exportApi = {
 };
 
 // Canvas API
+export interface CanvasImportResource {
+  id: string;
+  resourceType: 'file' | 'page';
+  name: string;
+  materialType?: 'pdf' | 'docx' | 'text' | null;
+  size?: number;
+  supported: boolean;
+  reason?: string;
+}
+export interface CanvasImportResult {
+  id: string;
+  resourceType: 'file' | 'page';
+  name: string;
+  status: 'imported' | 'skipped' | 'failed';
+  materialId?: string;
+  message: string;
+  code?: string;
+}
+export interface CanvasImportReport {
+  results: CanvasImportResult[];
+  summary: { imported: number; skipped: number; failed: number };
+}
 export const canvasApi = {
+  getImportCourses: async (folderId: string): Promise<ApiResponse<{ courses: Array<{ id: string; name: string; courseCode: string }> }>> => {
+    return await apiClient.get(`/canvas/material-import/courses?folderId=${encodeURIComponent(folderId)}`);
+  },
+  getImportMaterials: async (folderId: string, courseId: string): Promise<ApiResponse<{
+    resources: CanvasImportResource[]; warnings: Array<{ resourceType: string; code: string; message: string }>;
+    batchLimit: number; maxFileBytes: number;
+  }>> => {
+    return await apiClient.get(`/canvas/material-import/courses/${encodeURIComponent(courseId)}/materials?folderId=${encodeURIComponent(folderId)}`);
+  },
+  importMaterials: async (folderId: string, courseId: string, resources: Array<Pick<CanvasImportResource, 'id' | 'resourceType'>>): Promise<ApiResponse<CanvasImportReport>> => {
+    return await apiClient.post(`/canvas/material-import/courses/${encodeURIComponent(courseId)}/materials`, { folderId, resources });
+  },
   getConfig: async (): Promise<ApiResponse<{ enabled: boolean; canvasBaseUrl: string | null; ltiConfigured: boolean }>> => {
     return await apiClient.get('/canvas/config');
   },
