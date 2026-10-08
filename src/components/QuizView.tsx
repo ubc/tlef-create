@@ -227,7 +227,7 @@ const QuizView = () => {
     setSearchParams(nextParams);
   };
 
-  const workflowSteps: Omit<WorkflowStep, 'detail'>[] = [
+  const workflowSteps: WorkflowStep[] = [
     {
       id: 'materials',
       label: 'Sources',

@@ -3,7 +3,7 @@ import { X, ArrowLeft, ArrowRight, ExternalLink, Loader2, Link2, Link2Off, LogOu
 import MaterialUpload from './MaterialUpload';
 import { usePubSub } from '../hooks/usePubSub';
 import { canvasApi } from '../services/api';
-import WorkflowStepper, { WorkflowStep } from './workflow/WorkflowStepper';
+import { WorkflowStep, WorkflowTabs } from './workflow/WorkflowStepper';
 import '../styles/components/CreateCourseModal.css';
 
 interface Material {
@@ -248,24 +248,32 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     {
       id: '1',
       label: 'Course details',
-      detail: currentStep > 1 ? courseName : 'Name your course',
       state: currentStep > 1 ? 'complete' : 'current'
     },
     {
       id: '2',
       label: 'Course materials',
-      detail: materials.length > 0 ? `${materials.length} added` : 'Optional · add now or later',
       state: currentStep > 2 ? 'complete' : currentStep === 2 ? 'current' : 'available',
       disabled: currentStep < 2
     },
     ...(canvasEnabled ? [{
       id: '3',
       label: 'Canvas',
-      detail: selectedCourse ? selectedCourse.name : 'Optional connection',
       state: currentStep === 3 ? 'current' as const : 'available' as const,
       disabled: currentStep < 3
     }] : [])
   ];
+
+  const getStepTabId = (stepId: string) => `create-course-tab-${stepId}`;
+  const stepPanelId = (stepId: string) => `create-course-panel-${stepId}`;
+  // Only the current step's panel is rendered.
+  const getStepPanelId = (stepId: string) => stepId === String(currentStep) ? stepPanelId(stepId) : undefined;
+  const stepPanelProps = (step: number) => ({
+    className: 'step-content',
+    role: 'tabpanel' as const,
+    id: stepPanelId(String(step)),
+    'aria-labelledby': getStepTabId(String(step))
+  });
 
   return (
     <div className="modal-overlay">
@@ -287,11 +295,12 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
         </div>
 
         <div className="modal-body">
-          <WorkflowStepper
+          <WorkflowTabs
             steps={creationSteps}
-            activeStepId={String(currentStep)}
+            selectedStepId={String(currentStep)}
             ariaLabel="Create course steps"
-            compact
+            getTabId={getStepTabId}
+            getPanelId={getStepPanelId}
             onStepSelect={(stepId) => {
               const nextStep = Number(stepId);
               if (nextStep <= currentStep) setCurrentStep(nextStep);
@@ -300,7 +309,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
 
           {/* Step 1: Course Name */}
           {currentStep === 1 && (
-            <div className="step-content">
+            <div {...stepPanelProps(1)}>
               <div className="step-header">
                 <h3>Name your course</h3>
                 <p>Create the shared workspace that will hold materials and Learning Objects.</p>
@@ -331,7 +340,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
 
           {/* Step 2: Upload Materials (Optional) */}
           {currentStep === 2 && (
-            <div className="step-content">
+            <div {...stepPanelProps(2)}>
               <div className="step-header">
                 <h3>Upload Course Materials</h3>
                 <p>Add materials to your course (optional). You can also do this later.</p>
@@ -379,7 +388,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
 
           {/* Step 3: Link to Canvas (Optional) */}
           {currentStep === 3 && (
-            <div className="step-content">
+            <div {...stepPanelProps(3)}>
               <div className="step-header">
                 <h3>Link to Canvas Course</h3>
                 <p>Optionally link this course to a Canvas course. A module named "{courseName}" will be created automatically.</p>

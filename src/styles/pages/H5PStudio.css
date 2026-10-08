@@ -294,7 +294,6 @@
 
 .h5p-studio-page > .workflow-stepper { margin-bottom: 20px; }
 .h5p-studio-page > .workflow-stepper ol { min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.h5p-studio-page > .workflow-stepper .workflow-step-copy small { white-space: normal; }
 .studio-back-link { display: inline-block; margin-bottom: 16px; color: var(--studio-ink); text-decoration: underline; }
 .studio-ai-composer { border: 1px solid var(--studio-line); border-radius: 16px; padding: 28px; background: var(--studio-surface); }
 .studio-ai-composer h2 { margin: 0 0 8px; font-size: 1.5rem; color: var(--studio-ink); }

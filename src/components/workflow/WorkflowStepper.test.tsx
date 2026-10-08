@@ -3,39 +3,39 @@ import { describe, expect, it, vi } from 'vitest';
 import WorkflowStepper, { WorkflowStep, WorkflowTabs } from './WorkflowStepper';
 
 const steps: WorkflowStep[] = [
-  { id: 'materials', label: 'Materials', detail: 'Ready · 2 assigned', state: 'complete' },
-  { id: 'objectives', label: 'Learning Objectives', detail: 'Current', state: 'available' },
-  { id: 'preview', label: 'Preview & Export', detail: 'Waiting for questions', state: 'blocked', disabled: true }
+  { id: 'materials', label: 'Materials', state: 'complete' },
+  { id: 'objectives', label: 'Learning Objectives', state: 'available' },
+  { id: 'preview', label: 'Preview & Export', state: 'blocked', disabled: true }
 ];
 
 describe('WorkflowStepper', () => {
-  it('announces the current step, supports navigation, and disables blocked steps', () => {
+  it('renders in-page links, marks the current step, and reports selection', () => {
     const onStepSelect = vi.fn();
     render(
       <WorkflowStepper
         steps={steps}
         activeStepId="objectives"
-        ariaLabel="Learning Object creation steps"
+        ariaLabel="Course setup steps"
+        getHref={(stepId) => `#section-${stepId}`}
         onStepSelect={onStepSelect}
       />
     );
 
-    const currentStep = screen.getByRole('button', { name: /Learning Objectives/ });
-    expect(currentStep).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('navigation', { name: 'Course setup steps' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Learning Objectives' })).toHaveAttribute('aria-current', 'step');
 
-    fireEvent.click(screen.getByRole('button', { name: /Materials/ }));
+    const materials = screen.getByRole('link', { name: 'Materials (complete)' });
+    expect(materials).toHaveAttribute('href', '#section-materials');
+    fireEvent.click(materials);
     expect(onStepSelect).toHaveBeenCalledWith('materials');
-
-    expect(screen.getByRole('button', { name: /Preview & Export/ })).toBeDisabled();
   });
 });
 
 describe('WorkflowTabs', () => {
-  const tabSteps = steps.map(({ detail: _detail, ...step }) => step);
   const renderTabs = (onStepSelect = vi.fn()) => {
     render(
       <WorkflowTabs
-        steps={tabSteps}
+        steps={steps}
         selectedStepId="objectives"
         ariaLabel="Quiz creation steps"
         getTabId={(stepId) => `tab-${stepId}`}

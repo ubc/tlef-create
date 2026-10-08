@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CourseView from './CourseView';
@@ -192,13 +192,18 @@ describe('CourseView quiz creation', () => {
     const quizzes = screen.getByRole('heading', { name: 'Quizzes (1)' });
     expect(materials.compareDocumentPosition(quizzes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Course materials/ }));
+    const steps = screen.getByRole('navigation', { name: 'Course setup steps' });
+    expect(within(steps).queryByRole('link', { name: /Course details/ })).not.toBeInTheDocument();
+
+    const materialsLink = within(steps).getByRole('link', { name: /Course materials/ });
+    expect(materialsLink).toHaveAttribute('href', '#course-materials');
+    fireEvent.click(materialsLink);
+    expect(materialsLink).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('heading', { name: '1 course source is ready' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Quizzes/ })[0]);
+    const quizzesLink = within(steps).getByRole('link', { name: /Quizzes/ });
+    expect(quizzesLink).toHaveAttribute('href', '#course-quizzes');
+    fireEvent.click(quizzesLink);
     expect(screen.getByRole('heading', { name: 'Review generated questions' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Course details/ }));
-    expect(screen.getByRole('heading', { name: 'Test Course is ready' })).toBeInTheDocument();
   });
 });

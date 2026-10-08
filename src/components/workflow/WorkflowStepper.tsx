@@ -7,7 +7,6 @@ export type WorkflowStepState = 'complete' | 'current' | 'available' | 'blocked'
 export interface WorkflowStep {
   id: string;
   label: string;
-  detail: string;
   state: WorkflowStepState;
   disabled?: boolean;
 }
@@ -16,6 +15,8 @@ interface WorkflowStepperProps {
   steps: WorkflowStep[];
   activeStepId: string;
   ariaLabel: string;
+  /** In-page link target for a step, e.g. `#course-materials`. */
+  getHref: (stepId: string) => string;
   onStepSelect?: (stepId: string) => void;
   compact?: boolean;
 }
@@ -26,9 +27,17 @@ const STEP_STATUS_TEXT: Partial<Record<WorkflowStepState, string>> = {
   attention: 'needs attention'
 };
 
-type WorkflowTab = Omit<WorkflowStep, 'detail'>;
+const StepLabel = ({ step }: { step: WorkflowStep }) => {
+  const statusText = STEP_STATUS_TEXT[step.state];
+  return (
+    <span className="workflow-step-copy">
+      <strong>{step.label}</strong>
+      {statusText && <span className="workflow-step-status"> ({statusText})</span>}
+    </span>
+  );
+};
 
-const StepIcon = ({ step, index, isActive }: { step: WorkflowTab; index: number; isActive: boolean }) => (
+const StepIcon = ({ step, index, isActive }: { step: WorkflowStep; index: number; isActive: boolean }) => (
   <span className="workflow-step-number" aria-hidden="true">
     {step.state === 'complete' && !isActive ? (
       <Check size={15} strokeWidth={3} />
@@ -43,12 +52,13 @@ const StepIcon = ({ step, index, isActive }: { step: WorkflowTab; index: number;
 );
 
 interface WorkflowTabsProps {
-  steps: WorkflowTab[];
+  steps: WorkflowStep[];
   /** Selected tab; pass null when the visible panel isn't owned by any tab. */
   selectedStepId: string | null;
   ariaLabel: string;
   getTabId: (stepId: string) => string;
-  getPanelId: (stepId: string) => string;
+  /** Return undefined for a tab whose panel isn't rendered, so aria-controls never points at a missing id. */
+  getPanelId: (stepId: string) => string | undefined;
   onStepSelect: (stepId: string) => void;
 }
 
@@ -97,7 +107,6 @@ export const WorkflowTabs = ({
       {steps.map((step, index) => {
         const isSelected = index === selectedIndex;
         const isDisabled = Boolean(step.disabled);
-        const statusText = STEP_STATUS_TEXT[step.state];
 
         return (
           <button
@@ -119,10 +128,7 @@ export const WorkflowTabs = ({
             }}
           >
             <StepIcon step={step} index={index} isActive={isSelected} />
-            <span className="workflow-step-copy">
-              <strong>{step.label}</strong>
-              {statusText && <span className="workflow-tab-status"> ({statusText})</span>}
-            </span>
+            <StepLabel step={step} />
           </button>
         );
       })}
@@ -130,10 +136,15 @@ export const WorkflowTabs = ({
   );
 };
 
+/**
+ * In-page navigation for pages that keep every section visible. Each step is a
+ * link to its section; the browser moves focus to the target on activation.
+ */
 const WorkflowStepper = ({
   steps,
   activeStepId,
   ariaLabel,
+  getHref,
   onStepSelect,
   compact = false
 }: WorkflowStepperProps) => (
@@ -144,27 +155,19 @@ const WorkflowStepper = ({
     <ol>
       {steps.map((step, index) => {
         const isActive = step.id === activeStepId;
-        const isDisabled = Boolean(step.disabled);
-        const state = isActive ? 'current' : step.state;
 
         return (
           <li key={step.id}>
-            <button
-              type="button"
+            <a
+              href={getHref(step.id)}
               className="workflow-step-button"
-              data-state={state}
+              data-state={isActive ? 'current' : step.state}
               aria-current={isActive ? 'step' : undefined}
-              aria-disabled={isDisabled}
-              title={`Step ${index + 1}: ${step.label} — ${step.detail}`}
-              disabled={isDisabled}
               onClick={() => onStepSelect?.(step.id)}
             >
               <StepIcon step={step} index={index} isActive={isActive} />
-              <span className="workflow-step-copy">
-                <strong>{step.label}</strong>
-                <small>{step.detail}</small>
-              </span>
-            </button>
+              <StepLabel step={step} />
+            </a>
           </li>
         );
       })}
