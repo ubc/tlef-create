@@ -30,20 +30,25 @@ describe('CreateCourseModal workflow', () => {
 
     expect(screen.getByRole('dialog', { name: 'Create New Course' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close create course dialog' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Create course steps' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Course details/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('tablist', { name: 'Create course steps' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Course details/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /Course materials/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('tabpanel', { name: /Course details/ })).toContainElement(screen.getByLabelText('Course Name'));
 
     fireEvent.change(screen.getByLabelText('Course Name'), { target: { value: 'CPSC 310' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
 
-    expect(screen.getByRole('button', { name: /Course materials/ })).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByText('Course material uploader')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Course materials/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: /Course materials/ })).toContainElement(screen.getByText('Course material uploader'));
+
+    fireEvent.click(screen.getByRole('tab', { name: /Course details/ }));
+    expect(screen.getByLabelText('Course Name')).toHaveValue('CPSC 310');
   });
   it('offers Canvas connection before the user is connected', async () => {
     vi.mocked(canvasApi.getConfig).mockResolvedValueOnce({ data: { enabled: true } } as never);
     vi.mocked(canvasApi.getAuthStatus).mockResolvedValueOnce({ data: { connected: false } } as never);
     render(<CreateCourseModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} />);
-    await screen.findByRole('button', { name: /Canvas Optional connection/ });
+    await screen.findByRole('tab', { name: /^Canvas/ });
     fireEvent.change(screen.getByLabelText('Course Name'), { target: { value: 'Canvas QA' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));

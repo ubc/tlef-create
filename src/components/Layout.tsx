@@ -19,7 +19,7 @@ const Layout = ({ children }: LayoutProps) => {
     });
 
     return (
-        <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''}`}>
+        <div className={`app-layout${collapsed ? ' sidebar-collapsed' : ''}`}>
             {collapsed && <div className="sidebar-rail"><button onClick={toggleSidebar} aria-label="Expand sidebar" aria-expanded={false}><PanelLeftOpen size={21} /></button></div>}
             <button
                 className="mobile-menu-button"
@@ -29,11 +29,11 @@ const Layout = ({ children }: LayoutProps) => {
                 <Menu size={24} />
             </button>
             <Sidebar collapsed={collapsed} onToggleCollapse={toggleSidebar} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-            <div className="main-content">
+            <main className="main-content">
                 <div className="content-area">
                     {children}
                 </div>
-            </div>
+            </main>
             <NotificationSystem />
             <CreateGuide />
         </div>

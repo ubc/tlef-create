@@ -219,7 +219,7 @@ const CreateGuide = () => {
   };
 
   return (
-    <div className={`create-guide ${isOpen ? 'is-open' : ''}`}>
+    <aside className={`create-guide ${isOpen ? 'is-open' : ''}`} aria-label="CREATE Guide">
       {isOpen && (
         <section className="create-guide-panel" role="dialog" aria-label="CREATE Guide">
           <header className="create-guide-header">
@@ -329,7 +329,7 @@ const CreateGuide = () => {
           {isOpen ? <X size={24} /> : <MessageCircle size={25} />}
         </button>
       </FeatureCoachmark>
-    </div>
+    </aside>
   );
 };
 

@@ -67,13 +67,13 @@ describe('QuizView tabs', () => {
   it('preserves the current page position when Coverage Map is selected', async () => {
     render(<QuizView />);
 
-    const workflow = screen.getByRole('navigation', { name: 'Quiz creation steps' });
+    const workflow = screen.getByRole('tablist', { name: 'Quiz creation steps' });
     expect(workflow).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Sources/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Objectives/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Generate/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Review/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Preview/ })).toBeDisabled();
+    expect(screen.getByRole('tab', { name: /^Sources/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Objectives/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Generate/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Review/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Preview/ })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.queryByText('Blueprint & Generate')).not.toBeInTheDocument();
 
     const coverageTab = await screen.findByRole('button', { name: 'Coverage Map' });
@@ -91,36 +91,37 @@ describe('QuizView tabs', () => {
   it('restores Materials when browser navigation returns to step 1', async () => {
     routeParams = new URLSearchParams('tab=generation');
     const view = render(<QuizView />);
-    expect(screen.getByRole('button', { name: /Generate/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('tab', { name: /Generate/ })).toHaveAttribute('aria-selected', 'true');
     routeParams = new URLSearchParams('tab=materials');
     view.rerender(<QuizView />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Sources/ })).toHaveAttribute('aria-current', 'step'));
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Sources/ })).toHaveAttribute('aria-selected', 'true'));
     expect(screen.getByText('Materials panel').parentElement).toHaveStyle({ display: 'block' });
+    expect(screen.getByRole('tabpanel', { name: 'Sources' })).toContainElement(screen.getByText('Materials panel'));
   });
 
   it('does not mark processing sources complete and refreshes the step once ready', async () => {
     state.material.materials = [{ _id: 'material-1', processingStatus: 'processing' }];
     const view = render(<QuizView />);
-    expect(await screen.findByRole('button', { name: /Sources Checking or processing sources/ })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Sources' })).toHaveAttribute('aria-selected', 'true');
     state.material.materials = [{ _id: 'material-1', processingStatus: 'completed' }];
     view.rerender(<QuizView />);
-    expect(await screen.findByRole('button', { name: /Sources Ready · 1 assigned/ })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Sources (complete)' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('keeps existing questions reviewable when assigned materials have been removed', async () => {
     state.quiz.currentQuiz.materials = [];
     state.quiz.currentQuiz.questions = ['question-1'];
     render(<QuizView />);
-    expect(await screen.findByRole('button', { name: /^Review / })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /^Preview/ })).toBeEnabled();
+    expect(await screen.findByRole('tab', { name: /^Review/ })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByRole('tab', { name: /^Preview/ })).not.toHaveAttribute('aria-disabled');
   });
 
   it('changes Review from attention to complete after instructor confirmation', async () => {
     state.quiz.currentQuiz.questions = ['question-1'];
     const view = render(<QuizView />);
-    expect(await screen.findByRole('button', { name: /Review 1 question to check/ })).toHaveAttribute('data-state', 'attention');
+    expect(await screen.findByRole('tab', { name: 'Review (needs attention)' })).toHaveAttribute('data-state', 'attention');
     state.quiz.currentQuiz.progress.reviewCompleted = true;
     view.rerender(<QuizView />);
-    expect(screen.getByRole('button', { name: /Review Reviewed · 1 question/ })).toHaveAttribute('data-state', 'complete');
+    expect(screen.getByRole('tab', { name: 'Review (complete)' })).toHaveAttribute('data-state', 'complete');
   });
 });

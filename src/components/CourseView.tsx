@@ -490,27 +490,13 @@ const CourseView = () => {
 
   const courseWorkflowSteps: WorkflowStep[] = [
     {
-      id: 'details',
-      label: 'Course details',
-      detail: 'Complete',
-      state: 'complete'
-    },
-    {
       id: 'materials',
       label: 'Course materials',
-      detail: completedMaterialCount > 0
-        ? `Ready · ${completedMaterialCount} source${completedMaterialCount === 1 ? '' : 's'}`
-        : processingMaterialCount > 0
-          ? `Processing · ${processingMaterialCount}`
-          : failedMaterialCount > 0 ? 'Needs attention' : 'Add source content',
       state: completedMaterialCount > 0 ? 'complete' : failedMaterialCount > 0 ? 'attention' : 'available'
     },
     {
       id: 'quizzes',
       label: 'Quizzes',
-      detail: course.quizzes.length > 0
-        ? `In progress · ${course.quizzes.length} quiz${course.quizzes.length === 1 ? '' : 'zes'}`
-        : 'Create the first quiz',
       state: course.quizzes.length > 0 ? 'available' : completedMaterialCount > 0 ? 'available' : 'blocked'
     }
   ];
@@ -518,28 +504,21 @@ const CourseView = () => {
   const recommendedCourseStep = completedMaterialCount > 0 ? 'quizzes' : 'materials';
   const activeCourseStep = selectedCourseStep || recommendedCourseStep;
 
-  const scrollToMaterials = () => {
-    setSelectedCourseStep('materials');
-    materialsSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  // Move focus with the scroll so keyboard and screen reader users land in the section too.
+  const goToSection = (stepId: 'materials' | 'quizzes') => {
+    setSelectedCourseStep(stepId);
+    const section = stepId === 'materials' ? materialsSectionRef.current : quizzesSectionRef.current;
+    section?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    section?.focus({ preventScroll: true });
   };
 
-  const scrollToQuizzes = () => {
-    setSelectedCourseStep('quizzes');
-    quizzesSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  };
+  const scrollToMaterials = () => goToSection('materials');
+  const scrollToQuizzes = () => goToSection('quizzes');
 
-  const courseNextAction = activeCourseStep === 'details'
-    ? {
-        eyebrow: 'Step 1 · Complete',
-        title: `${course.name} is ready`,
-        detail: 'Your course workspace has been created. Next, add source content for grounded AI generation.',
-        label: 'Continue to Materials',
-        action: scrollToMaterials
-      }
-    : activeCourseStep === 'materials'
+  const courseNextAction = activeCourseStep === 'materials'
       ? failedMaterialCount > 0
         ? {
-            eyebrow: 'Step 2 · Action required',
+            eyebrow: 'Step 1 · Action required',
             title: 'Retry a failed course material',
             detail: `${failedMaterialCount} source${failedMaterialCount === 1 ? '' : 's'} could not be processed. Retry below or upload a replacement.`,
             label: 'Review Failed Material',
@@ -547,7 +526,7 @@ const CourseView = () => {
           }
         : processingMaterialCount > 0
           ? {
-              eyebrow: 'Step 2 · Processing',
+              eyebrow: 'Step 1 · Processing',
               title: 'Course materials are processing',
               detail: `${processingMaterialCount} source${processingMaterialCount === 1 ? ' is' : 's are'} being prepared for AI generation.`,
               label: 'View Processing',
@@ -555,14 +534,14 @@ const CourseView = () => {
             }
           : completedMaterialCount > 0
             ? {
-                eyebrow: 'Step 2 · Complete',
+                eyebrow: 'Step 1 · Complete',
                 title: `${completedMaterialCount} course source${completedMaterialCount === 1 ? ' is' : 's are'} ready`,
                 detail: 'Your materials can now ground learning objectives and generated questions.',
                 label: 'Continue to Quizzes',
                 action: scrollToQuizzes
               }
             : {
-                eyebrow: 'Step 2 · Start here',
+                eyebrow: 'Step 1 · Start here',
                 title: 'Add your first course material',
                 detail: 'Add a PDF, DOCX, URL, or pasted text to ground AI generation.',
                 label: 'Add Course Material',
@@ -570,7 +549,7 @@ const CourseView = () => {
               }
       : completedMaterialCount === 0
         ? {
-            eyebrow: 'Step 3 · Blocked',
+            eyebrow: 'Step 2 · Blocked',
             title: 'Prepare course materials first',
             detail: 'At least one successfully processed source is needed before a quiz can use grounded AI generation.',
             label: 'Go to Materials',
@@ -578,7 +557,7 @@ const CourseView = () => {
           }
         : !recommendedQuiz
           ? {
-              eyebrow: 'Step 3 · Ready',
+              eyebrow: 'Step 2 · Ready',
               title: 'Create your first Quiz',
               detail: 'Turn your prepared materials into learning objectives, questions, and an exportable activity.',
               label: 'Create Quiz',
@@ -592,15 +571,9 @@ const CourseView = () => {
               action: () => handleQuizClick(recommendedQuiz.quiz.id, recommendedQuiz.stage.tab)
             };
 
-  const handleCourseStepSelect = (stepId: string) => {
-    setSelectedCourseStep(stepId);
-    if (stepId === 'details') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (stepId === 'materials') {
-      materialsSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    } else {
-      quizzesSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    }
+  const courseSectionIds: Record<string, string> = {
+    materials: 'course-materials',
+    quizzes: 'course-quizzes'
   };
 
   return (
@@ -640,7 +613,8 @@ const CourseView = () => {
             steps={courseWorkflowSteps}
             activeStepId={activeCourseStep}
             ariaLabel="Course setup steps"
-            onStepSelect={handleCourseStepSelect}
+            getHref={(stepId) => `#${courseSectionIds[stepId]}`}
+            onStepSelect={setSelectedCourseStep}
             compact
           />
 
@@ -659,10 +633,12 @@ const CourseView = () => {
           <div
             className={`course-workspace-section ${activeCourseStep === 'materials' ? 'is-active' : ''}`}
             ref={materialsSectionRef}
+            id={courseSectionIds.materials}
+            tabIndex={-1}
           >
             <div className="course-workspace-section-heading">
               <div>
-                <span>Step 2</span>
+                <span>Step 1</span>
                 <h3>Course Materials</h3>
                 <p>Add source content once, then reuse it across every quiz in this course.</p>
               </div>
@@ -699,10 +675,12 @@ const CourseView = () => {
           <div
             className={`course-workspace-section ${activeCourseStep === 'quizzes' ? 'is-active' : ''}`}
             ref={quizzesSectionRef}
+            id={courseSectionIds.quizzes}
+            tabIndex={-1}
           >
             <div className="course-workspace-section-heading quiz-section-header">
               <div>
-                <span>Step 3</span>
+                <span>Step 2</span>
                 <h3>Quizzes ({course.quizzes.length})</h3>
                 <p>Continue from the suggested step or open any quiz directly.</p>
               </div>

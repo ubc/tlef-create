@@ -325,10 +325,10 @@ const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse 
   return (
       <>
         {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
-        <div className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'is-collapsed' : ''}`}>
+        <header className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'is-collapsed' : ''}`} aria-label="Sidebar">
           <div className="sidebar-header">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h1 className="sidebar-title">CREATE</h1>
+              <p className="sidebar-title">CREATE</p>
               <button className="sidebar-collapse-button" onClick={onToggleCollapse} aria-label="Collapse sidebar" aria-expanded={!collapsed}><PanelLeftClose size={20} /></button>
               <button
                 className="sidebar-close-button"
@@ -381,59 +381,71 @@ const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse 
                   No courses yet. Create your first course folder to get started.
                 </p>
             ) : (
-                folders.map((folder) => (
-                    <div key={folder._id}>
-                      <div
-                          className={`course-item ${activeCourse === folder._id ? 'active' : ''}`}
-                          onClick={() => handleCourseClick(folder._id)}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span className="course-name">{folder.name}</span>
-                          {expandedCourses.includes(folder._id) ?
-                              <ChevronDown size={16} /> :
-                              <ChevronRight size={16} />
-                          }
-                        </div>
-                      </div>
+                <ul className="course-list">
+                {folders.map((folder) => (
+                    <li key={folder._id}>
+                      <h3 className="course-heading">
+                        <button
+                            type="button"
+                            className={`course-item ${activeCourse === folder._id ? 'active' : ''}`}
+                            onClick={() => handleCourseClick(folder._id)}
+                            aria-expanded={expandedCourses.includes(folder._id)}
+                            aria-controls={expandedCourses.includes(folder._id) && folder.quizzes ? `course-quizzes-${folder._id}` : undefined}
+                            aria-current={activeCourse === folder._id && !activeQuiz ? 'page' : undefined}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span className="course-name">{folder.name}</span>
+                            {expandedCourses.includes(folder._id) ?
+                                <ChevronDown size={16} aria-hidden="true" /> :
+                                <ChevronRight size={16} aria-hidden="true" />
+                            }
+                          </span>
+                        </button>
+                      </h3>
 
                       {expandedCourses.includes(folder._id) && folder.quizzes && (
-                          <div className="quiz-list">
+                          <div className="quiz-list" id={`course-quizzes-${folder._id}`}>
+                            <ul className="quiz-items">
                             {folder.quizzes.map((quiz: string | { _id: string; name?: string; questions?: string[] }) => {
                               const quizId = typeof quiz === 'string' ? quiz : quiz._id;
                               const quizName = typeof quiz === 'string' ? `Quiz ${quiz}` : (quiz.name || `Quiz ${quizId}`);
                               const questionCount = typeof quiz === 'string' ? 0 : (quiz.questions?.length || 0);
                               
                               return (
-                                <div
-                                    key={quizId}
-                                    className={`quiz-item ${activeQuiz === quizId ? 'active' : ''}`}
-                                    onClick={() => handleQuizClick(folder._id, quizId)}
-                                >
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>{quizName}</span>
-                                    <span style={{ fontSize: 'var(--font-size-sm)', opacity: 0.7 }}>
-                                      {questionCount} question{questionCount === 1 ? '' : 's'}
+                                <li key={quizId}>
+                                  <button
+                                      type="button"
+                                      className={`quiz-item ${activeQuiz === quizId ? 'active' : ''}`}
+                                      onClick={() => handleQuizClick(folder._id, quizId)}
+                                      aria-current={activeQuiz === quizId ? 'page' : undefined}
+                                  >
+                                    <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span>{quizName}</span>
+                                      <span style={{ fontSize: 'var(--font-size-sm)', opacity: 0.7 }}>
+                                        {questionCount} question{questionCount === 1 ? '' : 's'}
+                                      </span>
                                     </span>
-                                  </div>
-                                </div>
+                                  </button>
+                                </li>
                               );
                             })}
+                            </ul>
                             
                             <button 
                               className={`quiz-add-button ${creatingQuizForFolder === folder._id ? 'loading' : ''}`}
                               onClick={() => handleAddQuiz(folder._id)}
                               disabled={creatingQuizForFolder === folder._id}
                             >
-                              {creatingQuizForFolder === folder._id ? (
+                              {creatingQuizForFolder === folder._id && (
                                 <div className="spinner-mini"></div>
-                              ) : (
-                                <Plus size={16} />
                               )}
+                              <span>Add Quiz<span className="generation-visually-hidden"> ({folder.name})</span></span>
                             </button>
                           </div>
                       )}
-                    </div>
-                ))
+                    </li>
+                ))}
+                </ul>
             )}
           </div>
 
@@ -446,7 +458,7 @@ const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse 
               <span>{reduxUser?.displayName || reduxUser?.cwlId || 'User Account'}</span>
             </div>
           </div>
-        </div>
+        </header>
 
         <CreateCourseModal
             isOpen={showCreateModal}
