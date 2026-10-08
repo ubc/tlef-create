@@ -126,6 +126,36 @@ export async function runAuthoringAgent({ session, run, latestRequest, history =
   };
   rememberRequirements(state.requirements);
 
+  // Resolve deictic source requests before a paid decision can ask what the
+  // attached material means. Reads use the same ownership/exclusion boundary
+  // and receipts as model-selected tools; they never imply complete coverage.
+  if (!current && !assistant && state.phase === 'ready' && state.step === 0
+    && !state.selectedContextPrepared && session.materialIds?.length
+    && /\b(?:this|these|attached|selected)\b|这个|这些|这份|所选|已选|附件/i.test(latestRequest)) {
+    const length = Math.min(6000, Math.floor(6000 / session.materialIds.length));
+    for (const materialId of session.materialIds.map(String)) {
+      const alreadyRead = session.taskContext.observations.some(row => row.tool === 'read_material'
+        && row.data?.material?.id === materialId && row.data?.excerpt?.trim())
+        || state.observations.some(row => row.tool === 'read_material' && row.arguments?.materialId === materialId);
+      if (alreadyRead) continue;
+      const args = { materialId, offset: 0, length };
+      let result;
+      try {
+        result = await authoringOperation('read_material', 'Read the selected material for this request',
+          () => tools.execute('read_material', args), value => value.summary);
+      } catch (error) {
+        if (error.code !== 'AUTHORING_AGENT_TOOL') throw error;
+        result = { error: true, message: error.message, summary: error.message };
+      }
+      if (!result.error) for (const version of authoringPromptSourceVersions([{ result }])) sourceVersions.add(version);
+      state.observations.push({ tool: 'read_material', arguments: args, result, scopeHash: authoringScopeHash(session) });
+      await save();
+      await checkpoint('agent_tool_saved');
+    }
+    state.selectedContextPrepared = true;
+    await save();
+  }
+
   while (true) {
     signal?.throwIfAborted();
     await guard();

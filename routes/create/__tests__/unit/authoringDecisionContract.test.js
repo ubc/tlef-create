@@ -1,6 +1,16 @@
 import { describe, expect, test } from '@jest/globals';
 import { parseDecision } from '../../services/authoring/authoringContracts.js';
 
+test('keeps internal requirements data out of the teacher reply without discarding its prose', () => {
+  const internal = JSON.stringify({ topic: { value: 'concise interpretation', quote: 'based on this' } });
+  expect(parseDecision({ action: 'reply', reply: `I will use your selected notes.\n\nrequirements:${internal}\n\nReview the plan.`, clarification: [] }, 0).reply)
+    .toBe('I will use your selected notes.\n\nReview the plan.');
+  expect(() => parseDecision({ action: 'reply', reply: `requirements:${internal}`, clarification: [] }, 0))
+    .toThrow(expect.objectContaining({ code: 'AUTHORING_RESPONSE' }));
+  expect(parseDecision({ action: 'reply', reply: 'A JSON example: {"force":10}', clarification: [] }, 0).reply)
+    .toBe('A JSON example: {"force":10}');
+});
+
 const reply = { action: 'reply', reply: 'Which question count should I use?', clarification: [{ question: 'How many questions?', options: ['One', 'Five'] }] };
 describe('selectable authoring clarification contract', () => {
   test('retains bounded choices and normalizes whitespace while dropping unknown metadata', () => {

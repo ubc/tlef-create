@@ -3,6 +3,17 @@ import helpKnowledgeService from '../../services/helpKnowledgeService.js';
 import { answerHelpQuestion } from '../../services/helpChatService.js';
 
 describe('CREATE Guide knowledge retrieval', () => {
+  test('retrieves native learner preview navigation and container scoring guidance', async () => {
+    const sources = await helpKnowledgeService.retrieve('Current question set learner preview Next question Previous question Finish Show solution Retry Multiple answers container scoring', { route: '/course/test/quiz/test?tab=preview' }, 5);
+    expect(sources.some(source => source.documentId === 'review-and-export'
+      && source.section === 'Test the learner preview'
+      && source.content.includes('Question Set scores the correct choices individually'))).toBe(true);
+  });
+  test('retrieves selected-material references and delegated question counts', async () => {
+    const sources = await helpKnowledgeService.retrieve('With a material chip attached, based on this these notes you decide how many questions', { route: '/h5p-studio' }, 5);
+    expect(sources.some(source => source.documentId === 'h5p-studio' && source.section === 'Add context with + or @'
+      && source.content.includes('bounded text sample') && source.content.includes('you decide how many'))).toBe(true);
+  });
   test.each([
     ['Where can I expand the task summary to see Input tokens Output tokens Total tokens and elapsed time for the same execution?', 'same execution'],
     ['Does recorded token usage include AI model calls from failed checks and automatic rework rather than just the successful question?', 'failed checks and automatic rework'],

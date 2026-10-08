@@ -1,4 +1,5 @@
 import { renderLegacyH5PPreview } from '../services/h5pLegacyPreviewService.js';
+import { getPreviewStylesheet, previewStylesRevision } from '../services/h5pPreviewStylesService.js';
 import express from 'express';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
@@ -118,6 +119,13 @@ router.get('/core/h5p-core.js', allowSandboxedH5PAsset, asyncHandler(async (req,
 router.get('/core/js/jquery.js', allowSandboxedH5PAsset, asyncHandler(async (_req, res) => {
   const jqueryPath = path.join(__dirname, '..', 'h5p-core', 'js', 'jquery.js');
   res.type('application/javascript').sendFile(jqueryPath);
+}));
+
+router.get('/core/styles/preview.css', allowSandboxedH5PAsset, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', req.query.createRevision === previewStylesRevision
+    ? 'public, max-age=31536000, immutable'
+    : 'public, max-age=0, must-revalidate');
+  res.type('text/css').send(await getPreviewStylesheet());
 }));
 
 // Serve the same pinned official core used by Studio, including fonts/theme CSS.

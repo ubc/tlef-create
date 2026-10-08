@@ -33,6 +33,58 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+test.each(['Help me generate questions based on this, you decide how many.', '根据这个材料帮我出题，题数你决定。'])('reads the attached source before the first paid decision: %s', async latestRequest => {
+  const materialId = '555555555555555555555555';
+  const material = { _id: materialId, name: 'week3-lecture-notes', content: 'Newton laws of motion and free-body diagrams.',
+    uploadedBy: owner, folder: session.courseId, processingStatus: 'completed', updatedAt: new Date('2026-10-06') };
+  jest.spyOn(Material, 'findOne').mockReturnValue({ select: () => ({ lean: async () => material }) });
+  const options = request(latestRequest, { session: { ...session, contextCourse: false, materialIds: [materialId] } });
+  const complete = jest.spyOn(llmService, 'streamCompletion').mockImplementation(async ({ prompt }) => {
+    expect(Material.findOne).toHaveBeenCalledTimes(1);
+    expect(prompt).toContain(material.content);
+    expect(prompt).toContain(material.name);
+    expect(prompt).toContain('Do not ask them to choose the delegated count again');
+    return response({ action: 'build_plan', reply: 'Use the selected motion notes and recommend a small set.', clarification: [] });
+  });
+  expect(await runAuthoringAgent(options)).toMatchObject({ action: 'build_plan' });
+  expect(complete).toHaveBeenCalledTimes(1);
+  expect(Material.findOne.mock.calls[0][0]).toEqual({ $and: [
+    { folder: session.courseId, uploadedBy: owner, _id: { $in: [materialId] } }, { _id: materialId }
+  ] });
+  expect(options.session.taskContext.observations.find(row => row.tool === 'read_material').provenance[0])
+    .toMatchObject({ id: materialId, start: 0, end: material.content.length });
+});
+
+test('an unavailable attached source supplies its real error before the model decides', async () => {
+  const materialId = '555555555555555555555555';
+  jest.spyOn(Material, 'findOne').mockReturnValue({ select: () => ({ lean: async () => ({ _id: materialId, processingStatus: 'processing' }) }) });
+  const complete = jest.spyOn(llmService, 'streamCompletion').mockImplementation(async ({ prompt }) => {
+    expect(prompt).toContain('must finish processing before it can be read');
+    return response({ action: 'reply', reply: 'The selected notes are still processing. Resume after they finish.', clarification: [] });
+  });
+  const options = request('Create questions based on this.', { session: { ...session, contextCourse: false, materialIds: [materialId] } });
+  expect(await runAuthoringAgent(options)).toMatchObject({ reply: expect.stringContaining('still processing') });
+  expect(complete).toHaveBeenCalledTimes(1);
+  expect(options.run.agentState.observations[0].result.error).toBe(true);
+});
+
+test('these notes reads every selected source within one shared sample budget', async () => {
+  const ids = ['555555555555555555555555', '666666666666666666666666'];
+  const read = jest.spyOn(Material, 'findOne').mockImplementation(filter => ({ select: () => ({ lean: async () => {
+    const id = filter.$and[1]._id;
+    return { _id: id, name: `Source ${ids.indexOf(id) + 1}`, content: 'x'.repeat(8000), processingStatus: 'completed' };
+  } }) }));
+  const options = request('Build a plan based on these notes.', { session: { ...session, contextCourse: false, materialIds: ids } });
+  const complete = jest.spyOn(llmService, 'streamCompletion').mockResolvedValue(response({ action: 'build_plan', reply: 'Use both selected sources.', clarification: [] }));
+  await runAuthoringAgent(options);
+  expect(read).toHaveBeenCalledTimes(2);
+  const readings = options.run.agentState.observations.filter(row => row.tool === 'read_material');
+  expect(readings.map(row => row.result.material.id)).toEqual(ids);
+  expect(readings.reduce((total, row) => total + row.result.text.length, 0)).toBe(6000);
+  expect(readings.every(row => row.result.nextOffset === 3000)).toBe(true);
+  expect(complete).toHaveBeenCalledTimes(1);
+});
+
 test('tools feed actual results into the next model decision and final results replay without buying another call', async () => {
   const options = request();
   const complete = jest.spyOn(llmService, 'streamCompletion')
@@ -498,7 +550,6 @@ test('a two-page source can reach a checked build with only two reads instead of
     updatedAt: new Date('2026-10-03T00:00:00Z')
   }) }) });
   const complete = jest.spyOn(llmService, 'streamCompletion')
-    .mockResolvedValueOnce(response({ action: 'tool', tool: 'read_material', arguments: { materialId, offset: 0 } }))
     .mockResolvedValueOnce(response({ action: 'tool', tool: 'read_material', arguments: { materialId, offset: 6000 } }))
     .mockResolvedValueOnce(response({ action: 'tool', tool: 'check_requirements', arguments: {} }))
     .mockImplementation(async ({ prompt }) => response(prompt.includes('IMPORTANT_FACT_AT_END_OF_FIRST_PAGE')
@@ -506,7 +557,7 @@ test('a two-page source can reach a checked build with only two reads instead of
       : { action: 'tool', tool: 'read_material', arguments: { materialId, offset: 0 } }));
   expect(await runAuthoringAgent(options)).toMatchObject({ action: 'build_plan' });
   expect(readMaterial).toHaveBeenCalledTimes(2);
-  expect(complete).toHaveBeenCalledTimes(4);
+  expect(complete).toHaveBeenCalledTimes(3);
   const finalPrompt = complete.mock.calls.at(-1)[0].prompt;
   expect(finalPrompt).toContain('IMPORTANT_FACT_AT_END_OF_FIRST_PAGE');
   expect(finalPrompt).toContain('SOURCE_END');

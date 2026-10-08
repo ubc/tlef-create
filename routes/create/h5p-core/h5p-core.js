@@ -105,7 +105,7 @@ H5P.EventDispatcher = (function () {
     }
   };
 
-  EventDispatcher.prototype.trigger = function (event, extra, eventData) {
+  EventDispatcher.prototype.trigger = function (event, extra, eventData, source) {
     if (!this.listeners) this.listeners = {};
     if (typeof event === 'string') {
       event = new H5P.Event(event, extra, eventData);
@@ -114,20 +114,23 @@ H5P.EventDispatcher = (function () {
     if (this.listeners[event.type]) {
       var listeners = this.listeners[event.type].slice();
       for (var i = 0; i < listeners.length; i++) {
-        listeners[i].fn.call(listeners[i].thisArg || this, event);
+        // External listeners use the originating content instance as `this`,
+        // just like the official dispatcher (Book uses its subContentId).
+        var context = this === H5P.externalDispatcher && source ? source : this;
+        listeners[i].fn.call(listeners[i].thisArg || context, event);
       }
     }
 
     // Bubble xAPI events up through parent chain
     if (event.type === 'xAPI' && !event.preventBubbling && this.parent) {
       if (this.parent.trigger) {
-        this.parent.trigger(event);
+        this.parent.trigger(event, undefined, undefined, source || this);
       }
     }
 
     // Propagate xAPI events to external dispatcher (but not from the dispatcher itself)
-    if (event.type === 'xAPI' && H5P.externalDispatcher && this !== H5P.externalDispatcher) {
-      H5P.externalDispatcher.trigger(event);
+    if (event.type === 'xAPI' && !source && H5P.externalDispatcher && this !== H5P.externalDispatcher) {
+      H5P.externalDispatcher.trigger(event, undefined, undefined, this);
     }
   };
 

@@ -2,6 +2,7 @@
 // H5P core, shared library assets, and a native runnable for each question.
 import { convertQuestionToH5P, generateH5PQuestionSet, buildInteractiveBookContent,
   INTERACTIVE_BOOK_UNSUPPORTED_TYPES, QUESTION_SET_UNSUPPORTED_TYPES } from './h5pExportService.js';
+import { previewStylesheetUrl } from './h5pPreviewStylesService.js';
 import LIBRARY_REGISTRY, { getNeededLibraries } from '../config/h5pLibraryRegistry.js';
 import { resolveNativePreviewAssets as resolveLibraryDependencies } from './h5pNativePreviewService.js';
 
@@ -61,29 +62,21 @@ export async function renderLegacyH5PPreview(quiz, questions, containerMode = 'c
 
 
     return `<!DOCTYPE html>
-<html>
+<html class="h5p-iframe" lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(quiz.name || 'Preview')}</title>
+  <link rel="stylesheet" href="${previewStylesheetUrl}">
   <style>
-    :root {
-      --h5p-theme-main-cta-base: #2374e3; --h5p-theme-main-cta-dark: #1a5bbf;
-      --h5p-theme-contrast-cta: #ffffff; --h5p-theme-font-size-m: 16px;
-      --h5p-theme-spacing-xs: 8px; --h5p-theme-spacing-s: 12px;
-      --h5p-theme-spacing-m: 16px; --h5p-theme-spacing-l: 24px;
-      --h5p-theme-text-primary: #111827; --h5p-theme-text-secondary: #6b7280;
-      --h5p-theme-background: #ffffff; --h5p-theme-border: #e5e7eb;
-      --h5p-theme-border-radius: 8px;
-    }
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9fafb; }
+    body { margin: 0; padding: 0; font-family: var(--h5p-theme-font-name); background: #f9fafb; }
     #${containerId} { width: 100%; min-height: 500px; }
     #${containerId}.h5p-content { width: 100% !important; }
   </style>
 ${cssTags}
 </head>
 <body>
-  <div id="${containerId}" class="h5p-content"></div>
+  <div id="${containerId}" class="h5p-content h5p-large"></div>
   <script src="/api/create/h5p-preview/core/js/jquery.js"></script>
   <script>window.jQuery = window.$ = H5P.jQuery;</script>
   <script>
@@ -96,7 +89,7 @@ ${cssTags}
       contents: {}
     };
   </script>
-  <script src="/api/create/h5p-preview/core/h5p-core.js?createRevision=20260921-branch-parent"></script>
+  <script src="/api/create/h5p-preview/core/h5p-core.js?createRevision=20261008-event-source"></script>
   <script>
     H5P.jQuery = jQuery;
     H5P.$body = jQuery('body');
@@ -189,7 +182,7 @@ ${jsTags}
       (function() {
         var library = ${JSON.stringify(h5pContent).replace(/</g, '\\u003c')};
         var $container = jQuery('#${containerId}');
-        $container.addClass('h5p-content');
+        $container.addClass('h5p-content h5p-large');
         H5P.newRunnable(library, 'preview-${quizId}-${idx}', $container, false, {
           metadata: library.metadata || {}
         });
@@ -197,60 +190,17 @@ ${jsTags}
   });
 
   const html = `<!DOCTYPE html>
-<html>
+<html class="h5p-iframe" lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(quiz.name || 'Quiz Preview')}</title>
+  <link rel="stylesheet" href="${previewStylesheetUrl}">
   <style>
-    /* H5P Components theme variables — required by H5P.Components button/navigation CSS */
-    :root {
-      --h5p-theme-main-cta-base: #2374e3;
-      --h5p-theme-main-cta-dark: #1a5bbf;
-      --h5p-theme-main-cta-light: #5a9af0;
-      --h5p-theme-secondary-cta-base: #4a4a4a;
-      --h5p-theme-secondary-cta-dark: #2a2a2a;
-      --h5p-theme-secondary-cta-light: #6a6a6a;
-      --h5p-theme-contrast-cta: #ffffff;
-      --h5p-theme-contrast-cta-light: #f0f4ff;
-      --h5p-theme-contrast-cta-white: #ffffff;
-      --h5p-theme-secondary-contrast-cta: #ffffff;
-      --h5p-theme-secondary-contrast-cta-hover: #f5f5f5;
-      --h5p-theme-alternative-base: #ffffff;
-      --h5p-theme-alternative-dark: #f3f4f6;
-      --h5p-theme-alternative-darker: #e5e7eb;
-      --h5p-theme-alternative-light: #f9fafb;
-      --h5p-theme-ui-base: #f9fafb;
-      --h5p-theme-text-primary: #111827;
-      --h5p-theme-text-secondary: #374151;
-      --h5p-theme-text-third: #6b7280;
-      --h5p-theme-stroke-1: #e5e7eb;
-      --h5p-theme-font-name: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --h5p-theme-font-size-s: 12px;
-      --h5p-theme-font-size-m: 16px;
-      --h5p-theme-font-size-l: 20px;
-      --h5p-theme-font-size-xl: 24px;
-      --h5p-theme-font-size-xxl: 32px;
-      --h5p-theme-spacing-xxs: 4px;
-      --h5p-theme-spacing-xs: 8px;
-      --h5p-theme-spacing-s: 12px;
-      --h5p-theme-spacing-m: 16px;
-      --h5p-theme-spacing-l: 24px;
-      --h5p-theme-border-radius-small: 4px;
-      --h5p-theme-border-radius-medium: 6px;
-      --h5p-theme-border-radius-large: 12px;
-      --h5p-theme-feedback-correct-main: #166534;
-      --h5p-theme-feedback-correct-secondary: #dcfce7;
-      --h5p-theme-feedback-correct-third: #86efac;
-      --h5p-theme-feedback-incorrect-main: #991b1b;
-      --h5p-theme-feedback-incorrect-secondary: #fee2e2;
-      --h5p-theme-feedback-incorrect-third: #fca5a5;
-    }
-
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: var(--h5p-theme-font-name);
       background: #f9fafb;
     }
     .questions-container { max-width: 960px; margin: 0 auto; }
@@ -332,7 +282,7 @@ ${questionBlocks.join('\n')}
 
   <script src="/api/create/h5p-preview/core/js/jquery.js"></script>
   <script>window.jQuery = window.$ = H5P.jQuery;</script>
-  <script src="/api/create/h5p-preview/core/h5p-core.js?createRevision=20260921-branch-parent"></script>
+  <script src="/api/create/h5p-preview/core/h5p-core.js?createRevision=20261008-event-source"></script>
 ${jsTags}
 
   <script>

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { getH5PTypesForContainer } from '../../config/h5pTypeAdapterRegistry.js';
 import { normalizeObjectiveChanges } from './courseObjectiveRevision.js';
 import { normalizeClarification } from './authoringClarification.js';
+import { extractBalancedJson } from '../../utils/openAIRequestUtils.js';
 
 export const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const stableId = value => digest(value).slice(0, 24);
@@ -85,8 +86,31 @@ export function parseDecision(value, questionCount, allowedQuestionTypes = getH5
       || new Set(item.options.map(option => option.trim())).size !== item.options.length)) {
     fail('The assistant returned incomplete clarification choices. Your work is unchanged.', 422, 'AUTHORING_RESPONSE');
   }
-  return { action: value.action, reply: value.reply, questionIndex: value.questionIndex, ...batch, ...revision,
+  return { action: value.action, reply: instructorFacingReply(value.reply), questionIndex: value.questionIndex, ...batch, ...revision,
     clarification: clarification.map(normalizeClarification) };
+}
+
+function instructorFacingReply(reply) {
+  // Some providers put the extraction schema inside reply despite JSON mode.
+  // Remove only a labelled internal requirements object, preserving ordinary
+  // prose and examples of JSON that the instructor may actually ask to teach.
+  const pattern = /(?:^|\n)[ \t]*requirements[ \t]*:[ \t]*(?=\{)/gi;
+  let match;
+  while ((match = pattern.exec(reply))) {
+    const tail = reply.slice(pattern.lastIndex);
+    const json = extractBalancedJson(tail);
+    if (!json) fail('The assistant mixed incomplete internal data into its reply. Your saved work is preserved.', 422, 'AUTHORING_RESPONSE');
+    let data;
+    try { data = JSON.parse(json); }
+    catch { fail('The assistant mixed unreadable internal data into its reply. Your saved work is preserved.', 422, 'AUTHORING_RESPONSE'); }
+    if (!Object.keys(data).length || !Object.entries(data).every(([key, field]) =>
+      ['topic', 'audience', 'purpose', 'difficulty', 'questionTypes', 'mustCover', 'exclusions'].includes(key)
+      && typeof field?.value === 'string' && typeof field?.quote === 'string')) continue;
+    reply = reply.slice(0, match.index) + reply.slice(pattern.lastIndex + json.length);
+    pattern.lastIndex = match.index;
+  }
+  if (!reply.trim()) fail('The assistant returned internal data without a teaching response. Your saved work is preserved.', 422, 'AUTHORING_RESPONSE');
+  return reply.replace(/\n{3,}/g, '\n\n').trim();
 }
 const referenceId = value => value && typeof value === 'object'
   ? String(value._id || value.id || '') : value ? String(value) : '';

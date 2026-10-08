@@ -1,6 +1,17 @@
 import { expect, test } from '@jest/globals';
 import { readRequestedCount, updateTeachingRequirements, reconcileQuestionCount } from '../../services/authoring/teachingRequirements.js';
 
+test('schema placeholders never become confirmed teaching requirements', () => {
+  const input = 'Generate questions based on this.';
+  expect(updateTeachingRequirements(null, input, 'placeholder-request', {
+    audience: { value: 'concise interpretation', quote: input }
+  }).fields).toEqual({});
+  const old = { fields: { audience: { value: 'concise interpretation', quote: input },
+    difficulty: { value: 'easy', quote: 'easy' } } };
+  expect(updateTeachingRequirements(old, input, 'repair-request').fields).toEqual({ difficulty: old.fields.difficulty });
+  expect(old.fields.audience).toBeDefined();
+});
+
 test.each(['Around 15 questions based on this material', 'Create fifteen questions.', '生成15道题', 'Question count: 15',
   'Build 15 easy questions.', 'Draft fifteen introductory multiple-choice questions.', 'Prepare 15 hard practice MCQs.', '生成15道简单选择题',
   '生成15道简单单选题', '生成15道多选题', 'Create fifteen easy single-choice questions.',

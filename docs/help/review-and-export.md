@@ -66,6 +66,14 @@ Open **Preview & Export** to check the questions using CREATE's shared H5P revie
 
 **Advanced H5P Editor** opens an independent Studio draft using the official H5P runtime. Studio edits do not automatically update CREATE questions. The same native H5P builder is still used for package export and Studio conversion. Preview does not create a saved Studio item.
 
+## Test the learner preview
+
+**Current question set** in Preview & Export uses the same installed H5P theme, fonts and question controls as the Studio saved preview. CREATE's surrounding headers and question labels can differ. H5P controls retain their native colours. In **Question Set**, test **Next question** and **Previous question** after checking an answer, then **Finish**, **Show solution** and **Retry**. Retry clears the learner responses; it does not delete or regenerate saved questions.
+
+For multiple-choice **Multiple answers**, try both a partial selection and all correct choices. Column and Interactive Book currently score this activity as one point for the whole question; Question Set scores the correct choices individually. Compare the same container when checking scores. In Interactive Book, answering a question updates its completion marker and summary; visiting a page alone does not complete its questions.
+
+Flashcard **Turn** reveals the back with the installed H5P card transition. Single Choice Set uses **Next question** after feedback in CREATE's generated activities. Question Set success/failure videos are optional author-supplied media, so a result page without an ending video is expected when none is configured. Studio changes to media or behaviour are independent of the CREATE question records.
+
 ## PDF and Markdown export
 
 PDF and Markdown exports can include questions only, answers only, or a combined version. Use questions-only for a learner handout and answers/combined for review or facilitation. These are snapshots: edits made after download require a new export.

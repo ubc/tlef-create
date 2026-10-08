@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import H5PContent from '../models/H5PContent.js';
 import { getStudioCatalog } from './h5pStudioCatalog.js';
 import { H5P_CORE_API, H5P_CORE_VERSION, H5P_CORE_SCRIPTS, H5P_CORE_STYLES, H5P_RUNTIME_REVISION } from '../config/h5pRuntime.js';
+import { questionSetNavigationStyles } from './h5pPreviewStylesService.js';
 
 // Use createRequire for CJS packages
 const require = createRequire(import.meta.url);
@@ -93,6 +94,7 @@ export function renderPlayerPage(model) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>H5P activity preview</title>
   ${prepareRuntimeAssets(model.styles, 'styles').map(style => `<link rel="stylesheet" href="${escapeAttribute(style)}">`).join('\n  ')}
+  <style>${questionSetNavigationStyles}</style>
   ${prepareRuntimeAssets(insertH5PJQueryBridge(model.scripts)).map(script => `<script src="${escapeAttribute(script)}"></script>`).join('\n  ')}
   <script>window.H5PIntegration = ${integration};</script>
 </head>

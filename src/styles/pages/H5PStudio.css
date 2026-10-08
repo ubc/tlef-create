@@ -586,11 +586,6 @@
 .h5p-studio-surface .studio-type-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; max-height:min(440px,55dvh); }
 .h5p-studio-surface .studio-type-preview { height:76px; }
 
-/* Keep the help entry in the footer, clear of the message send button. */
-.app-layout:has(.h5p-studio-page) .create-guide { right:12px; bottom:5px; }
-.app-layout:has(.h5p-studio-page) .create-guide-launcher { width:32px; height:32px; box-shadow:none; }
-.app-layout:has(.h5p-studio-page) .create-guide-launcher svg { width:18px; height:18px; }
-
 @media(max-width:1000px) {
   .h5p-studio-surface .h5p-studio-workspace { display:flex; flex-direction:column; }
   .h5p-studio-surface .h5p-studio-library { flex:none; border-right:0; border-bottom:1px solid var(--studio-line); }

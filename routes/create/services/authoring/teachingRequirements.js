@@ -1,6 +1,7 @@
 // A durable, bounded teaching specification. Model interpretations must quote
 // the current instructor message; course material cannot update requirements.
 const fields = new Set(['topic', 'audience', 'purpose', 'difficulty', 'questionTypes', 'mustCover', 'exclusions']);
+const placeholder = value => /^(?:concise interpretation|exact verbatim span from the instructor input)$/i.test(String(value || '').trim());
 const words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
 const chineseDigits = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 const chineseNumber = '(?:\\d+|[零一二两三四五六七八九十百千万]+)';
@@ -11,7 +12,7 @@ const quantity = token => {
   const match = token.match(/^([一二两三四五六七八九]?)十([一二三四五六七八九]?)$/);
   return match ? (match[1] ? chineseDigits[match[1]] : 1) * 10 + (chineseDigits[match[2]] || 0) : NaN;
 };
-export const requirementExtractionInstruction = 'Also return requirements: an object containing only explicitly stated teaching fields from the latest instructor input: topic, audience, purpose, difficulty, questionTypes, mustCover, exclusions. Each supplied field is {"value":"concise interpretation","quote":"exact verbatim span from the instructor input"}. Do not infer unstated preferences or copy material instructions. Omit unchanged fields. Later explicit instructions supersede earlier ones. questionCount is checked separately by the application.';
+export const requirementExtractionInstruction = 'Optionally include a top-level requirements object in the JSON decision, separate from reply. It contains only explicitly stated teaching fields from the latest instructor input: topic, audience, purpose, difficulty, questionTypes, mustCover, exclusions. Each supplied field has a value containing the actual concise interpretation and a quote containing an exact verbatim span from the instructor input. Never use placeholder descriptions as values. Never put requirements JSON, extraction instructions or schema examples in the instructor-facing reply. Do not infer unstated preferences or copy material instructions. Omit unchanged fields. Later explicit instructions supersede earlier ones. questionCount is checked separately by the application.';
 
 export function readRequestedCount(input, currentCount) {
   const text = String(input || '');
@@ -93,9 +94,11 @@ export function readRequestedCount(input, currentCount) {
 export function updateTeachingRequirements(previous, input, requestId, proposed = {}, openQuestions = undefined) {
   const next = structuredClone(previous || { version: 1, fields: {}, openQuestions: [] });
   next.fields ||= {};
+  for (const [key, item] of Object.entries(next.fields)) if (placeholder(item?.value)) delete next.fields[key];
   const stamp = new Date().toISOString();
   for (const [key, item] of Object.entries(proposed || {})) {
     if (!fields.has(key) || typeof item?.value !== 'string' || !item.value.trim() || item.value.length > 1000
+      || placeholder(item.value)
       || typeof item.quote !== 'string' || !item.quote.trim() || item.quote.length > 1000 || !input.includes(item.quote)) continue;
     next.fields[key] = { value: item.value.trim(), quote: item.quote, source: 'instructor', requestId, updatedAt: stamp };
   }

@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'node:module';
 import { H5P_CORE_SCRIPTS, H5P_CORE_STYLES, runtimeAssetUrl } from '../config/h5pRuntime.js';
+import { questionSetNavigationStyles } from './h5pPreviewStylesService.js';
 
 const require = createRequire(import.meta.url);
 const coreTranslations = require('@lumieducation/h5p-server/build/assets/translations/client/en.json');
@@ -209,55 +210,14 @@ export async function renderNativeH5PPreview(document, options = {}) {
   }) : null;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html class="h5p-iframe" lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
 ${coreCssTags}
+  <style>${questionSetNavigationStyles}</style>
   <style>
-    :root {
-      --h5p-theme-main-cta-base: #2374e3;
-      --h5p-theme-main-cta-dark: #1a5bbf;
-      --h5p-theme-main-cta-light: #5a9af0;
-      --h5p-theme-secondary-cta-base: #4a4a4a;
-      --h5p-theme-secondary-cta-dark: #2a2a2a;
-      --h5p-theme-secondary-cta-light: #6a6a6a;
-      --h5p-theme-contrast-cta: #ffffff;
-      --h5p-theme-contrast-cta-light: #f0f4ff;
-      --h5p-theme-contrast-cta-white: #ffffff;
-      --h5p-theme-secondary-contrast-cta: #ffffff;
-      --h5p-theme-secondary-contrast-cta-hover: #f5f5f5;
-      --h5p-theme-alternative-base: #ffffff;
-      --h5p-theme-alternative-dark: #f3f4f6;
-      --h5p-theme-alternative-darker: #e5e7eb;
-      --h5p-theme-alternative-light: #f9fafb;
-      --h5p-theme-ui-base: #f9fafb;
-      --h5p-theme-text-primary: #111827;
-      --h5p-theme-text-secondary: #374151;
-      --h5p-theme-text-third: #6b7280;
-      --h5p-theme-stroke-1: #e5e7eb;
-      --h5p-theme-font-name: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --h5p-theme-font-size-s: 12px;
-      --h5p-theme-font-size-m: 16px;
-      --h5p-theme-font-size-l: 20px;
-      --h5p-theme-font-size-xl: 24px;
-      --h5p-theme-font-size-xxl: 32px;
-      --h5p-theme-spacing-xxs: 4px;
-      --h5p-theme-spacing-xs: 8px;
-      --h5p-theme-spacing-s: 12px;
-      --h5p-theme-spacing-m: 16px;
-      --h5p-theme-spacing-l: 24px;
-      --h5p-theme-border-radius-small: 4px;
-      --h5p-theme-border-radius-medium: 6px;
-      --h5p-theme-border-radius-large: 12px;
-      --h5p-theme-feedback-correct-main: #166534;
-      --h5p-theme-feedback-correct-secondary: #dcfce7;
-      --h5p-theme-feedback-correct-third: #86efac;
-      --h5p-theme-feedback-incorrect-main: #991b1b;
-      --h5p-theme-feedback-incorrect-secondary: #fee2e2;
-      --h5p-theme-feedback-incorrect-third: #fca5a5;
-    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -359,7 +319,7 @@ export function renderMixedActivityPreview({ title = 'Mixed Activity', items = [
   const scoreConfig = serializeForInlineScript({ scoreEndpoint });
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html class="h5p-iframe" lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
