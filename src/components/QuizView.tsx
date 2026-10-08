@@ -14,11 +14,13 @@ import { clearObjectives } from '../store/slices/learningObjectiveSlice';
 import { usePubSub } from '../hooks/usePubSub';
 import { LearningObjectiveData } from './generation/generationTypes';
 import { normalizeLearningObjectiveData } from '../utils/learningObjectiveState';
-import WorkflowStepper, { WorkflowStep } from './workflow/WorkflowStepper';
+import { WorkflowStep, WorkflowTabs } from './workflow/WorkflowStepper';
 import '../styles/components/QuizView.css';
 
 type WorkflowTab = 'materials' | 'objectives' | 'generation' | 'review' | 'preview';
 type TabType = WorkflowTab | 'coverage';
+
+const WORKFLOW_TAB_PREFIX = 'quiz-workflow';
 
 const QuizView = () => {
   const { courseId, quizId } = useParams();
@@ -225,37 +227,27 @@ const QuizView = () => {
     setSearchParams(nextParams);
   };
 
-  const workflowSteps: WorkflowStep[] = [
+  const workflowSteps: Omit<WorkflowStep, 'detail'>[] = [
     {
       id: 'materials',
       label: 'Sources',
-      detail: materialsReady ? `Ready · ${readyAssignedCount} assigned` : failedAssignedCount > 0 ? `${failedAssignedCount} failed · check sources` : assignedMaterials.length > 0 ? 'Checking or processing sources' : 'Start here · assign sources',
       state: materialsReady ? 'complete' : failedAssignedCount > 0 ? 'attention' : 'available'
     },
     {
       id: 'objectives',
       label: 'Objectives',
-      detail: learningObjectives.length > 0 ? `Ready · ${learningObjectives.length} LOs` : 'Create measurable outcomes',
       state: learningObjectives.length > 0 ? 'complete' : assignedMaterials.length > 0 ? 'available' : 'blocked',
       disabled: !canProceed('objectives')
     },
     {
       id: 'generation',
       label: 'Generate',
-      detail: questionCount > 0
-        ? `Complete · ${questionCountLabel}`
-        : currentQuiz.progress?.planGenerated
-          ? 'Question plan ready'
-          : 'Choose format and question mix',
       state: questionCount > 0 ? 'complete' : canProceed('generation') ? 'available' : 'blocked',
       disabled: !canProceed('generation')
     },
     {
       id: 'review',
       label: 'Review',
-      detail: questionCount > 0
-        ? currentQuiz.progress?.reviewCompleted ? `Reviewed · ${questionCountLabel}` : `${questionCountLabel} to check`
-        : 'Waiting for questions',
       state: questionCount > 0 && currentQuiz.progress?.reviewCompleted
         ? 'complete'
         : questionCount > 0
@@ -266,11 +258,20 @@ const QuizView = () => {
     {
       id: 'preview',
       label: 'Preview',
-      detail: questionCount > 0 ? 'Preview and choose delivery' : 'Waiting for questions',
       state: questionCount > 0 ? 'available' : 'blocked',
       disabled: !canProceed('preview')
     }
   ];
+
+  const getWorkflowTabId = (stepId: string) => `${WORKFLOW_TAB_PREFIX}-tab-${stepId}`;
+  // Review and Preview share one panel (ReviewEdit switches mode).
+  const getWorkflowPanelId = (stepId: string) =>
+    `${WORKFLOW_TAB_PREFIX}-panel-${stepId === 'preview' ? 'review' : stepId}`;
+  const tabPanelProps = (stepId: WorkflowTab) => ({
+    role: 'tabpanel' as const,
+    id: getWorkflowPanelId(stepId),
+    'aria-labelledby': getWorkflowTabId(stepId === 'review' && activeTab === 'preview' ? 'preview' : stepId)
+  });
 
   const activeWorkflowStep = activeTab === 'coverage' ? lastWorkflowTab : activeTab;
   const activeStepNumber = workflowSteps.findIndex(step => step.id === activeWorkflowStep) + 1;
@@ -359,12 +360,13 @@ const QuizView = () => {
           </p>
         </div>
 
-        <WorkflowStepper
+        <WorkflowTabs
           steps={workflowSteps}
-          activeStepId={activeWorkflowStep}
+          selectedStepId={activeTab === 'coverage' ? null : activeTab}
           ariaLabel="Quiz creation steps"
+          getTabId={getWorkflowTabId}
+          getPanelId={getWorkflowPanelId}
           onStepSelect={(stepId) => handleTabChange(stepId as WorkflowTab)}
-          compact
         />
 
         <div className={`quiz-workflow-context ${activeTab === 'coverage' ? 'is-coverage' : ''}`}>
@@ -393,7 +395,7 @@ const QuizView = () => {
 
         <div className="quiz-content">
           {/* Keep all components mounted, use CSS to show/hide */}
-          <div style={{ display: activeTab === 'materials' ? 'block' : 'none' }}>
+          <div {...tabPanelProps('materials')} style={{ display: activeTab === 'materials' ? 'block' : 'none' }}>
             <MaterialAssignment
                 courseId={courseId!}
                 assignedMaterials={assignedMaterials}
@@ -414,7 +416,7 @@ const QuizView = () => {
             />
           </div>
 
-          <div style={{ display: activeTab === 'objectives' ? 'block' : 'none' }}>
+          <div {...tabPanelProps('objectives')} style={{ display: activeTab === 'objectives' ? 'block' : 'none' }}>
             <LearningObjectives
                 assignedMaterials={assignedMaterials}
                 materialReadiness={assignedMaterialReadiness}
@@ -441,7 +443,7 @@ const QuizView = () => {
             />
           </div>
 
-          <div style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
+          <div {...tabPanelProps('generation')} style={{ display: activeTab === 'generation' ? 'block' : 'none' }}>
             <QuestionGeneration
                 isActive={activeTab === 'generation'}
                 learningObjectives={learningObjectives}
@@ -457,7 +459,7 @@ const QuizView = () => {
             />
           </div>
 
-          <div style={{ display: activeTab === 'review' || activeTab === 'preview' ? 'block' : 'none' }}>
+          <div {...tabPanelProps('review')} style={{ display: activeTab === 'review' || activeTab === 'preview' ? 'block' : 'none' }}>
             <ReviewEdit
                 quizId={quizId!}
                 learningObjectives={learningObjectives}
