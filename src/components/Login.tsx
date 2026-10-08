@@ -164,9 +164,7 @@ const Login = ({ onAuthChange }: LoginProps) => {
         {/* Logo and Branding Section */}
         <div className="login-header">
           <div className="logo-container">
-            <div className="logo-icon">
-              <GraduationCap size={32} />
-            </div>
+            <img src="/create-logo.svg" alt="" className="logo-icon" />
             <div className="logo-text">
               <h1 className="brand-title">TLEF CREATE</h1>
               <div className="brand-badge">

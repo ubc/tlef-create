@@ -78,13 +78,10 @@
 .logo-icon {
   width: 60px;
   height: 60px;
-  background: linear-gradient(135deg, #000000 0%, #333333 100%);
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 
+  display: block;
+  /* matches the rx="112" corner radius in create-logo.svg */
+  border-radius: 22%;
+  box-shadow:
     0 10px 30px rgba(0, 0, 0, 0.1),
     0 4px 8px rgba(0, 0, 0, 0.05);
 }

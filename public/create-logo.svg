@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="TLEF-CREATE">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#000000"/>
@@ -6,9 +6,6 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <g transform="translate(96 96) scale(13.333)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/>
-    <path d="M22 10v6"/>
-    <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>
-  </g>
+  <path d="M342 170 A121.6 121.6 0 1 0 342 342" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round"/>
+  <path d="M384 211 Q390 250 429 256 Q390 262 384 301 Q378 262 339 256 Q378 250 384 211Z" fill="#ffffff"/>
 </svg>
