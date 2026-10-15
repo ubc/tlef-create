@@ -75,11 +75,13 @@ import('./routes/create/services/lumiService.js')
     console.error('💡 Canvas H5P export may not work properly');
   });
 
-// Start LTI 1.3 server (separate port) — only if configured
+// Start LTI 1.3 tool (mounted at /lti below) — only if configured
+let ltiApp = null;
 if (process.env.LTI_CLIENT_ID) {
   console.log('🔧 Starting LTI 1.3 server...');
   import('./routes/create/services/ltiService.js')
     .then(module => module.startLtiServer())
+    .then(app => { ltiApp = app; })
     .catch(err => {
       console.error('❌ Failed to start LTI server:', err.message);
       console.error('💡 Canvas LTI integration may not work properly');
@@ -90,6 +92,16 @@ if (process.env.LTI_CLIENT_ID) {
 
 const app = express();
 const PORT = process.env.PORT || 7736;
+
+// Canvas reaches the LTI tool under /lti. It must run ahead of the app's own
+// body, cookie and session middleware: ltijs signs cookies with its own key,
+// and cookie-parser skips requests whose cookies were already parsed.
+if (process.env.LTI_CLIENT_ID) {
+  app.use('/lti', (req, res, next) => {
+    if (!ltiApp) return res.status(503).send('LTI tool is starting, please retry');
+    return ltiApp(req, res, next);
+  });
+}
 
 // CORS configuration for frontend integration
 // In production, strip port numbers from FRONTEND_URL as they shouldn't be in browser requests

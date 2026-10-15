@@ -281,7 +281,7 @@ Defaults come from `.env.example`:
 - Qdrant: `http://localhost:6333`, collection `quiz-materials`
 - Local SimpleSAMLphp IdP: `http://localhost:6122`
 - Ollama fallback: `http://localhost:11434`
-- Optional Canvas: `http://localhost`; optional LTI public runtime on port 7737
+- Optional Canvas: `http://localhost`; optional LTI tool under `/lti` on the backend port
 
 The app can use OpenAI-compatible endpoints or Ollama. `llmService.js` resolves
 the effective provider/model/key and supports per-user credentials. Redis is

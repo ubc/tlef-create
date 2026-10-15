@@ -227,7 +227,7 @@ router.post('/export/:quizId', asyncHandler(async (req, res) => {
   const externalToolId = await canvasApiService.ensureLtiToolInstalled(req.user.id, courseId);
 
   // Step 5: Build LTI launch URL with custom param to identify the quiz
-  const ltiPublicUrl = process.env.LTI_PUBLIC_URL || `http://localhost:${process.env.LTI_PORT || 7737}`;
+  const ltiPublicUrl = process.env.LTI_PUBLIC_URL || `http://localhost:${process.env.PORT || 8051}/lti`;
   const launchUrl = `${ltiPublicUrl}/?quizExportId=${resourceLinkId}`;
 
   // Step 6: Create ExternalTool module item (Canvas launches via LTI)

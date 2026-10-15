@@ -13,13 +13,14 @@ const require = createRequire(import.meta.url);
 const lti = require('ltijs').Provider;
 
 const LTI_KEY = process.env.LTI_KEY || 'LTIKEY-default-change-in-production';
-const LTI_PORT = parseInt(process.env.LTI_PORT || '7737', 10);
 const MONGODB_URI = process.env.MONGODB_URI;
-// LTI_PUBLIC_URL must be reachable from Canvas. If Canvas is in Docker, use host.docker.internal
-const LTI_PUBLIC_URL = process.env.LTI_PUBLIC_URL || `http://localhost:${LTI_PORT}`;
+// LTI_PUBLIC_URL must be reachable from Canvas: the main server's origin plus
+// the /lti mount path. If Canvas is in Docker, use host.docker.internal
+const LTI_PUBLIC_URL = process.env.LTI_PUBLIC_URL || `http://localhost:${process.env.PORT || 8051}/lti`;
 
 /**
- * Start the LTI 1.3 server on a separate port
+ * Set up the LTI 1.3 tool and return its Express app, which server.js mounts
+ * at /lti. Links in pages it renders use req.baseUrl so they keep that prefix.
  */
 export async function startLtiServer() {
   if (!MONGODB_URI) {
@@ -83,7 +84,7 @@ export async function startLtiServer() {
         const snapshot = exportRecord.canvasExport.mixedActivitySnapshot;
         const items = (snapshot?.questions || []).map((question, index) => ({
           title: `Question ${index + 1}`,
-          url: `/h5p/mixed/${encodeURIComponent(quizExportId)}/${encodeURIComponent(String(question._id))}?token=${encodeURIComponent(createH5PPreviewToken({
+          url: `${req.baseUrl}/h5p/mixed/${encodeURIComponent(quizExportId)}/${encodeURIComponent(String(question._id))}?token=${encodeURIComponent(createH5PPreviewToken({
             userId: quiz.createdBy,
             quizId: quiz._id,
             questionId: question._id
@@ -96,8 +97,8 @@ export async function startLtiServer() {
           title: snapshot.title || quiz.name,
           items,
           scoreEndpoint: typeof req.query?.ltik === 'string'
-            ? `/score?ltik=${encodeURIComponent(req.query.ltik)}`
-            : '/score'
+            ? `${req.baseUrl}/score?ltik=${encodeURIComponent(req.query.ltik)}`
+            : `${req.baseUrl}/score`
         }));
       }
 
@@ -178,15 +179,17 @@ export async function startLtiServer() {
     }
   });
 
-  // Deploy on separate port
-  await lti.deploy({ port: LTI_PORT });
+  // Serverless: no listener of its own; the main server mounts lti.app
+  await lti.deploy({ serverless: true, silent: true });
 
   // Register Canvas platform (if not already registered)
   await registerCanvasPlatform();
 
-  console.log(`✅ LTI 1.3 server running on port ${LTI_PORT}`);
+  console.log(`✅ LTI 1.3 tool ready at ${LTI_PUBLIC_URL}`);
   console.log(`   JWKS: ${LTI_PUBLIC_URL}/keys`);
   console.log(`   Launch: ${LTI_PUBLIC_URL}/`);
+
+  return lti.app;
 }
 
 /**
