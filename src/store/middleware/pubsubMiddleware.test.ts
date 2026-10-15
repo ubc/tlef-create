@@ -136,4 +136,24 @@ describe('pubsubMiddleware - Question Generation Events', () => {
         const callArgs = publishSpy.mock.calls[0];
         expect((callArgs[1] as QuestionGenerationCompletedPayload).duration).toBeGreaterThanOrEqual(50);
     });
+
+    it('should publish QUESTION_GENERATION_STARTED only once while a generation is active', () => {
+        const quizId = 'test-quiz-repeat';
+
+        store.dispatch(setQuestionsGenerating({ generating: true, quizId }));
+        store.dispatch(setQuestionsGenerating({ generating: true, quizId }));
+        store.dispatch(setQuestionsGenerating({ generating: true, quizId }));
+
+        const startedCalls = publishSpy.mock.calls.filter(
+            call => call[0] === PUBSUB_EVENTS.QUESTION_GENERATION_STARTED
+        );
+        expect(startedCalls).toHaveLength(1);
+
+        // A new generation after completion announces again
+        store.dispatch(setQuestionsGenerating({ generating: false, quizId }));
+        store.dispatch(setQuestionsGenerating({ generating: true, quizId }));
+        expect(publishSpy.mock.calls.filter(
+            call => call[0] === PUBSUB_EVENTS.QUESTION_GENERATION_STARTED
+        )).toHaveLength(2);
+    });
 });

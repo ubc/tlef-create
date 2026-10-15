@@ -24,6 +24,8 @@ export const pubsubMiddleware: Middleware = (store) => (next) => (action: Payloa
             const timestamp = Date.now();
 
             if (payload.generating) {
+                // Job polling re-dispatches generating:true; only announce the first start.
+                if (generationStartTimes.has(quizId)) break;
                 generationStartTimes.set(quizId, timestamp);
 
                 const startedPayload: QuestionGenerationStartedPayload = {
