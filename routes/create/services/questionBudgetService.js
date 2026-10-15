@@ -1,5 +1,6 @@
 const HIGHER_ORDER_BLOOM_LEVELS = new Set(['apply', 'analyze', 'evaluate', 'create']);
 const MAX_QUESTIONS_PER_LO = 5;
+const EMPHASIZED_SHARE = 0.5;
 
 function normalizeMetadata(learningObjective) {
   return learningObjective?.generationMetadata || {};
@@ -75,10 +76,73 @@ function scaleAllocationsToTotal(allocations, requestedTotal) {
   return baseline;
 }
 
+// Split `total` across weights by largest remainder, giving each at least one.
+function distributeByWeight(total, weights) {
+  const counts = weights.map(() => 1);
+  let remaining = total - counts.length;
+  if (remaining <= 0) return counts;
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const shares = weights.map((weight, index) => {
+    const exact = (remaining * weight) / totalWeight;
+    counts[index] += Math.floor(exact);
+    return { index, remainder: exact - Math.floor(exact) };
+  });
+  remaining = total - counts.reduce((sum, count) => sum + count, 0);
+  shares
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+    .slice(0, remaining)
+    .forEach(({ index }) => { counts[index] += 1; });
+  return counts;
+}
+
+/**
+ * Re-split the budget so instructor emphasis is unmistakable: emphasised LOs
+ * share at least half of the quiz, de-emphasised LOs get half their usual
+ * weight, and every LO keeps at least one question.
+ */
+function applyInstructorEmphasis(allocations, total, emphasized, deemphasized) {
+  const emphasizedAllocations = allocations.filter(a => emphasized.has(a.learningObjectiveIndex));
+  const otherAllocations = allocations.filter(a => !emphasized.has(a.learningObjectiveIndex));
+  const naturalShare = emphasizedAllocations.reduce((sum, a) => sum + a.count, 0);
+  const emphasizedShare = emphasizedAllocations.length
+    ? Math.max(
+      emphasizedAllocations.length,
+      Math.min(total - otherAllocations.length, Math.max(naturalShare, Math.ceil(total * EMPHASIZED_SHARE)))
+    )
+    : 0;
+
+  const emphasizedCounts = distributeByWeight(emphasizedShare, emphasizedAllocations.map(() => 1));
+  const otherCounts = distributeByWeight(
+    total - emphasizedShare,
+    otherAllocations.map(a => Math.max(1, a.count) * (deemphasized.has(a.learningObjectiveIndex) ? 0.25 : 1))
+  );
+  const countByIndex = new Map([
+    ...emphasizedAllocations.map((a, i) => [a.learningObjectiveIndex, emphasizedCounts[i]]),
+    ...otherAllocations.map((a, i) => [a.learningObjectiveIndex, otherCounts[i]])
+  ]);
+
+  return allocations.map(allocation => {
+    const note = emphasized.has(allocation.learningObjectiveIndex)
+      ? '; instructor asked to emphasize this objective'
+      : deemphasized.has(allocation.learningObjectiveIndex)
+        ? '; instructor asked to de-emphasize this objective'
+        : '';
+    return {
+      ...allocation,
+      count: countByIndex.get(allocation.learningObjectiveIndex),
+      rationale: `${allocation.rationale}${note}`
+    };
+  });
+}
+
 export function buildQuestionBudget(learningObjectives = [], options = {}) {
   const approach = options.approach || 'support';
   const maxQuestions = options.maxQuestions || 100;
   const requestedTotal = Number.isFinite(options.requestedTotal) ? options.requestedTotal : null;
+
+  const onlyIndexes = new Set(options.only || []);
+  const emphasized = new Set(options.emphasize || []);
+  const deemphasized = new Set(options.deemphasize || []);
 
   const rawAllocations = learningObjectives.map((learningObjective, index) => ({
     learningObjectiveIndex: index,
@@ -88,10 +152,28 @@ export function buildQuestionBudget(learningObjectives = [], options = {}) {
   }));
 
   const rawTotal = rawAllocations.reduce((sum, allocation) => sum + allocation.count, 0);
-  const effectiveTotal = requestedTotal ?? Math.min(maxQuestions, rawTotal);
-  const allocations = effectiveTotal === rawTotal
+  // In automatic mode, emphasis adds questions rather than taking them away
+  // from the other objectives.
+  const emphasisBonus = rawAllocations
+    .filter(allocation => emphasized.has(allocation.learningObjectiveIndex))
+    .reduce((sum, allocation) => sum + allocation.count, 0);
+  const effectiveTotal = requestedTotal ?? Math.min(maxQuestions, rawTotal + emphasisBonus);
+  let allocations = effectiveTotal === rawTotal
     ? rawAllocations
     : scaleAllocationsToTotal(rawAllocations, effectiveTotal);
+  if (onlyIndexes.size) {
+    // "Make them all about LO3": the whole quiz goes to those objectives and
+    // the others drop out of the budget entirely.
+    const focused = rawAllocations.filter(a => onlyIndexes.has(a.learningObjectiveIndex));
+    const counts = distributeByWeight(Math.max(focused.length, effectiveTotal), focused.map(a => Math.max(1, a.count)));
+    allocations = focused.map((allocation, index) => ({
+      ...allocation,
+      count: counts[index],
+      rationale: `${allocation.rationale}; instructor asked for every question to cover this objective`
+    }));
+  } else if (emphasized.size || deemphasized.size) {
+    allocations = applyInstructorEmphasis(rawAllocations, effectiveTotal, emphasized, deemphasized);
+  }
   const total = allocations.reduce((sum, allocation) => sum + allocation.count, 0);
 
   return {

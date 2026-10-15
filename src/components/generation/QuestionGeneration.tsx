@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector, useStore } from 'react-redux';
-import { Save, Wand2 } from 'lucide-react';
+import { Check, Save, Wand2 } from 'lucide-react';
 import { RootState, AppDispatch } from '../../store';
 import { fetchQuestions, setQuestionsGenerating, setQuestionsForQuiz, selectHasReviewDrafts } from '../../store/slices/questionSlice';
 import { updateQuizLocally } from '../../store/slices/quizSlice';
 import { selectQuestionsByQuiz } from '../../store/selectors';
-import { ApiError, questionsApi, quizApi, plansApi, Question } from '../../services/api';
+import { ApiError, questionsApi, quizApi, plansApi, Question, type InstructionOutcome } from '../../services/api';
 import { API_URL } from '../../config/api';
 import { usePubSub } from '../../hooks/usePubSub';
 import { useSSE } from '../../hooks/useSSE';
@@ -125,6 +125,7 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
       version: number | null;
       approach: 'support' | 'assess' | 'gamify';
     };
+    instructionOutcome?: InstructionOutcome | null;
   } | null>(null);
   const loadingAnimationRef = useRef<HTMLDivElement>(null);
   const generatedPlanEndRef = useRef<HTMLDivElement>(null);
@@ -565,13 +566,27 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
         ...(item.type === 'multiple-choice' && { selectionMode: 'single' as const })
       }));
 
+      // Types the chosen layout cannot hold are swapped above; say so rather
+      // than letting a requested type silently disappear.
+      const layoutSwaps = getUnsupportedQuestionTypesForTarget(result.planItems.map(item => item.type), targetFormat);
+      const instructionOutcome = result.instructionOutcome && layoutSwaps.length
+        ? {
+          ...result.instructionOutcome,
+          applied: [
+            ...result.instructionOutcome.applied,
+            `${layoutSwaps.map(type => type.label).join(', ')} ${layoutSwaps.length === 1 ? 'is' : 'are'} not available in this layout, so ${layoutSwaps.length === 1 ? 'that row uses' : 'those rows use'} ${getFallbackQuestionType(targetFormat).replace(/-/g, ' ')} instead.`
+          ]
+        }
+        : result.instructionOutcome;
+
       setPlanItems(items);
       setBlueprintSummary({
         recommendedTotalQuestions: result.recommendedTotalQuestions,
         totalQuestionStrategy: result.totalQuestionStrategy,
         totalQuestionRationale: result.totalQuestionRationale,
         questionBudget: result.questionBudget,
-        promptProvenance: result.promptProvenance
+        promptProvenance: result.promptProvenance,
+        instructionOutcome
       });
       if (result.recommendedTotalQuestions) {
         setAIConfig(prev => ({
@@ -603,6 +618,12 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
   };
 
   const buildQuestionConfigs = () => {
+    // The Blueprint already applied type and LO-distribution instructions; this
+    // carries the rest (tone, examples, difficulty, wording) into every question.
+    const additionalInstructions = aiConfig.additionalInstructions?.trim();
+    const quizInstructions = additionalInstructions
+      ? `Instructor's instructions for the whole quiz (question type and learning objective are already set for this question; follow any guidance about content, examples, difficulty, style, or wording):\n${additionalInstructions.slice(0, 1000)}`
+      : '';
     return planItems.flatMap(item => {
       const lo = learningObjectives.find(lo => lo._id === item.learningObjectiveId);
       const hasLO = !!item.learningObjectiveId && !!lo;
@@ -624,7 +645,8 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
             .map(id => learningObjectives.find(objective => objective._id === id)?.text)
             .filter(Boolean).join('; ')}`]
           : []),
-        item.customPrompt?.trim() || ''
+        item.customPrompt?.trim() || '',
+        quizInstructions
       ].filter(Boolean).join('\n\n');
 
       return Array(item.count).fill(null).map(() => ({
@@ -1108,6 +1130,25 @@ const QuestionGeneration = ({ learningObjectives, assignedMaterials, quizId, cou
                             ? 'User default'
                             : 'System default'}
                       </p>
+                    )}
+                    {blueprintSummary.instructionOutcome && (
+                      <div className="blueprint-instruction-outcome">
+                        <h4>Your instructions</h4>
+                        <blockquote>{blueprintSummary.instructionOutcome.instructions}</blockquote>
+                        <ul>
+                          {blueprintSummary.instructionOutcome.applied.map(line => (
+                            <li key={line}><Check size={14} aria-hidden="true" /> {line}</li>
+                          ))}
+                          {blueprintSummary.instructionOutcome.passedToQuestions && (
+                            <li>
+                              <Check size={14} aria-hidden="true" />
+                              {blueprintSummary.instructionOutcome.otherGuidance
+                                ? ` Applied when each question is written: ${blueprintSummary.instructionOutcome.otherGuidance}`
+                                : ' Also sent to the AI with every question, so guidance about content, examples, and wording applies when questions are written.'}
+                            </li>
+                          )}
+                        </ul>
+                      </div>
                     )}
                     {blueprintSummary.questionBudget?.allocations.length ? (
                       <details className="blueprint-budget-details">

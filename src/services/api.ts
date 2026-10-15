@@ -1077,6 +1077,15 @@ export const objectivesApi = {
 };
 
 // Generation Plan API
+/** How the Blueprint applied the instructor's Additional Instructions. */
+export interface InstructionOutcome {
+  instructions: string;
+  applied: string[];
+  /** Guidance beyond counts/types/difficulty, restated by the model. */
+  otherGuidance?: string;
+  passedToQuestions: boolean;
+}
+
 export const plansApi = {
   // POST /api/create/plans/generate-ai - Generate AI-powered plan (NEW)
   generateAIPlan: async (
@@ -1107,6 +1116,7 @@ export const plansApi = {
       version: number | null;
       approach: 'support' | 'assess' | 'gamify';
     };
+    instructionOutcome?: InstructionOutcome | null;
     planItems: Array<{
       type: string;
       learningObjectiveIndex: number;
@@ -1142,6 +1152,7 @@ export const plansApi = {
           version: number | null;
           approach: 'support' | 'assess' | 'gamify';
         };
+        instructionOutcome?: InstructionOutcome | null;
         planItems: Array<{
           type: string;
           learningObjectiveIndex: number;

@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { Check, Sparkles, Target, Trophy } from 'lucide-react';
 import {
-  DELIVERY_TARGETS, getFormatsForDeliveryTarget,
+  DELIVERY_TARGETS, getFormatsForDeliveryTarget, getQuestionTypesForApproach,
   type DeliveryTarget, type PedagogicalApproach, type TargetFormat
 } from '../../constants/questionTypeCapabilities';
 import '../../styles/components/GenerationSetup.css';
@@ -74,7 +74,7 @@ export default function GenerationSetup({ approach, onApproachChange, deliveryTa
     <section className="generation-setup" aria-label="Teaching purpose and activity layout">
       <fieldset className="generation-setup-section" disabled={disabled}>
         <legend>Choose your teaching purpose</legend>
-        <p className="generation-setup-hint">What should this Quiz help your students do?</p>
+        <p className="generation-setup-hint">What should this Quiz help your students do? Each purpose starts from its own question types; you can ask for others in Additional Instructions.</p>
         <div className="pedagogical-streams">
           {STREAMS.map(stream => <label key={stream.value} className="pedagogical-stream">
             <input className="generation-choice-input" type="radio" name={`${id}-stream`} value={stream.value} checked={approach === stream.value} onChange={() => onApproachChange(stream.value)} aria-label={stream.label} />
@@ -82,6 +82,9 @@ export default function GenerationSetup({ approach, onApproachChange, deliveryTa
               <span className="generation-choice-top"><stream.icon size={20} aria-hidden="true" /><strong>{stream.label}</strong><Check className="generation-choice-check" size={16} aria-hidden="true" /></span>
               <span className="generation-choice-title">{stream.title}</span>
               <span className="generation-choice-detail">{stream.description}</span>
+              <span className="pedagogical-stream-types">
+                Default question types: {getQuestionTypesForApproach(stream.value).map(type => type.label).join(', ')}
+              </span>
             </span>
           </label>)}
         </div>

@@ -2636,6 +2636,50 @@
     font-weight: 600;
 }
 
+.blueprint-instruction-outcome {
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+}
+
+.blueprint-instruction-outcome h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+}
+
+.blueprint-instruction-outcome blockquote {
+    margin: 0 0 0.625rem 0;
+    padding-left: 0.75rem;
+    border-left: 3px solid var(--color-border);
+    color: var(--color-muted-foreground);
+    font-style: italic;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.blueprint-instruction-outcome ul {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.blueprint-instruction-outcome li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.blueprint-instruction-outcome li svg {
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+
 .blueprint-budget-details {
     margin-top: 1rem;
 }

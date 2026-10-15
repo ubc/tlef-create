@@ -12,6 +12,7 @@
 .generation-choice-input:checked + span { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); background: var(--color-muted); }
 .generation-choice-input:focus-visible + span { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .generation-choice-input:disabled + span { opacity: .6; cursor: not-allowed; }
+.pedagogical-stream-types { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--color-border); color: var(--color-muted-foreground); font-size: 0.8rem; line-height: 1.4; }
 .pedagogical-stream:hover .pedagogical-stream-body, .generation-layout-choice:hover .generation-layout-body { border-color: var(--color-primary); }
 .generation-choice-top { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
 .generation-choice-check { margin-left: auto; visibility: hidden; flex-shrink: 0; }

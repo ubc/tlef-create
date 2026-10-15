@@ -53,6 +53,62 @@ describe('questionBudgetService', () => {
     expect(budget.allocations.map(allocation => allocation.count)).toEqual([6, 2, 4]);
   });
 
+  test('gives an emphasized objective at least half of a fixed total', () => {
+    const budget = buildQuestionBudget(learningObjectives, {
+      approach: 'assess',
+      requestedTotal: 7,
+      emphasize: [2]
+    });
+    const counts = budget.allocations.map(allocation => allocation.count);
+
+    expect(budget.total).toBe(7);
+    expect(counts[2]).toBeGreaterThanOrEqual(4);
+    expect(counts[2]).toBeGreaterThan(Math.max(counts[0], counts[1]));
+    expect(Math.min(...counts)).toBeGreaterThanOrEqual(1);
+    expect(budget.allocations[2].rationale).toContain('instructor asked to emphasize');
+  });
+
+  test('de-emphasized objectives keep one question and lose share', () => {
+    const baseline = buildQuestionBudget(learningObjectives, { approach: 'assess', requestedTotal: 9 });
+    const budget = buildQuestionBudget(learningObjectives, { approach: 'assess', requestedTotal: 9, deemphasize: [0] });
+
+    expect(budget.total).toBe(9);
+    expect(budget.allocations[0].count).toBeLessThan(baseline.allocations[0].count);
+    expect(budget.allocations[0].count).toBeGreaterThanOrEqual(1);
+  });
+
+  test('adds questions for an emphasized objective in automatic mode', () => {
+    const baseline = buildQuestionBudget(learningObjectives, { approach: 'assess' });
+    const emphasized = buildQuestionBudget(learningObjectives, { approach: 'assess', emphasize: [2] });
+
+    expect(emphasized.total).toBeGreaterThan(baseline.total);
+    expect(emphasized.allocations[2].count).toBeGreaterThanOrEqual(Math.ceil(emphasized.total / 2));
+  });
+
+  test('puts every question on the objectives the instructor limited the quiz to', () => {
+    const fixed = buildQuestionBudget(learningObjectives, { approach: 'assess', requestedTotal: 7, only: [2] });
+    expect(fixed.total).toBe(7);
+    expect(fixed.allocations).toHaveLength(1);
+    expect(fixed.allocations[0]).toMatchObject({ learningObjectiveIndex: 2, count: 7 });
+
+    const auto = buildQuestionBudget(learningObjectives, { approach: 'assess', only: [2] });
+    const baseline = buildQuestionBudget(learningObjectives, { approach: 'assess' });
+    expect(auto.total).toBe(baseline.total);
+    expect(auto.allocations.map(a => a.learningObjectiveIndex)).toEqual([2]);
+  });
+
+  test('rebalancing keeps an LO-limited plan on that objective', () => {
+    const budget = buildQuestionBudget(learningObjectives, { approach: 'assess', requestedTotal: 7, only: [2] });
+    const modelRows = [
+      { type: 'multiple-choice', learningObjectiveIndex: 0, count: 3 },
+      { type: 'multiple-choice', learningObjectiveIndex: 2, count: 2 }
+    ];
+    const kept = discardPlanItemsOutsideBudget(modelRows, budget).items;
+    const plan = rebalancePlanToBudget(kept, budget, 'multiple-choice', 'assess');
+    expect(plan.every(item => item.learningObjectiveIndex === 2)).toBe(true);
+    expect(plan.reduce((sum, item) => sum + item.count, 0)).toBe(7);
+  });
+
   test('rejects a total that cannot cover every learning objective', () => {
     expect(() => buildQuestionBudget(learningObjectives, {
       approach: 'assess',

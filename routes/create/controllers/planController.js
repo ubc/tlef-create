@@ -26,6 +26,8 @@ import {
   discardPlanItemsOutsideBudget,
   rebalancePlanToBudget
 } from '../services/questionBudgetService.js';
+import { ensureRequestedTypes, summarizeInstructionOutcome } from '../services/instructorDirectives.js';
+import { interpretInstructions } from '../services/instructionInterpreter.js';
 
 const router = express.Router();
 
@@ -216,10 +218,60 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       userOverride?.customQuestionTypeRules ||
       systemTemplate.questionTypeRules;
 
+    const instructorInstructions = typeof additionalInstructions === 'string'
+      ? additionalInstructions.trim()
+      : '';
+
+    // Call the active user's model rather than the server's startup default.
+    if (!llmService) {
+      return errorResponse(res, 'LLM service not available', 'AI_SERVICE_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+    workflowStage = 'config';
+    llmConfig = await llmService.resolveUserLLMConfig(userId);
+    res.locals.auditMetadata = {
+      ...(res.locals.auditMetadata || {}),
+      provider: llmConfig.provider,
+      model: llmConfig.model
+    };
+
+    // Instructions are turned into directives that the code below enforces,
+    // so they shape the Blueprint even when the model would ignore them.
+    if (instructorInstructions) {
+      streamProgress('instructions-started', 'Reading your additional instructions...');
+    }
+    const { directives, interpretedBy } = await interpretInstructions({
+      instructions: instructorInstructions,
+      learningObjectives: quiz.learningObjectives,
+      complete: async interpretationPrompt => {
+        const result = await llmService.streamCompletion({
+          prompt: interpretationPrompt,
+          userId,
+          llmConfig,
+          temperature: 0,
+          maxTokens: 600,
+          jsonMode: true
+        });
+        return result?.content;
+      }
+    });
+    workflowStage = 'preflight';
+    const requiredQuestionType = directives.types.only;
+    const excludedQuestionTypes = directives.types.exclude;
+    const requestedQuestionTypes = directives.types.include;
+    const loEmphasis = directives.loFocus;
+    const requiredDifficulty = directives.difficulty;
+    if (instructorInstructions) {
+      console.log('🧭 Instruction directives:', { interpretedBy, directives });
+      streamProgress('instructions-complete', 'Turned your instructions into Blueprint rules.', { interpretedBy });
+    }
+
     const questionBudget = buildQuestionBudget(quiz.learningObjectives, {
       approach,
       requestedTotal: requestedTotalQuestions,
-      maxQuestions
+      maxQuestions,
+      only: loEmphasis.only,
+      emphasize: loEmphasis.emphasize,
+      deemphasize: loEmphasis.deemphasize
     });
     const effectiveTotalQuestions = questionBudget.total;
     streamProgress('budget-complete', `Calculated a ${effectiveTotalQuestions}-question coverage budget.`, {
@@ -274,12 +326,8 @@ router.post('/generate-ai', authenticateToken, asyncHandler(async (req, res) => 
       existingQuestions: existingQuestions.length
     });
 
-    const additionalContext = additionalInstructions
-      ? `\n\nAdditional instructions from instructor: ${additionalInstructions}`
-      : '';
-
     // Step 3: Build the complete prompt by replacing variables
-    const innerPrompt = resolvedInnerPrompt + additionalContext;
+    const innerPrompt = resolvedInnerPrompt;
 
     const totalQuestionInstruction = effectiveTotalQuestions;
 
@@ -325,6 +373,29 @@ ${budgetLines.join('\n')}
       prompt += `\n\n${planningHistoryContext}`;
     }
 
+    // Instructor instructions go last and explicitly outrank the approach's
+    // default question-type rules, which otherwise win on smaller models.
+    if (instructorInstructions) {
+      prompt += `\n\nINSTRUCTOR INSTRUCTIONS (HIGHEST PRIORITY):
+${instructorInstructions}
+- These instructions come directly from the instructor and OVERRIDE the pedagogical approach's question type rules and distribution percentages above.
+- If they ask for specific question types, use those types even if the approach rules say otherwise.
+- Learning objectives are numbered from 1 in these instructions ("LO 1" is learningObjectiveIndex 0). Any emphasis they ask for is already reflected in the question budget.
+- The question budget and JSON shape still apply.`;
+      if (requiredQuestionType) {
+        prompt += `\n- Every planItems entry MUST use "type": "${requiredQuestionType}".`;
+      }
+      if (requestedQuestionTypes.length) {
+        prompt += `\n- Use these requested types for at least half of the questions: ${requestedQuestionTypes.join(', ')}.`;
+      }
+      if (excludedQuestionTypes.length) {
+        prompt += `\n- Do NOT use these types: ${excludedQuestionTypes.join(', ')}.`;
+      }
+      if (requiredDifficulty) {
+        prompt += `\n- Every planItems entry MUST use "difficulty": "${requiredDifficulty}".`;
+      }
+    }
+
     if (requestedTotalQuestions === null) {
       prompt += `\n\nAUTO QUESTION COUNT MODE:
 - The instructor did not provide a fixed total question count.
@@ -356,18 +427,6 @@ Return ONLY this JSON shape:
       userId
     });
 
-    // Call the active user's model rather than the server's startup default.
-    if (!llmService) {
-      return errorResponse(res, 'LLM service not available', 'AI_SERVICE_ERROR', HTTP_STATUS.SERVICE_UNAVAILABLE);
-    }
-
-    workflowStage = 'config';
-    llmConfig = await llmService.resolveUserLLMConfig(userId);
-    res.locals.auditMetadata = {
-      ...(res.locals.auditMetadata || {}),
-      provider: llmConfig.provider,
-      model: llmConfig.model
-    };
     console.log(`🤖 Generating AI plan with ${llmConfig.provider} model: ${llmConfig.model}`);
     streamProgress('llm-started', `Calling ${llmConfig.model} to draft the quiz blueprint...`);
     const streamBlueprintOutput = (textChunk, metadata) => {
@@ -460,12 +519,21 @@ Return ONLY this JSON shape:
     const validTypes = Object.values(QUESTION_TYPES);
     const rules = resolvedRules;
     const allowedTypes = rules?.allowedTypes || validTypes;
+    const replacementType = requiredQuestionType
+      || [...allowedTypes, ...validTypes].find(type => !excludedQuestionTypes.includes(type));
     const maxPerLO = rules?.maxPerLO || new Map();
 
     let totalCount = 0;
     const countPerLO = {}; // Track count by type per LO
 
     for (const item of planData.planItems) {
+      // Explicit instructor type requests beat the model's choice.
+      if (requiredQuestionType) {
+        item.type = requiredQuestionType;
+      } else if (excludedQuestionTypes.includes(item.type)) {
+        item.type = replacementType;
+      }
+
       item.bloomLevel = normalizeBloomLevel(item.bloomLevel);
       item.difficulty = normalizeDifficulty(item.difficulty, item.bloomLevel);
       item.pedagogicalIntent = ['support', 'assess', 'gamify'].includes(item.pedagogicalIntent)
@@ -484,7 +552,8 @@ Return ONLY this JSON shape:
       }
 
       // Check if type is allowed by template rules
-      if (allowedTypes.length > 0 && !allowedTypes.includes(item.type)) {
+      const instructorRequestedType = item.type === requiredQuestionType || requestedQuestionTypes.includes(item.type);
+      if (!instructorRequestedType && allowedTypes.length > 0 && !allowedTypes.includes(item.type)) {
         console.warn(`⚠️ Question type ${item.type} not in allowed list for ${approach} approach. Allowed: ${allowedTypes.join(', ')}`);
         // Don't reject - just warn, as LLM might have a good reason
       }
@@ -518,7 +587,7 @@ Return ONLY this JSON shape:
 
     // Step 5: Treat the deterministic budget as authoritative even if the LLM
     // returns a different total or omits a learning objective.
-    const fallbackType = allowedTypes[0] || 'multiple-choice';
+    const fallbackType = replacementType;
     planData.planItems = rebalancePlanToBudget(
       planData.planItems,
       questionBudget,
@@ -529,6 +598,10 @@ Return ONLY this JSON shape:
       planData.planItems,
       quiz.learningObjectives
     );
+    planData.planItems = ensureRequestedTypes(planData.planItems, requestedQuestionTypes);
+    if (requiredDifficulty) {
+      planData.planItems = planData.planItems.map(item => ({ ...item, difficulty: requiredDifficulty }));
+    }
     streamProgress('budget-aligned', 'Aligned blueprint rows to LO subpoints and the fixed question budget.');
 
     totalCount = planData.planItems.reduce((sum, item) => sum + item.count, 0);
@@ -571,6 +644,16 @@ Return ONLY this JSON shape:
         rationale: allocation.rationale
       }))
     };
+    planData.instructionOutcome = summarizeInstructionOutcome({
+      instructions: instructorInstructions,
+      planItems: planData.planItems,
+      requiredType: requiredQuestionType,
+      requestedTypes: requestedQuestionTypes,
+      excludedTypes: excludedQuestionTypes,
+      emphasis: loEmphasis,
+      difficulty: requiredDifficulty,
+      otherGuidance: directives.otherGuidance
+    });
     planData.promptProvenance = {
       promptType: 'quiz-blueprint',
       source: courseOverride ? 'course' : userOverride ? 'user' : 'system',

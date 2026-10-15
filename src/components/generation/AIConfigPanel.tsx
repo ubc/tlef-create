@@ -133,6 +133,9 @@ export default function AIConfigPanel({
           maxLength={1000}
         />
         <div className="textarea-hint">
+          Your instructions take priority over the teaching purpose's default question types. Refer to objectives by number (e.g. LO 3). The Blueprint shows how each instruction was applied.
+        </div>
+        <div className="textarea-hint">
           {(aiConfig.additionalInstructions || '').length}/1000 characters
         </div>
       </div>
