@@ -68,7 +68,7 @@ const FirstUseApiKeyModal = ({ onDismiss }: Props) => {
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-content" style={{ maxWidth: 620, width: 'calc(100vw - 48px)', maxHeight: '90vh', overflowY: 'auto', zIndex: 10000, padding: '32px' }}>
+      <div className="modal-content" role="dialog" aria-modal="true" style={{ maxWidth: 620, width: 'calc(100vw - 48px)', maxHeight: '90vh', overflowY: 'auto', zIndex: 10000, padding: '32px' }}>
         <div className="modal-header">
           <Key size={20} />
           <h4 style={{ marginLeft: 8 }}>Add Your LLM API Key</h4>

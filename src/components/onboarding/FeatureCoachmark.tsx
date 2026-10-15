@@ -22,6 +22,39 @@ interface FeatureCoachmarkProps {
 const VIEWPORT_GUTTER = 16;
 const POPOVER_GAP = 12;
 
+// Modals block clicks outside themselves, so a coachmark shown over one can't be dismissed.
+// Covers Radix dialogs, the shared .modal-overlay pattern and the app's other custom modals.
+const OPEN_MODAL_SELECTOR = [
+  '[aria-modal="true"]',
+  '[role="alertdialog"]',
+  '.dialog-overlay',
+  '.modal-overlay',
+  '.search-modal-overlay',
+  '.source-preview-backdrop',
+  '.authoring-context-backdrop'
+].join(', ');
+
+const isModalOpen = () => document.querySelector(OPEN_MODAL_SELECTOR) !== null;
+
+const useModalOpen = (enabled: boolean) => {
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || typeof MutationObserver === 'undefined') {
+      setModalOpen(false);
+      return;
+    }
+
+    const refresh = () => setModalOpen(isModalOpen());
+    refresh();
+    const observer = new MutationObserver(refresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [enabled]);
+
+  return modalOpen;
+};
+
 const FeatureCoachmark = ({
   children,
   isOpen,
@@ -39,10 +72,12 @@ const FeatureCoachmark = ({
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const modalOpen = useModalOpen(isOpen);
+  const isShown = isOpen && !modalOpen;
 
   useEffect(() => {
     const anchor = anchorRef.current;
-    if (!anchor || !isOpen) {
+    if (!anchor || !isShown) {
       setIsVisible(false);
       return;
     }
@@ -58,7 +93,7 @@ const FeatureCoachmark = ({
     );
     observer.observe(anchor);
     return () => observer.disconnect();
-  }, [isOpen]);
+  }, [isShown]);
 
   const updatePosition = useCallback(() => {
     const anchor = anchorRef.current;
@@ -90,7 +125,7 @@ const FeatureCoachmark = ({
   }, [placement]);
 
   useLayoutEffect(() => {
-    if (!isOpen || !isVisible) return;
+    if (!isShown || !isVisible) return;
     updatePosition();
 
     window.addEventListener('resize', updatePosition);
@@ -99,15 +134,15 @@ const FeatureCoachmark = ({
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isOpen, isVisible, updatePosition]);
+  }, [isShown, isVisible, updatePosition]);
 
   return (
     <div
       ref={anchorRef}
-      className={`feature-coachmark-anchor${block ? ' feature-coachmark-anchor--block' : ''}${isOpen ? ' is-tutorial-active' : ''}`}
+      className={`feature-coachmark-anchor${block ? ' feature-coachmark-anchor--block' : ''}${isShown ? ' is-tutorial-active' : ''}`}
     >
       {children}
-      {isOpen && isVisible && createPortal(
+      {isShown && isVisible && createPortal(
         <div
           ref={popoverRef}
           className="feature-coachmark"
