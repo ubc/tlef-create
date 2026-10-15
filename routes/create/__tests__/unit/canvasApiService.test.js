@@ -41,6 +41,11 @@ test('finds an installed LTI tool beyond the first page without installing a dup
   expect(await service.ensureLtiToolInstalled('owner', '7')).toBe(9);
   expect(global.fetch.mock.calls.every(([, req]) => req.method === 'GET')).toBe(true);
 });
+test('finds an account-level LTI tool through the course listing', async () => {
+  global.fetch.mockResolvedValueOnce(json([{ id: 11, developer_key_id: '10000000000002' }]));
+  expect(await service.ensureLtiToolInstalled('owner', '7')).toBe(11);
+  expect(String(global.fetch.mock.calls[0][0].url ?? global.fetch.mock.calls[0][0])).toContain('include_parents=true');
+});
 test('reports a missing Canvas LTI installation without hiding upstream failures', async () => {
   global.fetch.mockResolvedValueOnce(json([])).mockResolvedValueOnce(json([]))
     .mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ message: 'Invalid client ID' }] }), { status: 400, headers: { 'Content-Type': 'application/json' } }));

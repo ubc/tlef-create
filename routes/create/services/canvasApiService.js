@@ -105,8 +105,9 @@ export async function ensureLtiToolInstalled(userId, courseId) {
     throw new Error('LTI_CLIENT_ID not configured');
   }
 
-  // Check course-level tools first, then account-level
-  const courseTools = await canvasRequest(userId, `/courses/${courseId}/external_tools?per_page=100`);
+  // include_parents also returns tools installed on parent accounts, which an
+  // instructor can see here but not through the account-level endpoint.
+  const courseTools = await canvasRequest(userId, `/courses/${courseId}/external_tools?include_parents=true&per_page=100`);
   console.log('🔍 Canvas external tools found:', JSON.stringify(courseTools.map(t => ({ id: t.id, name: t.name, developer_key_id: t.developer_key_id })), null, 2));
 
   const existing = courseTools.find(t =>
