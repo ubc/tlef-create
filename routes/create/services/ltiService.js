@@ -1,6 +1,7 @@
 import { createRequire } from 'module';
 import { rewriteLtiAssetUrls, renderContent } from './lumiService.js';
 import Quiz from '../models/Quiz.js';
+import { getMongoUri } from '../config/database.js';
 import { addCanvasResizeBridge } from './canvasPlayerPage.js';
 import { canvasBaseUrl } from './canvasToolkitConnection.js';
 import { canvasLtiPlatformConfig } from './canvasLtiPlatformConfig.js';
@@ -13,7 +14,6 @@ const require = createRequire(import.meta.url);
 const lti = require('ltijs').Provider;
 
 const LTI_KEY = process.env.LTI_KEY || 'LTIKEY-default-change-in-production';
-const MONGODB_URI = process.env.MONGODB_URI;
 // LTI_PUBLIC_URL must be reachable from Canvas: the main server's origin plus
 // the /lti mount path. If Canvas is in Docker, use host.docker.internal
 const LTI_PUBLIC_URL = process.env.LTI_PUBLIC_URL || `http://localhost:${process.env.PORT || 8051}/lti`;
@@ -23,14 +23,9 @@ const LTI_PUBLIC_URL = process.env.LTI_PUBLIC_URL || `http://localhost:${process
  * at /lti. Links in pages it renders use req.baseUrl so they keep that prefix.
  */
 export async function startLtiServer() {
-  if (!MONGODB_URI) {
-    console.error('❌ LTI: MONGODB_URI not set, skipping LTI server startup');
-    return;
-  }
-
-  // Setup ltijs with MongoDB
+  // Same database lookup as the main app (MONGODB_URI or MONGO_URI)
   lti.setup(LTI_KEY, {
-    url: MONGODB_URI
+    url: getMongoUri()
   }, {
     appRoute: '/',
     loginRoute: '/login',

@@ -77,12 +77,14 @@ import('./routes/create/services/lumiService.js')
 
 // Start LTI 1.3 tool (mounted at /lti below) — only if configured
 let ltiApp = null;
+let ltiFailed = false;
 if (process.env.LTI_CLIENT_ID) {
   console.log('🔧 Starting LTI 1.3 server...');
   import('./routes/create/services/ltiService.js')
     .then(module => module.startLtiServer())
     .then(app => { ltiApp = app; })
     .catch(err => {
+      ltiFailed = true;
       console.error('❌ Failed to start LTI server:', err.message);
       console.error('💡 Canvas LTI integration may not work properly');
     });
@@ -98,7 +100,11 @@ const PORT = process.env.PORT || 7736;
 // and cookie-parser skips requests whose cookies were already parsed.
 if (process.env.LTI_CLIENT_ID) {
   app.use('/lti', (req, res, next) => {
-    if (!ltiApp) return res.status(503).send('LTI tool is starting, please retry');
+    if (!ltiApp) {
+      return res.status(503).send(ltiFailed
+        ? 'LTI tool is unavailable; check the server logs for "Failed to start LTI server"'
+        : 'LTI tool is starting, please retry');
+    }
     return ltiApp(req, res, next);
   });
 }
