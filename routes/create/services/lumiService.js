@@ -342,7 +342,7 @@ export async function renderContent(contentId, user = systemUser, options) {
   let html = await readyPlayer.render(contentId, user, 'en', options);
 
   if (typeof html === 'string') {
-    // When rendered inside Canvas LTI iframe, relative paths go to :7737 instead of :8051
+    // The Canvas LTI iframe may be served from a different origin than the API
     // Convert all /api/create/h5p/ paths to absolute URLs pointing to the main server
     const mainServerUrl = process.env.H5P_ASSETS_URL || `http://localhost:${process.env.PORT || 8051}`;
     html = html.replace(/(['"])(\/api\/create\/h5p\/)/g, `$1${mainServerUrl}/api/create/h5p/`);

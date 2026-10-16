@@ -2,6 +2,8 @@
 
 This document records the errors encountered when setting up the TLEF-CREATE LTI 1.3 integration with a local Canvas (`canvas-lms-docker`) instance, and the exact fix for each one.
 
+> **Note:** the LTI tool used to run on its own port (7737). It is now served by the main server under `/lti`, so `http://localhost:7737/…` in the history below corresponds to `http://localhost:8051/lti/…` today. The Final Working Configuration section uses the current URLs.
+
 ---
 
 ## Overview of the Flow
@@ -131,7 +133,7 @@ Canvas responds with the installed tool's `id`, which is then used for creating 
 **Fix:** Switch the Developer Key's JWK method from **Public JWK URL** to **Paste Public JWK**, and paste the static JWK JSON directly. Retrieve the JWK from our server:
 
 ```bash
-curl http://localhost:7737/keys
+curl http://localhost:8051/lti/keys
 ```
 
 Copy the result and paste it into the Canvas Developer Key editor under **Paste Public JWK**.
@@ -143,7 +145,7 @@ Copy the result and paste it into the Canvas Developer Key editor under **Paste 
 ### `.env` (tlef-create)
 ```env
 LTI_CLIENT_ID=10000000000002
-LTI_PUBLIC_URL=http://localhost:7737
+LTI_PUBLIC_URL=http://localhost:8051/lti
 CANVAS_BASE_URL=http://localhost
 CANVAS_CLIENT_ID=10000000000001
 CANVAS_CLIENT_SECRET=<your-canvas-secret>
@@ -162,12 +164,12 @@ default: &default
 - **Key type:** LTI Key
 - **Redirect URIs:**
   ```
-  http://localhost:7737/
-  http://localhost:7737/login
+  http://localhost:8051/lti/
+  http://localhost:8051/lti/login
   ```
-- **Target Link URI:** `http://localhost:7737/`
-- **OpenID Connect Initiation URL:** `http://localhost:7737/login`
-- **JWK Method:** Paste Public JWK (from `curl http://localhost:7737/keys`)
+- **Target Link URI:** `http://localhost:8051/lti/`
+- **OpenID Connect Initiation URL:** `http://localhost:8051/lti/login`
+- **JWK Method:** Paste Public JWK (from `curl http://localhost:8051/lti/keys`)
 
 ### After any Canvas reset
 If you reset or re-create the Canvas Docker environment, run these steps:
