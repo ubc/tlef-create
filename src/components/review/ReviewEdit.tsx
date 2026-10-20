@@ -1056,6 +1056,7 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         onClose={() => setCanvasExportModalOpen(false)}
         quizId={quizId}
         quizName={currentQuiz?.name || 'Learning Object'}
+        linkedCanvasCourseId={typeof currentQuiz?.folder === 'object' ? currentQuiz.folder.canvasCourseId : undefined}
         showNotification={showNotification}
       />
 

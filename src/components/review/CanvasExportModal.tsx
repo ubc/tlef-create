@@ -8,6 +8,8 @@ interface CanvasExportModalProps {
   onClose: () => void;
   quizId: string;
   quizName: string;
+  /** Canvas course linked to this quiz's CREATE course; preselected when the user can still access it. */
+  linkedCanvasCourseId?: string | null;
   showNotification: (type: string, title: string, message: string) => void;
 }
 
@@ -32,6 +34,7 @@ const CanvasExportModal = ({
   onClose,
   quizId,
   quizName,
+  linkedCanvasCourseId,
   showNotification
 }: CanvasExportModalProps) => {
   const [step, setStep] = useState<Step>('checking');
@@ -44,6 +47,7 @@ const CanvasExportModal = ({
   const [newModuleName, setNewModuleName] = useState('');
   const [creatingModule, setCreatingModule] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [linkedUnavailable, setLinkedUnavailable] = useState(false);
 
   // Check Canvas connection on open
   useEffect(() => {
@@ -60,6 +64,7 @@ const CanvasExportModal = ({
       setSelectedCourse(null);
       setSelectedModule(null);
       setResultUrl(null);
+      setLinkedUnavailable(false);
     }
   }, [isOpen]);
 
@@ -77,7 +82,13 @@ const CanvasExportModal = ({
       const res = await canvasApi.getAuthStatus();
       if (res.data?.connected) {
         setStep('select-course');
-        await loadCourses();
+        const available = await loadCourses();
+        const linked = linkedCanvasCourseId
+          ? available.find(course => String(course.id) === String(linkedCanvasCourseId))
+          : undefined;
+        setLinkedUnavailable(!!linkedCanvasCourseId && !linked);
+        // Start at the module step for the linked course; "Back to courses" still allows a different course.
+        if (linked) await handleCourseSelect(linked);
       } else {
         setStep('connect');
       }
@@ -114,14 +125,17 @@ const CanvasExportModal = ({
     }
   }
 
-  async function loadCourses() {
+  async function loadCourses(): Promise<CanvasCourse[]> {
     setLoading(true);
     try {
       const res = await canvasApi.getCourses();
-      setCourses(res.data?.courses || []);
+      const available = res.data?.courses || [];
+      setCourses(available);
+      return available;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load courses';
       showNotification('error', 'Error', message);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -265,6 +279,9 @@ const CanvasExportModal = ({
                   Disconnect
                 </button>
               </div>
+              {linkedUnavailable && !loading && (
+                <p className="canvas-selected-info">The Canvas course linked to this course isn't available to your account. Choose another course.</p>
+              )}
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading courses...</div>
               ) : courses.length === 0 ? (
@@ -278,7 +295,7 @@ const CanvasExportModal = ({
                       onClick={() => handleCourseSelect(course)}
                     >
                       <div className="canvas-item-name">{course.name}</div>
-                      <div className="canvas-item-meta">{course.courseCode}{course.term ? ` - ${course.term}` : ''}</div>
+                      <div className="canvas-item-meta">{course.courseCode}{course.term ? ` - ${course.term}` : ''}{String(course.id) === String(linkedCanvasCourseId) ? ' · Linked' : ''}</div>
                     </button>
                   ))}
                 </div>

@@ -65,6 +65,18 @@ describe('Canvas material import', () => {
     expect(screen.getByText('No materials could be listed. Review the access messages above.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reconnect Canvas' })).toBeInTheDocument();
   });
+  it('preselects the linked Canvas course and loads its materials', async () => {
+    render(<CanvasMaterialImportModal isOpen folderId="folder" linkedCanvasCourseId="2" onClose={vi.fn()} />);
+    await screen.findByText('Lecture.pdf');
+    expect(screen.getByRole('combobox', { name: 'Canvas course' })).toHaveValue('2');
+    expect(mocks.getImportMaterials).toHaveBeenCalledWith('folder', '2');
+  });
+  it('falls back to the course list when the linked course is not available', async () => {
+    render(<CanvasMaterialImportModal isOpen folderId="folder" linkedCanvasCourseId="99" onClose={vi.fn()} />);
+    await screen.findByText(/linked to this course isn't available/);
+    expect(screen.getByRole('combobox', { name: 'Canvas course' })).toHaveValue('');
+    expect(mocks.getImportMaterials).not.toHaveBeenCalled();
+  });
   it('explains unavailable configuration and handles blocked sign-in popups', async () => {
     mocks.getAuthStatus.mockResolvedValue({ data: { connected: false } });
     vi.spyOn(window, 'open').mockReturnValue(null);

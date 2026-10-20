@@ -27,7 +27,7 @@ interface CanvasCourse {
 interface CreateCourseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (courseName: string, materials: Material[], canvasCourseId?: string, canvasModuleId?: string) => Promise<void>;
+  onSubmit: (courseName: string, materials: Material[], canvasCourseId?: string) => Promise<void>;
 }
 
 const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps) => {
@@ -45,7 +45,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   const [canvasError, setCanvasError] = useState('');
   const [canvasCourses, setCanvasCourses] = useState<CanvasCourse[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CanvasCourse | null>(null);
-  const [canvasModuleId, setCanvasModuleId] = useState<string | null>(null);
   const [linkToCanvas, setLinkToCanvas] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
@@ -163,7 +162,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
 
   const handleUnlinkCanvas = () => {
     setSelectedCourse(null);
-    setCanvasModuleId(null);
     setLinkToCanvas(false);
   };
 
@@ -174,8 +172,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       setCanvasConnected(false);
       setCanvasCourses([]);
       setSelectedCourse(null);
-      setCanvasModuleId(null);
-      setLinkToCanvas(false);
+        setLinkToCanvas(false);
     } catch {
       // ignore
     } finally {
@@ -188,23 +185,10 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
       setIsCreating(true);
       setUploadProgress(0);
       try {
-        // Create Canvas module now (only once, at submission time)
-        let moduleId = canvasModuleId;
-        if (linkToCanvas && selectedCourse && !moduleId) {
-          try {
-            const res = await canvasApi.createModule(selectedCourse.id, courseName.trim());
-            moduleId = res.data?.module?.id || null;
-            setCanvasModuleId(moduleId);
-          } catch {
-            moduleId = null;
-          }
-        }
-
         await onSubmit(
           courseName.trim(),
           materials,
-          linkToCanvas && selectedCourse ? selectedCourse.id : undefined,
-          linkToCanvas && moduleId ? moduleId : undefined
+          linkToCanvas && selectedCourse ? selectedCourse.id : undefined
         );
         resetModal();
         onClose();
@@ -230,7 +214,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
   const handleSkipCanvas = async () => {
     setLinkToCanvas(false);
     setSelectedCourse(null);
-    setCanvasModuleId(null);
     await handleCreateCourse();
   };
 
@@ -239,7 +222,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
     setMaterials([]);
     setCurrentStep(1);
     setSelectedCourse(null);
-    setCanvasModuleId(null);
     setLinkToCanvas(false);
     setCanvasCourses([]);
   };
@@ -391,7 +373,7 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
             <div {...stepPanelProps(3)}>
               <div className="step-header">
                 <h3>Link to Canvas Course</h3>
-                <p>Optionally link this course to a Canvas course. A module named "{courseName}" will be created automatically.</p>
+                <p>Optionally link this course to a Canvas course. Canvas imports and exports will start with this course selected.</p>
               </div>
 
               {!canvasConnected ? (
@@ -421,7 +403,6 @@ const CreateCourseModal = ({ isOpen, onClose, onSubmit }: CreateCourseModalProps
                       <div className="canvas-linked-meta">
                         {selectedCourse.courseCode}{selectedCourse.term ? ` — ${selectedCourse.term}` : ''}
                       </div>
-                      <div className="canvas-linked-module">Module "{courseName}" will be created on submit</div>
                     </div>
                     <button className="btn btn-ghost btn-sm" onClick={handleUnlinkCanvas} title="Unlink">
                       <Link2Off size={16} />

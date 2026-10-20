@@ -232,15 +232,6 @@
     color: var(--color-muted-foreground);
 }
 
-.canvas-linked-module {
-    font-size: var(--font-size-xs);
-    color: var(--color-primary);
-    margin-top: 2px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
 /* Reuse CanvasExportModal styles for course list */
 .canvas-connect-step {
     text-align: center;

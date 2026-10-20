@@ -31,6 +31,7 @@ const folderSchema = new mongoose.Schema({
   
   // Canvas integration (optional — linked Canvas course and module)
   canvasCourseId: { type: String, default: null },
+  // Legacy: set by old course creation; no longer written or read.
   canvasModuleId: { type: String, default: null },
 
   // Folder Statistics (for dashboard)
