@@ -25,6 +25,7 @@ interface Material {
 interface MaterialUploadProps {
   folderId?: string;
   linkedCanvasCourseId?: string | null;
+  onLinkedCanvasCourseChange?: (canvasCourseId: string) => void;
   materials: Material[];
   onAddMaterial: (
     material: { name: string; type: 'pdf' | 'docx' | 'url' | 'text'; content?: string; file?: File },
@@ -38,6 +39,7 @@ interface MaterialUploadProps {
 const MaterialUpload = ({
   folderId,
   linkedCanvasCourseId,
+  onLinkedCanvasCourseChange,
   materials,
   onAddMaterial,
   onRemoveMaterial,
@@ -318,7 +320,7 @@ const MaterialUpload = ({
             </div>
           </div>
 
-          {folderId && <CanvasMaterialImportModal isOpen={showCanvasImport} folderId={folderId} linkedCanvasCourseId={linkedCanvasCourseId} onClose={() => setShowCanvasImport(false)} onImported={onMaterialReprocessed} />}
+          {folderId && <CanvasMaterialImportModal isOpen={showCanvasImport} folderId={folderId} linkedCanvasCourseId={linkedCanvasCourseId} onLinkedCanvasCourseChange={onLinkedCanvasCourseChange} onClose={() => setShowCanvasImport(false)} onImported={onMaterialReprocessed} />}
 
           {/* URL Form */}
           {showUrlForm && (

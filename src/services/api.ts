@@ -689,6 +689,12 @@ export const foldersApi = {
     return response.data;
   },
 
+  // PUT /api/create/folders/:id - Link (or unlink with null) a Canvas course
+  setLinkedCanvasCourse: async (id: string, canvasCourseId: string | null): Promise<{ folder: Folder }> => {
+    const response = await apiClient.put<{ success: boolean; data: { folder: Folder }; message: string }>(`/folders/${id}`, { canvasCourseId });
+    return response.data;
+  },
+
   // PUT /api/create/folders/:id - Update folder name
   updateFolder: async (id: string, name: string): Promise<{ folder: Folder }> => {
     const response = await apiClient.put<{ success: boolean; data: { folder: Folder }; message: string }>(`/folders/${id}`, { name });

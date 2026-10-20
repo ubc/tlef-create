@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, Check, Loader2, Plus, LogOut } from 'lucide-react';
-import { canvasApi } from '../../services/api';
+import { X, ExternalLink, Check, Loader2, Plus, LogOut, Link2 } from 'lucide-react';
+import { canvasApi, foldersApi } from '../../services/api';
 import '../../styles/components/CanvasExportModal.css';
 
 interface CanvasExportModalProps {
@@ -10,6 +10,10 @@ interface CanvasExportModalProps {
   quizName: string;
   /** Canvas course linked to this quiz's CREATE course; preselected when the user can still access it. */
   linkedCanvasCourseId?: string | null;
+  /** CREATE course (folder) the quiz belongs to; needed to save a new linked Canvas course. */
+  folderId?: string;
+  /** Called after the user saves a different Canvas course as the course's link. */
+  onLinkedCanvasCourseChange?: (canvasCourseId: string) => void;
   showNotification: (type: string, title: string, message: string) => void;
 }
 
@@ -35,6 +39,8 @@ const CanvasExportModal = ({
   quizId,
   quizName,
   linkedCanvasCourseId,
+  folderId,
+  onLinkedCanvasCourseChange,
   showNotification
 }: CanvasExportModalProps) => {
   const [step, setStep] = useState<Step>('checking');
@@ -48,6 +54,7 @@ const CanvasExportModal = ({
   const [creatingModule, setCreatingModule] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [linkedUnavailable, setLinkedUnavailable] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   // Check Canvas connection on open
   useEffect(() => {
@@ -181,6 +188,24 @@ const CanvasExportModal = ({
     }
   }
 
+  async function handleLinkCourse() {
+    if (!selectedCourse || !folderId || linking) return;
+    setLinking(true);
+    // Canvas returns numeric IDs at runtime even though the type says string.
+    const canvasCourseId = String(selectedCourse.id);
+    try {
+      await foldersApi.setLinkedCanvasCourse(folderId, canvasCourseId);
+      setLinkedUnavailable(false);
+      onLinkedCanvasCourseChange?.(canvasCourseId);
+      showNotification('success', 'Canvas course linked', `Exports and imports for this course will start with ${selectedCourse.name}.`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not save the linked Canvas course';
+      showNotification('error', 'Error', message);
+    } finally {
+      setLinking(false);
+    }
+  }
+
   async function handleDisconnect() {
     setIsDisconnecting(true);
     try {
@@ -310,6 +335,13 @@ const CanvasExportModal = ({
                 Back to courses
               </button>
               <p className="canvas-selected-info">Course: <strong>{selectedCourse?.name}</strong></p>
+              {selectedCourse && folderId && onLinkedCanvasCourseChange
+                && String(selectedCourse.id) !== String(linkedCanvasCourseId ?? '') && (
+                <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={handleLinkCourse} disabled={linking || loading}>
+                  {linking ? <Loader2 size={14} className="spinner" /> : <Link2 size={14} />}
+                  Set as linked course
+                </button>
+              )}
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading modules...</div>
               ) : (

@@ -2,7 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CanvasMaterialImportModal from './CanvasMaterialImportModal';
 const mocks = vi.hoisted(() => ({ getConfig: vi.fn(), getAuthStatus: vi.fn(), getImportCourses: vi.fn(), getImportMaterials: vi.fn(), importMaterials: vi.fn(), getConnectUrl: vi.fn() }));
-vi.mock('../services/api', () => ({ canvasApi: mocks }));
+const folderMocks = vi.hoisted(() => ({ setLinkedCanvasCourse: vi.fn() }));
+vi.mock('../services/api', () => ({ canvasApi: mocks, foldersApi: folderMocks }));
 const resources = [
   { id: '4', resourceType: 'file', name: 'Lecture.pdf', materialType: 'pdf', supported: true },
   { id: '1', resourceType: 'page', name: 'Lesson page', materialType: 'text', supported: true },
@@ -70,6 +71,22 @@ describe('Canvas material import', () => {
     await screen.findByText('Lecture.pdf');
     expect(screen.getByRole('combobox', { name: 'Canvas course' })).toHaveValue('2');
     expect(mocks.getImportMaterials).toHaveBeenCalledWith('folder', '2');
+  });
+  it('saves a newly chosen course as the linked course', async () => {
+    folderMocks.setLinkedCanvasCourse.mockResolvedValue({ folder: {} });
+    const onLinked = vi.fn();
+    render(<CanvasMaterialImportModal isOpen folderId="folder" onLinkedCanvasCourseChange={onLinked} onClose={vi.fn()} />);
+    await screen.findByRole('combobox', { name: 'Canvas course' });
+    expect(screen.queryByRole('button', { name: 'Set as linked course' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Set as linked course' }));
+    await waitFor(() => expect(onLinked).toHaveBeenCalledWith('2'));
+    expect(folderMocks.setLinkedCanvasCourse).toHaveBeenCalledWith('folder', '2');
+  });
+  it('does not offer to link the course that is already linked', async () => {
+    render(<CanvasMaterialImportModal isOpen folderId="folder" linkedCanvasCourseId="2" onLinkedCanvasCourseChange={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText('Lecture.pdf');
+    expect(screen.queryByRole('button', { name: 'Set as linked course' })).not.toBeInTheDocument();
   });
   it('falls back to the course list when the linked course is not available', async () => {
     render(<CanvasMaterialImportModal isOpen folderId="folder" linkedCanvasCourseId="99" onClose={vi.fn()} />);

@@ -1057,6 +1057,12 @@ const ReviewEdit = ({ quizId, learningObjectives, workflowMode = 'review' }: Rev
         quizId={quizId}
         quizName={currentQuiz?.name || 'Learning Object'}
         linkedCanvasCourseId={typeof currentQuiz?.folder === 'object' ? currentQuiz.folder.canvasCourseId : undefined}
+        folderId={typeof currentQuiz?.folder === 'object' ? currentQuiz.folder._id : currentQuiz?.folder}
+        onLinkedCanvasCourseChange={canvasCourseId => {
+          if (currentQuiz && typeof currentQuiz.folder === 'object') {
+            dispatch(updateQuizLocally({ ...currentQuiz, folder: { ...currentQuiz.folder, canvasCourseId } }));
+          }
+        }}
         showNotification={showNotification}
       />
 

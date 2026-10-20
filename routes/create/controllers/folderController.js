@@ -143,7 +143,7 @@ router.get('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
 
 /**
  * PUT /api/folders/:id
- * Update folder name
+ * Update folder name and/or linked Canvas course (null unlinks)
  */
 router.put('/:id', authenticateToken, validateUpdateFolder, asyncHandler(async (req, res) => {
   const folderId = req.params.id;
@@ -174,6 +174,10 @@ router.put('/:id', authenticateToken, validateUpdateFolder, asyncHandler(async (
     }
 
     folder.name = name.trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'canvasCourseId')) {
+    folder.canvasCourseId = req.body.canvasCourseId || null;
   }
 
   await folder.updateStats();

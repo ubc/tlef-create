@@ -657,6 +657,7 @@ const CourseView = () => {
             <MaterialUpload
               folderId={courseId}
               linkedCanvasCourseId={course?.canvasCourseId}
+              onLinkedCanvasCourseChange={canvasCourseId => setCourse(prev => prev ? { ...prev, canvasCourseId } : prev)}
               materials={materials.map(m => ({
                 id: m._id,
                 name: m.name,
