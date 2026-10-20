@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import CreateCourseModal from './CreateCourseModal';
 import { canvasApi } from '../services/api';
@@ -15,6 +15,8 @@ vi.mock('../services/api', () => ({
   canvasApi: {
     getConfig: vi.fn().mockResolvedValue({ data: { enabled: false } }),
     getAuthStatus: vi.fn(),
+    getCourses: vi.fn(),
+    createModule: vi.fn(),
   },
 }));
 
@@ -53,6 +55,22 @@ describe('CreateCourseModal workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
     expect(screen.getByRole('button', { name: 'Connect to Canvas' })).toBeInTheDocument();
+  });
+  it('links a Canvas course without creating a Canvas module', async () => {
+    vi.mocked(canvasApi.getConfig).mockResolvedValueOnce({ data: { enabled: true } } as never);
+    vi.mocked(canvasApi.getAuthStatus).mockResolvedValueOnce({ data: { connected: true } } as never);
+    vi.mocked(canvasApi.getCourses).mockResolvedValueOnce({ data: { courses: [{ id: '42', name: 'Physics 101', courseCode: 'PHYS' }] } } as never);
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<CreateCourseModal isOpen onClose={vi.fn()} onSubmit={onSubmit} />);
+    await screen.findByRole('tab', { name: /^Canvas/ });
+    fireEvent.change(screen.getByLabelText('Course Name'), { target: { value: 'Physics' } });
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+    fireEvent.click(await screen.findByText('Physics 101'));
+    expect(screen.queryByText(/will be created/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create Course' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('Physics', [], '42'));
+    expect(canvasApi.createModule).not.toHaveBeenCalled();
   });
 
 });

@@ -50,6 +50,7 @@ export interface Folder {
   instructor: string;
   materials: Array<string | FolderMaterialSummary>;
   quizzes: Array<string | FolderQuizSummary>;
+  canvasCourseId?: string | null;
   stats: {
     totalQuizzes: number;
     totalQuestions: number;
@@ -187,7 +188,7 @@ export interface CoverageMap {
 export interface Quiz {
   _id: string;
   name: string;
-  folder: string | Pick<Folder, '_id' | 'name'>;
+  folder: string | Pick<Folder, '_id' | 'name' | 'canvasCourseId'>;
   materials: string[] | Material[];
   learningObjectives: string[];
   questions: string[];
@@ -677,14 +678,20 @@ export const foldersApi = {
   },
 
   // POST /api/create/folders - Create new folder with quizzes
-  createFolder: async (name: string, quizCount: number = 1, canvasCourseId?: string, canvasModuleId?: string): Promise<{ folder: Folder }> => {
-    const response = await apiClient.post<{ success: boolean; data: { folder: Folder }; message: string }>('/folders', { name, quizCount, canvasCourseId, canvasModuleId });
+  createFolder: async (name: string, quizCount: number = 1, canvasCourseId?: string): Promise<{ folder: Folder }> => {
+    const response = await apiClient.post<{ success: boolean; data: { folder: Folder }; message: string }>('/folders', { name, quizCount, canvasCourseId });
     return response.data;
   },
 
   // GET /api/create/folders/:id - Get specific folder
   getFolder: async (id: string): Promise<{ folder: Folder }> => {
     const response = await apiClient.get<{ success: boolean; data: { folder: Folder }; message: string }>(`/folders/${id}`);
+    return response.data;
+  },
+
+  // PUT /api/create/folders/:id - Link (or unlink with null) a Canvas course
+  setLinkedCanvasCourse: async (id: string, canvasCourseId: string | null): Promise<{ folder: Folder }> => {
+    const response = await apiClient.put<{ success: boolean; data: { folder: Folder }; message: string }>(`/folders/${id}`, { canvasCourseId });
     return response.data;
   },
 

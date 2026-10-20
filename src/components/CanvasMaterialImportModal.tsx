@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { canvasApi, CanvasImportResource, CanvasImportReport } from '../services/api';
+import { canvasApi, foldersApi, CanvasImportResource, CanvasImportReport } from '../services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import '../styles/components/CanvasMaterialImportModal.css';
 
 interface Props {
   isOpen: boolean;
   folderId: string;
+  /** Canvas course linked to this CREATE course; preselected when the user can still access it. */
+  linkedCanvasCourseId?: string | null;
+  /** Called after the user saves a different Canvas course as this course's link. */
+  onLinkedCanvasCourseChange?: (canvasCourseId: string) => void;
   onClose: () => void;
   onImported?: () => void | Promise<void>;
 }
 const key = (resource: Pick<CanvasImportResource, 'id' | 'resourceType'>) => `${resource.resourceType}:${resource.id}`;
 
-export default function CanvasMaterialImportModal({ isOpen, folderId, onClose, onImported }: Props) {
+export default function CanvasMaterialImportModal({ isOpen, folderId, linkedCanvasCourseId, onLinkedCanvasCourseChange, onClose, onImported }: Props) {
   const [state, setState] = useState<'loading' | 'unavailable' | 'connect' | 'ready'>('loading');
   const [courses, setCourses] = useState<Array<{ id: string; name: string; courseCode: string }>>([]);
   const [courseId, setCourseId] = useState('');
@@ -23,6 +27,8 @@ export default function CanvasMaterialImportModal({ isOpen, folderId, onClose, o
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [linkedUnavailable, setLinkedUnavailable] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [limit, setLimit] = useState(10);
   const [maxBytes, setMaxBytes] = useState(50 * 1024 * 1024);
   const [report, setReport] = useState<CanvasImportReport | null>(null);
@@ -41,8 +47,12 @@ export default function CanvasMaterialImportModal({ isOpen, folderId, onClose, o
       if (!auth.data?.connected) { setState('connect'); return; }
       const result = await canvasApi.getImportCourses(folderId);
       if (current !== requestId.current) return;
-      setCourses(result.data?.courses || []); setState('ready');
+      const available = result.data?.courses || [];
+      setCourses(available); setState('ready');
       setCourseId(''); setResources([]); setSelected(new Set()); setReport(null);
+      const linked = linkedCanvasCourseId ? available.find(course => String(course.id) === String(linkedCanvasCourseId)) : undefined;
+      setLinkedUnavailable(!!linkedCanvasCourseId && !linked);
+      if (linked) void loadMaterials(linked.id);
     } catch (err) {
       if (current === requestId.current) { setError(err instanceof Error ? err.message : 'Could not load Canvas. Try again.'); setState('connect'); }
     }
@@ -87,6 +97,16 @@ export default function CanvasMaterialImportModal({ isOpen, folderId, onClose, o
     } catch (err) { if (current === requestId.current) setError(err instanceof Error ? err.message : 'Could not load course materials.'); }
     finally { if (current === requestId.current) setLoadingMaterials(false); }
   }
+  async function linkSelectedCourse() {
+    if (!courseId || linking) return;
+    setLinking(true); setError('');
+    try {
+      await foldersApi.setLinkedCanvasCourse(folderId, courseId);
+      setLinkedUnavailable(false);
+      onLinkedCanvasCourseChange?.(courseId);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not save the linked Canvas course.'); }
+    finally { setLinking(false); }
+  }
   async function importSelected() {
     if (!selected.size || importing) return;
     setImporting(true); setError('');
@@ -123,9 +143,14 @@ export default function CanvasMaterialImportModal({ isOpen, folderId, onClose, o
           <label className="canvas-import-field">Canvas course
             <select className="input" value={courseId} disabled={busy} onChange={event => void loadMaterials(event.target.value)}>
               <option value="">Choose a teaching course</option>
-              {courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}
+              {courses.map(course => <option key={course.id} value={course.id}>{course.name}{String(course.id) === String(linkedCanvasCourseId) ? ' (linked)' : ''}</option>)}
             </select>
           </label>
+          {linkedUnavailable && <p className="canvas-import-notice">The Canvas course linked to this course isn't available to your account. Choose another course.</p>}
+          {courseId && String(courseId) !== String(linkedCanvasCourseId ?? '') && onLinkedCanvasCourseChange && <div className="canvas-import-tools">
+            <button className="btn btn-outline" disabled={busy || linking} onClick={() => void linkSelectedCourse()}>{linking ? 'Saving…' : 'Set as linked course'}</button>
+            <span className="canvas-import-hint">Imports and exports for this course will start with this Canvas course.</span>
+          </div>}
           {!courses.length && <p>No teaching courses found. This import currently requires a Teacher enrollment in Canvas.</p>}
           {warnings.map((warning, index) => <p key={index} role="alert" className="canvas-import-notice">{warning}</p>)}
           {(warnings.length > 0 || error) && <div className="canvas-import-tools">

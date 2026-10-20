@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, ExternalLink, Check, Loader2, Plus, LogOut } from 'lucide-react';
-import { canvasApi } from '../../services/api';
+import { X, ExternalLink, Check, Loader2, Plus, LogOut, Link2 } from 'lucide-react';
+import { canvasApi, foldersApi } from '../../services/api';
 import '../../styles/components/CanvasExportModal.css';
 
 interface CanvasExportModalProps {
@@ -8,6 +8,12 @@ interface CanvasExportModalProps {
   onClose: () => void;
   quizId: string;
   quizName: string;
+  /** Canvas course linked to this quiz's CREATE course; preselected when the user can still access it. */
+  linkedCanvasCourseId?: string | null;
+  /** CREATE course (folder) the quiz belongs to; needed to save a new linked Canvas course. */
+  folderId?: string;
+  /** Called after the user saves a different Canvas course as the course's link. */
+  onLinkedCanvasCourseChange?: (canvasCourseId: string) => void;
   showNotification: (type: string, title: string, message: string) => void;
 }
 
@@ -32,6 +38,9 @@ const CanvasExportModal = ({
   onClose,
   quizId,
   quizName,
+  linkedCanvasCourseId,
+  folderId,
+  onLinkedCanvasCourseChange,
   showNotification
 }: CanvasExportModalProps) => {
   const [step, setStep] = useState<Step>('checking');
@@ -44,6 +53,8 @@ const CanvasExportModal = ({
   const [newModuleName, setNewModuleName] = useState('');
   const [creatingModule, setCreatingModule] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [linkedUnavailable, setLinkedUnavailable] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   // Check Canvas connection on open
   useEffect(() => {
@@ -60,6 +71,7 @@ const CanvasExportModal = ({
       setSelectedCourse(null);
       setSelectedModule(null);
       setResultUrl(null);
+      setLinkedUnavailable(false);
     }
   }, [isOpen]);
 
@@ -77,7 +89,13 @@ const CanvasExportModal = ({
       const res = await canvasApi.getAuthStatus();
       if (res.data?.connected) {
         setStep('select-course');
-        await loadCourses();
+        const available = await loadCourses();
+        const linked = linkedCanvasCourseId
+          ? available.find(course => String(course.id) === String(linkedCanvasCourseId))
+          : undefined;
+        setLinkedUnavailable(!!linkedCanvasCourseId && !linked);
+        // Start at the module step for the linked course; "Back to courses" still allows a different course.
+        if (linked) await handleCourseSelect(linked);
       } else {
         setStep('connect');
       }
@@ -114,14 +132,17 @@ const CanvasExportModal = ({
     }
   }
 
-  async function loadCourses() {
+  async function loadCourses(): Promise<CanvasCourse[]> {
     setLoading(true);
     try {
       const res = await canvasApi.getCourses();
-      setCourses(res.data?.courses || []);
+      const available = res.data?.courses || [];
+      setCourses(available);
+      return available;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load courses';
       showNotification('error', 'Error', message);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -164,6 +185,24 @@ const CanvasExportModal = ({
       showNotification('error', 'Error', message);
     } finally {
       setCreatingModule(false);
+    }
+  }
+
+  async function handleLinkCourse() {
+    if (!selectedCourse || !folderId || linking) return;
+    setLinking(true);
+    // Canvas returns numeric IDs at runtime even though the type says string.
+    const canvasCourseId = String(selectedCourse.id);
+    try {
+      await foldersApi.setLinkedCanvasCourse(folderId, canvasCourseId);
+      setLinkedUnavailable(false);
+      onLinkedCanvasCourseChange?.(canvasCourseId);
+      showNotification('success', 'Canvas course linked', `Exports and imports for this course will start with ${selectedCourse.name}.`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not save the linked Canvas course';
+      showNotification('error', 'Error', message);
+    } finally {
+      setLinking(false);
     }
   }
 
@@ -265,6 +304,9 @@ const CanvasExportModal = ({
                   Disconnect
                 </button>
               </div>
+              {linkedUnavailable && !loading && (
+                <p className="canvas-selected-info">The Canvas course linked to this course isn't available to your account. Choose another course.</p>
+              )}
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading courses...</div>
               ) : courses.length === 0 ? (
@@ -278,7 +320,7 @@ const CanvasExportModal = ({
                       onClick={() => handleCourseSelect(course)}
                     >
                       <div className="canvas-item-name">{course.name}</div>
-                      <div className="canvas-item-meta">{course.courseCode}{course.term ? ` - ${course.term}` : ''}</div>
+                      <div className="canvas-item-meta">{course.courseCode}{course.term ? ` - ${course.term}` : ''}{String(course.id) === String(linkedCanvasCourseId) ? ' · Linked' : ''}</div>
                     </button>
                   ))}
                 </div>
@@ -293,6 +335,13 @@ const CanvasExportModal = ({
                 Back to courses
               </button>
               <p className="canvas-selected-info">Course: <strong>{selectedCourse?.name}</strong></p>
+              {selectedCourse && folderId && onLinkedCanvasCourseChange
+                && String(selectedCourse.id) !== String(linkedCanvasCourseId ?? '') && (
+                <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={handleLinkCourse} disabled={linking || loading}>
+                  {linking ? <Loader2 size={14} className="spinner" /> : <Link2 size={14} />}
+                  Set as linked course
+                </button>
+              )}
               {loading ? (
                 <div className="canvas-loading"><Loader2 size={24} className="spinner" /> Loading modules...</div>
               ) : (

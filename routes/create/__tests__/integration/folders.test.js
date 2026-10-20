@@ -314,6 +314,45 @@ describe('Folder Management API Integration Tests', () => {
       expect(response.body.success).toBe(false);
       expect(response.body.error.message).toContain('already exists');
     });
+
+    test('should link, change and unlink the Canvas course without renaming', async () => {
+      await request(app).put(`/api/folders/${folderId}`).send({ canvasCourseId: '42' }).expect(200);
+      let folderInDb = await Folder.findById(folderId);
+      expect(folderInDb.canvasCourseId).toBe('42');
+      expect(folderInDb.name).toBe('Original Name');
+
+      await request(app).put(`/api/folders/${folderId}`).send({ canvasCourseId: '77' }).expect(200);
+      folderInDb = await Folder.findById(folderId);
+      expect(folderInDb.canvasCourseId).toBe('77');
+
+      await request(app).put(`/api/folders/${folderId}`).send({ canvasCourseId: null }).expect(200);
+      folderInDb = await Folder.findById(folderId);
+      expect(folderInDb.canvasCourseId).toBeNull();
+    });
+
+    test('should keep the Canvas link when only the name changes', async () => {
+      await Folder.updateOne({ _id: folderId }, { canvasCourseId: '42' });
+      await request(app).put(`/api/folders/${folderId}`).send({ name: 'Renamed' }).expect(200);
+      const folderInDb = await Folder.findById(folderId);
+      expect(folderInDb.canvasCourseId).toBe('42');
+    });
+
+    test('should accept a numeric Canvas course ID as Canvas returns it', async () => {
+      await request(app).put(`/api/folders/${folderId}`).send({ canvasCourseId: 42 }).expect(200);
+      const folderInDb = await Folder.findById(folderId);
+      expect(folderInDb.canvasCourseId).toBe('42');
+    });
+
+    test('should reject an invalid Canvas course ID', async () => {
+      for (const canvasCourseId of ['', { id: 42 }, 4.2]) {
+        const response = await request(app)
+          .put(`/api/folders/${folderId}`)
+          .send({ canvasCourseId })
+          .expect(400);
+
+        expect(response.body.success).toBe(false);
+      }
+    });
   });
 
   describe('DELETE /api/folders/:id', () => {

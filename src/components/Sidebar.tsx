@@ -203,11 +203,11 @@ const Sidebar = ({ isOpen = false, onClose, collapsed = false, onToggleCollapse 
     navigate(`/course/${courseId}/quiz/${quizId}`);
   };
 
-  const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = [], canvasCourseId?: string, canvasModuleId?: string) => {
+  const handleCreateCourse = async (courseName: string, materials: Array<{ type: string; name: string; content?: string; file?: File }> = [], canvasCourseId?: string) => {
     try {
       // Step 1: Create the folder/course (await this - it's fast)
       console.log(`📁 Creating course: ${courseName}`, canvasCourseId ? `(Canvas: ${canvasCourseId})` : '');
-      const response = await foldersApi.createFolder(courseName, 1, canvasCourseId, canvasModuleId);
+      const response = await foldersApi.createFolder(courseName, 1, canvasCourseId);
       const courseId = response.folder._id;
 
       // Step 2: Immediately add the new folder to the sidebar state

@@ -25,6 +25,7 @@ interface CourseData {
   id: string;
   name: string;
   quizzes: QuizData[];
+  canvasCourseId?: string | null;
 }
 
 const CourseView = () => {
@@ -200,7 +201,8 @@ const CourseView = () => {
           status: typeof quiz === 'string' ? undefined : quiz.status,
           progress: typeof quiz === 'string' ? undefined : quiz.progress,
           updatedAt: typeof quiz === 'string' ? undefined : quiz.updatedAt
-        })) || []
+        })) || [],
+        canvasCourseId: folderResponse.folder.canvasCourseId
       };
 
       setCourse(course);
@@ -654,6 +656,8 @@ const CourseView = () => {
             </div>
             <MaterialUpload
               folderId={courseId}
+              linkedCanvasCourseId={course?.canvasCourseId}
+              onLinkedCanvasCourseChange={canvasCourseId => setCourse(prev => prev ? { ...prev, canvasCourseId } : prev)}
               materials={materials.map(m => ({
                 id: m._id,
                 name: m.name,

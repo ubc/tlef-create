@@ -94,7 +94,7 @@ router.get('/:id', authenticateToken, validateMongoId, asyncHandler(async (req, 
   const userId = req.user.id;
 
   const quiz = await Quiz.findOne({ _id: quizId, createdBy: userId })
-    .populate('folder', 'name')
+    .populate('folder', 'name canvasCourseId')
     .populate({
       path: 'materials',
       select: 'name type processingStatus fileSize createdAt'
@@ -146,7 +146,7 @@ router.put('/:id/review', authenticateToken, validateMongoId, asyncHandler(async
     ...freeQuestionMutation(new Date()),
     'questionGenerationLease.token': { $exists: false }
   }, { $set: { 'progress.reviewCompleted': true }, $inc: { __v: 1 } }, { new: true })
-    .populate('folder', 'name')
+    .populate('folder', 'name canvasCourseId')
     .populate('materials', 'name type processingStatus fileSize createdAt')
     .populate({ path: 'learningObjectives', select: 'text order generationMetadata createdAt', options: { sort: { order: 1 } } })
     .populate({ path: 'questions', select: 'type difficulty questionText reviewStatus order createdAt', options: { sort: { order: 1 } } })
@@ -212,7 +212,7 @@ router.put('/:id', authenticateToken, validateUpdateQuiz, asyncHandler(async (re
   });
 
   await quiz.save();
-  await quiz.populate('folder', 'name');
+  await quiz.populate('folder', 'name canvasCourseId');
 
   return successResponse(res, { quiz }, 'Quiz updated successfully');
 }));
@@ -319,7 +319,7 @@ router.put('/:id/materials', authenticateToken, validateAssignMaterials, asyncHa
   );
 
   const updatedQuiz = await Quiz.findById(quizId)
-    .populate('folder', 'name')
+    .populate('folder', 'name canvasCourseId')
     .populate('materials', 'name type processingStatus');
 
   return successResponse(res, { quiz: updatedQuiz }, 'Materials assigned successfully');

@@ -89,6 +89,16 @@ export const validateUpdateFolder = [
     .trim()
     .isLength({ min: 1, max: 200 })
     .withMessage('Folder name must be between 1 and 200 characters'),
+
+  // Canvas returns numeric course IDs; store them as strings like the Folder schema.
+  body('canvasCourseId')
+    .optional({ nullable: true })
+    .custom(value => typeof value === 'string' || Number.isInteger(value))
+    .withMessage('Canvas course ID must be a string, an integer or null')
+    .bail()
+    .customSanitizer(value => String(value).trim())
+    .isLength({ min: 1, max: 64 })
+    .withMessage('Canvas course ID must be between 1 and 64 characters'),
   
   handleValidationErrors
 ];
