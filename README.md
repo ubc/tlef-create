@@ -184,7 +184,7 @@ ollama serve
 ```
 
 ### Setup Order
-1. **Install Ollama and Llama model** (see [AI Setup](#-ai-setup))
+1. **Install Ollama and Llama model** (see [AI Setup](#-ai-setup)).
 2. **Clone and start MongoDB**: 
    ```bash
    git clone -b tlef-create-integration https://github.com/fanxiaotuGod/tlef-mongodb-docker.git
