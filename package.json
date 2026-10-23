@@ -137,5 +137,8 @@
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "moment-timezone": "^0.6.5"
   }
 }
