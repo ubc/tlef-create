@@ -1,5 +1,4 @@
 import passport from 'passport';
-import { Strategy as SamlStrategy } from 'passport-saml';
 import User from '../models/User.js';
 import { createSamlVerify } from '../services/samlUserService.js';
 import { SAML_REQUESTED_ATTRIBUTES } from '../utils/samlIdentity.js';
@@ -51,24 +50,45 @@ if (process.env.NODE_ENV === 'development') {
     console.warn('⚠️ Using hardcoded SAML certificate (may be outdated)');
   }
 
-  samlStrategy = new SamlStrategy({
-    callbackUrl: process.env.SAML_CALLBACK_URL || 'http://localhost:7736/api/create/auth/saml/callback',
-    entryPoint: process.env.SAML_ENTRY_POINT || 'http://localhost:8080/simplesaml/saml2/idp/SSOService.php',
-    logoutUrl: process.env.SAML_LOGOUT_URL || 'http://localhost:8080/simplesaml/saml2/idp/SingleLogoutService.php',
-    logoutCallbackUrl: process.env.SAML_LOGOUT_CALLBACK_URL || 'http://localhost:7736/api/create/auth/logout/callback',
-    issuer: process.env.SAML_ISSUER || 'tlef-create',
-    cert: samlCert,
-    identifierFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:transient',
-    disableRequestedAuthnContext: true,
-    acceptedClockSkewMs: 5000,
-    validateInResponseTo: false,
-    wantAssertionsSigned: true,
-    wantAuthnResponseSigned: true,
-    signatureAlgorithm: 'sha256'
-  }, createSamlVerify({ preferPuid: false }));
+  // Uses passport-ubcshib rather than passport-saml directly. The wrapper's
+  // underlying library is @node-saml/passport-saml, which carries the fix for
+  // the SAML signature-verification bypass that passport-saml 3.x never
+  // received. Every option below is either managed by the wrapper or passed
+  // through unchanged, so the dev IdP contract is the same as before.
+  // Registered under 'saml' so the strategy-name selection in
+  // authController.js is unaffected.
+  if (!UBCShibStrategy) {
+    console.error('❌ Generic SAML strategy not registered: passport-ubcshib failed to load');
+  } else if (!samlCert) {
+    // The wrapper requires a certificate and throws without one. passport-saml
+    // tolerated a null cert, which is the behaviour that made the bypass
+    // exploitable, so this is now a hard failure rather than a warning.
+    console.error('❌ Generic SAML strategy not registered: no SAML certificate.');
+    console.error('   Set SAML_CERT_PATH (see .env.example) to docker-simple-saml\'s cert.');
+  } else {
+    try {
+      samlStrategy = new UBCShibStrategy({
+        callbackUrl: process.env.SAML_CALLBACK_URL || 'http://localhost:7736/api/create/auth/saml/callback',
+        entryPoint: process.env.SAML_ENTRY_POINT || 'http://localhost:8080/simplesaml/saml2/idp/SSOService.php',
+        logoutUrl: process.env.SAML_LOGOUT_URL || 'http://localhost:8080/simplesaml/saml2/idp/SingleLogoutService.php',
+        logoutCallbackUrl: process.env.SAML_LOGOUT_CALLBACK_URL || 'http://localhost:7736/api/create/auth/logout/callback',
+        issuer: process.env.SAML_ISSUER || 'tlef-create',
+        cert: samlCert,
+        identifierFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:transient',
+        disableRequestedAuthnContext: true,
+        acceptedClockSkewMs: 5000,
+        validateInResponseTo: false,
+        wantAssertionsSigned: true,
+        wantAuthnResponseSigned: true,
+        signatureAlgorithm: 'sha256'
+      }, createSamlVerify({ preferPuid: false }));
 
-  passport.use('saml', samlStrategy);
-  console.log('✅ Generic SAML strategy registered for development');
+      passport.use('saml', samlStrategy);
+      console.log('✅ Generic SAML strategy registered for development');
+    } catch (error) {
+      console.error('❌ Failed to configure generic SAML strategy:', error.message);
+    }
+  }
 } else {
   console.log('ℹ️ Skipping generic SAML strategy (only used in development)');
 }

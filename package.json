@@ -85,8 +85,7 @@
     "node-fetch": "^3.3.2",
     "openai": "^4.104.0",
     "passport": "^0.7.0",
-    "passport-saml": "^3.2.4",
-    "passport-ubcshib": "^0.1.4",
+    "passport-ubcshib": "0.1.7-rc.2",
     "pdfjs-dist": "^4.10.38",
     "pdfkit": "^0.17.2",
     "pubsub-js": "^1.9.5",
@@ -98,7 +97,7 @@
     "react-resizable-panels": "^2.1.3",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7",
-    "sanitize-html": "2.17.3",
+    "sanitize-html": "2.18.1",
     "sonner": "^1.5.0",
     "tailwind-merge": "^3.3.1",
     "ubc-genai-toolkit-core": "^0.1.0",
@@ -139,6 +138,7 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "moment-timezone": "^0.6.5"
+    "moment-timezone": "^0.6.5",
+    "htmlparser2": "^10.1.0"
   }
 }
