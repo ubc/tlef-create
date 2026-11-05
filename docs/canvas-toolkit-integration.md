@@ -87,11 +87,11 @@ url:POST|/api/v1/courses/:course_id/modules
 url:POST|/api/v1/courses/:course_id/pages
 url:POST|/api/v1/courses/:course_id/modules/:module_id/items
 url:GET|/api/v1/courses/:course_id/external_tools
-url:GET|/api/v1/accounts/:account_id/external_tools
-url:POST|/api/v1/courses/:course_id/external_tools
 ```
 
-The final tool-installation scope was missing from the older implementation. Existing connections need to be reauthorized if they lack a newly required scope. Canvas role permissions still apply; if instructors cannot install a tool, a Canvas administrator must install it first.
+CREATE finds the LTI tool through the course's external tools listing with `include_parents=true`, which also returns tools installed on parent accounts. It does not install the tool itself, so a Canvas administrator must install the LTI tool at the account level (or in each course) before instructors can export. If the tool is missing, export fails with `CANVAS_LTI_TOOL_UNAVAILABLE`.
+
+Older versions also requested `GET /api/v1/accounts/:account_id/external_tools` and `POST /api/v1/courses/:course_id/external_tools`; both can be removed from the Developer Key. Existing tokens keep the scopes they were granted until the user reconnects.
 
 Existing database records need no bulk migration. Old tokens remain readable and refreshable; new authorizations save the Canvas user ID. Connecting to a different Canvas domain requires a new authorization. If Canvas returns no refresh token during reauthorization, the old refresh token is kept only when the Canvas user is confirmed to be the same person. Records with unknown identity are not reused across accounts.
 

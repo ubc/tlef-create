@@ -12,9 +12,7 @@ export const CANVAS_SCOPES = [
   'url:POST|/api/v1/courses/:course_id/modules',
   'url:POST|/api/v1/courses/:course_id/pages',
   'url:POST|/api/v1/courses/:course_id/modules/:module_id/items',
-  'url:GET|/api/v1/courses/:course_id/external_tools',
-  'url:GET|/api/v1/accounts/:account_id/external_tools',
-  'url:POST|/api/v1/courses/:course_id/external_tools'
+  'url:GET|/api/v1/courses/:course_id/external_tools'
 ];
 
 export function canvasBaseUrl(env = process.env) {
