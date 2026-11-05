@@ -46,13 +46,14 @@ test('finds an account-level LTI tool through the course listing', async () => {
   expect(await service.ensureLtiToolInstalled('owner', '7')).toBe(11);
   expect(String(global.fetch.mock.calls[0][0].url ?? global.fetch.mock.calls[0][0])).toContain('include_parents=true');
 });
-test('reports a missing Canvas LTI installation without hiding upstream failures', async () => {
-  global.fetch.mockResolvedValueOnce(json([])).mockResolvedValueOnce(json([]))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ message: 'Invalid client ID' }] }), { status: 400, headers: { 'Content-Type': 'application/json' } }));
+test('reports a missing Canvas LTI installation without trying to install it', async () => {
+  global.fetch.mockResolvedValueOnce(json([{ id: 3, name: 'Other tool', developer_key_id: '999' }]));
   await expect(service.ensureLtiToolInstalled('owner', '7')).rejects.toMatchObject({ code: 'CANVAS_LTI_TOOL_UNAVAILABLE' });
-
-  global.fetch.mockResolvedValueOnce(json([])).mockResolvedValueOnce(json([]))
-    .mockRejectedValueOnce(new canvas.CanvasApiError('Canvas unavailable', 503));
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(global.fetch.mock.calls[0][1].method).toBe('GET');
+});
+test('does not hide upstream failures while looking up the LTI tool', async () => {
+  global.fetch.mockRejectedValueOnce(new canvas.CanvasApiError('Canvas unavailable', 503));
   await expect(service.ensureLtiToolInstalled('owner', '7')).rejects.toMatchObject({ statusCode: 503 });
 });
 test('creates the existing LTI launch module item through the toolkit', async () => {

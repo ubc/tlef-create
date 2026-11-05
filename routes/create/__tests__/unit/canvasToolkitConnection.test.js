@@ -30,7 +30,9 @@ describe('official UBC Canvas toolkit connection', () => {
     expect(url.pathname).toBe('/login/oauth2/auth');
     expect(url.searchParams.get('state')).toBe('random-state');
     expect(url.searchParams.get('scope').split(' ')).toEqual(CANVAS_SCOPES);
-    expect(CANVAS_SCOPES).toContain('url:POST|/api/v1/courses/:course_id/external_tools');
+    expect(CANVAS_SCOPES).toContain('url:GET|/api/v1/courses/:course_id/external_tools');
+    expect(CANVAS_SCOPES).not.toContain('url:GET|/api/v1/accounts/:account_id/external_tools');
+    expect(CANVAS_SCOPES).not.toContain('url:POST|/api/v1/courses/:course_id/external_tools');
     expect(CANVAS_SCOPES).toEqual(expect.arrayContaining([
       'url:GET|/api/v1/courses/:course_id/files', 'url:GET|/api/v1/courses/:course_id/files/:id',
       'url:GET|/api/v1/files/:id/public_url', 'url:GET|/api/v1/courses/:course_id/pages',

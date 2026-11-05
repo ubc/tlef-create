@@ -107,20 +107,11 @@ Then set `LTI_PUBLIC_URL=http://localhost:7737` in `.env` (so future module item
 
 ### 5. LTI tool not found via Canvas external_tools API
 
-**Symptom:** The backend calls `GET /api/v1/courses/:id/external_tools` to find the LTI tool before creating a module item, but the tool is not returned — even though it is installed at the account level.
+**Symptom:** Export fails with "The CREATE LTI tool is not available in this Canvas course" (`CANVAS_LTI_TOOL_UNAVAILABLE`).
 
-**Cause:** Canvas's course-level external tools API does not return LTI 1.3 tools installed at the account level in all configurations.
+**Cause:** The backend calls `GET /api/v1/courses/:id/external_tools?include_parents=true` to find the LTI tool before creating a module item. That listing includes tools installed on the course and on its parent accounts, so the tool has not been installed anywhere above the course. CREATE does not install the tool itself; its OAuth key deliberately has no tool-installation scope.
 
-**Fix (in `canvasApiService.js`):** Fall back to auto-installing the tool via client ID if it's not found in either course-level or account-level lookups:
-
-```js
-const installed = await canvasRequest(userId, `/courses/${courseId}/external_tools`, {
-  method: 'POST',
-  body: JSON.stringify({ client_id: ltiClientId })
-});
-```
-
-Canvas responds with the installed tool's `id`, which is then used for creating the `ExternalTool` module item.
+**Fix:** As a Canvas admin, install the tool at the account level so every course can see it: **Admin → (account) → Settings → Apps → View App Configurations → + App**, choose **By Client ID**, and enter the LTI Developer Key's client ID (`LTI_CLIENT_ID`). Make sure the LTI Developer Key is set to **On** first. Then retry the export.
 
 ---
 
