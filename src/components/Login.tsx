@@ -3,15 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { GraduationCap, Sparkles, Shield, ArrowRight, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { GraduationCap, Sparkles, Shield, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import '../styles/components/Login.css';
 
 interface LoginProps {
   onAuthChange?: () => void;
 }
 
+const FRESH_WINDOW_TIP =
+  'If this keeps happening, clear your cookies for this site or open a new private/incognito window and sign in again.';
+
+// Messages for the ?error= codes the backend adds when it redirects back here.
+const LOGIN_ERRORS: Record<string, { title: string; body: string }> = {
+  rate_limited: {
+    title: 'Too many sign-in attempts',
+    body: `Please wait about 15 minutes before trying again. ${FRESH_WINDOW_TIP}`,
+  },
+  login_failed: {
+    title: 'Sign-in didn’t complete',
+    body: `We couldn’t finish signing you in with CWL. ${FRESH_WINDOW_TIP}`,
+  },
+};
+
 const Login = ({ onAuthChange }: LoginProps) => {
   const navigate = useNavigate();
+  const [loginError] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get('error');
+    return code ? LOGIN_ERRORS[code] ?? null : null;
+  });
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
   const [samlAvailable, setSamlAvailable] = useState<boolean | null>(null);
   const [autoLoginAvailable, setAutoLoginAvailable] = useState(false);
@@ -195,6 +215,14 @@ const Login = ({ onAuthChange }: LoginProps) => {
           </CardHeader>
           
           <CardContent className="login-card-content">
+            {loginError && (
+              <Alert variant="destructive">
+                <AlertCircle size={16} />
+                <AlertTitle>{loginError.title}</AlertTitle>
+                <AlertDescription>{loginError.body}</AlertDescription>
+              </Alert>
+            )}
+
             {/* Features Preview */}
             <div className="features-preview">
               <div className="feature-item">

@@ -189,11 +189,11 @@ router.post('/saml/callback', (req, res, next) => {
   console.log(`🔑 Processing ${strategy} callback (NODE_ENV: ${process.env.NODE_ENV})...`);
 
   passport.authenticate(strategy, {
-    failureRedirect: `${frontendUrl}/login`
+    failureRedirect: `${frontendUrl}/login?error=login_failed`
   })(req, res, (err) => {
     if (err) {
       console.error(`❌ ${strategy} callback error:`, err);
-      return res.redirect(`${frontendUrl}/login`);
+      return res.redirect(`${frontendUrl}/login?error=login_failed`);
     }
     console.log(`✅ ${strategy} callback successful`);
     // Successful authentication, redirect to frontend

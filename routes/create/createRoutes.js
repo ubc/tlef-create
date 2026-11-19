@@ -44,15 +44,24 @@ router.use(helmet({
 const authLimiter = rateLimit({
   windowMs: RATE_LIMITS.AUTH.windowMs,
   max: RATE_LIMITS.AUTH.max,
-  message: {
-    error: {
-      code: ERROR_CODES.AUTH_ERROR,
-      message: 'Too many authentication attempts, please try again later',
-      timestamp: new Date().toISOString()
-    }
-  },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  handler: (req, res, _next, options) => {
+    // The login route is a full-page navigation, so a raw JSON body would be
+    // shown to the user as-is. Send browsers back to the login page instead,
+    // where a friendly message is rendered from the error code.
+    if (req.accepts(['json', 'html']) === 'html') {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8092';
+      return res.redirect(`${frontendUrl}/login?error=rate_limited`);
+    }
+    return res.status(options.statusCode).json({
+      error: {
+        code: ERROR_CODES.AUTH_ERROR,
+        message: 'Too many authentication attempts, please try again later',
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
 });
 
 const apiLimiter = rateLimit({
