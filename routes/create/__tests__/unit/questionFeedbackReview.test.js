@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
-import { feedbackReviewSchema, reviewQuestionFeedback } from '../../services/questionFeedbackReview.js';
+import { feedbackReviewSchema, hasAssessmentCriteria, reviewQuestionFeedback } from '../../services/questionFeedbackReview.js';
 
 const question = {
   questionText: 'What is condensation?', correctAnswer: 'Gas changes to liquid.', explanation: 'Original explanation',
@@ -30,12 +30,28 @@ describe('independent question feedback review', () => {
     [{ ...reviewed, followsInstructorRequest: false }, 'INSTRUCTION_MISMATCH'],
     [{ ...reviewed, evidenceIsSufficient: false }, 'EVIDENCE_INSUFFICIENT'],
     [{ ...reviewed, contentIsValid: false }, 'ANSWER_INVALID'],
-    [{ ...reviewed, rubricIsAppropriate: false }, 'RUBRIC_INVALID'],
     [{ ...reviewed, feedback: [] }, 'FEEDBACK_INVALID'],
     [{}, 'REVIEW_INVALID_RESPONSE']
   ])('reports a structured failure without storing review prose', async (payload, reason) => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(payload) }))
       .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: reason });
+  });
+  test('ignores a rubric verdict on keyed multiple choice that has no assessment criteria', async () => {
+    const result = await reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete({ ...reviewed, rubricIsAppropriate: false, issues: [] }) });
+    expect(result.qualityReview).toBe('ai-feedback-reviewed');
+  });
+  test.each([
+    ['option point weights', { ...question, content: { ...question.content, options: question.content.options.map((option, index) => ({ ...option, points: index ? 0 : 2 })) } }],
+    ['a rubric', { ...question, rubric: [{ criterion: 'Names the phase change', points: 1 }] }],
+    ['a sample answer', { ...question, content: { ...question.content, sampleAnswer: 'Gas becomes liquid.' } }]
+  ])('still rejects a rubric verdict when the draft carries %s', async (_label, draft) => {
+    await expect(reviewQuestionFeedback(draft, { questionType: 'multiple-choice', complete: complete({ ...reviewed, rubricIsAppropriate: false }) }))
+      .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityFailureReason: 'RUBRIC_INVALID' });
+  });
+  test('recognizes only populated assessment criteria', () => {
+    expect(hasAssessmentCriteria(question)).toBe(false);
+    expect(hasAssessmentCriteria({ ...question, rubric: [], keywords: [], sampleAnswer: '', scoring: {} })).toBe(false);
+    expect(hasAssessmentCriteria({ ...question, keywords: [{ keyword: 'condensation', points: 1 }] })).toBe(true);
   });
   test('scopes review to one item without dropping the instructor constraints', async () => {
     const model = complete(reviewed);

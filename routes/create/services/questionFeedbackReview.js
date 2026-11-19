@@ -43,6 +43,18 @@ function reviewError(message, cause, reason) {
   return error;
 }
 
+const ASSESSMENT_CRITERIA_FIELDS = ['rubric', 'criteria', 'assessmentCriteria', 'keywords', 'sampleAnswer', 'points', 'pointWeights', 'weights', 'scoring'];
+const present = value => value !== undefined && value !== null && value !== ''
+  && !(Array.isArray(value) && value.length === 0)
+  && !(typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+// Criteria or point weights the reviewer could actually judge, at either level
+// of the draft or on an individual option.
+export function hasAssessmentCriteria(question) {
+  const holders = [question, question?.content, ...(Array.isArray(question?.content?.options) ? question.content.options : [])];
+  return holders.some(holder => holder && typeof holder === 'object'
+    && ASSESSMENT_CRITERIA_FIELDS.some(field => present(holder[field])));
+}
+
 // An independent pass checks the learner-action contract as well as the answer.
 // It may repair explanations, but cannot silently change the answer or options.
 // Human review remains necessary: a second model pass is not a proof of truth.
@@ -139,7 +151,9 @@ export async function reviewQuestionFeedback(question, { questionType, relevantC
   if (review.contentIsValid !== true || review.answerIsCorrect !== true) {
     throw rejected('The answer did not pass the quality check. Please refine the instructions and regenerate this question.', undefined, 'ANSWER_INVALID');
   }
-  if (review.rubricIsAppropriate !== true) {
+  // A rubric verdict only means something when the draft carries criteria to
+  // judge. Ordinary keyed MC has none, so a "false" there is reviewer noise.
+  if (review.rubricIsAppropriate !== true && hasAssessmentCriteria(question)) {
     throw rejected('The assessment criteria did not match the teaching task. No question was saved.', undefined, 'RUBRIC_INVALID');
   }
   const validText = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 12000;
