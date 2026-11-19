@@ -172,14 +172,21 @@ describe('independent question feedback review', () => {
   test.each([
     ['wrong distractor derivation', { expression: '12 + 8 - 3', result: 20 }, 'ARITHMETIC_FALSE_EQUALITY'],
     ['wrong multiplication', { expression: '7 * 8', result: 54 }, 'ARITHMETIC_FALSE_EQUALITY'],
-    ['division by zero', { expression: '3 / 0', result: 0 }, 'ARITHMETIC_DIVISION_BY_ZERO'],
-    ['unsupported expression', { expression: 'Math.max(1, 2)', result: 2 }, 'ARITHMETIC_UNSUPPORTED_EXPRESSION']
+    ['division by zero', { expression: '3 / 0', result: 0 }, 'ARITHMETIC_DIVISION_BY_ZERO']
   ])('rejects %s rather than saving unchecked arithmetic or silently changing an answer', async (_label, calculation, qualityFailureReason) => {
     const payload = { ...reviewed, feedback: reviewed.feedback.map((item, index) => index === 1 ? { ...item, calculations: [calculation] } : item) };
     const model = complete(payload);
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: model }))
       .rejects.toMatchObject({ code: 'QUESTION_QUALITY_REVIEW', qualityCheck: 'arithmetic', qualityFailureReason });
     expect(model).toHaveBeenCalledTimes(1);
+  });
+  test('drops an unreadable declared calculation and keeps the reviewed qualitative feedback', async () => {
+    const calculation = { expression: '(charge_Ca2+ * charge_O2-) > (charge_K+ * charge_I-)' };
+    const payload = { ...reviewed, calculations: [calculation], feedback: reviewed.feedback.map((item, index) => index === 1 ? { ...item, calculations: [calculation] } : item) };
+    const result = await reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete(payload) });
+    expect(result.explanation).toBe(reviewed.explanation);
+    expect(result.explanation).not.toContain('charge_');
+    expect(result.content.options[1].chosenFeedback).not.toContain('charge_');
   });
   test('rejects false explicit prose equations even if the declared calculation list is empty', async () => {
     await expect(reviewQuestionFeedback(question, { questionType: 'multiple-choice', complete: complete({ ...reviewed, explanation: 'The result is 7 × 8 = 54.' }) }))
